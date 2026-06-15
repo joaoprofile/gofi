@@ -1,0 +1,17 @@
+# Institutional — {{.ProjectName}}
+
+Conhecimento de negócio **específico deste produto/empresa** (domínio, glossário,
+atores, regras, integrações, métricas, roadmap). As skills do pipeline gofi são
+**genéricas e portáveis** — não carregam nada deste produto. Todo o "quem somos,
+o que fazemos, como o negócio funciona" vive **aqui**.
+
+Esta pasta é organizada como um **RAG**: o ponto de entrada é o manifesto de
+retrieval **[INDEX.md](INDEX.md)** — leia-o primeiro. Ele lista os chunks
+temáticos e diz **quando carregar cada um**, para usar só o relevante e
+economizar tokens.
+
+O `/gofi-pd` resolve esta pasta por `project.name` do `.gofi.yaml`
+(`.claude/institutional/{{.ProjectName}}/`). Os chunks nascem vazios — preencha
+conforme o discovery for revelando o negócio.
+
+→ **Comece por [INDEX.md](INDEX.md).**

@@ -1,0 +1,27 @@
+# {{.ProjectName}}
+
+Rust service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+.
+├── Cargo.toml                # workspace
+├── crates/
+│   └── {{.ProjectName}}/
+│       ├── Cargo.toml
+│       └── src/main.rs
+└── .claude/                  # gofi agents config
+```
+
+## Build & run
+
+```sh
+cargo run -p {{.ProjectName}}
+```
+
+## Tests
+
+```sh
+gofi test
+```

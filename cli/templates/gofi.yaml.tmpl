@@ -1,0 +1,123 @@
+# .gofi.yaml — configuração do projeto (gerado por `gofi init`)
+#
+# Fonte única das escolhas do projeto. Toda skill lê este arquivo ANTES de
+# qualquer coisa para descobrir linguagem-alvo, nome do projeto, superfície de
+# UI e stack de plataforma. Campos marcados {{ ... }} são renderizados pela CLI.
+version: 1
+
+project:
+    name: {{.ProjectName}}              # resolve a pasta institucional e o pathCmd
+    language: {{.Language}}             # determina sdk/<lang>/ lido por gofi-eng/qa
+    root: {{.Root}}                     # raiz do workspace
+    path: {{.Path}}                     # subpasta que contém o manifesto da linguagem (go.mod)
+
+ai:
+    host: {{.AIHost}}                   # ex.: claude-vscode
+    model: {{.AIModel}}                 # ex.: claude-opus-4-8
+
+agents:
+{{- range .Agents}}
+    - {{.}}
+{{- end}}
+
+sources:
+    agents: {{.Sources.Agents}}         # repo-fonte do harness (skills, sdk-docs, knowledge)
+    sdk:
+        go: {{.Sources.SDK.Go}}         # SDK Go (camada de execução, via go.work)
+{{- if .Sources.SDK.Web}}
+        web: {{.Sources.SDK.Web}}       # npm — Design System web (gofi-ui)
+{{- end}}
+{{- if .Sources.SDK.Mobile}}
+        mobile: {{.Sources.SDK.Mobile}} # npm — Design System mobile (gofi-ui-native)
+{{- end}}
+{{- if .Sources.IaC}}
+    iac:
+        {{.Ops.IaC}}: {{.Sources.IaC}}  # módulos de IaC reutilizáveis (opcional)
+{{- end}}
+
+# ───────────────────────────────────────────────────────────────────────────
+# CAMADA UI — consumida por /gofi-ui (omitir o bloco se o projeto não tem front)
+# ───────────────────────────────────────────────────────────────────────────
+# Forma A — UMA superfície (chaves no nível de `ui`):
+{{- if .UI}}
+ui:
+    framework: {{.UI.Framework}}        # react|angular|vue → web · react-native|expo → mobile
+    path: {{.UI.Path}}                  # raiz do app de UI (relativa a project.root)
+    brand: {{.UI.Brand}}                # blue (padrão) | violet | green  (presets vivos, não hex livre)
+    styling: {{.UI.Styling}}            # tailwind (web) | stylesheet (rn)
+    state: {{.UI.State}}                # camada de data/estado (ex.: tanstack-query)
+    testing: {{.UI.Testing}}            # vitest+rtl (web) | jest+rntl (rn)
+{{- else}}
+# ui:
+#     framework: react
+#     path: web
+#     brand: blue
+#     styling: tailwind
+#     state: tanstack-query
+#     testing: vitest
+{{- end}}
+#
+# Forma B — DUAS superfícies (full-stack web + mobile); cada sub-bloco é um alvo:
+# ui:
+#     web:    { framework: react,        path: apps/web,    brand: blue, styling: tailwind,   state: tanstack-query, testing: vitest }
+#     mobile: { framework: react-native, path: apps/mobile, brand: blue, styling: stylesheet, state: tanstack-query, testing: jest }
+
+# ───────────────────────────────────────────────────────────────────────────
+# CAMADA OPS — consumida por /gofi-ops (omitir o bloco se não há IaC/CI-CD)
+# ───────────────────────────────────────────────────────────────────────────
+{{- if .Ops}}
+ops:
+    cloud: {{.Ops.Cloud}}               # oci|aws|gcp|azure
+    iac: {{.Ops.IaC}}                   # terraform|opentofu|pulumi
+    target: {{.Ops.Target}}             # oke|eks|gke|k8s|container-instances|swarm|paas
+    cicd: {{.Ops.CICD}}                 # azure-devops|github-actions|gitlab-ci|oci-devops
+    registry: {{.Ops.Registry}}         # ocir|ecr|gar|acr
+    path: {{.Ops.Path}}                 # pasta guarda-chuva na raiz (iac/ deploy/ ci/ pipelines/)
+{{- else}}
+# ops:
+#     cloud: oci
+#     iac: terraform
+#     target: oke
+#     cicd: azure-devops
+#     registry: ocir
+#     path: ops
+{{- end}}
+
+git:
+    remote: "{{.Git.Remote}}"
+
+test:
+    default: {{.Test.Default}}          # task rodada por padrão
+    hooks:
+        pre: []
+        post: []
+    tasks:
+        unit:
+            desc: Unit tests
+            run: go -C {{.Path}} test ./...
+        cover:
+            desc: Coverage in text
+            run: go -C {{.Path}} test -cover ./...
+        cover-html:
+            desc: Coverage as coverage.html
+            run: go -C {{.Path}} test -coverprofile=coverage.out ./... && go -C {{.Path}} tool cover -html=coverage.out -o coverage.html
+        sonar:
+            desc: SonarScanner (requires SONAR_TOKEN, SONAR_HOST_URL)
+            run: sonar-scanner
+            needs:
+                - cover
+
+hsec:
+    enabled: true
+    ignore_paths:
+        - .gofi/
+        - .claude/
+        - vendor/
+        - node_modules/
+        - dist/
+        - target/
+        - .git/
+    severity_threshold: HIGH
+    return_error_on_finding: true
+    output_format: text
+    timeout_seconds: 600
