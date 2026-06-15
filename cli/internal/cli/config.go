@@ -118,7 +118,7 @@ func mergeWizardIntoConfig(cfg *config.GofiConfig, r *wizard.Result) *config.Gof
 	if r.Language != "" {
 		path := r.SourcePath
 		if path == "" {
-			path = config.DefaultSourceRoot
+			path = config.DefaultBackendPath
 		}
 		cfg.Backend = &config.Backend{Language: r.Language, Path: path}
 	} else {

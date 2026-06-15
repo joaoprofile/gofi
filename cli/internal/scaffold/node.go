@@ -64,8 +64,14 @@ func CreateExpoApp(root, path string, useDS bool) error {
 	if err := nodeRunner(root, "npx", "--yes", "create-expo-app@latest", path, "--template", "blank-typescript"); err != nil {
 		return fmt.Errorf("create-expo-app: %w", err)
 	}
+	appDir := filepath.Join(root, path)
+	// The Expo template scaffolds its own AI-assistant files (.claude/, CLAUDE.md).
+	// The gofi harness lives at the project root, so drop the nested copies to
+	// avoid a duplicate, conflicting context inside the mobile app.
+	if err := removeNestedClaude(appDir); err != nil {
+		return fmt.Errorf("clean nested .claude in %s: %w", path, err)
+	}
 	if useDS {
-		appDir := filepath.Join(root, path)
 		if err := nodeRunner(appDir, "npm", "install", DSMobile); err != nil {
 			return fmt.Errorf("install %s: %w", DSMobile, err)
 		}
@@ -73,6 +79,19 @@ func CreateExpoApp(root, path string, useDS bool) error {
 		// centered Button that reveals a message on press, in native app style.
 		if err := seedStarter("embedded/expo-starter", appDir); err != nil {
 			return fmt.Errorf("seed gofi-ui-native starter: %w", err)
+		}
+	}
+	return nil
+}
+
+// removeNestedClaude deletes a .claude/ directory and CLAUDE.md file inside an
+// app folder if a scaffolder created them. The gofi harness is installed once at
+// the project root; a nested copy under a surface folder is redundant. No-op
+// when the paths are absent.
+func removeNestedClaude(appDir string) error {
+	for _, p := range []string{filepath.Join(appDir, ".claude"), filepath.Join(appDir, "CLAUDE.md")} {
+		if err := os.RemoveAll(p); err != nil {
+			return err
 		}
 	}
 	return nil

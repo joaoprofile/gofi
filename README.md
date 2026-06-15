@@ -1,6 +1,6 @@
 # Gofi Ecosystem — Harness
 
-> Repositório-fonte consumido pela CLI [`gofi`](#instalação-da-cli) para gerar e
+> Repositório-fonte consumido pela CLI para gerar e
 > manter projetos. Nele vivem os **agents**, **boilerplates**, **SDK docs**,
 > **knowledge** e **memória** que formam o *harness* sobre o qual a IA opera.
 

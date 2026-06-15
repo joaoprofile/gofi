@@ -145,6 +145,8 @@ func validateOps(ops *Ops) error {
 		{"cloud", ops.Cloud, map[string]bool{CloudOCI: true, CloudAWS: true, CloudGCP: true, CloudAzure: true}},
 		{"iac", ops.IaC, map[string]bool{IaCTerraform: true, IaCOpenTofu: true, IaCPulumi: true}},
 		{"cicd", ops.CICD, map[string]bool{CICDGitHubActions: true, CICDAzureDevOps: true, CICDGitLabCI: true, CICDOCIDevOps: true}},
+		{"target", ops.Target, map[string]bool{TargetK8s: true, TargetOKE: true, TargetEKS: true, TargetGKE: true, TargetSwarm: true, TargetContainerInstances: true, TargetPaaS: true}},
+		{"registry", ops.Registry, map[string]bool{RegistryOCIR: true, RegistryECR: true, RegistryGAR: true, RegistryACR: true}},
 	}
 	for _, c := range checks {
 		if c.val != "" && !c.allowed[c.val] {

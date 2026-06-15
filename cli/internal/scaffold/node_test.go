@@ -92,6 +92,36 @@ func TestCreateExpoApp_WithDS(t *testing.T) {
 	}
 }
 
+func TestCreateExpoApp_RemovesNestedClaude(t *testing.T) {
+	root := t.TempDir()
+	appDir := filepath.Join(root, "mobile")
+	// Simulate create-expo-app scaffolding its own AI-assistant files.
+	orig := nodeRunner
+	nodeRunner = func(dir, name string, args ...string) error {
+		if name == "npx" {
+			if err := os.MkdirAll(filepath.Join(appDir, ".claude"), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(appDir, ".claude", "settings.json"), []byte("{}"), 0o644); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(appDir, "CLAUDE.md"), []byte("nested"), 0o644)
+		}
+		return nil
+	}
+	t.Cleanup(func() { nodeRunner = orig })
+
+	if err := CreateExpoApp(root, "mobile", false); err != nil {
+		t.Fatalf("CreateExpoApp: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(appDir, ".claude")); !os.IsNotExist(err) {
+		t.Errorf("nested .claude/ should have been removed, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(appDir, "CLAUDE.md")); !os.IsNotExist(err) {
+		t.Errorf("nested CLAUDE.md should have been removed, got err=%v", err)
+	}
+}
+
 func TestCreateApp_EmptyPath(t *testing.T) {
 	captureNodeRunner(t)
 	if err := CreateViteApp("/root", "", false); err == nil {

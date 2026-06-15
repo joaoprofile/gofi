@@ -120,9 +120,19 @@ const DefaultAgentsRef = "github.com/joaoprofile/gofi@main"
 // installed by the create step — not as git sources.
 const DefaultSDKGoRef = "github.com/joaoprofile/gofi-sdk-go@main"
 
-// DefaultSourceRoot is the source folder name used when the wizard input is
-// left blank (saved to project.path).
+// DefaultSourceRoot is the historical source folder name. It is the back-compat
+// fallback used when migrating older configs and when a config omits a path —
+// it must stay "src" so migrated projects keep pointing at their on-disk folder.
 const DefaultSourceRoot = "src"
+
+// Default folder names used by `gofi init` when the wizard input is left blank.
+// Each surface defaults to a folder named after itself; the user overrides only
+// if they want a different layout.
+const (
+	DefaultBackendPath  = "backend"
+	DefaultFrontendPath = "frontend"
+	DefaultMobilePath   = "mobile"
+)
 
 // DefaultSources returns the source pin used for a brand new project.
 func DefaultSources() Sources {
@@ -135,8 +145,17 @@ func DefaultSources() Sources {
 }
 
 // DefaultOps returns the platform block seeded into a freshly created
-// .gofi.yaml. The wizard does not ask cloud/iac/etc — only the ops/ folder is
-// created and the path recorded; the dev (or the infra spec) fills the rest.
+// .gofi.yaml. It ships the first-class gofi-ops stack (OCI + Terraform + OKE +
+// GitHub Actions + OCIR) so the agent has a complete `ops:` block to read from
+// day one. The wizard does not ask these — the user adjusts them afterwards via
+// `gofi config` or by editing .gofi.yaml.
 func DefaultOps() *Ops {
-	return &Ops{Path: DefaultOpsPath}
+	return &Ops{
+		Cloud:    CloudOCI,
+		IaC:      IaCTerraform,
+		Target:   TargetOKE,
+		CICD:     CICDGitHubActions,
+		Registry: RegistryOCIR,
+		Path:     DefaultOpsPath,
+	}
 }

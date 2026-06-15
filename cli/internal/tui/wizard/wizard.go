@@ -42,11 +42,11 @@ type Result struct {
 
 	// Backend (when EnvBack selected).
 	Language   string // go|rust|nodejs|java|csharp
-	SourcePath string // backend source folder inside Root (default "src")
+	SourcePath string // backend source folder inside Root (default "backend")
 	GoModule   string // only when Language == go
 
 	// Web (when EnvWeb selected).
-	WebPath string // web app folder inside Root (default "web")
+	WebPath string // web app folder inside Root (default "frontend")
 	WebDS   string // config.DSWeb or "" (no design system)
 
 	// Mobile (when EnvMobile selected). MobileDS is gofi-ui-native (always set
@@ -163,7 +163,7 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 				Value(&r.Language),
 			huh.NewInput().
 				Title("Backend path").
-				Description("Source folder inside the root, e.g. src, services, backend. Blank = src.").
+				Description("Source folder inside the root, e.g. backend, services, src. Blank = backend.").
 				Validate(validateSurfacePath).
 				Value(&r.SourcePath),
 		).WithHideFunc(func() bool { return !has(EnvBack) }),
@@ -172,7 +172,7 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 			huh.NewNote().Title("Web").Description("Vite + React + TypeScript, with gofi-ui installed."),
 			huh.NewInput().
 				Title("Web path").
-				Description("App folder inside the root. Blank = web.").
+				Description("App folder inside the root. Blank = frontend.").
 				Validate(validateSurfacePath).
 				Value(&r.WebPath),
 		).WithHideFunc(func() bool { return !has(EnvWeb) }),
@@ -265,11 +265,11 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 	// Default per-surface paths when blank, and pin the design system for each
 	// selected surface (web → gofi-ui, mobile → gofi-ui-native, always).
 	if r.Has(EnvBack) && r.SourcePath == "" {
-		r.SourcePath = config.DefaultSourceRoot
+		r.SourcePath = config.DefaultBackendPath
 	}
 	if r.Has(EnvWeb) {
 		if r.WebPath == "" {
-			r.WebPath = "web"
+			r.WebPath = config.DefaultFrontendPath
 		}
 		r.WebDS = config.DSWeb
 	} else {
@@ -277,7 +277,7 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 	}
 	if r.Has(EnvMobile) {
 		if r.MobilePath == "" {
-			r.MobilePath = "mobile"
+			r.MobilePath = config.DefaultMobilePath
 		}
 		r.MobileDS = config.DSMobile
 	} else {
@@ -320,11 +320,11 @@ func newDefaultResult() *Result {
 		AIModel:        config.ModelOpus48,
 		Environments:   []string{EnvBack},
 		Language:       config.LanguageGo,
-		SourcePath:     config.DefaultSourceRoot,
+		SourcePath:     config.DefaultBackendPath,
 		GoModule:       "github.com/your-org/your-repo",
-		WebPath:        "web",
+		WebPath:        config.DefaultFrontendPath,
 		WebDS:          config.DSWeb,
-		MobilePath:     "mobile",
+		MobilePath:     config.DefaultMobilePath,
 		MobileDS:       config.DSMobile,
 		Agents:         config.AllAgents(),
 		AgentsRef:      config.DefaultAgentsRef,

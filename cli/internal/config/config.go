@@ -70,6 +70,21 @@ const (
 	CICDGitLabCI      = "gitlab-ci"
 	CICDOCIDevOps     = "oci-devops"
 
+	// Deploy runtime targets (gofi-ops `ops.target`).
+	TargetK8s                = "k8s"
+	TargetOKE                = "oke"
+	TargetEKS                = "eks"
+	TargetGKE                = "gke"
+	TargetSwarm              = "swarm"
+	TargetContainerInstances = "container-instances"
+	TargetPaaS               = "paas"
+
+	// Image registries (gofi-ops `ops.registry`).
+	RegistryOCIR = "ocir"
+	RegistryECR  = "ecr"
+	RegistryGAR  = "gar"
+	RegistryACR  = "acr"
+
 	DefaultOpsPath = "ops"
 )
 
@@ -123,9 +138,10 @@ type UISurface struct {
 	DS        string `yaml:"ds,omitempty"`
 }
 
-// Ops carries the platform/delivery block the gofi-ops skill reads. The wizard
-// seeds only Path by default; cloud/iac/etc are filled in later by the dev or
-// the infra spec.
+// Ops carries the platform/delivery block the gofi-ops skill reads. `gofi init`
+// seeds the first-class stack (see DefaultOps); the user adjusts it afterwards
+// via `gofi config` or by editing .gofi.yaml — the inline comments emitted by
+// MarshalYAML list the accepted values for each field.
 type Ops struct {
 	Cloud    string `yaml:"cloud,omitempty"`
 	IaC      string `yaml:"iac,omitempty"`
@@ -133,6 +149,33 @@ type Ops struct {
 	CICD     string `yaml:"cicd,omitempty"`
 	Registry string `yaml:"registry,omitempty"`
 	Path     string `yaml:"path,omitempty"`
+}
+
+// MarshalYAML emits the ops block with an inline comment on each field listing
+// the accepted values, so a freshly written .gofi.yaml documents the options
+// the user can switch to. Empty fields are omitted (mirrors the omitempty tags).
+func (o Ops) MarshalYAML() (interface{}, error) {
+	fields := []struct{ key, val, opts string }{
+		{"cloud", o.Cloud, "oci | aws | gcp | azure"},
+		{"iac", o.IaC, "terraform | opentofu | pulumi"},
+		{"target", o.Target, "k8s | oke | eks | gke | swarm | container-instances | paas"},
+		{"cicd", o.CICD, "github-actions | azure-devops | gitlab-ci | oci-devops"},
+		{"registry", o.Registry, "ocir | ecr | gar | acr"},
+		{"path", o.Path, ""},
+	}
+	node := &yaml.Node{Kind: yaml.MappingNode}
+	for _, f := range fields {
+		if f.val == "" {
+			continue
+		}
+		key := &yaml.Node{Kind: yaml.ScalarNode, Value: f.key}
+		val := &yaml.Node{Kind: yaml.ScalarNode, Value: f.val}
+		if f.opts != "" {
+			val.LineComment = f.opts
+		}
+		node.Content = append(node.Content, key, val)
+	}
+	return node, nil
 }
 
 // HsecConfig drives the `gofi hsec` command (Horusec SAST). gofi renders this
