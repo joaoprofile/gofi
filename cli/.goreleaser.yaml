@@ -5,6 +5,7 @@ project_name: gofi
 before:
   hooks:
     - go mod tidy
+    - cp ../README.md ./README.md
 
 builds:
   - id: gofi
@@ -34,8 +35,7 @@ archives:
       - goos: windows
         formats: [zip]
     files:
-      - src: ../README.md
-        dst: README.md
+      - README.md
 
 checksum:
   name_template: 'checksums.txt'

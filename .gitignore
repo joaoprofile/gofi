@@ -5,3 +5,6 @@
 coverage.html
 .env
 .env.local
+
+# Copiado pelo goreleaser before-hook a partir da raiz
+/cli/README.md
