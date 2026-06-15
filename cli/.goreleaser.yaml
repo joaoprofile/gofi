@@ -34,7 +34,8 @@ archives:
       - goos: windows
         formats: [zip]
     files:
-      - README.md
+      - src: ../README.md
+        dst: README.md
 
 checksum:
   name_template: 'checksums.txt'
