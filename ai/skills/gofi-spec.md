@@ -41,7 +41,7 @@ Você **não escreve código** — sua saída é o documento de especificação.
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-pd
 5. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (especialmente `ddd-principles.md` e `diagram-conventions.md` — PlantUML obrigatório em §2 e qualquer fluxo na spec; `application-vs-domain-service.md` — declarar em §3.1 quais operações são use case `application/` e quais são `service/` direto; `event-driven-executor-pattern.md` — declarar em §4 quando o contexto usa split decider/executor com tópico de eventos entre eles, tabela `{ctx}_execution` com `decision_id` UNIQUE, materialização atomic da junction local, **DUAS bridges separadas** quando há split decider/executor — `DecisionBridge` puro sem `ctx`/`error` para o decider + `ExecutionBridge` com `ctx`/retry para o executor (cada adapter implementa as duas em arquivos separados — `decision_bridge.go` + `execution_bridge.go`); e **Processor scheduler-driven mora no domínio** — declarar em §8 a subpasta `services/domain/{ctx}/scheduler/{processor,repository,model}/`, binário cron do projeto é **só wiring**, sem `*_processor.go` próprio)
 6. Ler **knowledge per-agent**: `.claude/knowledge/spec/*.md` (user-treinado)
-7. Ler `.claude/specs-template/sdd-template.md` — formato obrigatório de saída
+7. Ler `.claude/templates/sdd-template.md` — formato obrigatório de saída
 8. Para `project.language`:
    - Ler `.claude/sdk/<lang>/knowledge/structure.md` — onde a spec posiciona arquivos
    - Ler `.claude/sdk/<lang>/knowledge/env-vars-standard.md` — variáveis de ambiente do SDK
@@ -263,7 +263,7 @@ Está correto?
 ### Fase 6 — Geração da spec
 
 Com o modelo confirmado, gere a spec em `specs/{contexto}/sdd-{contexto}.md`
-seguindo o template em `.claude/specs-template/sdd-template.md`.
+seguindo o template em `.claude/templates/sdd-template.md`.
 
 ---
 
@@ -462,7 +462,7 @@ Quando o contexto sincroniza dados **inbound** de N sistemas externos (cada um c
 ### Manifesto do Serviço (§0)
 
 Toda spec abre com a seção §0 — campos derivados das respostas da Fase 1.
-O formato exato vem do `specs-template/sdd-template.md`. Para Go, os
+O formato exato vem do `templates/sdd-template.md`. Para Go, os
 nomes de path (`pathService`, `pathCmd`, `pathContext`) seguem
 `.claude/sdk/go/knowledge/structure.md`.
 
@@ -624,7 +624,7 @@ Ver `.claude/knowledge/shared/learning-protocol.md`.
 
 Em particular:
 - Correções nas perguntas de elicitação → atualize esta skill
-- Mudanças no formato da spec → atualize `specs-template/sdd-template.md`
+- Mudanças no formato da spec → atualize `templates/sdd-template.md`
 - Lições de modelagem cross-language → atualize `knowledge/shared/` (genéricas, sem domínio)
 - Lições language-specific → atualize `.claude/sdk/<lang>/knowledge/` (genéricas, sem domínio)
 - Generalize qualquer trecho domínio-específico antes de salvar em knowledge

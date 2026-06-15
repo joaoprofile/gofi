@@ -68,7 +68,7 @@ vale neste projeto — nunca entra em skill).
 | Knowledge cross-agent (universal) | `.claude/knowledge/shared/*.md` | Portável |
 | Knowledge per-agent (`gofi train`) | `.claude/knowledge/{agent}/*.md` (criado sob demanda; hoje `eng/`, `ui/`) | Portável |
 | Conhecimento institucional (negócio específico do produto/empresa) | `.claude/institutional/{project.name}/` — RAG: `INDEX.md` (sempre) + chunks sob demanda | Específico |
-| Templates SDD/PRD | `.claude/specs-template/`, `.claude/prd-template/` | Portável |
+| Templates SDD/PRD | `.claude/templates/` (`sdd-template.md`, `prd-template.md`) | Portável |
 | Memória global (visão, serviços, convenções) | `.claude/memory/project.md` | Específico |
 | Estado por-contexto (frontmatter + histórico) | `.claude/memory/contexts/{contexto}.md` | Específico |
 | Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |

@@ -126,7 +126,7 @@ Antes de iniciar a descoberta, **sempre**:
      metodologia genérica deste arquivo) e **ofereça bootstrapar** a pasta
      institucional ao final (criar `INDEX.md` + chunks), registrando o que
      descobriu em `.claude/institutional/{project.name}/`.
-8. **Leia `.claude/prd-template/prd-template.md`** — layout obrigatório do PRD.
+8. **Leia `.claude/templates/prd-template.md`** — layout obrigatório do PRD.
 9. Verifique se o diretório de PRDs existe (ex.: `prd/`) — crie se necessário.
 10. Se já existir PRD para o contexto, confirme se é refinamento ou novo PRD.
 
@@ -363,11 +363,11 @@ que já está documentado; valide apenas o que o PRD afeta.
 ## 9. Estrutura do PRD (Saída Esperada)
 
 O PRD final **deve seguir exatamente** o layout de
-`.claude/prd-template/prd-template.md`.
+`.claude/templates/prd-template.md`.
 
 ### 9.1 Regras de geração
 
-- **Copie o template** `.claude/prd-template/prd-template.md` como base.
+- **Copie o template** `.claude/templates/prd-template.md` como base.
 - Salve em `{pathPrd}/{contexto}/prd-{contexto}.md`.
 - **Mantenha todas as 19 seções** — preserve títulos, numeração e tabelas.
 - Seções **(Opcional)** podem ser omitidas se não se aplicarem; documente a razão
@@ -530,7 +530,7 @@ institucional):
   regra, integração, roadmap) → `.claude/institutional/{produto}/` + linha no
   `INDEX.md`.
 - Padrão de discovery validado e genérico → `.claude/knowledge/pd/<topico>.md`.
-- Mudança no layout do PRD → `.claude/prd-template/prd-template.md`.
+- Mudança no layout do PRD → `.claude/templates/prd-template.md`.
 
 ---
 
