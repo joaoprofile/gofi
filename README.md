@@ -11,30 +11,30 @@
 ### Linux / macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 ```
 
 ### Versão específica
 
 ```sh
 # Linux / macOS
-GOFI_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh
+GOFI_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
 
 # Windows
 $env:GOFI_VERSION = "v0.2.0"
-iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 ```
 
 ### Diretório de instalação customizado (Linux / macOS)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
+curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
 ```
 
 ### Onde o binário é instalado

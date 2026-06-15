@@ -2,14 +2,14 @@
 # install.sh — install the gofi CLI on Linux and macOS
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh
-#   GOFI_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
-#   curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.sh | sh -s -- --add-to-path
+#   curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
+#   GOFI_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
+#   curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh -s -- --add-to-path
 
 set -eu
 
-REPO="joaoprofile/gofi-cli"
+REPO="joaoprofile/gofi"
 BINARY="gofi"
 VERSION="${GOFI_VERSION:-latest}"
 BIN_DIR=""

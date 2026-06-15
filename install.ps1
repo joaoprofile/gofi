@@ -2,11 +2,11 @@
 install.ps1 — install the gofi CLI on Windows.
 
 Usage (PowerShell):
-  iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.ps1 | iex
+  iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 
 Specific version:
   $env:GOFI_VERSION = "v0.2.0"
-  iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi-cli/main/install.ps1 | iex
+  iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 
 The script installs into %LOCALAPPDATA%\Programs\gofi\bin and adds that
 directory to the user PATH (no admin needed). Restart your shell for the
@@ -15,7 +15,7 @@ PATH update to take effect.
 
 $ErrorActionPreference = "Stop"
 
-$Repo    = "joaoprofile/gofi-cli"
+$Repo    = "joaoprofile/gofi"
 $Binary  = "gofi"
 $Version = if ($env:GOFI_VERSION) { $env:GOFI_VERSION } else { "latest" }
 
