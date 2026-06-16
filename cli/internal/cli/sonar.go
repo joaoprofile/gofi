@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -88,15 +89,19 @@ func runSonarStart() error {
 	if !sonar.IsInstalled() {
 		return errors.New("sonar-scanner is not installed on PATH; run `gofi sonar install` for instructions")
 	}
-	configPath, err := sonar.WriteConfig(root, cfg.Sonar, backendLanguage(cfg))
-	if err != nil {
+	// The rendered file documents the effective config (and is what
+	// `gofi sonar config` prints); the scan itself passes the same properties
+	// as -D flags so it works regardless of which sonar-scanner is installed.
+	if _, err := sonar.WriteConfig(root, cfg.Sonar, backendLanguage(cfg)); err != nil {
 		return fmt.Errorf("write sonar-project.properties: %w", err)
 	}
-	if missing := sonar.MissingEnv(cfg.Sonar.HostURL); len(missing) > 0 {
-		fmt.Fprintf(os.Stderr, "warning: %s not set in the environment; sonar-scanner may fail to authenticate. Export them (e.g. from .env) before running.\n", strings.Join(missing, ", "))
+	scannerArgs, err := sonar.ScannerArgs(cfg.Sonar, backendLanguage(cfg))
+	if err != nil {
+		return fmt.Errorf("build sonar-scanner arguments: %w", err)
 	}
+	warnSonarEnv(os.Stderr, cfg.Sonar.HostURL)
 	fmt.Printf("Running sonar-scanner against %s …\n\n", root)
-	if err := sonar.Run(root, configPath, os.Stdout, os.Stderr, os.Stdin); err != nil {
+	if err := sonar.Run(root, scannerArgs, os.Stdout, os.Stderr, os.Stdin); err != nil {
 		return err
 	}
 	fmt.Println("\nAnalysis complete. Review the report on your SonarQube/SonarCloud dashboard.")
@@ -145,6 +150,28 @@ func runSonarInstall() error {
 	fmt.Println()
 	fmt.Println("Then export SONAR_HOST_URL and SONAR_TOKEN (e.g. in .env) before running `gofi sonar`.")
 	return nil
+}
+
+// warnSonarEnv prints actionable guidance when the SonarQube server URL or
+// token are not configured. hostURLFromConfig is the optional host pinned in
+// the sonar: block, which removes the need for SONAR_HOST_URL.
+func warnSonarEnv(w io.Writer, hostURLFromConfig string) {
+	hostSet := strings.TrimSpace(hostURLFromConfig) != "" || strings.TrimSpace(os.Getenv("SONAR_HOST_URL")) != ""
+	tokenSet := strings.TrimSpace(os.Getenv("SONAR_TOKEN")) != ""
+	if hostSet && tokenSet {
+		return
+	}
+	fmt.Fprintln(w, "warning: SonarQube is not fully configured:")
+	if !hostSet {
+		fmt.Fprintln(w, "  • SONAR_HOST_URL is not set — sonar-scanner defaults to SonarCloud")
+		fmt.Fprintln(w, "    (https://sonarcloud.io), which additionally requires sonar.organization.")
+		fmt.Fprintln(w, "    For a local/self-hosted SonarQube, export e.g. SONAR_HOST_URL=http://localhost:9000")
+	}
+	if !tokenSet {
+		fmt.Fprintln(w, "  • SONAR_TOKEN is not set — generate one in your SonarQube under")
+		fmt.Fprintln(w, "    My Account → Security → Generate Tokens, then export SONAR_TOKEN=<token>.")
+	}
+	fmt.Fprintln(w, "  Tip: put both in .env and export them before running `gofi sonar`.")
 }
 
 // backendLanguage returns the project's backend language, or "" for a

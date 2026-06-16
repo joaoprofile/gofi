@@ -3,6 +3,7 @@ package sonar
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -76,6 +77,33 @@ func TestBuildProperties_RequiresProjectKey(t *testing.T) {
 	}
 }
 
+func TestScannerArgs_Defaults(t *testing.T) {
+	c := config.DefaultSonar("my-service", &config.Backend{Language: config.LanguageGo, Path: "src"}, nil, nil)
+	args, err := ScannerArgs(c, config.LanguageGo)
+	if err != nil {
+		t.Fatalf("args: %v", err)
+	}
+
+	// Properties are passed as -Dkey=value so they work with both the Java
+	// scanner CLI and the npm sonarqube-scanner (which ignores -Dproject.settings).
+	for _, want := range []string{
+		"-Dsonar.projectKey=my-service",
+		"-Dsonar.sources=src",
+		"-Dsonar.go.coverage.reportPaths=coverage.out",
+		"-Dsonar.sourceEncoding=UTF-8",
+	} {
+		if !slices.Contains(args, want) {
+			t.Errorf("expected args to contain %q, got %v", want, args)
+		}
+	}
+}
+
+func TestScannerArgs_RequiresProjectKey(t *testing.T) {
+	if _, err := ScannerArgs(config.SonarConfig{}, ""); err == nil {
+		t.Fatal("expected error when project key is empty")
+	}
+}
+
 func TestWriteConfig_RoundTrip(t *testing.T) {
 	root := t.TempDir()
 	c := config.DefaultSonar("svc", &config.Backend{Language: config.LanguageGo, Path: "src"}, nil, nil)
@@ -92,29 +120,6 @@ func TestWriteConfig_RoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "sonar.projectKey=svc") {
 		t.Errorf("expected key in output:\n%s", b)
-	}
-}
-
-func TestMissingEnv(t *testing.T) {
-	t.Setenv("SONAR_TOKEN", "")
-	t.Setenv("SONAR_HOST_URL", "")
-
-	// Host pinned in config removes the need for SONAR_HOST_URL.
-	got := MissingEnv("https://sonar.example.com")
-	if len(got) != 1 || got[0] != "SONAR_TOKEN" {
-		t.Errorf("expected only SONAR_TOKEN missing, got %v", got)
-	}
-
-	// No host anywhere — both are missing.
-	got = MissingEnv("")
-	if len(got) != 2 {
-		t.Errorf("expected both env vars missing, got %v", got)
-	}
-
-	t.Setenv("SONAR_TOKEN", "secret")
-	t.Setenv("SONAR_HOST_URL", "https://sonar.example.com")
-	if got := MissingEnv(""); len(got) != 0 {
-		t.Errorf("expected nothing missing, got %v", got)
 	}
 }
 
