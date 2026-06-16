@@ -111,6 +111,7 @@ type GofiConfig struct {
 	Training Training    `yaml:"training,omitempty"`
 	Test     TestSection `yaml:"test"`
 	Hsec     HsecConfig  `yaml:"hsec"`
+	Sonar    SonarConfig `yaml:"sonar"`
 }
 
 // Backend carries the backend language and its source folder. nil for a
@@ -189,6 +190,30 @@ type HsecConfig struct {
 	OutputFormat         string   `yaml:"output_format"` // text | json | sarif
 	OutputFile           string   `yaml:"output_file,omitempty"`
 	TimeoutSeconds       int      `yaml:"timeout_seconds,omitempty"`
+}
+
+// SonarConfig drives the `gofi sonar` command (SonarQube / SonarCloud static
+// analysis). gofi renders this into a sonar-project.properties under
+// <project>/.gofi/ every time `gofi sonar` runs, then invokes the sonar-scanner
+// binary against it.
+//
+// The server URL and authentication token are read from the environment
+// (SONAR_HOST_URL / SONAR_TOKEN — typically exported from .env) and are never
+// stored in the YAML. HostURL here is only an optional non-secret override for
+// the server URL when you prefer to pin it per project.
+//
+// Sources scopes analysis to the project's own code folders; Exclusions drops
+// everything that is not first-party project code (tests, mocks, generated
+// code, the vendored SDK under .gofi/, build artefacts), so reports reflect
+// only the code the team actually owns.
+type SonarConfig struct {
+	Enabled        bool     `yaml:"enabled"`
+	ProjectKey     string   `yaml:"project_key"`
+	ProjectName    string   `yaml:"project_name,omitempty"`
+	HostURL        string   `yaml:"host_url,omitempty"`
+	Sources        []string `yaml:"sources,omitempty"`
+	Exclusions     []string `yaml:"exclusions,omitempty"`
+	CoverageReport string   `yaml:"coverage_report,omitempty"`
 }
 
 // Project carries the general identity of a gofi project: its name and the

@@ -63,6 +63,52 @@ func TestValidate_Invalid(t *testing.T) {
 	}
 }
 
+func TestValidate_SonarEnabledRequiresKey(t *testing.T) {
+	c := validConfig()
+	c.Sonar = SonarConfig{Enabled: true} // no project key
+	if err := c.Validate(); err == nil {
+		t.Fatal("expected error when sonar is enabled without a project key")
+	}
+
+	c.Sonar.ProjectKey = "my-service"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected valid with project key set: %v", err)
+	}
+
+	// Disabled sonar is always valid regardless of missing fields.
+	c.Sonar = SonarConfig{Enabled: false}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected disabled sonar to validate: %v", err)
+	}
+}
+
+func TestDefaultSonar_ScopesAndExcludes(t *testing.T) {
+	s := DefaultSonar("my-service", &Backend{Language: LanguageGo, Path: "src"}, nil, nil)
+	if !s.Enabled {
+		t.Error("expected sonar enabled by default")
+	}
+	if s.ProjectKey != "my-service" {
+		t.Errorf("expected project key from name, got %q", s.ProjectKey)
+	}
+	if len(s.Sources) != 1 || s.Sources[0] != "src" {
+		t.Errorf("expected sources scoped to backend path, got %v", s.Sources)
+	}
+	if s.CoverageReport != "coverage.out" {
+		t.Errorf("expected go coverage report, got %q", s.CoverageReport)
+	}
+	wantExcl := map[string]bool{"**/*_test.go": false, "**/mocks/**": false, "**/.gofi/**": false}
+	for _, e := range s.Exclusions {
+		if _, ok := wantExcl[e]; ok {
+			wantExcl[e] = true
+		}
+	}
+	for e, found := range wantExcl {
+		if !found {
+			t.Errorf("expected default exclusions to drop %q", e)
+		}
+	}
+}
+
 func TestValidate_TestTaskCycle(t *testing.T) {
 	c := validConfig()
 	c.Test.Tasks = map[string]TestTask{

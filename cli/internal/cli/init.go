@@ -15,6 +15,7 @@ import (
 	"github.com/joaoprofile/gofi-cli/internal/gitops"
 	"github.com/joaoprofile/gofi-cli/internal/hsec"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
+	"github.com/joaoprofile/gofi-cli/internal/sonar"
 	"github.com/joaoprofile/gofi-cli/internal/toolchain"
 	"github.com/joaoprofile/gofi-cli/internal/tui/spinner"
 	"github.com/joaoprofile/gofi-cli/internal/tui/styles"
@@ -183,6 +184,15 @@ func executePipeline(r *wizard.Result) error {
 			}
 			if _, err := hsec.WriteConfig(r.Root, cfg.Hsec); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: could not write horusec-config.json: %v\n", err)
+			}
+			return nil
+		}},
+		spinner.Step{Name: "Seed Sonar config", Fn: func() error {
+			if !cfg.Sonar.Enabled {
+				return nil
+			}
+			if _, err := sonar.WriteConfig(r.Root, cfg.Sonar, backendLang); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not write sonar-project.properties: %v\n", err)
 			}
 			return nil
 		}},
@@ -386,6 +396,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 		Git:      config.Git{Remote: r.GitRemote},
 		Test:     config.DefaultTestSection(testLang, testPath),
 		Hsec:     config.DefaultHsec(),
+		Sonar:    config.DefaultSonar(proj.Name, backend, frontend, mobile),
 	}
 }
 

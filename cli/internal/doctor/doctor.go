@@ -76,9 +76,11 @@ func Run(cfg *config.GofiConfig, opts Options) []Check {
 	}
 	projectRoot := ""
 	hsecEnabled := false
+	sonarEnabled := false
 	if cfg != nil {
 		projectRoot = cfg.Project.Root
 		hsecEnabled = cfg.Hsec.Enabled
+		sonarEnabled = cfg.Sonar.Enabled
 		if cfg.Backend != nil && cfg.Backend.Language != "" {
 			checks = append(checks, checkToolchain(opts.Lookup, cfg.Backend.Language))
 		}
@@ -86,6 +88,10 @@ func Run(cfg *config.GofiConfig, opts Options) []Check {
 	if hsecEnabled {
 		checks = append(checks, checkBinary(opts.Lookup, "horusec", true,
 			"hsec is enabled in .gofi.yaml; run `gofi hsec install` to install"))
+	}
+	if sonarEnabled {
+		checks = append(checks, checkBinary(opts.Lookup, "sonar-scanner", true,
+			"sonar is enabled in .gofi.yaml; run `gofi sonar install` for instructions"))
 	}
 	checks = append(checks, checkCache(projectRoot))
 	checks = append(checks, checkGitHub(opts.HTTPClient, opts.HTTPBaseURL))

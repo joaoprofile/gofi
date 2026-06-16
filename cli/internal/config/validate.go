@@ -106,6 +106,22 @@ func (c *GofiConfig) Validate() error {
 	if err := c.Test.Validate(); err != nil {
 		return err
 	}
+	if err := c.Sonar.validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validate checks the sonar block. A disabled block is always valid (the user
+// is not using it). When enabled, a non-empty project key is required so the
+// rendered sonar-project.properties identifies the project on the server.
+func (s *SonarConfig) validate() error {
+	if !s.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(s.ProjectKey) == "" {
+		return fmt.Errorf("sonar.project_key: required when sonar.enabled is true")
+	}
 	return nil
 }
 

@@ -62,6 +62,7 @@ gofi test cover-html`,
 		newDoctorCmd(),
 		newConfigCmd(),
 		newHsecCmd(),
+		newSonarCmd(),
 	)
 
 	return root

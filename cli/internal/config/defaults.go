@@ -29,9 +29,9 @@ func DefaultTestSection(language, sourceRoot string) TestSection {
 					Run:  "go -C " + sourceRoot + " test -coverprofile=coverage.out ./... && go -C " + sourceRoot + " tool cover -html=coverage.out -o coverage.html",
 				},
 				"sonar": {
-					Desc:  "SonarScanner (requires SONAR_TOKEN, SONAR_HOST_URL)",
+					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
 					Needs: []string{"cover"},
-					Run:   "sonar-scanner",
+					Run:   "gofi sonar start",
 				},
 			},
 		}
@@ -52,9 +52,9 @@ func DefaultTestSection(language, sourceRoot string) TestSection {
 					Run:  "cargo tarpaulin --out Html",
 				},
 				"sonar": {
-					Desc:  "SonarScanner (requires SONAR_TOKEN, SONAR_HOST_URL)",
+					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
 					Needs: []string{"cover"},
-					Run:   "sonar-scanner",
+					Run:   "gofi sonar start",
 				},
 			},
 		}
@@ -105,6 +105,94 @@ func DefaultHsec() HsecConfig {
 		OutputFormat:         "json",
 		TimeoutSeconds:       600,
 	}
+}
+
+// DefaultSonar returns the Sonar block seeded into a freshly created
+// .gofi.yaml. Enabled by default; users can disable per project later via
+// `gofi config`.
+//
+// projectName seeds the project key/name. backend/frontend/mobile scope
+// sonar.sources to the project's own source folders, and language picks the
+// coverage report path so `gofi sonar` ships meaningful coverage on day one.
+// The exclusions keep analysis to first-party project code: tests, mocks,
+// generated code, the vendored SDK under .gofi/, and build artefacts are all
+// dropped so the dashboard reflects only the code the team owns.
+func DefaultSonar(projectName string, backend *Backend, frontend, mobile *UISurface) SonarConfig {
+	var sources []string
+	if backend != nil && backend.Path != "" {
+		sources = append(sources, backend.Path)
+	}
+	if frontend != nil && frontend.Path != "" {
+		sources = append(sources, frontend.Path)
+	}
+	if mobile != nil && mobile.Path != "" {
+		sources = append(sources, mobile.Path)
+	}
+	if len(sources) == 0 {
+		sources = []string{"."}
+	}
+
+	key := projectName
+	if key == "" {
+		key = "gofi-project"
+	}
+
+	cfg := SonarConfig{
+		Enabled:     true,
+		ProjectKey:  key,
+		ProjectName: key,
+		Sources:     sources,
+		Exclusions: []string{
+			// Tests — analysed code only, not the test suite.
+			"**/*_test.go",
+			"**/*.test.ts",
+			"**/*.test.tsx",
+			"**/*.test.js",
+			"**/*.spec.ts",
+			"**/*.spec.tsx",
+			"**/*.spec.js",
+			"**/testdata/**",
+			"**/__tests__/**",
+			// Mocks / fakes / stubs.
+			"**/mocks/**",
+			"**/mock_*.go",
+			"**/*_mock.go",
+			"**/*.mock.ts",
+			// Generated code.
+			"**/*.gen.go",
+			"**/*.pb.go",
+			"**/*_gen.go",
+			"**/*.min.js",
+			// SDK + tooling checkouts and editor/agent state.
+			"**/.gofi/**",
+			"**/.claude/**",
+			"**/vendor/**",
+			"**/node_modules/**",
+			// Build artefacts.
+			"**/dist/**",
+			"**/build/**",
+			"**/target/**",
+			"**/coverage.out",
+			"**/coverage.html",
+		},
+	}
+	if backend != nil {
+		cfg.CoverageReport = defaultCoverageReport(backend.Language)
+	}
+	return cfg
+}
+
+// defaultCoverageReport returns the conventional coverage artefact path for a
+// language — the file the `cover` test task produces — or "" when gofi has no
+// convention for it yet.
+func defaultCoverageReport(language string) string {
+	switch language {
+	case LanguageGo:
+		return "coverage.out"
+	case LanguageRust:
+		return "cobertura.xml"
+	}
+	return ""
 }
 
 // DefaultAgentsRef is the source pin used as the wizard default in `gofi init`
