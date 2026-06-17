@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/joaoprofile/gofi-cli/internal/dotenv"
 	"github.com/joaoprofile/gofi-cli/internal/help"
 	"github.com/joaoprofile/gofi-cli/internal/sources"
 	"github.com/joaoprofile/gofi-cli/internal/tui/spinner"
@@ -29,6 +31,10 @@ gofi train -a pd ./docs/fiscal.md
 gofi test cover-html`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			loadDotenv()
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRootDefault(cmd)
 		},
@@ -66,6 +72,29 @@ gofi test cover-html`,
 	)
 
 	return root
+}
+
+// loadDotenv loads a .env file before any gofi command runs, so variables like
+// SONAR_HOST_URL / SONAR_TOKEN no longer need a manual `set -a; source .env`.
+// It looks in the project root first, then the current directory. Variables
+// already set in the environment win, and a missing file is a no-op.
+func loadDotenv() {
+	seen := make(map[string]struct{})
+	var paths []string
+	if root, err := findProjectRoot(); err == nil {
+		paths = append(paths, filepath.Join(root, ".env"))
+		seen[root] = struct{}{}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if _, ok := seen[cwd]; !ok {
+			paths = append(paths, filepath.Join(cwd, ".env"))
+		}
+	}
+	for _, p := range paths {
+		if _, err := dotenv.Load(p); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to load %s: %v\n", p, err)
+		}
+	}
 }
 
 // runRootDefault is invoked when the user types just `gofi` (no subcommand).

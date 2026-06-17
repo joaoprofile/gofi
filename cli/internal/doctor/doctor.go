@@ -73,6 +73,8 @@ func Run(cfg *config.GofiConfig, opts Options) []Check {
 			"needed by Claude Code; the gofi CLI itself uses go-git"),
 		checkBinary(opts.Lookup, "claude", true,
 			"Claude Code CLI not found; install per https://docs.claude.com/en/docs/claude-code"),
+		checkBinary(opts.Lookup, "docker", true,
+			"Docker not found; needed to run local services (e.g. SonarQube, LocalStack) — install per https://docs.docker.com/get-docker/"),
 	}
 	projectRoot := ""
 	hsecEnabled := false

@@ -29,7 +29,7 @@ func TestRun_AllOK(t *testing.T) {
 	checks := Run(cfg, Options{
 		HTTPBaseURL: srv.URL,
 		HTTPClient:  srv.Client(),
-		Lookup:      mockLookup(map[string]string{"git": "/usr/bin/git", "claude": "/usr/bin/claude", "go": "/usr/bin/go"}),
+		Lookup:      mockLookup(map[string]string{"git": "/usr/bin/git", "claude": "/usr/bin/claude", "docker": "/usr/bin/docker", "go": "/usr/bin/go"}),
 	})
 
 	for _, c := range checks {

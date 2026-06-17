@@ -21,8 +21,8 @@ func newDoctorCmd() *cobra.Command {
 		Long: `Run a series of environment checks and print a status table.
 
 Checks: git on PATH, target language toolchain (go or cargo), claude CLI on PATH,
-write access to ~/.cache/gofi/, GitHub API connectivity. Each row reports ok,
-warning or error along with a remediation hint.`,
+docker on PATH, write access to ~/.cache/gofi/, GitHub API connectivity. Each row
+reports ok, warning or error along with a remediation hint.`,
 		Example: `gofi doctor
 gofi doctor --plain`,
 		RunE: func(cmd *cobra.Command, args []string) error {

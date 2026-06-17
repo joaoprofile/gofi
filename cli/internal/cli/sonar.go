@@ -148,7 +148,7 @@ func runSonarInstall() error {
 		fmt.Println("  https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/")
 	}
 	fmt.Println()
-	fmt.Println("Then export SONAR_HOST_URL and SONAR_TOKEN (e.g. in .env) before running `gofi sonar`.")
+	fmt.Println("Then set SONAR_HOST_URL and SONAR_TOKEN — gofi auto-loads a .env from the project root, so adding them there is enough.")
 	return nil
 }
 
@@ -171,7 +171,7 @@ func warnSonarEnv(w io.Writer, hostURLFromConfig string) {
 		fmt.Fprintln(w, "  • SONAR_TOKEN is not set — generate one in your SonarQube under")
 		fmt.Fprintln(w, "    My Account → Security → Generate Tokens, then export SONAR_TOKEN=<token>.")
 	}
-	fmt.Fprintln(w, "  Tip: put both in .env and export them before running `gofi sonar`.")
+	fmt.Fprintln(w, "  Tip: put both in a .env at the project root — gofi loads it automatically (no `source .env` needed).")
 }
 
 // backendLanguage returns the project's backend language, or "" for a
