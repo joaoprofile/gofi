@@ -1,0 +1,283 @@
+services:
+  # 1. OpenTelemetry Collector
+  otel-collector:
+    container_name: service-otel-collector
+    image: otel/opentelemetry-collector-contrib:0.149.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    restart: unless-stopped
+    depends_on:
+      tempo-ready:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_healthy
+      loki-ready:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+
+  # 2. Tempo (Backend de Traces)
+  tempo:
+    container_name: service-tempo
+    image: grafana/tempo:2.10.3
+    command: ["-config.file=/etc/tempo/tempo-config.yaml"]
+    user: "0"
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo/tempo-config.yaml
+      - tempo-data:/var/lib/tempo
+    ports:
+      - "3200:3200"
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+
+  # 2a. Wait for Tempo to be ready (imagem distroless sem wget/curl)
+  tempo-ready:
+    container_name: service-tempo-ready
+    image: busybox
+    restart: "no"
+    depends_on:
+      - tempo
+    command: >
+      sh -c "
+      echo 'Aguardando Tempo...';
+      until wget -q --spider http://tempo:3200/ready 2>/dev/null; do
+        sleep 5;
+      done;
+      echo 'Tempo pronto.';
+      "
+
+  # 3. Prometheus (Backend de Metrics)
+  prometheus:
+    container_name: service-prometheus
+    image: prom/prometheus:v3.11.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9091:9090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 4. Loki (Backend de Logs)
+  loki:
+    container_name: service-loki
+    image: grafana/loki:3.6.5
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml
+      - loki-data:/var/lib/loki
+    restart: unless-stopped
+    user: "0"
+    depends_on:
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+
+  # 4a. Wait for Loki to be ready (imagem distroless sem wget/curl)
+  loki-ready:
+    container_name: service-loki-ready
+    image: busybox
+    restart: "no"
+    depends_on:
+      - loki
+    command: >
+      sh -c "
+      echo 'Aguardando Loki...';
+      until wget -q --spider http://loki:3100/ready 2>/dev/null; do
+        sleep 5;
+      done;
+      echo 'Loki pronto.';
+      "
+
+  # 5. Grafana (Visualização de Metrics/Traces/Logs)
+  grafana:
+    container_name: service-grafana
+    image: grafana/grafana:12.2.8
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo-ready:
+        condition: service_completed_successfully
+      loki-ready:
+        condition: service_completed_successfully
+
+   # 6. MinIO (Armazenamento S3 para Loki e Tempo)
+  minio:
+    container_name: service-minio
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: lokiuser
+      MINIO_ROOT_PASSWORD: lokipassword
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 6a. Create buckets loki.
+  createbuckets:
+    container_name: service-createbuckets
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 lokiuser lokipassword;
+      mc mb --ignore-existing myminio/loki;
+      mc mb --ignore-existing myminio/tempo;
+      echo 'Buckets criados.';
+      exit 0;
+      "
+
+  # Kafka
+  kafka:
+    container_name: service-kafka
+    image: confluentinc/cp-kafka:7.9.0
+    ports:
+      - "9092:9092"   
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"   # UUID fixo para dev (evita reinit a cada restart)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # auto-create OFF: os tópicos são criados explicitamente pelo kafka-init com
+      # o partition count da topologia (auto-create geraria 1 partição — gargalo).
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # Kafka topic bootstrap — cria os tópicos com a topologia de
+  # specs/topologia/spec-topologia-kafka.md. Dev = single broker → RF=1
+  # (prod usa RF=3 / minISR=2). Partitions e retention seguem a spec.
+  kafka-init:
+    container_name: service-kafka-init
+    image: confluentinc/cp-kafka:7.9.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: >
+      bash -c "
+      set -e;
+      B=kafka:29092;
+      create() { kafka-topics --bootstrap-server $$B --create --if-not-exists --topic $$1 --partitions $$2 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=$$3 --config max.message.bytes=1048576 --config compression.type=producer; };
+      echo '== criando topicos marketplace.* (topologia spec / RF=1 dev) ==';
+      create marketplace.sync 32 604800000;
+      create marketplace.lifecycle 8 2592000000;
+      create marketplace.sync.dlq 8 2592000000;
+      create marketplace.lifecycle.dlq 4 5184000000;
+      echo '== topicos criados ==';
+      kafka-topics --bootstrap-server $$B --list | grep marketplace;
+      "
+
+  # Kafka UI
+  kafka-ui:
+    container_name: service-kafka-ui
+    image: provectuslabs/kafka-ui:v0.7.2
+    ports:
+      - "9002:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  postgres:
+    container_name: service-postgres
+    image: postgres:14.6
+    restart: always
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=102030
+    ports:
+      - "5432:5432"
+
+  redis:
+    container_name: service-redis
+    image: redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    restart: always
+    ports:
+      - "6379:6379"
+
+  sonarqube:
+    container_name: service-sonarqube
+    image: sonarqube:community
+    ports:
+      - "9003:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  postgres-data:
+  grafana-storage:
+  minio-data:
+  tempo-data:
+  loki-data:
+  kafka-data:

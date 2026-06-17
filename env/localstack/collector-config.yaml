@@ -1,0 +1,56 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+  transform/metrics:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["service_name"], resource.attributes["service.name"])
+          - set(attributes["environment"], resource.attributes["environment"])
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Loki 3.x endpoint native OTLP.
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    add_metric_suffixes: false
+    send_timestamps: true
+
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo]
+
+    metrics:
+      receivers: [otlp]
+      processors: [transform/metrics, batch]
+      exporters: [prometheus]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/loki]

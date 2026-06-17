@@ -1,0 +1,69 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  path_prefix: /var/lib/loki
+  instance_addr: 0.0.0.0
+  storage:
+    s3:
+      endpoint: minio:9000
+      bucketnames: loki
+      access_key_id: lokiuser
+      secret_access_key: lokipassword
+      insecure: true
+      s3forcepathstyle: true
+      region: us-east-1
+  ring:
+    kvstore:
+      store: memberlist
+  replication_factor: 1
+
+memberlist:
+  join_members:
+    - loki:7946
+
+ingester:
+  wal:
+    enabled: true
+    dir: /var/lib/loki/wal
+  lifecycler:
+    ring:
+      replication_factor: 1
+
+limits_config:
+  retention_period: 168h
+  max_query_length: 24h
+  allow_structured_metadata: true
+
+distributor:
+  otlp_config:
+    default_resource_attributes_as_index_labels:
+      - service.name
+      - service.namespace
+      - service.version
+      - environment
+      - deployment.environment
+
+schema_config:
+  configs:
+    - from: "2024-01-01"
+      store: tsdb
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+      object_store: s3
+
+compactor:
+  working_directory: /var/lib/loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  delete_request_store: s3
+  delete_request_cancel_period: 24h
+
+querier:
+  query_ingesters_within: 2h

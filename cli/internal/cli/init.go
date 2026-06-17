@@ -176,6 +176,12 @@ func executePipeline(r *wizard.Result) error {
 			return ensureGitignore(r.Root, ".env")
 		}},
 		spinner.Step{Name: "Seed local .env", Fn: func() error {
+			// Backend projects get a populated .env from
+			// env/localstack/.env-example in the "Seed ops/localstack + .env"
+			// step below; here we only seed an empty one for non-backend setups.
+			if hasBack {
+				return nil
+			}
 			return ensureEnvFile(r.Root)
 		}},
 		spinner.Step{Name: "Seed Horusec config", Fn: func() error {
@@ -224,6 +230,11 @@ func executePipeline(r *wizard.Result) error {
 			return nil
 		}},
 	)
+	if hasBack {
+		steps = append(steps, spinner.Step{Name: "Seed ops/localstack + .env", Fn: func() error {
+			return seedLocalstackEnv(r.Root, r.AgentsRef)
+		}})
+	}
 	if goBackend && pre.GoOK {
 		steps = append(steps, spinner.Step{Name: "Wire SDK into go.work", Fn: func() error {
 			return scaffold.EnsureGoWorkSDK(r.Root, r.Language)

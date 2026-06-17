@@ -202,6 +202,76 @@ func recordSDKSha(projectRoot, language string, resolved sources.Ref) {
 	}
 }
 
+// envExampleFile is the .env template shipped inside env/localstack/ in the
+// gofi repo. It seeds the project-root .env but is intentionally NOT copied
+// into ops/localstack/ (that folder holds only the runtime config files).
+const envExampleFile = ".env-example"
+
+// seedLocalstackEnv copies the gofi repo's env/localstack/ directory into the
+// new project. Everything except envExampleFile lands in <projectRoot>/
+// ops/localstack/ (docker-compose + observability configs), and the
+// .env-example seeds <projectRoot>/.env with the standard variables. The files
+// come from the fetched gofi monorepo (cached via fetchSource), never hardcoded
+// in the CLI. A missing env/localstack/ is a soft skip with a warning.
+func seedLocalstackEnv(projectRoot, agentsRef string) error {
+	dir, _, err := fetchSource(projectRoot, agentsRef)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", agentsRef, err)
+	}
+	srcDir := filepath.Join(dir, "env", "localstack")
+	if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {
+		fmt.Fprintf(os.Stderr, "warning: gofi repo has no env/localstack/; skipping ops/localstack + .env seeding\n")
+		return nil
+	}
+
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	destDir := filepath.Join(projectRoot, "ops", "localstack")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == envExampleFile {
+			continue
+		}
+		if err := copyFile(filepath.Join(srcDir, e.Name()), filepath.Join(destDir, e.Name()), 0o644); err != nil {
+			return fmt.Errorf("copy ops/localstack/%s: %w", e.Name(), err)
+		}
+	}
+
+	// Seed the project-root .env from the template, never clobbering an
+	// existing one (init can run in place over a dir that already has a .env).
+	example := filepath.Join(srcDir, envExampleFile)
+	if _, statErr := os.Stat(example); statErr == nil {
+		if err := copyFileIfAbsent(example, filepath.Join(projectRoot, ".env"), 0o600); err != nil {
+			return fmt.Errorf("seed .env: %w", err)
+		}
+	}
+	return nil
+}
+
+// copyFile writes src to dst with the given mode, creating parent dirs.
+func copyFile(src, dst string, mode os.FileMode) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, mode)
+}
+
+// copyFileIfAbsent copies src to dst only when dst does not already exist.
+func copyFileIfAbsent(src, dst string, mode os.FileMode) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	}
+	return copyFile(src, dst, mode)
+}
+
 func dirExists(fsys fs.FS, p string) bool {
 	info, err := fs.Stat(fsys, p)
 	return err == nil && info.IsDir()

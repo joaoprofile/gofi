@@ -24,6 +24,9 @@ var fixtureRepoFiles = map[string]string{
 	"ai/sdk/go/boilerplates/model.md":       "fixture model boilerplate",
 	"ai/sdk/go/sdk-docs/overview.md":        "fixture sdk overview",
 	"ai/sdk/go/knowledge/error-handling.md": "fixture error handling knowledge",
+	"env/localstack/.env-example":           "APP_NAME=fixture\nLOG_LEVEL=debug\n",
+	"env/localstack/docker-compose.yml":     "services: {}\n",
+	"env/localstack/prometheus.yml":         "global: {}\n",
 }
 
 // writeFixtureRepo materialises fixtureRepoFiles in a temp directory and

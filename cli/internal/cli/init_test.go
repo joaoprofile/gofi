@@ -164,6 +164,30 @@ func TestExecutePipeline_Go(t *testing.T) {
 		t.Errorf("expected .env in .gitignore, got:\n%s", gitignore)
 	}
 
+	// Backend projects seed ops/localstack/ with the gofi repo's localstack
+	// config files (docker-compose + observability), copied from env/localstack/.
+	for _, p := range []string{
+		"ops/localstack/docker-compose.yml",
+		"ops/localstack/prometheus.yml",
+	} {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			t.Errorf("expected %s: %v", p, err)
+		}
+	}
+	// The .env template is the source of the project .env — it must not leak
+	// into ops/localstack/.
+	if _, err := os.Stat(filepath.Join(target, "ops/localstack/.env-example")); err == nil {
+		t.Errorf(".env-example should not be copied into ops/localstack/")
+	}
+	// The project-root .env is seeded from env/localstack/.env-example, not empty.
+	env, err := os.ReadFile(filepath.Join(target, ".env"))
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+	if !strings.Contains(string(env), "APP_NAME=") {
+		t.Errorf("expected .env populated from .env-example, got:\n%s", env)
+	}
+
 	// Pre-v2.4 flat dirs must NOT appear under the new layout.
 	for _, gone := range []string{
 		".claude/boilerplates",
