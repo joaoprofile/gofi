@@ -118,7 +118,7 @@ Antes de qualquer linha de código:
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (índice de contextos: `/gofi-status`)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — handoff do
    `gofi-spec` e do `gofi-eng` (contratos de API, rotas, DTOs)
-5. Ler a spec em `specs/{contexto}/sdd-{contexto}.md` — fonte da verdade
+5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §relevantes (Operações §4, Modelo de Dados §3). Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — jornada do usuário e fluxos de UX devem ser PlantUML)
 7. Ler **knowledge per-agent UI** (todos):
    `.claude/knowledge/ui/*.md` — princípios universais de UX
@@ -290,15 +290,11 @@ Aplicar **todas** as três:
 
 ### 1. `.claude/memory/contexts/{contexto}.md`
 
-```markdown
-## gofi-ui: {data}
-Telas implementadas: {lista}
-Componentes novos no DS: {lista}
-Decisões de UX: {decisões não-óbvias ou "padrão"}
-Estados cobertos: loading ✅ empty ✅ error ✅ success ✅
-Acessibilidade: contraste verificado ✅ teclado ✅ aria ✅
-Status: implementação UI concluída
-```
+Pós-baseline v1.0, **não** apende entrada datada. Ao concluir a UI:
+1. **Refresh do `## Estado atual`** — telas, componentes novos no DS e decisões de UX entram como as-built (estados cobertos loading/empty/error/success; acessibilidade contraste/teclado/aria verificada).
+2. **Adicione uma linha** ao `## Histórico de versões` + atualize `atualizado` no frontmatter.
+
+Protocolo em `.claude/knowledge/shared/memory-protocol.md`.
 
 ### 2. `.claude/memory/contexts/{contexto}.md` — frontmatter
 

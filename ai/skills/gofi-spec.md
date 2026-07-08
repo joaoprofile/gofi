@@ -39,6 +39,7 @@ Você **não escreve código** — sua saída é o documento de especificação.
 2. Ler `.claude/CLAUDE.md` — mapa de paths físicos
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-pd
+4b. **RAG (poucos tokens):** ler o PRD de origem via `prd/INDEX.md` (descoberta por `keywords`) → frontmatter → `grep -n '^## '` + `Read` só das §relevantes (§8 Regras, §17 Considerações Técnicas). Ao **gerar a spec**, seguir a seção *Escrita* de `.claude/knowledge/shared/rag-retrieval-protocol.md` (base no `sdd-template.md`: frontmatter + `keywords`, **sem** Rastreabilidade/`**Autor:**`/journal) e **regenerar** `specs/INDEX.md` (`bash .claude/scripts/gen-index.sh specs`).
 5. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (especialmente `ddd-principles.md` e `diagram-conventions.md` — PlantUML obrigatório em §2 e qualquer fluxo na spec; `application-vs-domain-service.md` — declarar em §3.1 quais operações são use case `application/` e quais são `service/` direto; `event-driven-executor-pattern.md` — declarar em §4 quando o contexto usa split decider/executor com tópico de eventos entre eles, tabela `{ctx}_execution` com `decision_id` UNIQUE, materialização atomic da junction local, **DUAS bridges separadas** quando há split decider/executor — `DecisionBridge` puro sem `ctx`/`error` para o decider + `ExecutionBridge` com `ctx`/retry para o executor (cada adapter implementa as duas em arquivos separados — `decision_bridge.go` + `execution_bridge.go`); e **Processor scheduler-driven mora no domínio** — declarar em §8 a subpasta `services/domain/{ctx}/scheduler/{processor,repository,model}/`, binário cron do projeto é **só wiring**, sem `*_processor.go` próprio)
 6. Ler **knowledge per-agent**: `.claude/knowledge/spec/*.md` (user-treinado)
 7. Ler `.claude/templates/sdd-template.md` — formato obrigatório de saída
@@ -540,6 +541,7 @@ Atualizar/criar o frontmatter:
 contexto: {contexto}
 servicos: [{serviço}, ...]
 status: spec
+versao: "1.0"
 versao_prd: "{X.Y}" | n/a
 versao_spec: "{X.Y}"
 prd: prd/{contexto}/prd-{contexto}.md | n/a
@@ -568,12 +570,14 @@ Conteúdo mínimo:
 - **Decisões de arquitetura** (lista dos ADRs por título)
 - **Pontos de atenção para `gofi-eng`** (regras não-óbvias, gotchas, cross-context calls esperadas)
 - **Variáveis de ambiente adicionais** (lista ou "nenhuma")
-- **Histórico de agentes** — uma linha por evento, em ordem cronológica:
-  - `gofi-pd: {data} — PRD aprovado em {prd-path}`
-  - `gofi-spec: {data} — spec v1.0 criada em {spec-path}`
-  - `gofi-spec: {data} — spec v1.X bump por {motivo}` (a cada bump posterior)
-  - `gofi-eng: {data} — implementado em {pathContext}` (quando rodar)
-  - `gofi-qa: {data} — auditoria concluída` (quando rodar)
+- **`## Histórico de versões`** — uma linha por **versão** (não por evento):
+  `| v{X.Y} | {data} | spec v{X.Y} criada/bump — {motivo curto} |`.
+
+> **RAG (pós-baseline v1.0):** a memória é consolidada, não jornal. O
+> manifesto/resumo/decisões viram **as-built no `## Estado atual`** da cabeça +
+> uma linha no `## Histórico de versões`. **Não** apende `## gofi-...: {data}`.
+> O detalhe cronológico vive no git/spec. Modelo completo em
+> `.claude/knowledge/shared/memory-protocol.md`.
 
 ### Checklist de fechamento (rode mentalmente antes de devolver "spec gerada")
 

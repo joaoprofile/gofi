@@ -74,10 +74,17 @@ registrá-lo como nota para o `/gofi-spec` consumir depois.
    - **Teste rápido:** *esse conhecimento vale para outro cliente do mesmo
      segmento? → skill. Só vale para este produto/empresa? → institucional.*
 2. **O institucional é a memória do contexto específico.** Tudo que é específico
-   do produto/empresa vive em `.claude/institutional/{project.name}/`. Aprendeu
-   algo durável e específico (termo, ator, regra, integração, item de roadmap)?
-   Grave no **chunk correto** e **registre a linha no `INDEX.md`**. Um fato = um
-   lugar.
+   do produto/empresa vive em `.claude/institutional/{project.name}/`. **Onde
+   gravar depende de `sources.institutional` no `.gofi.yaml`:**
+   - **Repo configurado** → a pasta é um **espelho pull-only** mantido pela
+     empresa (`gofi institutional update` a **substitui por completo**). **Não
+     escreva chunk local** — seria perdido no próximo update. Aprendizado
+     específico **deste produto** durante o discovery vai para o **PRD** (ou
+     `memory/contexts/`); conhecimento durável de negócio válido para a empresa é
+     **contribuído ao repo institucional** fora do projeto (sinalize ao usuário).
+   - **Sem repo** → a pasta é mantida **à mão no git do projeto**. Aprendeu algo
+     durável e específico (termo, ator, regra, integração, roadmap)? Grave no
+     **chunk correto** e **registre a linha no `INDEX.md`**. Um fato = um lugar.
 3. **Institucional é um RAG — leia por relevância, não tudo.** Na pré-execução,
    carregue **só o `INDEX.md`**; depois carregue **apenas os chunks** cujo tema
    casa com o discovery atual (ver protocolo no próprio INDEX). Não leia chunk
@@ -126,7 +133,7 @@ Antes de iniciar a descoberta, **sempre**:
      metodologia genérica deste arquivo) e **ofereça bootstrapar** a pasta
      institucional ao final (criar `INDEX.md` + chunks), registrando o que
      descobriu em `.claude/institutional/{project.name}/`.
-8. **Leia `.claude/templates/prd-template.md`** — layout obrigatório do PRD.
+8. **Leia `.claude/templates/prd-template.md`** — layout obrigatório do PRD (já no formato RAG: frontmatter + `keywords`, **sem** `**Autor/Data:**`/Rastreabilidade/Histórico). Ao gerar o PRD, siga a seção *Escrita* de `.claude/knowledge/shared/rag-retrieval-protocol.md`: frontmatter + `keywords` (8–14 termos de busca), **zero proveniência/rastro de agent/nome de pessoa**, e **regenere** `prd/INDEX.md` (`bash .claude/scripts/gen-index.sh prd`) ao criar/renomear. Para descobrir PRDs existentes, consulte `prd/INDEX.md` — não varra a pasta.
 9. Verifique se o diretório de PRDs existe (ex.: `prd/`) — crie se necessário.
 10. Se já existir PRD para o contexto, confirme se é refinamento ou novo PRD.
 
@@ -153,8 +160,11 @@ coluna "Carregar quando", e leia **só os chunks relevantes**:
 | `metrics.md` | Métricas a elicitar → alimenta critérios de aceite |
 | `roadmap.md` | Itens previstos → antecipar dependências, evitar redundância |
 
-**Escrita (ao aprender):** fato de negócio novo e durável vai no chunk correto +
-linha registrada no `INDEX.md` (§1.2 regra 2). Nunca na skill.
+**Escrita (ao aprender):** ver §1.2 regra 2 — o destino depende de
+`sources.institutional`. **Com repo** (espelho pull-only): não edite a pasta;
+leve o aprendizado ao PRD/`memory` e contribua ao repo institucional fora do
+projeto. **Sem repo**: fato de negócio novo e durável vai no chunk correto +
+linha no `INDEX.md`. Nunca na skill.
 
 **Calibração pelo institucional (antes de perguntar):**
 - Termo já no glossário → não peça definição.
@@ -508,6 +518,11 @@ Ao concluir o PRD, **escreva** em `.claude/memory/contexts/{contexto}.md`:
 - **Frontmatter** (cria se não existir): `status: prd`, `versao_prd`,
   `prd: {path}`, `servicos`, `atualizado: {data}`
 - Próximo passo (na prosa): `/gofi-spec` para gerar spec
+
+> **RAG (pós-baseline v1.0):** a memória é consolidada, não jornal. Domínio/
+> atores/decisões de produto **atualizam o `## Estado atual`** da cabeça +
+> uma linha no `## Histórico de versões`. **Não** apende `## gofi-pd: {data}`.
+> Modelo completo em `.claude/knowledge/shared/memory-protocol.md`.
 
 O índice global é gerado por `/gofi-status` lendo esse frontmatter — **não**
 registre o contexto em `project.md`. Toque `project.md` apenas se nasceu um

@@ -295,15 +295,11 @@ Aplicar as três:
 (`{contexto-infra}` = nome do contexto de plataforma/infra, ex.: `infra`,
 `platform`.)
 
-```markdown
-## gofi-ops: {data}
-Recursos provisionados: {módulos/capabilities — rede, cluster, db, ...}
-Ambientes: {dev|staging|prod cobertos}
-Coexistência: {o que do legado permanece; o que migrou; corte pendente}
-Decisões: {não-óbvias ou "padrão"}
-Plan: {resumo — N add / N change / N destroy}
-Status: {bootstrap | dev provisionado | ... }
-```
+Pós-baseline v1.0, **não** apende entrada datada. Ao concluir:
+1. **Refresh do `## Estado atual`** — recursos provisionados, ambientes cobertos, coexistência legado↔novo e decisões entram como as-built vigente.
+2. **Adicione uma linha** ao `## Histórico de versões` + atualize `atualizado` no frontmatter (inclua o plan `N add/change/destroy` no resumo).
+
+Protocolo em `.claude/knowledge/shared/memory-protocol.md`.
 
 ### 2. `.claude/memory/contexts/{contexto-infra}.md` — frontmatter
 

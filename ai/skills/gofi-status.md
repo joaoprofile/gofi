@@ -15,6 +15,11 @@ não há alvo de escrita comum entre devs → zero conflito de git. Cada context
 inconsistência (frontmatter faltando, path inexistente), **reporta** — não corrige
 silenciosamente.
 
+> **Corpora irmãos (RAG):** este índice cobre a **memória** (derivado do frontmatter dos
+> `contexts/*.md`). Specs e PRDs têm seus próprios manifestos **commitados** —
+> `specs/INDEX.md` e `prd/INDEX.md` (regen: `.claude/scripts/gen-index.sh`). Protocolo de
+> descoberta/leitura em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
+
 ---
 
 ## Leis (regras básicas — aplicam antes de tudo)

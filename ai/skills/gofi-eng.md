@@ -44,7 +44,7 @@ Antes de qualquer linha de código:
 2. Ler `.claude/CLAUDE.md` — mapa de paths físicos do projeto
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-spec
-5. Ler a spec em `specs/{contexto}/sdd-{contexto}.md` — fonte da verdade
+5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` (descoberta por keywords) → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §seções relevantes (Modelo de Dados §3, Operações §4, Regras §5, ADRs §9). Nunca leia a spec inteira por reflexo. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
 7. Ler **knowledge per-agent**: `.claude/knowledge/eng/*.md` (user-treinado)
 8. Para `project.language` (a partir do `.gofi.yaml`):
@@ -113,7 +113,13 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
   materializado por ≥2 repos exige atualizar **cada** `SELECT` em contagem E
   ordem ao mudar a struct — um deles ficar para trás quebra só naquele caminho,
   em runtime (`expected N destination arguments in Scan, not M` ou
-  desalinhamento silencioso). Procedimento completo em
+  desalinhamento silencioso). Sub-caso campeão: **campo struct para coluna JSONB
+  sem `sql.Scanner`** — o mapper expande a struct e, se os sub-campos não têm tag
+  `db`, ela contribui **0 folhas** → aridade curta em toda leitura do tipo (o
+  `INSERT` engana porque passa `[]byte` explícito). Coluna JSONB = tipo com
+  `Scan`/`Value`, nunca struct recursiva. `build`/`test` **sem DB não pega** —
+  validar `len(mapping.GetMappedCols(&T{}))` == colunas do `SELECT` ou exercitar
+  a query. Procedimento completo em
   `.claude/knowledge/eng/impact-analysis-on-change.md`; mecânica do scan em
   `.claude/sdk/go/knowledge/value-objects.md` §"O contrato posicional é do TIPO,
   não do repo".
@@ -567,6 +573,22 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
     alias) — código novo importa `money` direto. DTOs expõem `currencyCode`
     (ISO 4217) / `countryCode` (ISO 3166-1), nunca o struct inteiro.
 
+- **Enviar arquivo a bucket (object storage) → `gofi/base/bucket` via wrapper de domínio.**
+  Qualquer artefato que precisa persistir bytes fora do Postgres (planilha bulk,
+  relatório, anexo, snapshot exportado) sobe por `bucket.Store`
+  (`github.com/joaoprofile/gofi/base/bucket`), aberto **uma vez** no composition
+  root via `config.OpenBucketFromEnv(environment.Instance())` e injetado
+  (tolerar `nil` = feature off, nunca fataliza o boot). O domínio **não** chama
+  `store.Put` cru nem importa `bucket/oci`/`bucket/minio` — encapsula num
+  `{Ctx}FileService` (`{ctx}/storage/`) que faz nil-check + object key
+  (`path.Join(prefixo, tipo, tenant, id, filename)`) + tradução para
+  `errs.AppError`, e devolve a **key** (persistir na linha para
+  `PresignGet`/`Delete` depois). Upload: `PutInput{Key, Body: bytes.NewReader(data),
+  Size: int64(len(data)), ContentType}` — body re-legível + size exato; se o mesmo
+  arquivo vai para 2 destinos (API externa + bucket), um `bytes.NewReader` **por
+  destino** (buffer drena uma vez). Vars `BUCKET_*` são modeladas pelo SDK (não são
+  desvio de padrão). Padrão completo, wrapper, presign e anti-padrões em
+  `.claude/sdk/go/knowledge/bucket-storage.md`.
 - **Bridge é puro fetch+map — zero DB, zero enriquecimento pesado.**
   Adapter externo é a borda: HTTP/SDK + parse → snapshot. **Não** chama repository, **não** consulta cache, **não** faz N+1 com APIs auxiliares. Enriquecimento "pesado" (identidade resolvida de tabela-cache, por exemplo) mora **fora** do adapter — ou (a) cache materializado no write pela application com batch read prévio, ou (b) enricher background fora do hot path. **Heurística**: se o adapter precisa de >2 chamadas externas por entidade, refator (provavelmente uma enrich step deveria ser separada).
 
@@ -627,12 +649,12 @@ Aplicar **todas** as três:
 
 ### 1. `.claude/memory/contexts/{contexto}.md`
 
-```markdown
-## gofi-eng: {data}
-Arquivos criados: {lista}
-Decisões: {decisões não-óbvias ou "padrão"}
-Status: implementação concluída
-```
+Pós-baseline v1.0, a memória **não** acumula entradas datadas. Ao concluir a implementação:
+1. **Refresh do `## Estado atual`** da cabeça — reescreva o que mudou (arquivos criados + decisões não-óbvias entram como as-built vigente, não como changelog).
+2. **Adicione uma linha** ao `## Histórico de versões` e bumpe `versao` no frontmatter (1.0→1.1 melhoria, →2.0 estrutural): `| v1.1 | {data} | {resumo curto} |`.
+3. O detalhe/porquê vive no commit e na spec — não na memória.
+
+Protocolo completo em `.claude/knowledge/shared/memory-protocol.md`.
 
 ### 2. `.claude/memory/contexts/{contexto}.md` — frontmatter
 
