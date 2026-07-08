@@ -8,6 +8,10 @@
 > **Panorama de todos os contextos:** rode **`/gofi-status`** — ele lê o
 > frontmatter de cada `memory/contexts/*.md` e monta o índice (Implementados /
 > Spec / PRD) sob demanda. Não há índice commitado.
+>
+> **Regra de escrita:** conteúdo **específico deste projeto**. Padrão técnico
+> genérico do SDK (stack, env vars, layers) vive em `.claude/sdk/<lang>/` — não
+> replique aqui. Um fato = um lugar.
 
 ---
 
@@ -26,42 +30,10 @@
 
 ---
 
-## Tecnologias
-{{if eq .Language "go"}}
-- **Linguagem:** Go
-- **Banco:** PostgreSQL (via `gofi/sqln`)
-- **HTTP:** stdlib net/http + `gofi/netx`
-- **Validação:** `gofi/base/validator` (go-playground/validator v10)
-- **Erros:** `gofi/base/errs` (AppError estruturado)
-- **Logging:** `gofi/obs/logging` (slog + OTLP)
-- **Testes:** `testify` — mocks handcraft (sem frameworks de mock)
-{{else}}
-_Preencher conforme stack adotada._
-{{end}}
----
-
-{{- if eq .Language "go"}}
-## Variáveis de Ambiente — Padrão gofi
-
-Referência completa: `.claude/sdk/go/sdk-docs/config.md`
-
-| Módulo | Prefixo de variáveis |
-|--------|----------------------|
-| App | `APP_NAME`, `APP_ENVIRONMENT`, `APP_TENANT`, `LOG_LEVEL`, `APP_MAX_PARALLEL_WORKERS` |
-| Obs/OTEL | `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| Debug | `SERVICE_DEBUG`, `SERVICE_DEBUG_ADDR`, `SERVICE_DEBUG_USER`, `SERVICE_DEBUG_PASS` |
-| Cloud | `CLOUD_PROVIDER`, `CLOUD_HOST`, `CLOUD_REGION`, `CLOUD_SECRET`, `CLOUD_TOKEN`, `CLOUD_DISABLE_SSL` |
-| Database (sqln) | `DATABASE_DRIVER/HOST/USER/PASSWORD/NAME/PORT/SSL_MODE/MAX_*` |
-| Cache/Redis | `CACHE_TYPE`, `CACHE_URI`, `CACHE_PASSWORD`, `CACHE_USE_TLS` |
-| Mensageria (msq) | `MESSAGING_PROVIDER/USER/PASSWORD/HOST/PORT` |
-
----
-{{end}}
 ## Agentes Ativos
 
 {{range .Agents}}- /{{.}}
-{{end}}
----
+{{end}}---
 
 ## Serviços
 
@@ -72,19 +44,16 @@ Referência completa: `.claude/sdk/go/sdk-docs/config.md`
 {{else}}
 | Serviço | Caminho | Porta | Banco |
 |---------|---------|-------|-------|
-{{end}}
----
+{{end}}---
 
 ## Convenções
 
-Specs em `specs/{contexto}/sdd-{contexto}.md` (raiz do projeto, fora de `.claude/`).
-PRDs em `prd/{contexto}/prd-{contexto}.md`.
+Specs em `specs/{contexto}/sdd-{contexto}.md` e PRDs em `prd/{contexto}/prd-{contexto}.md`
+(raiz do projeto, fora de `.claude/`) — ambos **corpora RAG**: descubra pelos
+`specs/INDEX.md` / `prd/INDEX.md` (case por `keywords`), nunca varra a pasta.
+Protocolo em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
 Rastreio por contexto em `memory/contexts/{contexto}.md` (frontmatter + histórico).
 
-### Consolidadas
-
-- Paginação: **0-indexed** na API e internamente (`page=0` = primeira página)
-- Erros de validação propagados ao cliente via `AppError.WithDetails`
-- DTOs em `model/dto.go`; entidades em `model/entity.go` — mesmo pacote, arquivos separados
-- Todos os erros do service em `service/errors.go` como vars registradas
-- Statements SQL preparados no construtor do repository
+> Registre aqui apenas convenções **deliberadas e específicas do projeto**
+> (prefixos de tabela, políticas de paginação, regras de nomenclatura próprias).
+> As consolidadas nascem à medida que o time decide — comece vazio.

@@ -167,7 +167,8 @@ PRD), derivado do frontmatter de cada `contexts/*.md`.
 ├── knowledge/
 │   ├── shared/                     — princípios universais cross-skill
 │   └── {eng,ui,...}/               — knowledge per-skill (criado sob demanda por `gofi train`)
-├── institutional/{project.name}/   — RAG de negócio (INDEX.md + chunks) — específico do produto
+├── institutional/{project.name}/   — RAG de negócio (INDEX.md + chunks) — espelho do repo da empresa (pull-only) ou mantido à mão
+├── scripts/gen-index.sh            — regenera specs/prd INDEX.md a partir do frontmatter
 ├── specs-template/sdd-template.md
 ├── prd-template/prd-template.md
 └── memory/
@@ -186,6 +187,24 @@ Em v1 o SDK cobre **`go`** (backend) e o front (`/gofi-ui`): web pelo DS
 > do projeto via `go.work`); as skills normalmente NÃO leem daí. Se uma skill
 > precisou abrir código real para decidir, é gap de curadoria — atualizar
 > `.claude/sdk/<lang>/`.
+
+---
+
+## Três camadas de atualização (quem atualiza o quê)
+
+Cada tipo de conteúdo tem **uma** fonte e **um** comando — nunca se cruzam:
+
+| Camada | Conteúdo | Fonte | Comando | Versionado no projeto |
+|--------|----------|-------|---------|-----------------------|
+| **Técnica / compartilhada** | skills, SDK, sdk-docs, boilerplates, `knowledge/shared`, templates, scripts, CLAUDE.md | `sources.agents` (+ `sources.sdk`) | `gofi update` (puxa sempre o último) | sim |
+| **Institucional (negócio)** | `.claude/institutional/{project.name}/` | `sources.institutional` (repo da empresa, multi-produto) | `gofi institutional update` (**substitui a pasta por completo**) | sim (snapshot) |
+| **Do projeto** | `prd/`, `specs/`, `memory/contexts/` | git do próprio projeto | nenhum (a CLI **nunca** toca) | sim |
+
+- `gofi update` **preserva** `knowledge/` e `memory/` e **não toca** `institutional/`.
+- **Sem `sources.institutional`:** a pasta institucional nasce de um starter local
+  e é editada **à mão** no git do projeto — não há de onde puxar.
+- **Com `sources.institutional`:** a pasta vira **espelho pull-only**; edições de
+  negócio vão para o repo da empresa, não para o projeto.
 
 ---
 
@@ -261,9 +280,10 @@ Quatro camadas, dois lados da [doutrina](#doutrina-das-skills):
 
 Canal de comunicação entre skills e entre sessões.
 
-- **`project.md`** — visão global: serviços/binários, tecnologias, convenções.
-  Lida por **todas** as skills antes de executar. **Estado por-contexto NÃO
-  vai aqui** (evita conflito de git entre devs em contextos diferentes).
+- **`project.md`** — visão global **específica do projeto**: serviços/binários e
+  convenções deliberadas. Lida por **todas** as skills antes de executar. Padrão
+  técnico genérico do SDK (stack, env vars) vive em `.claude/sdk/<lang>/`, não
+  aqui. **Estado por-contexto NÃO vai aqui** (evita conflito de git entre devs).
 - **`contexts/{contexto}.md`** — estado e handoff por contexto. **Frontmatter**
   (`status`, `versao_*`, `atualizado`) é o **único** lugar de estado por-contexto;
   o corpo guarda o histórico. Cada skill escreve sua parte ao concluir:
@@ -293,6 +313,9 @@ ui:
   framework: react    # determina o stack de /gofi-ui
 ops:
   cloud: oci          # determina a stack de /gofi-ops (IaC, CI/CD, registry)
+sources:
+  agents: github.com/org/gofi@main          # base técnica → gofi update
+  institutional: github.com/org/base@main   # base de negócio → gofi institutional update (opcional)
 # ... demais campos consumidos pelas skills
 ```
 

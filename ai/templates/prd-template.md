@@ -1,26 +1,21 @@
-# TEMPLATE PADRÃO — PRD / REQUISITO DE NEGÓCIO
-
 ---
-
-# TÍTULO DO PROJETO: `<Nome do Projeto>`
-
+tipo: prd
+contexto: {contexto}
+submodulo: {sub}                    # ou n/a
+versao: "1.0"
+status: aprovado                    # ou draft | discovery se ainda não implementado
+spec: specs/{contexto}/sdd-{...}.md # ou n/a
+keywords: [{8-14 termos kebab-case de busca do domínio}]
+atualizado: {YYYY-MM-DD}
 ---
-
-# `<CÓDIGO>` — `<Nome do Requisito>`
-
-Ex: `RN-01 — Gestão de Cadastro de Pessoas`
-
----
+# PRD — {contexto}/{submodulo} — {Nome do Requisito}
 
 ## 1. Informações Gerais
 
 | Campo        | Valor |
 |-------------|------|
-| Versão       | 1.0 |
-| Autor        |  |
-| Data         |  |
-| Status       | Draft / Em andamento / Aprovado |
-| Stakeholders |  |
+| Contexto     | {contexto} |
+| Stakeholders | {só papéis, ex.: Produto · Pricing · Engenharia — sem nomes de pessoas} |
 
 ---
 

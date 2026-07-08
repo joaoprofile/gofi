@@ -1,9 +1,16 @@
-# SDD — {NomeDoContexto}
+---
+tipo: spec
+contexto: {contexto}
+submodulo: {sub}                  # ou n/a se for a spec única do contexto (sdd-{contexto}.md)
+versao: "1.0"
+status: aprovado                  # ou proposto | em_revisao se ainda não implementado
+prd: prd/{contexto}/prd-{...}.md  # ou n/a
+keywords: [{8-14 termos kebab-case de busca do domínio}]
+atualizado: {YYYY-MM-DD}
+---
+# SDD — {contexto}/{submodulo}
 
-**Versão:** 1.0  
-**Data:** {data}  
-**Status:** Rascunho | Em Revisão | Aprovado  
-**Autor:** {nome}
+> **Escopo:** {1–2 frases do que a spec cobre — sem versão/autor/data (isso vive no frontmatter e no git)}
 
 ---
 
@@ -370,12 +377,10 @@ src/{contexto}/
 
 ---
 
-## 10. Rastreabilidade
+## 10. Histórico de versões
 
-| Tarefa | Agente | Status | Arquivo |
-|--------|--------|--------|---------|
-| Criação da spec | gofi-spec | ✅ | specs/{contexto}/sdd-{contexto}.md |
-| Implementação | gofi-eng | ⬜ | src/{contexto}/ |
-| Auditoria ui | gofi-ui | ⬜ | — |
-| Auditoria QA | gofi-qa | ⬜ | — |
-| Documentação doc | gofi-doc | ⬜ | — |
+| Versão | Data | Mudança |
+|--------|------|---------|
+| v1.0 | {YYYY-MM-DD} | Baseline consolidada. |
+
+> **Sem seção de Rastreabilidade / rastro de agent / changelog multi-versão.** A proveniência (quem/quando) vive no git; a versão vive no frontmatter. Uma linha por versão do doc.

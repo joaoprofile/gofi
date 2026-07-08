@@ -46,8 +46,9 @@ conteúdo de cada skill — enunciada **uma vez aqui**; as "Leis" no topo de cad
 | `/gofi-qa` | Quality Auditor — audita implementação contra spec e padrões |
 | `/gofi-doc` | Documentation Generator (Frontend & QA) — gera doc de contrato a partir de handlers Go |
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
+| `/gofi-full` | Full-Cycle Orchestrator — encadeia `gofi-pd → gofi-spec → gofi-eng → gofi-qa` em fluxo contínuo, volta à fase anterior quando reprova e segue até o QA aprovar sem ressalvas |
 
-Pipeline típico: `/gofi-pd → /gofi-spec → /gofi-eng → /gofi-qa`.
+Pipeline típico: `/gofi-pd → /gofi-spec → /gofi-eng → /gofi-qa` (ou `/gofi-full` para o ciclo inteiro orquestrado).
 Camada de apresentação: `/gofi-ui` após a spec (e o contrato do `gofi-eng`).
 Plataforma/infra: `/gofi-spec` (infra) → `/gofi-ops`.
 Doc de contrato: abrir o handler no IDE → `/gofi-doc`.
@@ -67,13 +68,16 @@ vale neste projeto — nunca entra em skill).
 | Knowledge específico da linguagem | `.claude/sdk/<lang>/knowledge/*.md` | Portável |
 | Knowledge cross-agent (universal) | `.claude/knowledge/shared/*.md` | Portável |
 | Knowledge per-agent (`gofi train`) | `.claude/knowledge/{agent}/*.md` (criado sob demanda; hoje `eng/`, `ui/`) | Portável |
-| Conhecimento institucional (negócio específico do produto/empresa) | `.claude/institutional/{project.name}/` — RAG: `INDEX.md` (sempre) + chunks sob demanda | Específico |
+| Conhecimento institucional (negócio específico do produto/empresa) | `.claude/institutional/{project.name}/` — RAG: `INDEX.md` (sempre) + chunks sob demanda. **Espelho pull-only** do repo `sources.institutional` quando configurado (atualizado por `gofi institutional update`, que **substitui a pasta por completo**); **sem repo**, mantido à mão no git do projeto | Específico |
 | Templates SDD/PRD | `.claude/templates/` (`sdd-template.md`, `prd-template.md`) | Portável |
 | Memória global (visão, serviços, convenções) | `.claude/memory/project.md` | Específico |
-| Estado por-contexto (frontmatter + histórico) | `.claude/memory/contexts/{contexto}.md` | Específico |
+| Estado por-contexto (cabeça: frontmatter + Estado atual consolidado + Histórico de versões) | `.claude/memory/contexts/{contexto}.md` | Específico |
+| Versões antigas transbordadas (só quando o changelog cresce) | `.claude/memory/contexts/{contexto}/history.md` | Específico |
 | Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |
 | Specs do projeto | `specs/{contexto}/sdd-{contexto}.md` | Específico |
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
+| Índice de retrieval de specs/PRDs (derivado do frontmatter) | `specs/INDEX.md`, `prd/INDEX.md` (regen: `.claude/scripts/gen-index.sh`) | Específico |
+| Protocolo de retrieval (ler os corpora gastando poucos tokens) | `.claude/knowledge/shared/rag-retrieval-protocol.md` | Portável |
 
 ## Convenção de leitura dos agents
 
@@ -84,7 +88,7 @@ e arquivos variam por agent); aqui fica o denominador comum:
 2. Ler `.claude/CLAUDE.md` (este arquivo) — mapa de paths físicos + doutrina das skills.
 3. Ler `.claude/memory/project.md` para visão global (serviços + convenções). Para o índice de contextos existentes, rodar `/gofi-status`.
 4. Ler `.claude/memory/contexts/{contexto}.md` se já houver — frontmatter (estado) + handoff de fases anteriores.
-5. Ler **`.claude/knowledge/shared/*.md`** — princípios universais cross-agent (DDD, protocolo de memória, protocolo de aprendizado).
+5. Ler **`.claude/knowledge/shared/*.md`** — princípios universais cross-agent (DDD, protocolo de memória, **protocolo de retrieval RAG**, protocolo de aprendizado).
 6. Ler **`.claude/knowledge/{agent}/*.md`** — knowledge user-treinado para esse agent (criado sob demanda por `gofi train`).
 7. **Contexto institucional (RAG)** — quando precisar de negócio além da spec, ler `.claude/institutional/{project.name}/INDEX.md` e **só os chunks relevantes**; nunca a pasta inteira.
 8. Para a linguagem-alvo, ler conteúdo language-specific:
@@ -92,10 +96,14 @@ e arquivos variam por agent); aqui fica o denominador comum:
    - `.claude/sdk/<lang>/sdk-docs/*.md` — API do SDK (apenas módulos relevantes)
    - `.claude/sdk/<lang>/boilerplates/*.md` — esqueletos antes de implementar (gofi-eng/qa)
 
+> **Specs/PRDs/contextos são RAG — gaste poucos tokens.** Regras de **leitura e criação** em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
+> - **Ler:** nunca leia um doc inteiro por reflexo. Descubra por `keywords` em `specs/INDEX.md`/`prd/INDEX.md` (ou `/gofi-status` p/ memória) → leia só o **frontmatter** do alvo → `grep -n '^## '` + `Read` apenas da §relevante.
+> - **Criar/editar:** emita **frontmatter + `keywords`** (base nos templates `.claude/templates/`), **zero proveniência** (sem `**Autor/Versão/Data:**`, sem `## Rastreabilidade`, sem nome de agent/pessoa, sem journal), Histórico de **1 linha**, e **regenere** o INDEX (`.claude/scripts/gen-index.sh`). Todo doc tem `versao: "1.0"` + `keywords`.
+
 ## Persistência de estado
 
 Ao concluir uma fase, cada agent **deve atualizar**:
-- `.claude/memory/contexts/{contexto}.md` — **frontmatter** (`status`, `versao_*`, `atualizado`) + entry no histórico (`gofi-{nome}: {data} — ...`). É o **único** lugar de estado por-contexto.
+- `.claude/memory/contexts/{contexto}.md` — **frontmatter** (`versao`, `status`, `versao_*`, `atualizado`, `keywords`) + reescrita do `## Estado atual` + 1 linha no `## Histórico de versões` (baseline consolidada — **sem** journal datado `gofi-{nome}: {data}`). É o **único** lugar de estado por-contexto.
 - `.claude/memory/project.md` **só** quando nasce um serviço/binário novo (tabela "Serviços").
 - A spec em `specs/{contexto}/sdd-{contexto}.md` quando o agent é gofi-eng ou gofi-qa
 
