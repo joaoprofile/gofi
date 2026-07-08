@@ -210,9 +210,15 @@ func executePipeline(r *wizard.Result) error {
 				if err := seedDocDir(r.Root, "specs"); err != nil {
 					return err
 				}
+				if err := scaffold.SeedCorpusIndex(r.Root, "specs"); err != nil {
+					return err
+				}
 			}
 			if r.CreatePrdDir {
 				if err := seedDocDir(r.Root, "prd"); err != nil {
+					return err
+				}
+				if err := scaffold.SeedCorpusIndex(r.Root, "prd"); err != nil {
 					return err
 				}
 			}
@@ -230,6 +236,11 @@ func executePipeline(r *wizard.Result) error {
 			return nil
 		}},
 	)
+	if r.InstitutionalRef != "" {
+		steps = append(steps, spinner.Step{Name: "Pull institutional base", Fn: func() error {
+			return seedInstitutionalFromRepo(r.Root, r.Name, r.InstitutionalRef)
+		}})
+	}
 	if hasBack {
 		steps = append(steps, spinner.Step{Name: "Seed ops/localstack + .env", Fn: func() error {
 			return seedLocalstackEnv(r.Root, r.AgentsRef)
@@ -387,7 +398,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 
 	// Go SDK is the only git source the wizard configures (cloned into
 	// .gofi/gofi-sdk-go/). Web/mobile design systems are npm packages.
-	src := config.Sources{Agents: r.AgentsRef}
+	src := config.Sources{Agents: r.AgentsRef, Institutional: r.InstitutionalRef}
 	if r.Has(wizard.EnvBack) && r.Language == config.LanguageGo {
 		if v := r.SDKURLs[config.LanguageGo]; v != "" {
 			src.SDK = map[string]string{config.LanguageGo: v}
@@ -467,6 +478,11 @@ func confirmSummary(r *wizard.Result) {
 	lines = append(lines, row("AI", r.AIHost+" ("+r.AIModel+")"))
 	lines = append(lines, row("agents", strings.Join(r.Agents, ", ")))
 	lines = append(lines, row("skills", r.AgentsRef))
+	if r.InstitutionalRef != "" {
+		lines = append(lines, row("institutional", r.InstitutionalRef))
+	} else {
+		lines = append(lines, row("institutional", "manual (no repo)"))
+	}
 	if r.GitRemote != "" {
 		lines = append(lines, row("remote", r.GitRemote))
 	}

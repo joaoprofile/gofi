@@ -207,6 +207,61 @@ func recordSDKSha(projectRoot, language string, resolved sources.Ref) {
 // into ops/localstack/ (that folder holds only the runtime config files).
 const envExampleFile = ".env-example"
 
+// resolveRefSHA resolves ref to its commit SHA without downloading a tarball —
+// used by `gofi doctor` to compare the committed institutional snapshot against
+// upstream. Honors GOFI_AGENTS_LOCAL_DIR (fixture mode) by returning "local".
+func resolveRefSHA(projectRoot, ref string) (string, error) {
+	if os.Getenv("GOFI_AGENTS_LOCAL_DIR") != "" {
+		return "local", nil
+	}
+	r, err := sources.Parse(ref)
+	if err != nil {
+		return "", err
+	}
+	cache, err := sources.ProjectCache(projectRoot)
+	if err != nil {
+		return "", err
+	}
+	client, err := sources.NewClient(cache)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := client.Resolve(r)
+	if err != nil {
+		return "", err
+	}
+	return resolved.Ref, nil
+}
+
+// seedInstitutionalFromRepo does the initial pull of the org's institutional
+// base during `gofi init`: it fetches institutionalRef and full-replaces
+// .claude/institutional/<projectName>/ with the repo's <projectName>/ folder.
+//
+// Soft-fail by design: if the repo can't be fetched or has no folder for this
+// product yet, the embedded starter seeded by InstallAgentsContent stays in
+// place and we only warn — init must not abort over an institutional gap.
+func seedInstitutionalFromRepo(projectRoot, projectName, institutionalRef string) error {
+	dir, resolved, err := fetchSource(projectRoot, institutionalRef)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not fetch institutional repo (%v); keeping local starter in .claude/institutional/%s/\n", err, projectName)
+		return nil
+	}
+	data := scaffold.TemplateData{ProjectName: projectName}
+	if _, err := scaffold.InstallInstitutionalMirror(os.DirFS(dir), projectName, projectRoot, projectName, data); err != nil {
+		if errors.Is(err, scaffold.ErrNoInstitutionalSubdir) {
+			fmt.Fprintf(os.Stderr, "warning: institutional repo has no %q/ folder yet; keeping local starter. Run 'gofi institutional update' after adding it.\n", projectName)
+			return nil
+		}
+		return fmt.Errorf("mirror institutional: %w", err)
+	}
+	if resolved.Ref != "local" {
+		if err := writeInstalledInstitutionalSha(projectRoot, resolved.Ref); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not record institutional SHA: %v\n", err)
+		}
+	}
+	return nil
+}
+
 // seedLocalstackEnv copies the gofi repo's env/localstack/ directory into the
 // new project. Everything except envExampleFile lands in <projectRoot>/
 // ops/localstack/ (docker-compose + observability configs), and the

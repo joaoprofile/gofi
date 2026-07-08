@@ -35,8 +35,8 @@ type Change struct {
 // project's existing files.
 //
 // The walk mirrors the InstallUpdate branch of InstallAgentsContent:
-// CLAUDE.md, skills/<agent>.md (selected agents only) and templates/*.
-// memory/ and knowledge/ are skipped because update preserves them.
+// CLAUDE.md, skills/<agent>.md (selected agents only), templates/* and
+// scripts/*. memory/ and knowledge/ are skipped because update preserves them.
 func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data TemplateData) ([]Change, error) {
 	var changes []Change
 
@@ -85,6 +85,12 @@ func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data Template
 
 	if srcDir := path.Join(srcRoot, "ai", "templates"); dirExistsInFS(agentsFS, srcDir) {
 		if err := walkAndPlan(agentsFS, srcDir, "templates", data, add); err != nil {
+			return nil, err
+		}
+	}
+
+	if srcDir := path.Join(srcRoot, "ai", "scripts"); dirExistsInFS(agentsFS, srcDir) {
+		if err := walkAndPlan(agentsFS, srcDir, "scripts", data, add); err != nil {
 			return nil, err
 		}
 	}

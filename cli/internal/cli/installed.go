@@ -18,8 +18,9 @@ const installedFileName = "installed.yaml"
 // SDK entries let `gofi update` and `gofi init` skip re-extracting the SDK
 // when the live checkout already matches the resolved ref.
 type installedRecord struct {
-	Agents string            `yaml:"agents,omitempty"`
-	SDK    map[string]string `yaml:"sdk,omitempty"`
+	Agents        string            `yaml:"agents,omitempty"`
+	Institutional string            `yaml:"institutional,omitempty"`
+	SDK           map[string]string `yaml:"sdk,omitempty"`
 }
 
 func installedPath(projectRoot string) string {
@@ -54,6 +55,16 @@ func readInstalledSha(projectRoot string) string {
 func writeInstalledSha(projectRoot, agentsSha string) error {
 	rec := loadInstalled(projectRoot)
 	rec.Agents = agentsSha
+	return saveInstalled(projectRoot, rec)
+}
+
+func readInstalledInstitutionalSha(projectRoot string) string {
+	return loadInstalled(projectRoot).Institutional
+}
+
+func writeInstalledInstitutionalSha(projectRoot, sha string) error {
+	rec := loadInstalled(projectRoot)
+	rec.Institutional = sha
 	return saveInstalled(projectRoot, rec)
 }
 

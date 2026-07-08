@@ -234,6 +234,13 @@ type AI struct {
 
 type Sources struct {
 	Agents string `yaml:"agents"`
+	// Institutional is the optional business-knowledge repo, maintained by the
+	// org/company independent of any product. When set, `gofi institutional
+	// update` mirrors its <project.name>/ subfolder into
+	// .claude/institutional/<project.name>/ (full replace). When empty,
+	// institutional/ is seeded locally at init and managed by hand in the
+	// project's own git — there is no upstream to pull from.
+	Institutional string `yaml:"institutional,omitempty"`
 	// SDK is an optional per-language override for the SDK content. When a
 	// language is present in this map, gofi fetches that repo separately
 	// and uses its root for boilerplates/, sdk-docs/, knowledge/ — instead

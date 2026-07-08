@@ -54,6 +54,7 @@ const (
 //   - ai/claude/CLAUDE.md       → .claude/CLAUDE.md
 //   - ai/skills/<sel>.md        → .claude/skills/<sel>.md (only selected)
 //   - ai/templates/             → .claude/templates/
+//   - ai/scripts/               → .claude/scripts/ (RAG index tooling)
 //   - ai/memory/project.md.tmpl → .claude/memory/project.md (InstallNew only)
 //   - embedded institutional templates → .claude/institutional/<name>/ (InstallNew only)
 //
@@ -104,6 +105,21 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		c, err := installFS(agentsFS, srcDir, filepath.Join(dest, "templates"), data, InstallOptions{})
 		if err != nil {
 			return created, err
+		}
+		created = append(created, c...)
+	}
+
+	// scripts/ (RAG tooling: gen-index.sh regenerates specs/prd INDEX.md from
+	// frontmatter). Portable tool code — refreshed on new and update installs.
+	if srcDir := path.Join(srcRoot, "ai", "scripts"); dirExistsInFS(agentsFS, srcDir) {
+		c, err := installFS(agentsFS, srcDir, filepath.Join(dest, "scripts"), data, InstallOptions{})
+		if err != nil {
+			return created, err
+		}
+		for _, p := range c {
+			if strings.HasSuffix(p, ".sh") {
+				_ = os.Chmod(p, 0o755)
+			}
 		}
 		created = append(created, c...)
 	}
@@ -178,6 +194,59 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 
 	return created, nil
 }
+
+// SeedCorpusIndex writes the RAG retrieval manifest (INDEX.md) into a corpus
+// directory at the project root — "specs" or "prd". The seed is an empty index
+// (header + column row) that /gofi-spec and /gofi-pd repopulate via
+// .claude/scripts/gen-index.sh as documents are created. It never overwrites an
+// existing INDEX.md, so re-running init on a populated project is a no-op.
+func SeedCorpusIndex(projectRoot, corpus string) error {
+	if corpus != "specs" && corpus != "prd" {
+		return fmt.Errorf("unknown corpus %q (want specs|prd)", corpus)
+	}
+	target := filepath.Join(projectRoot, corpus, "INDEX.md")
+	if _, err := os.Stat(target); err == nil {
+		return nil // preserve a project's real index
+	}
+	seed, err := readFromFS(embeddedFS, path.Join("embedded", "corpus", corpus+"-INDEX.md"))
+	if err != nil {
+		return fmt.Errorf("read %s seed index: %w", corpus, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(target), err)
+	}
+	return os.WriteFile(target, seed, 0o644)
+}
+
+// InstallInstitutionalMirror replaces .claude/institutional/<projectName>/ with
+// the <srcSubdir> subtree of the org's institutional repo (instFS). It is a
+// FULL REPLACE: the destination is wiped and recreated on every run, so the
+// folder is an authoritative mirror of the upstream — local edits do not
+// survive (business changes belong in the institutional repo, not the project).
+//
+// srcSubdir is the product folder inside the repo (matched by project name in
+// the multi-product layout). Returns ErrNoInstitutionalSubdir when that folder
+// is absent so the caller can print actionable guidance.
+func InstallInstitutionalMirror(instFS fs.FS, srcSubdir, projectRoot, projectName string, data TemplateData) ([]string, error) {
+	if projectName == "" {
+		return nil, errors.New("project name is required")
+	}
+	if !dirExistsInFS(instFS, srcSubdir) {
+		return nil, fmt.Errorf("%w: %q", ErrNoInstitutionalSubdir, srcSubdir)
+	}
+	dest := filepath.Join(projectRoot, ".claude", "institutional", projectName)
+	if err := os.RemoveAll(dest); err != nil {
+		return nil, fmt.Errorf("clear %s: %w", dest, err)
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
+	}
+	return installFS(instFS, srcSubdir, dest, data, InstallOptions{})
+}
+
+// ErrNoInstitutionalSubdir signals the institutional repo has no folder for
+// this product (multi-product layout expects <project.name>/ at the repo root).
+var ErrNoInstitutionalSubdir = errors.New("institutional repo has no folder for this product")
 
 // InstallSDKContent copies the SDK content into the project's .claude/.
 // sdkRoot is the directory inside srcFS that contains boilerplates/,

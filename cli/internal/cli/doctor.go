@@ -21,8 +21,9 @@ func newDoctorCmd() *cobra.Command {
 		Long: `Run a series of environment checks and print a status table.
 
 Checks: git on PATH, target language toolchain (go or cargo), claude CLI on PATH,
-docker on PATH, write access to ~/.cache/gofi/, GitHub API connectivity. Each row
-reports ok, warning or error along with a remediation hint.`,
+docker on PATH, write access to ~/.cache/gofi/, GitHub API connectivity, and —
+when sources.institutional is set — whether the committed institutional snapshot
+is behind the org repo. Each row reports ok, warning or error with a hint.`,
 		Example: `gofi doctor
 gofi doctor --plain`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,6 +39,13 @@ func runDoctor() error {
 		cfg = nil
 	}
 	checks := doctor.Run(cfg, doctor.Options{})
+
+	// Institutional freshness — only when the project pins an org repo. The
+	// doctor package can't reach sources/installed.yaml (import cycle), so the
+	// check is orchestrated here and appended to the report.
+	if cfg != nil && cfg.Sources.Institutional != "" {
+		checks = append(checks, checkInstitutionalFreshness(cfg))
+	}
 
 	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(int(os.Stdout.Fd()))
 	render(checks, useColor)
@@ -112,6 +120,50 @@ func render(checks []doctor.Check, color bool) {
 		}
 	}
 	fmt.Println()
+}
+
+// checkInstitutionalFreshness resolves the configured institutional repo and
+// compares its current SHA with the snapshot committed to this project
+// (.gofi/installed.yaml). Network resolution failures degrade to a warning —
+// doctor should never hard-fail over an institutional gap.
+func checkInstitutionalFreshness(cfg *config.GofiConfig) doctor.Check {
+	root := projectRootFromCfg(cfg)
+	committed := readInstalledInstitutionalSha(root)
+	resolved, err := resolveRefSHA(root, cfg.Sources.Institutional)
+	return institutionalFreshnessCheck(cfg.Sources.Institutional, committed, resolved, err)
+}
+
+// institutionalFreshnessCheck is the pure decision the doctor row is built from,
+// factored out so it can be unit-tested without the network.
+func institutionalFreshnessCheck(ref, committed, resolved string, resolveErr error) doctor.Check {
+	const name = "institutional base"
+	switch {
+	case resolveErr != nil:
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: "could not resolve " + ref,
+			Hint:   "check connectivity; then run `gofi institutional update`",
+		}
+	case resolved == "local":
+		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "local source (fixture)"}
+	case committed == "":
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: "configured but no snapshot recorded",
+			Hint:   "run `gofi institutional update` to pull the org base",
+		}
+	case committed == resolved:
+		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "up to date (" + short(resolved) + ")"}
+	default:
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: fmt.Sprintf("behind: %s → %s", short(committed), short(resolved)),
+			Hint:   "run `gofi institutional update` to sync the org base",
+		}
+	}
 }
 
 func anyFailed(checks []doctor.Check) bool {

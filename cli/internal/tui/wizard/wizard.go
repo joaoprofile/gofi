@@ -37,6 +37,10 @@ type Result struct {
 	Root      string // workspace folder, absolute after Run
 	AgentsRef string // skills/agents source URL (gofi monorepo) pinned in .gofi.yaml
 
+	// InstitutionalRef is the optional org business-knowledge repo. Blank means
+	// institutional/ is managed by hand in this project's own git (no upstream).
+	InstitutionalRef string
+
 	// Environments selected — any combination of back/web/mobile.
 	Environments []string
 
@@ -130,6 +134,16 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 				Title("Repository").
 				Description("github.com/<org>/<repo>@<ref>").
 				Value(&r.AgentsRef),
+		),
+		// 2b — Institutional repository (optional)
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Institutional base (optional)").
+				Description("Org repo with business/product knowledge, maintained by the company independent of any product. Multi-product layout: a <project-name>/ folder per product. Blank = manage institutional/ by hand in this project's git."),
+			huh.NewInput().
+				Title("Institutional repository").
+				Description("github.com/<org>/<repo>@<ref> — or blank").
+				Value(&r.InstitutionalRef),
 		),
 		// 3 — Environments (multi-select)
 		huh.NewGroup(
@@ -259,6 +273,7 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 	r.GoModule = strings.TrimSpace(r.GoModule)
 	r.GitRemote = strings.TrimSpace(r.GitRemote)
 	r.AgentsRef = strings.TrimSpace(r.AgentsRef)
+	r.InstitutionalRef = strings.TrimSpace(r.InstitutionalRef)
 
 	r.SDKURLs = collectSources(sdkGo)
 
