@@ -101,6 +101,18 @@ type Product struct {
 
 - **Colunas fora de ordem no `SELECT`** — como o mapeamento é posicional, reordenar `SELECT price, name, id` quebra o scan. Sempre alinhar a ordem do `SELECT` com a ordem dos sub-campos da struct
 - **Esquecer a tag `db` externa** — o mapper pula o campo e os valores do VO ficam zero sem erro de scan
+- **Struct para coluna JSONB SEM `sql.Scanner` → 0 folhas, aridade off-by-one (armadilha campeã).**
+  Um campo cujo tipo é **struct** com tag `db` (destinado a uma coluna JSONB
+  única), mas cujos sub-campos têm só `json` (**sem** `db`), e que **não**
+  implementa `sql.Scanner`: o mapper tenta **recursar** (struct ≠ `time.Time` ≠
+  `sql.Scanner` → nested-scannable), não encontra folha `db` nenhuma e o campo
+  contribui **0 destinos de scan**. O `SELECT` lista a coluna JSONB, mas os
+  destinos ficam **1 a menos** → `sql: expected N destination arguments in Scan,
+  not N-1`, em **runtime**, em **toda** leitura do tipo (o `INSERT`/`UPDATE`
+  continua funcionando porque passa `.ToJSON()`/`[]byte` explícito — o bug só
+  aparece na primeira query que escaneia a struct inteira). Regra: **coluna JSONB
+  = tipo com `Scan`/`Value`** (vira folha única, aridade casa), **nunca** struct
+  recursiva com sub-campos sem `db`. Ver §"VO armazenado em coluna única".
 - **Mix de strategies** — se o VO implementa `sql.Scanner`, ele não recursa, mesmo que tenha sub-campos com `db`. Escolha uma estratégia por VO
 - **Adicionar sub-campo no meio** — muda a ordem posicional e quebra queries existentes. Ao estender um VO, adicione o novo sub-campo **no fim** e ajuste todos os `SELECT` correspondentes
 
@@ -141,6 +153,14 @@ Regras ao estender/alterar uma struct escaneada:
    no resultset e a aridade quebra.
 4. `go build` + `go test` de **todos** os pacotes consumidores, não só do que
    você editou.
+5. **`go build`/`go test` (sem DB) NÃO pega quebra de scan** — ela é de runtime.
+   Ao mexer numa struct escaneada, valide a **contagem de folhas** explicitamente:
+   `len(mapping.GetMappedCols(&T{}))` (do pacote `gofi/sqln/mapping`) tem que ser
+   **igual** ao nº de colunas de **cada** `*SelectFields` que cai em `T`. Um
+   teste de 3 linhas contando folhas trava a regressão; senão, exercite a query
+   real contra um banco. Confira folha-a-folha o **mapeamento de cada campo**
+   (struct aninhada = `Scanner` **ou** sub-campos `db`), não só a contagem visível
+   de campos da struct.
 
 ## Onde documentar
 

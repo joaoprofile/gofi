@@ -580,6 +580,28 @@ func classify{Op}Error(err error) errs.AppError {
 11. **`url := fmt.Sprintf(path, args...)`** — path tem placeholders `%s`/`%d`;
     nunca concat de strings com `+`. Query params estáticos ficam no path
     constant; dinâmicos viram `url.Values.Encode()`.
+12. **`NewRequest(..., path)` recebe SÓ o path relativo — o `BaseURL` do client
+    já é prependado.** `NewRequest` monta a URL final como `client.BaseURL + path`.
+    Passar URL absoluta no `path` (ex.: `baseURL + relativePath`, ou uma
+    constante que já contém o host) **duplica** o host →
+    `https://host/https://host/path`, e o servidor responde **405/404** (o nginx
+    da borda não roteia o path lixo). Sintoma clássico: `405 Method Not Allowed`
+    num POST/PATCH que "parece certo". Regra: a constante passada ao `NewRequest`
+    é **sempre** relativa (`"/oauth/token"`, `fmt.Sprintf("/items/%s", id)`); o
+    host vive **só** no `BaseURL` do `HttpClientConfig`. Cuidado com constantes
+    mal-nomeadas terminando em `URL` que na verdade guardam path relativo —
+    confirme o valor, não o nome. Exceção: código que **sobrescreve `req.Url`**
+    com URL absoluta antes do `Execute()` (paginação que remonta a URL a cada
+    iteração) bypassa o prepend — funciona, mas o argumento `path` do `NewRequest`
+    fica morto; prefira path relativo + `req.Url` relativo quando possível.
+13. **Body OAuth: o `netx` escolhe o encoding pelo TIPO do body, não por header.**
+    `url.Values` → `Content-Type: application/x-www-form-urlencoded`; qualquer
+    outro tipo (incl. `map[string]string`, struct) → `application/json`. Logo o
+    tipo do `SetBody` **é** o contrato de encoding — escolha conforme o que o
+    provider exige naquele endpoint específico (frequentemente difere entre
+    `authorization_code` exchange e `refresh_token` do mesmo provider; conferir
+    a doc oficial do provider, não assumir). Header manual de `Content-Type` não
+    troca o encoding; o tipo do body troca.
 
 ### Precedente no repo
 
