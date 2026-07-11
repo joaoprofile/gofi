@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 )
@@ -52,11 +53,12 @@ const (
 //
 // It installs:
 //   - ai/claude/CLAUDE.md       → .claude/CLAUDE.md
-//   - ai/skills/<sel>.md        → .claude/skills/<sel>.md (only selected)
+//   - ai/skills/*.md            → .claude/skills/*.md (all skills, always)
 //   - ai/templates/             → .claude/templates/
 //   - ai/scripts/               → .claude/scripts/ (RAG index tooling)
 //   - ai/memory/project.md.tmpl → .claude/memory/project.md (InstallNew only)
-//   - embedded institutional templates → .claude/institutional/<name>/ (InstallNew only)
+//   - ai/institutional/         → .claude/institutional/<name>/ (InstallNew only;
+//                                 embedded scaffold as fallback — see InstallInstitutionalSeed)
 //
 // On InstallNew, knowledge/shared/ is seeded from <srcRoot>/ai/knowledge/shared/
 // (memory/learning protocols, base principles), per-agent knowledge dirs are
@@ -81,16 +83,23 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		return created, fmt.Errorf("read CLAUDE.md: %w", err)
 	}
 
-	// Selected agents
-	for _, agent := range data.Agents {
-		body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "skills", agent+".md"))
+	// Skills — every .md file under ai/skills/ is installed, regardless of the
+	// selected agent set. The agent selection only scopes the per-agent
+	// knowledge dirs below; all skills (including gofi-full and any agent not in
+	// the canonical eight) are always available under .claude/skills/.
+	skills, err := listSkillNames(agentsFS, srcRoot)
+	if err != nil {
+		return created, fmt.Errorf("list skills: %w", err)
+	}
+	for _, skill := range skills {
+		body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "skills", skill+".md"))
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
-			return created, fmt.Errorf("read agent %s: %w", agent, err)
+			return created, fmt.Errorf("read skill %s: %w", skill, err)
 		}
-		target := filepath.Join(dest, "skills", agent+".md")
+		target := filepath.Join(dest, "skills", skill+".md")
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return created, err
 		}
@@ -124,33 +133,31 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		created = append(created, c...)
 	}
 
-	// Knowledge dirs. shared/ comes from the source repo (protocols, base
-	// principles); per-agent dirs are placeholders the team fills in.
-	// On InstallNew, shared/ is seeded from the source so projects start with
-	// the upstream knowledge baked in. InstallUpdate leaves it alone — the
-	// team's edits live there.
-	sharedDest := filepath.Join(dest, "knowledge", "shared")
+	// Knowledge. On InstallNew, the ENTIRE ai/knowledge/ tree is seeded from the
+	// source — shared/ (protocols, base principles) plus every per-agent dir that
+	// ships upstream content (eng/, ui/, …) — regardless of the selected agent
+	// set, so projects start with all upstream knowledge baked in. Selected
+	// agents that have no upstream content still get an empty placeholder dir the
+	// team fills in. InstallUpdate leaves the whole tree untouched — team edits
+	// live there.
+	knowledgeDest := filepath.Join(dest, "knowledge")
 	if mode == InstallNew {
-		sharedSrc := path.Join(srcRoot, "ai", "knowledge", "shared")
-		if dirExistsInFS(agentsFS, sharedSrc) {
-			c, err := installFS(agentsFS, sharedSrc, sharedDest, data, InstallOptions{})
+		if knowledgeSrc := path.Join(srcRoot, "ai", "knowledge"); dirExistsInFS(agentsFS, knowledgeSrc) {
+			c, err := installFS(agentsFS, knowledgeSrc, knowledgeDest, data, InstallOptions{})
 			if err != nil {
 				return created, err
 			}
 			created = append(created, c...)
-		} else {
-			if err := os.MkdirAll(sharedDest, 0o755); err != nil {
-				return created, err
-			}
 		}
-	} else {
-		if err := os.MkdirAll(sharedDest, 0o755); err != nil {
-			return created, err
-		}
+	}
+	// shared/ always exists (empty if the source shipped none), and selected
+	// agents without upstream content get a placeholder dir.
+	if err := os.MkdirAll(filepath.Join(knowledgeDest, "shared"), 0o755); err != nil {
+		return created, err
 	}
 	for _, agent := range data.Agents {
 		if short := agentToKnowledgeDir[agent]; short != "" {
-			if err := os.MkdirAll(filepath.Join(dest, "knowledge", short), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Join(knowledgeDest, short), 0o755); err != nil {
 				return created, err
 			}
 		}
@@ -177,22 +184,97 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		}
 	}
 
-	// Institutional knowledge (gofi-pd's per-product business RAG). Seeded
-	// only on InstallNew, scoped by project name (.claude/institutional/<name>/),
-	// matching how /gofi-pd resolves the folder from project.name. We seed only
-	// the structure — README + INDEX (RAG manifest) — from the embedded
-	// templates; the thematic chunks are filled in by the team during discovery.
-	// On InstallUpdate it is left untouched (team-managed, like memory/).
-	if mode == InstallNew && data.ProjectName != "" {
-		instDest := filepath.Join(dest, "institutional", data.ProjectName)
-		c, err := installFS(embeddedFS, "embedded/institutional", instDest, data, InstallOptions{})
+	// Institutional knowledge (gofi-pd's per-product business RAG). Seeded only
+	// on InstallNew, scoped by project name (.claude/institutional/<name>/),
+	// matching how /gofi-pd resolves the folder from project.name. See
+	// InstallInstitutionalSeed for the source/fallback and placeholder handling.
+	// On InstallUpdate it is left untouched (team-managed, like memory/). When a
+	// real institutional repo is configured, seedInstitutionalFromRepo later
+	// wipes and replaces this starter with authoritative company data.
+	if mode == InstallNew {
+		c, err := InstallInstitutionalSeed(agentsFS, srcRoot, projectRoot, data.ProjectName, data)
 		if err != nil {
-			return created, fmt.Errorf("seed institutional: %w", err)
+			return created, err
 		}
 		created = append(created, c...)
 	}
 
 	return created, nil
+}
+
+// institutionalNameToken is the literal placeholder in the guided institutional
+// template that InstallInstitutionalSeed substitutes with the project name. All
+// other {{PLACEHOLDERS}} are preserved verbatim for the team to fill in.
+const institutionalNameToken = "{{NOME_DO_PRODUTO}}"
+
+// InstallInstitutionalSeed seeds .claude/institutional/<projectName>/ with the
+// guided business-knowledge starter. It prefers ai/institutional/ from the
+// source monorepo (agentsFS) — the rich, guided template (domain, glossary,
+// actors, business-rules, integrations, metrics, roadmap + INDEX + README with
+// {{PLACEHOLDERS}} and [GUIA] prompts) — and falls back to the embedded minimal
+// scaffold when the source ships none. Every institutionalNameToken is replaced
+// with projectName so the starter is partially pre-filled; all other
+// {{PLACEHOLDERS}} stay literal for the team to complete during discovery.
+//
+// No-op when projectName is empty. Meant for InstallNew only.
+func InstallInstitutionalSeed(agentsFS fs.FS, srcRoot, projectRoot, projectName string, data TemplateData) ([]string, error) {
+	if projectName == "" {
+		return nil, nil
+	}
+	dest := filepath.Join(projectRoot, ".claude", "institutional", projectName)
+
+	if srcDir := path.Join(srcRoot, "ai", "institutional"); dirExistsInFS(agentsFS, srcDir) {
+		c, err := copyInstitutionalTemplate(agentsFS, srcDir, dest, projectName)
+		if err != nil {
+			return c, fmt.Errorf("seed institutional: %w", err)
+		}
+		return c, nil
+	}
+
+	// Fallback: embedded minimal scaffold (Go-template .tmpl rendering).
+	c, err := installFS(embeddedFS, "embedded/institutional", dest, data, InstallOptions{})
+	if err != nil {
+		return c, fmt.Errorf("seed institutional (embedded): %w", err)
+	}
+	return c, nil
+}
+
+// copyInstitutionalTemplate mirrors srcDir into dest, replacing every
+// institutionalNameToken with projectName and preserving all other placeholders
+// verbatim. .gitkeep files are dropped; .tmpl files are NOT Go-template rendered
+// (the guided template uses literal {{PLACEHOLDERS}}, not text/template fields).
+func copyInstitutionalTemplate(srcFS fs.FS, srcDir, dest, projectName string) ([]string, error) {
+	var created []string
+	err := fs.WalkDir(srcFS, srcDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == srcDir {
+			return nil
+		}
+		rel := strings.TrimPrefix(p, srcDir+"/")
+		target := filepath.Join(dest, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if filepath.Base(target) == GitkeepName {
+			return nil
+		}
+		raw, err := fs.ReadFile(srcFS, p)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", p, err)
+		}
+		content := bytes.ReplaceAll(raw, []byte(institutionalNameToken), []byte(projectName))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, content, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", target, err)
+		}
+		created = append(created, target)
+		return nil
+	})
+	return created, err
 }
 
 // SeedCorpusIndex writes the RAG retrieval manifest (INDEX.md) into a corpus
@@ -364,6 +446,30 @@ func CleanLegacySDKLayout(projectRoot string) []string {
 		}
 	}
 	return removed
+}
+
+// listSkillNames returns the base names (without the .md extension) of every
+// skill file under <srcRoot>/ai/skills/ in agentsFS, sorted. Directories and
+// non-.md files are ignored. A missing ai/skills/ dir yields an empty slice,
+// not an error, so callers degrade gracefully on sources without skills.
+func listSkillNames(agentsFS fs.FS, srcRoot string) ([]string, error) {
+	dir := path.Join(srcRoot, "ai", "skills")
+	entries, err := fs.ReadDir(agentsFS, dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		names = append(names, strings.TrimSuffix(e.Name(), ".md"))
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // readFromFS reads p from fsys and returns its bytes (helper around fs.ReadFile

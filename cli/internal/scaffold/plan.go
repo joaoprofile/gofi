@@ -35,7 +35,7 @@ type Change struct {
 // project's existing files.
 //
 // The walk mirrors the InstallUpdate branch of InstallAgentsContent:
-// CLAUDE.md, skills/<agent>.md (selected agents only), templates/* and
+// CLAUDE.md, skills/*.md (all skills), templates/* and
 // scripts/*. memory/ and knowledge/ are skipped because update preserves them.
 func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data TemplateData) ([]Change, error) {
 	var changes []Change
@@ -70,15 +70,19 @@ func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data Template
 		return nil, fmt.Errorf("read CLAUDE.md: %w", err)
 	}
 
-	for _, agent := range data.Agents {
-		body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "skills", agent+".md"))
+	skills, err := listSkillNames(agentsFS, srcRoot)
+	if err != nil {
+		return nil, fmt.Errorf("list skills: %w", err)
+	}
+	for _, skill := range skills {
+		body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "skills", skill+".md"))
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
-			return nil, fmt.Errorf("read agent %s: %w", agent, err)
+			return nil, fmt.Errorf("read skill %s: %w", skill, err)
 		}
-		if err := add(filepath.Join("skills", agent+".md"), body); err != nil {
+		if err := add(filepath.Join("skills", skill+".md"), body); err != nil {
 			return nil, err
 		}
 	}

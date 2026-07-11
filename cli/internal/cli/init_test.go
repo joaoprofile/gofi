@@ -352,14 +352,21 @@ func TestExecutePipeline_AgentFiltering(t *testing.T) {
 	if err := executePipeline(r); err != nil {
 		t.Fatalf("pipeline: %v", err)
 	}
-	for _, kept := range []string{"gofi-spec.md", "gofi-eng.md"} {
+	// All skills are installed regardless of the selected agent set.
+	for _, kept := range []string{"gofi-pd.md", "gofi-spec.md", "gofi-eng.md", "gofi-qa.md"} {
 		if _, err := os.Stat(filepath.Join(target, ".claude/skills", kept)); err != nil {
-			t.Errorf("expected %s kept: %v", kept, err)
+			t.Errorf("expected %s installed: %v", kept, err)
 		}
 	}
-	for _, gone := range []string{"gofi-pd.md", "gofi-qa.md"} {
-		if _, err := os.Stat(filepath.Join(target, ".claude/skills", gone)); !os.IsNotExist(err) {
-			t.Errorf("%s should have been removed", gone)
+	// The agent selection only scopes the per-agent knowledge dirs.
+	for _, kept := range []string{"spec", "eng"} {
+		if _, err := os.Stat(filepath.Join(target, ".claude/knowledge", kept)); err != nil {
+			t.Errorf("expected knowledge/%s for selected agent: %v", kept, err)
+		}
+	}
+	for _, gone := range []string{"pd", "qa"} {
+		if _, err := os.Stat(filepath.Join(target, ".claude/knowledge", gone)); !os.IsNotExist(err) {
+			t.Errorf("knowledge/%s should not exist for unselected agent", gone)
 		}
 	}
 }

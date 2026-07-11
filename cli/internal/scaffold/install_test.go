@@ -85,6 +85,11 @@ func fixtureFS() fs.FS {
 		"ai/knowledge/shared/memory-protocol.md":   {Data: []byte("# memory protocol")},
 		"ai/knowledge/shared/learning-protocol.md": {Data: []byte("# learning protocol")},
 		"ai/knowledge/shared/ddd-principles.md":    {Data: []byte("# ddd principles")},
+		"ai/knowledge/eng/rbac-helper.md":          {Data: []byte("# rbac helper")},
+		"ai/knowledge/ui/design-tokens.md":         {Data: []byte("# design tokens")},
+		"ai/institutional/INDEX.md":                 {Data: []byte("# Institutional Index — {{NOME_DO_PRODUTO}}")},
+		"ai/institutional/README.md":               {Data: []byte("# Institutional — {{NOME_DO_PRODUTO}}")},
+		"ai/institutional/domain.md":               {Data: []byte("# Domain — {{NOME_DO_PRODUTO}}\ntopics: [{{METRICA_1}}]")},
 		"ai/sdk/go/boilerplates/model.md":          {Data: []byte("model boilerplate")},
 		"ai/sdk/go/sdk-docs/overview.md":           {Data: []byte("sdk overview")},
 		"ai/sdk/go/knowledge/error-handling.md":    {Data: []byte("knowledge error handling")},
@@ -159,20 +164,66 @@ func TestInstallAgentsContent_FilterAgents(t *testing.T) {
 	data := sampleData()
 	data.Agents = []string{"gofi-spec", "gofi-eng"}
 	installAgentsFromFixture(t, dir, data)
-	for _, kept := range []string{"gofi-spec.md", "gofi-eng.md"} {
+	// All skills are always installed, regardless of the selected agent set.
+	for _, kept := range []string{"gofi-pd.md", "gofi-spec.md", "gofi-eng.md", "gofi-qa.md"} {
 		if _, err := os.Stat(filepath.Join(dir, ".claude/skills", kept)); err != nil {
-			t.Errorf("expected %s to be kept: %v", kept, err)
+			t.Errorf("expected %s to be installed: %v", kept, err)
 		}
 	}
-	for _, dropped := range []string{"gofi-pd.md", "gofi-qa.md"} {
-		if _, err := os.Stat(filepath.Join(dir, ".claude/skills", dropped)); !os.IsNotExist(err) {
-			t.Errorf("expected %s NOT to be installed (got err=%v)", dropped, err)
+	// All upstream knowledge is seeded regardless of selection: ui/ ships
+	// content even though gofi-ui is not selected here.
+	mustExist(t, dir,
+		".claude/knowledge/shared/memory-protocol.md",
+		".claude/knowledge/eng/rbac-helper.md",
+		".claude/knowledge/ui/design-tokens.md",
+	)
+	// A selected agent without upstream content still gets an empty placeholder.
+	if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge/spec")); err != nil {
+		t.Errorf("expected placeholder knowledge/spec for selected agent: %v", err)
+	}
+	// Unselected agents without upstream content get nothing.
+	for _, dropped := range []string{"pd", "qa"} {
+		if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge", dropped)); !os.IsNotExist(err) {
+			t.Errorf("expected knowledge/%s NOT to exist for unselected agent (got err=%v)", dropped, err)
 		}
 	}
-	for _, kept := range []string{"shared", "spec", "eng"} {
-		if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge", kept)); err != nil {
-			t.Errorf("expected knowledge/%s to exist: %v", kept, err)
-		}
+}
+
+func TestInstallAgentsContent_InstitutionalSeed(t *testing.T) {
+	dir := t.TempDir()
+	installAgentsFromFixture(t, dir, sampleData()) // ProjectName my-svc
+	base := ".claude/institutional/my-svc"
+	// The whole guided template is seeded (not just INDEX + README).
+	mustExist(t, dir, base+"/INDEX.md", base+"/README.md", base+"/domain.md")
+	// {{NOME_DO_PRODUTO}} is auto-filled with the project name.
+	mustContain(t, filepath.Join(dir, base, "README.md"), "Institutional — my-svc")
+	mustContain(t, filepath.Join(dir, base, "domain.md"), "Domain — my-svc")
+	// Other placeholders stay literal for the team to fill during discovery.
+	mustContain(t, filepath.Join(dir, base, "domain.md"), "{{METRICA_1}}")
+}
+
+func TestInstallInstitutionalSeed_FallsBackToEmbedded(t *testing.T) {
+	// A source without ai/institutional/ falls back to the embedded scaffold.
+	fsys := fstest.MapFS{"ai/skills/gofi-pd.md": {Data: []byte("# pd")}}
+	dir := t.TempDir()
+	created, err := InstallInstitutionalSeed(fsys, ".", dir, "my-svc", TemplateData{ProjectName: "my-svc"})
+	if err != nil {
+		t.Fatalf("InstallInstitutionalSeed: %v", err)
+	}
+	if len(created) == 0 {
+		t.Fatal("expected embedded fallback to seed files")
+	}
+	mustExist(t, dir, ".claude/institutional/my-svc/INDEX.md", ".claude/institutional/my-svc/README.md")
+}
+
+func TestInstallInstitutionalSeed_EmptyNameNoop(t *testing.T) {
+	dir := t.TempDir()
+	created, err := InstallInstitutionalSeed(fixtureFS(), ".", dir, "", TemplateData{})
+	if err != nil {
+		t.Fatalf("InstallInstitutionalSeed: %v", err)
+	}
+	if len(created) != 0 {
+		t.Errorf("expected no files for empty project name, got %v", created)
 	}
 }
 
