@@ -7,67 +7,69 @@ camada de apresentação (pages, features, components, layouts, hooks) de um
 contexto de domínio a partir de uma spec SDD aprovada e — quando existir —
 do contrato implementado pelo `gofi-eng`.
 
-Implementa no(s) framework(s) declarado(s) no `.gofi.yaml` (bloco `ui`). O DS que
-você segue é escolhido pela **superfície** do alvo, não pelo framework cru:
+Implementa no(s) framework(s) declarado(s) no `.gofi.yaml`. **O DS é sempre o que
+estiver configurado no `.gofi.yaml` — a skill nunca fixa um nome de DS.** Você lê o
+nome, resolve a pasta e segue os docs dela.
 
-| `ui.framework` | Superfície | Design system (`<ds>`) |
-|----------------|-----------|------------------------|
-| `react` (`angular`/`vue`) | **web** | `.claude/sdk/web/gofi-ui/` |
-| `react-native` / `expo` | **mobile** | `.claude/sdk/mobile/gofi-ui-native/` |
+### Resolução do DS (a partir do `.gofi.yaml`, nunca chumbado na skill)
 
-> A pasta do DS **é o nome do pacote** publicado: `gofi-ui` (web) e
-> `gofi-ui-native` (mobile). Adiante, o placeholder **`<ds>`** designa essa pasta
-> conforme a superfície — i.e. `.claude/sdk/<surface>/<ds>/` resolve para
-> `sdk/web/gofi-ui/` ou `sdk/mobile/gofi-ui-native/`.
+O bloco de UI declara a chave **`ds`** = **nome da pasta do DS**. O placeholder
+**`<ds>`** designa esse valor; a **superfície** vem do `framework`:
 
-> **Um projeto pode ter uma superfície ou as duas.** Leia o `.gofi.yaml` e
-> determine o(s) alvo(s): framework **web** → leia `.claude/sdk/web/gofi-ui/`;
-> framework **mobile** → leia `.claude/sdk/mobile/gofi-ui-native/`; se houver os
-> dois, leia **os dois DS** (e repita o fluxo por superfície). **Nunca** aplique o
-> DS de uma superfície na outra — a forma é diferente: web é **Tailwind v4 +
-> utilitários** (`bg-action`, `text-ink`); mobile é **objeto TS** (`makeTheme` +
-> `useTheme()`).
+| `framework` | Superfície (`<surface>`) | Pasta do DS |
+|-------------|--------------------------|-------------|
+| `react` (`angular`/`vue`) | **web** | `.claude/sdk/web/<ds>/` |
+| `react-native` / `expo` | **mobile** | `.claude/sdk/mobile/<ds>/` |
 
-> **A lib é dependência npm — você NÃO a recria.** No projeto-alvo, `gofi-ui`
-> (web) e `gofi-ui-native` (mobile) já estão instaladas em `node_modules`. Você
-> **importa** componentes/tokens da lib (`import { Button } from 'gofi-ui'`) e cria
-> apenas a camada do app (features, pages/screens, componentes app-specific, data).
-> Os docs do DS são a **especificação** do que a lib expõe — não código a copiar.
+- `<ds>` = valor de `frontend.ds`/`ui.ds` (superfície única) ou `ui.<surface>.ds`
+  (multi-superfície). **A skill não presume nenhum nome.** Se `ds` não estiver no
+  `.gofi.yaml`, **pare e peça** ao usuário para configurá-lo.
+- **A forma (estilo/estado/teste/import) vem do config + dos docs do DS — a skill
+  não assume Tailwind, npm, SCSS Modules nem nenhuma stack.** Pode ser Tailwind +
+  utilitários, SCSS Modules + tokens, `makeTheme`/`useTheme` (mobile), etc. Leia
+  `styling`/`state`/`testing` e o **manifesto do DS** antes de codificar.
+- O DS pode ser **lib npm** (`import { Button } from '<ds>'`) **ou componentes no
+  próprio repo** (importe do path do app, ex. `~/components/...`) — **quem manda é o
+  manifesto/docs do DS**. Em ambos os casos você **compõe** com o que o DS expõe e
+  **não o recria**; os docs são a especificação, não código a copiar.
 
-### Schema do bloco `ui` no `.gofi.yaml`
+> **Um projeto pode ter uma superfície ou as duas.** Se houver `ui.web`/`ui.mobile`,
+> processe cada uma como superfície-alvo independente e leia **o DS de cada uma**
+> (`.claude/sdk/<surface>/<ds>/`, com o `<ds>` de cada sub-bloco). **Nunca** aplique o
+> DS/forma de uma superfície na outra.
 
-Duas formas. **Uma superfície** (chaves no nível de `ui`):
+### Bloco de UI no `.gofi.yaml`
+
+O bloco pode se chamar **`frontend:`** (comum em full-stack) ou **`ui:`** — leia o que
+existir. **Os valores abaixo são exemplos: leia os reais do projeto, não presuma.**
+
+**Uma superfície:**
 
 ```yaml
-ui:
+frontend:                 # ou `ui:`
   framework: react        # react|angular|vue → web · react-native|expo → mobile
-  path: .                 # raiz do app de UI
-  brand:                  # cores DO PROJETO (não há paleta fixa) — omitir = padrão neutro
-    surface: "#AAD7FF"    #   superfície de marca
-    onBrand: "#0B2942"    #   texto sobre a marca (AA sobre surface)
-    action:  "#1B72D8"    #   affordance (AA sobre branco)
-    accent:  "#444CE7"    #   apoio (opcional)
-  styling: tailwind       # tailwind (web) | stylesheet (rn)
-  state: tanstack-query   # data/estado
-  testing: vitest         # vitest+rtl (web) | jest+rntl (rn)
+  path: frontend          # raiz do app de UI
+  ds: <ds>                # NOME DA PASTA DO DS (.claude/sdk/<surface>/<ds>/) — OBRIGATÓRIO
+  styling: <styling>      # ex.: tailwind | scss-modules | stylesheet — NÃO presuma
+  state: <state>          # ex.: tanstack-query | axios-hooks | redux
+  testing: <testing>      # ex.: jest | vitest
+  brand: <brand>          # cores DO PROJETO (string ou surface/onBrand/action/accent) — omitir = neutro
 ```
 
-**Duas superfícies** (sub-blocos `web:` e/ou `mobile:`, cada um com o seu):
+**Duas superfícies** (sub-blocos `web:`/`mobile:`, cada um com o seu `ds`/`framework`/`path`):
 
 ```yaml
 ui:
-  web:    { framework: react,        path: apps/web,    brand: { surface: "#AAD7FF", action: "#1B72D8" } }
-  mobile: { framework: react-native, path: apps/mobile, brand: { surface: "#AAD7FF", action: "#1B72D8" } }
+  web:    { framework: react,        path: apps/web,    ds: <ds-web> }
+  mobile: { framework: react-native, path: apps/mobile, ds: <ds-mobile> }
 ```
 
 Regra de leitura: se existir `ui.web`/`ui.mobile`, processe **cada** sub-bloco como
-uma superfície-alvo independente; senão, `ui` é uma superfície única (derive a
-superfície do `ui.framework`).
-
-Frameworks suportados pelo modelo: **React + TypeScript** (web, primeiro suportado)
-e **React Native** (mobile). Os dois bebem dos **mesmos tokens**
-(`.claude/knowledge/ui/design-tokens.md`) — muda a **forma** (web: utilitários
-Tailwind v4; mobile: `makeTheme`/`useTheme`) e os componentes.
+superfície-alvo independente (com o seu `ds`); senão é superfície única (derive pelo
+`framework`). **Em todos os casos, `<ds>` vem do config — a skill nunca fixa o nome,
+nem a stack.** Frameworks suportados: **React + TS** (web) e **React Native** (mobile);
+a **forma** (utilitários, SCSS Modules, `makeTheme`/`useTheme`, etc.) e os componentes
+são os que o **DS configurado** documenta.
 Você **não escreve código fora do escopo da spec** e **não inventa regras**
 que não estejam documentadas. Quando faltar contexto, pergunte antes de
 codificar.
@@ -105,15 +107,17 @@ antes de ser dada como pronta.
 
 Antes de qualquer linha de código:
 
-1. Ler `.gofi.yaml` (raiz) — extrair `project.name` e o **bloco `ui`** conforme o
-   **§Schema do bloco `ui`** (§Identidade): forma única (`ui.framework`/`path`/
-   `brand`/`styling`/`state`/`testing`) ou multi-superfície (`ui.web`/`ui.mobile`).
-   Derivar a(s) **superfície(s)-alvo** (web e/ou mobile) — um projeto pode ter uma,
-   as duas, e o bloco `ui` **coexiste** com o backend (`project.language`, ex.: `go`
-   tratado pelo `gofi-eng`) num mesmo full-stack. A marca de cada superfície são as
-   **cores do projeto** na chave `brand` (`surface`/`onBrand`/`action`/`accent`). Se
-   o bloco `ui:` não existir, **pare e peça ao usuário** para configurá-lo. Se `brand`
-   não existir, execute o **Bootstrap de marca** abaixo **antes de qualquer código**.
+1. Ler `.gofi.yaml` (raiz) — extrair `project.name` e o **bloco de UI** (`frontend:`
+   ou `ui:`) conforme o **§Bloco de UI** (§Identidade): forma única
+   (`framework`/`path`/`ds`/`styling`/`state`/`testing`/`brand`) ou multi-superfície
+   (`ui.web`/`ui.mobile`). Derivar a(s) **superfície(s)-alvo** (web e/ou mobile pelo
+   `framework`) e, **para cada uma, o `<ds>`** = valor da chave `ds` — o **nome da
+   pasta do DS não sai da skill, sai daqui**. O bloco de UI **coexiste** com o backend
+   (`project.language`) num full-stack. Se o bloco de UI **ou a chave `ds`** não
+   existir, **pare e peça ao usuário** para configurá-los (a skill não adivinha o DS).
+   Também leia `styling`/`state`/`testing` — a forma da implementação vem daí + dos
+   docs do DS, **não** de presunção. Se `brand` não existir, execute o **Bootstrap de
+   marca** abaixo **antes de qualquer código**.
 2. Ler `.claude/CLAUDE.md` — mapa de paths físicos do projeto
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (índice de contextos: `/gofi-status`)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — handoff do
@@ -124,10 +128,14 @@ Antes de qualquer linha de código:
    `.claude/knowledge/ui/*.md` — princípios universais de UX
 8. **Tokens (sempre):** ler `.claude/knowledge/ui/design-tokens.md` — estrutura de
    tokens/escalas e como as **cores do projeto** preenchem os papéis (sem paleta fixa).
-9. Para **cada superfície-alvo** (`<surface>` = `web` e/ou `mobile`, derivada do(s)
-   framework(s); `<ds>` = `gofi-ui` no web, `gofi-ui-native` no mobile) — repita a
-   leitura abaixo para cada uma que o projeto declarar:
-   - Ler o **manifesto do DS**: `.claude/sdk/<surface>/<ds>/gofi.md`
+9. Para **cada superfície-alvo** (`<surface>` = `web` e/ou `mobile`, derivada do
+   `framework`; **`<ds>` = valor da chave `ds` lida no passo 1**, nunca um nome fixo) —
+   repita a leitura abaixo. Comece pelo índice de retrieval quando existir:
+   - Ler o **índice RAG** da superfície se houver: `.claude/sdk/<surface>/INDEX.md`
+     (descobre docs por `keywords` → leia só o frontmatter do alvo → só a §relevante).
+   - Ler o **manifesto do DS** — o `.md` na **raiz** de `.claude/sdk/<surface>/<ds>/`
+     (é o único doc no topo da pasta; foundations/components/patterns são subpastas).
+     **Não** assuma um nome de arquivo específico; descubra pelo INDEX ou listando a raiz.
    - Ler **foundations** pertinentes:
      `.claude/sdk/<surface>/<ds>/foundations/{tokens-*,color,typography,
      spacing-layout,radius-elevation,motion,accessibility,...}.md`
@@ -135,15 +143,15 @@ Antes de qualquer linha de código:
      `.claude/sdk/<surface>/<ds>/components/{_index,...}.md`
    - Ler os **patterns** da tela alvo:
      `.claude/sdk/<surface>/<ds>/patterns/{states,app-shell|navigation,
-     page-templates,forms,feedback,hero-onboarding,...}.md`
+     page-templates,forms,feedback,...}.md`
    - Ler as **regras de código + estrutura** da superfície:
      `.claude/sdk/<surface>/knowledge/absolute-rules.md` e `structure.md`
      (framework-specific), e usar os esqueletos em
-     `.claude/sdk/<surface>/boilerplates/*.md` **antes** de implementar (a lib do DS
-     é dependência npm — importe dela, não a recrie).
+     `.claude/sdk/<surface>/boilerplates/*.md` **antes** de implementar. **Importe do
+     que o DS expõe (lib npm OU componentes do repo, conforme o manifesto) — não o recrie.**
    - **Se o contexto pertence a uma área/app com DS próprio**
      (app-specific — ex.: um back-office/admin distinto do front principal):
-     ler o DS app-specific em `.claude/sdk/<surface>/<ds>/<app>.md` — é o
+     ler o DS app-specific em `.claude/sdk/<surface>/<app>.md` — é o
      template a seguir ali. **Não confundir** com o DS principal — cada app tem o seu.
 10. Verificar se já existem arquivos no path da feature/page —
    **nunca sobrescrever sem confirmar**
@@ -162,9 +170,11 @@ vez por projeto): no mínimo a cor de **superfície de marca** e a de **ação**
 o **apoio**. Se o usuário não tiver preferência, use o padrão neutro de
 [knowledge/ui/design-tokens.md](../knowledge/ui/design-tokens.md).
 
-O agente aplica as cores do projeto configurando o **tema da lib** — a lib aceita
-cores arbitrárias: web injeta as vars `--brand`/`--action`/… via `<ThemeProvider>`;
-mobile passa as cores a `makeTheme(brand, mode)`/`<ThemeProvider>`. **Valide o
+O agente aplica as cores do projeto pelo **mecanismo de tema do DS configurado** —
+**exatamente como o manifesto do DS documenta**, sem presumir. Conforme a superfície e
+o DS, isso pode ser: injetar vars/tokens (`--brand`/`--action`/… num `<ThemeProvider>`
+ou nos tokens SCSS) no **web**; passar as cores a `makeTheme(brand, mode)`/
+`<ThemeProvider>` no **mobile**; ou outro mecanismo que o DS defina. **Valide o
 contraste ao aplicar** (receita em design-tokens §"Escolher cores com segurança"):
 `onBrand` ≥ 4.5:1 sobre `surface` e `action` ≥ 4.5:1 sobre branco — ajuste o tom
 dentro da cor do projeto se reprovar.
@@ -182,8 +192,10 @@ ui:
     accent:  "#444CE7"  #   apoio (opcional)
 ```
 
-- Gravar `ui.brand` no `.gofi.yaml` e refletir as cores no `<ThemeProvider>` do app.
-- Aplicar **as mesmas cores nas duas superfícies** (web + mobile) para manter paridade.
+- Gravar `brand` no bloco de UI do `.gofi.yaml` e refletir as cores pelo **mecanismo
+  de tema do DS** (conforme o manifesto do DS).
+- **Se o projeto configurar as duas superfícies** (web + mobile), aplicar **as mesmas
+  cores nas duas** para manter paridade (cada uma pelo mecanismo do seu DS).
 - Registrar a decisão de marca em `.claude/memory/project.md` (linha curta).
 
 ---
@@ -263,9 +275,10 @@ Aplicam-se em qualquer framework UI suportado:
 - **Foco visível** — nunca remova outline sem alternativa visível.
 - **Contraste 4.5:1 mínimo** (WCAG 2.2 AA) — verifique com ferramenta,
   não no olho.
-- **Mobile-first** — escreva os estilos base (mobile) primeiro: utilitários
-  Tailwind no web, `StyleSheet` no RN. Expanda para telas maiores com `md:`/`lg:`
-  (web) — desktop é refinamento.
+- **Mobile-first** — escreva os estilos base (mobile) primeiro, na **forma do DS**
+  (utilitários responsivos se o DS for utilitário; media queries com os breakpoints do
+  DS se for SCSS/CSS Modules; `StyleSheet` no RN). Expanda para telas maiores — desktop
+  é refinamento.
 - **Microcopy em PT-BR** — "entrar" não "logar", "sair" não "deslogar",
   "salvar" não "submit". Tom direto, sem jargão.
 - **Mutação destrutiva exige confirmação ou undo** (nunca ambos ausentes).
@@ -273,14 +286,22 @@ Aplicam-se em qualquer framework UI suportado:
 - **Nunca prop drilling > 2 níveis** — extraia hook/serviço/contexto.
 - **Sem CSS inline para layout** — só `style={}` para valores
   computados em runtime (ex: posição de tooltip).
-- **Sem fetch direto em componente** — passa por camada de data
-  (TanStack Query no web; no mobile, hooks/camada de data — ex. TanStack Query).
+- **Sem fetch direto em componente** — passa pela **camada de data configurada**
+  (`state` do `.gofi.yaml` + o que o DS/knowledge documenta: ex. TanStack Query,
+  hooks de axios, etc.). Não presuma a lib de dados.
 
-Os tokens e o design system da superfície são a fonte da verdade visual:
-[`.claude/knowledge/ui/design-tokens.md`](../knowledge/ui/design-tokens.md) +
-[`.claude/sdk/<surface>/<ds>/gofi.md`](../sdk/web/gofi-ui/gofi.md).
+Os tokens e o design system da superfície são a fonte da verdade visual: o
+**manifesto do DS configurado** — o `.md` na raiz de `.claude/sdk/<surface>/<ds>/`
+(descoberto via `.claude/sdk/<surface>/INDEX.md`), com `<ds>` vindo do `.gofi.yaml`.
 Regras framework-specific (ex: nunca `any`, nunca `useEffect` para derivar estado),
 quando existirem, em `.claude/sdk/<surface>/knowledge/absolute-rules.md`.
+
+> **Mobile (condicional).** Só quando o `.gofi.yaml` **configurar uma superfície
+> mobile** (`framework: react-native`/`expo`, ou sub-bloco `ui.mobile` com seu `ds`):
+> leia **também** o DS mobile em `.claude/sdk/mobile/<ds>/` — do mesmo modo
+> config-driven (manifesto na raiz, foundations/components/patterns), aplicando a
+> **forma mobile** (ex.: `makeTheme`/`useTheme`, `StyleSheet`). Sem superfície mobile
+> configurada, ignore — não crie nem procure DS mobile por conta própria.
 
 ---
 
