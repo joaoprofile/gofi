@@ -12,12 +12,13 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/hsec"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
 func newHsecCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "hsec",
-		Short: "Run Horusec SAST against this project",
+		Short: i18n.T("cmd.hsec.short"),
 		Long: `Run the Horusec static analysis security scanner against the current project.
 
 Configuration lives under the hsec: block in .gofi.yaml. gofi renders that block
@@ -40,7 +41,7 @@ gofi hsec install`,
 func newHsecStartCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "start",
-		Short:   "Run the security scan",
+		Short:   i18n.T("cmd.hsec.start.short"),
 		Long:    `Render .gofi/horusec-config.json from the hsec: block and invoke 'horusec start' against the project.`,
 		Example: `gofi hsec start`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -52,7 +53,7 @@ func newHsecStartCmd() *cobra.Command {
 func newHsecInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install the horusec CLI via the official script",
+		Short: i18n.T("cmd.hsec.install.short"),
 		Long: `Run the official horusec install script (Linux/macOS only).
 
 The script downloads a release of horusec into a directory on your PATH. Review
@@ -72,7 +73,7 @@ gofi hsec install --yes`,
 func newHsecListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
-		Short:   "List findings from the last scan",
+		Short:   i18n.T("cmd.hsec.list.short"),
 		Long:    `Print findings recorded in .gofi/horusec-output.json by the most recent 'gofi hsec start' run.`,
 		Example: `gofi hsec list`,
 		RunE: func(cmd *cobra.Command, args []string) error {

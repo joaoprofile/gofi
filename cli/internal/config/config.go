@@ -34,6 +34,7 @@ const (
 	AgentQA     = "gofi-qa"
 	AgentDoc    = "gofi-doc"
 	AgentStatus = "gofi-status"
+	AgentFull   = "gofi-full"
 
 	// UI design systems, keyed by surface.
 	DSWeb    = "gofi-ui"
@@ -88,12 +89,14 @@ const (
 	DefaultOpsPath = "ops"
 )
 
-// AllAgents returns the canonical list of the eight gofi agent slugs, in
-// pipeline order.
+// AllAgents returns the canonical list of the nine gofi agent slugs, in
+// pipeline order. gofi-full comes last: it is the orchestrator that chains the
+// others rather than a phase of its own.
 func AllAgents() []string {
 	return []string{
 		AgentPD, AgentSpec, AgentEng, AgentUI,
 		AgentOps, AgentQA, AgentDoc, AgentStatus,
+		AgentFull,
 	}
 }
 

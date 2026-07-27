@@ -12,12 +12,13 @@ import (
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/doctor"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Validate the local environment for gofi",
+		Short: i18n.T("cmd.doctor.short"),
 		Long: `Run a series of environment checks and print a status table.
 
 Checks: git on PATH, target language toolchain (go or cargo), claude CLI on PATH,

@@ -10,6 +10,8 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
+
+	"github.com/joaoprofile/gofi-cli/internal/settings"
 )
 
 // Brand palette (256-color codes for broad terminal support).
@@ -22,11 +24,17 @@ const (
 	bad       = lipgloss.Color("203") // error red
 )
 
-// Enabled reports whether colored/graphical output should be used. False when
-// NO_COLOR is set or stdout is not an interactive terminal.
+// Enabled reports whether colored output should be used. NO_COLOR always wins,
+// then the persisted preference, with "auto" following the terminal.
 func Enabled() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
+	}
+	switch settings.ColorMode() {
+	case settings.ColorNever:
+		return false
+	case settings.ColorAlways:
+		return true
 	}
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }

@@ -8,12 +8,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi-cli/internal/gitops"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
 func newCommitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "commit <message>",
-		Short: "Stage all changes and create a commit",
+		Short: i18n.T("cmd.commit.short"),
 		Long: `Stage every change in the project worktree (git add .) and create a commit
 with the given message.
 

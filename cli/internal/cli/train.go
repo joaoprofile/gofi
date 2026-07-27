@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/train"
 	"github.com/joaoprofile/gofi-cli/internal/tui/editor"
 )
@@ -34,7 +35,7 @@ const bufferTemplate = `# %s
 func newTrainCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "train [files...]",
-		Short: "Inject domain knowledge into an agent",
+		Short: i18n.T("cmd.train.short"),
 		Long: `Install one or more markdown files as knowledge that the chosen agent reads
 before every interaction.
 
@@ -76,7 +77,7 @@ gofi train --from-url https://intranet/personas.md -a pd`,
 func newTrainListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List installed training topics",
+		Short: i18n.T("cmd.train.list.short"),
 		Long:  `Print the topics installed for one agent or for the shared scope.`,
 		Example: `gofi train list -a pd
 gofi train list --shared`,
@@ -94,7 +95,7 @@ gofi train list --shared`,
 func newTrainShowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "show <topic>",
-		Short:   "Print the contents of an installed topic",
+		Short:   i18n.T("cmd.train.show.short"),
 		Long:    `Print the markdown content of an installed topic for inspection.`,
 		Example: `gofi train show -a pd dominio-fiscal`,
 		Args:    cobra.ExactArgs(1),
@@ -112,7 +113,7 @@ func newTrainShowCmd() *cobra.Command {
 func newTrainEditCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "edit <topic>",
-		Short:   "Open an installed topic in $EDITOR",
+		Short:   i18n.T("cmd.train.edit.short"),
 		Long:    `Open the topic file in $EDITOR (or --editor); save and close to update. After saving, the agent is invoked unless --no-invoke is passed.`,
 		Example: `gofi train edit -a pd dominio-fiscal`,
 		Args:    cobra.ExactArgs(1),
@@ -134,7 +135,7 @@ func newTrainEditCmd() *cobra.Command {
 func newTrainRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "remove <topic>",
-		Short:   "Delete an installed topic",
+		Short:   i18n.T("cmd.train.remove.short"),
 		Long:    `Delete the topic file and remove its entry from .gofi.yaml.`,
 		Example: `gofi train remove -a pd dominio-fiscal`,
 		Args:    cobra.ExactArgs(1),

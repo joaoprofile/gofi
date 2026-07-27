@@ -7,12 +7,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi-cli/internal/help"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print version, commit and build info",
+		Short: i18n.T("cmd.version.short"),
 		Long: `Print the gofi CLI version, the git commit it was built from,
 the build date, the Go toolchain version and the target platform.
 

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/tui/editor"
 	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
 )
@@ -17,7 +18,7 @@ import (
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Edit the project's .gofi.yaml",
+		Short: i18n.T("cmd.config.short"),
 		Long: `Open the current project's .gofi.yaml for editing.
 
 Without flags: opens the file in $EDITOR (fast for power users); the file is

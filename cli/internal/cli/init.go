@@ -14,6 +14,7 @@ import (
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/gitops"
 	"github.com/joaoprofile/gofi-cli/internal/hsec"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
 	"github.com/joaoprofile/gofi-cli/internal/sonar"
 	"github.com/joaoprofile/gofi-cli/internal/toolchain"
@@ -25,7 +26,7 @@ import (
 func newInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Bootstrap a new gofi project (interactive wizard)",
+		Short: i18n.T("cmd.init.short"),
 		Long: `Run an interactive wizard that creates a new gofi project end-to-end.
 
 The wizard asks for AI host, Claude model, project name, repository name, root path,

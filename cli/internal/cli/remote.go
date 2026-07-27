@@ -9,6 +9,7 @@ import (
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/gitops"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
 const remoteName = "origin"
@@ -16,7 +17,7 @@ const remoteName = "origin"
 func newRemoteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remote",
-		Short: "Manage the git remote for this project",
+		Short: i18n.T("cmd.remote.short"),
 		Long: `Configure the git remote for this gofi project.
 
 The wizard step is optional during 'gofi init'; this command lets you add, view or
@@ -32,7 +33,7 @@ gofi remote remove`,
 func newRemoteAddCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "add <url>",
-		Short: "Set the origin remote to the given URL",
+		Short: i18n.T("cmd.remote.add.short"),
 		Long: `Run 'git remote add origin <url>' and persist the URL in .gofi.yaml.
 
 Accepted forms:
@@ -51,7 +52,7 @@ gofi remote add github.com/org/my-service`,
 func newRemoteShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "show",
-		Short:   "Print the configured origin remote",
+		Short:   i18n.T("cmd.remote.show.short"),
 		Long:    `Print the URL stored under git.remote in .gofi.yaml. Reports "not configured" when empty.`,
 		Example: `gofi remote show`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,7 +64,7 @@ func newRemoteShowCmd() *cobra.Command {
 func newRemoteRemoveCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "remove",
-		Short:   "Remove the configured origin remote",
+		Short:   i18n.T("cmd.remote.remove.short"),
 		Long:    `Run 'git remote remove origin' and clear git.remote in .gofi.yaml.`,
 		Example: `gofi remote remove`,
 		RunE: func(cmd *cobra.Command, args []string) error {

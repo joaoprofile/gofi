@@ -11,13 +11,14 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/runner"
 )
 
 func newTestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test [task] [-- args]",
-		Short: "Run language test tasks",
+		Short: i18n.T("cmd.test.short"),
 		Long: `Run a named test task declared in .gofi.yaml under test.tasks.
 
 Without an argument, runs the task in test.default. Tasks can declare 'needs:' to
@@ -43,7 +44,7 @@ gofi test unit -- -run TestFoo -v`,
 func newTestListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
-		Short:   "List available test tasks",
+		Short:   i18n.T("cmd.test.list.short"),
 		Long:    `Print every task declared under test.tasks with its description and dependencies.`,
 		Example: `gofi test list`,
 		RunE: func(cmd *cobra.Command, args []string) error {

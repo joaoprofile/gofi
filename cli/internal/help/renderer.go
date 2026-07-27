@@ -8,6 +8,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
+
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/joaoprofile/gofi-cli/internal/settings"
 )
 
 const (
@@ -20,18 +23,30 @@ type Options struct {
 	NoColor bool
 }
 
+// DetectOptions resolves how output is rendered, in three layers: the
+// persisted settings, the environment and terminal, then the flags, which win.
 func DetectOptions(cmd *cobra.Command) Options {
-	opts := Options{}
+	opts := Options{Plain: settings.PlainOutput()}
+
+	switch settings.ColorMode() {
+	case settings.ColorNever:
+		opts.NoColor = true
+	case settings.ColorAlways:
+		// keep colors even when piped, the user asked for them
+	default: // auto: follow the terminal
+		if !term.IsTerminal(int(os.Stdout.Fd())) {
+			opts.NoColor = true
+		}
+	}
+	// NO_COLOR is honored regardless of the stored preference
+	if os.Getenv("NO_COLOR") != "" {
+		opts.NoColor = true
+	}
+
 	if v, err := cmd.Root().PersistentFlags().GetBool("plain"); err == nil && v {
 		opts.Plain = true
 	}
 	if v, err := cmd.Root().PersistentFlags().GetBool("no-color"); err == nil && v {
-		opts.NoColor = true
-	}
-	if os.Getenv("NO_COLOR") != "" {
-		opts.NoColor = true
-	}
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		opts.NoColor = true
 	}
 	return opts
@@ -67,10 +82,10 @@ func RenderRoot(root *cobra.Command, version string, opts Options) string {
 	b.WriteString(RenderSplash(root.Short, version, opts))
 	b.WriteString("\n")
 
-	b.WriteString(indent + st.heading.Render("USAGE") + "\n")
+	b.WriteString(indent + st.heading.Render(i18n.T("help.usage")) + "\n")
 	b.WriteString(doubleIndent + root.Use + " <command> [flags]\n\n")
 
-	b.WriteString(indent + st.heading.Render("COMMANDS") + "\n")
+	b.WriteString(indent + st.heading.Render(i18n.T("help.commands")) + "\n")
 	cmds := visibleCommands(root)
 	width := maxNameWidth(cmds)
 	if w := len("help, h"); w > width {
@@ -81,18 +96,18 @@ func RenderRoot(root *cobra.Command, version string, opts Options) string {
 		b.WriteString(doubleIndent + st.command.Render(name) + c.Short + "\n")
 	}
 	helpName := padRight("help, h", width+4)
-	b.WriteString(doubleIndent + st.command.Render(helpName) + "Show help (gofi h <command> for details)\n")
+	b.WriteString(doubleIndent + st.command.Render(helpName) + i18n.T("help.row") + "\n")
 	b.WriteString("\n")
 
 	if root.Example != "" {
-		b.WriteString(indent + st.heading.Render("EXAMPLES") + "\n")
+		b.WriteString(indent + st.heading.Render(i18n.T("help.examples")) + "\n")
 		for _, line := range splitNonEmpty(root.Example) {
 			b.WriteString(doubleIndent + st.example.Render(strings.TrimSpace(line)) + "\n")
 		}
 		b.WriteString("\n")
 	}
 
-	b.WriteString(indent + st.meta.Render("Run '"+root.Use+" h <command>' for command-specific help.") + "\n")
+	b.WriteString(indent + st.meta.Render(i18n.T("help.hint", root.Use)) + "\n")
 	return b.String()
 }
 
@@ -110,12 +125,12 @@ func RenderCommand(cmd *cobra.Command, opts Options) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(indent + st.heading.Render("USAGE") + "\n")
+	b.WriteString(indent + st.heading.Render(i18n.T("help.usage")) + "\n")
 	b.WriteString(doubleIndent + cmd.UseLine() + "\n\n")
 
 	subs := visibleCommands(cmd)
 	if len(subs) > 0 {
-		b.WriteString(indent + st.heading.Render("COMMANDS") + "\n")
+		b.WriteString(indent + st.heading.Render(i18n.T("help.commands")) + "\n")
 		width := maxNameWidth(subs)
 		for _, c := range subs {
 			name := padRight(c.Name(), width+4)
@@ -126,13 +141,13 @@ func RenderCommand(cmd *cobra.Command, opts Options) string {
 
 	flagsBlock := renderFlags(cmd, st)
 	if flagsBlock != "" {
-		b.WriteString(indent + st.heading.Render("FLAGS") + "\n")
+		b.WriteString(indent + st.heading.Render(i18n.T("help.flags")) + "\n")
 		b.WriteString(flagsBlock)
 		b.WriteString("\n")
 	}
 
 	if cmd.Example != "" {
-		b.WriteString(indent + st.heading.Render("EXAMPLES") + "\n")
+		b.WriteString(indent + st.heading.Render(i18n.T("help.examples")) + "\n")
 		for _, line := range splitNonEmpty(cmd.Example) {
 			b.WriteString(doubleIndent + st.example.Render(strings.TrimSpace(line)) + "\n")
 		}
@@ -140,7 +155,7 @@ func RenderCommand(cmd *cobra.Command, opts Options) string {
 	}
 
 	if related, ok := cmd.Annotations["related"]; ok && related != "" {
-		b.WriteString(indent + st.heading.Render("RELATED") + "\n")
+		b.WriteString(indent + st.heading.Render(i18n.T("help.related")) + "\n")
 		for _, line := range splitNonEmpty(related) {
 			b.WriteString(doubleIndent + strings.TrimSpace(line) + "\n")
 		}

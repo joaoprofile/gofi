@@ -7,13 +7,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi-cli/internal/help"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
 func newHelpCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "help [command]",
 		Aliases: []string{"h"},
-		Short:   "Show help for any command",
+		Short:   i18n.T("cmd.help.short"),
 		Long: `Print structured help for gofi or one of its subcommands.
 
 Without arguments, lists every available command with a one-line summary.
@@ -33,9 +34,9 @@ gofi help agent add`,
 
 			target, _, err := root.Find(args)
 			if err != nil || target == root {
-				fmt.Fprintf(os.Stderr, "unknown command %q for gofi\n", args[0])
+				fmt.Fprintln(os.Stderr, i18n.T("help.unknown_command", args[0]))
 				if suggestions := root.SuggestionsFor(args[0]); len(suggestions) > 0 {
-					fmt.Fprintf(os.Stderr, "\nDid you mean:\n")
+					fmt.Fprintf(os.Stderr, "\n%s\n", i18n.T("help.did_you_mean"))
 					for _, s := range suggestions {
 						fmt.Fprintf(os.Stderr, "  %s\n", s)
 					}

@@ -15,13 +15,14 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
 )
 
 func newAgentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "Manage agents (add | remove | list)",
+		Short: i18n.T("cmd.agent.short"),
 		Long: `Manage which agents are active in this project.
 
 Adding an agent installs its skill file in .claude/commands/ and registers it in
@@ -40,7 +41,7 @@ gofi agent remove gofi-qa`,
 func newAgentAddCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "add <name>",
-		Short: "Install an agent into this project",
+		Short: i18n.T("cmd.agent.add.short"),
 		Long: `Install the named agent into this project.
 
 Copies the agent's skill file into .claude/commands/ (fetching the latest from
@@ -58,7 +59,7 @@ gofi agent add gofi-spec`,
 func newAgentRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove <name>",
-		Short: "Uninstall an agent from this project",
+		Short: i18n.T("cmd.agent.remove.short"),
 		Long: `Remove the named agent from this project.
 
 Deletes the agent's skill file from .claude/commands/, removes it from .gofi.yaml
@@ -78,7 +79,7 @@ gofi agent remove gofi-qa --yes`,
 func newAgentListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
-		Short:   "List active and available agents",
+		Short:   i18n.T("cmd.agent.list.short"),
 		Long:    `Print the agents currently active in this project alongside the full list of available agents.`,
 		Example: `gofi agent list`,
 		RunE: func(cmd *cobra.Command, args []string) error {

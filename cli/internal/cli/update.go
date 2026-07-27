@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
 	"github.com/joaoprofile/gofi-cli/internal/sources"
 )
@@ -18,7 +19,7 @@ import (
 func newUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update agents and SDK to the latest tagged version",
+		Short: i18n.T("cmd.update.short"),
 		Long: `Resolve the gofi-agents source pinned in the global config and, after
 confirmation, reinstall .claude/ from the new tarball.
 

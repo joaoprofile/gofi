@@ -11,13 +11,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/sonar"
 )
 
 func newSonarCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sonar",
-		Short: "Run SonarQube/SonarCloud analysis against this project",
+		Short: i18n.T("cmd.sonar.short"),
 		Long: `Run the sonar-scanner static analysis against the current project.
 
 Configuration lives under the sonar: block in .gofi.yaml. gofi renders that block
@@ -45,7 +46,7 @@ gofi sonar install`,
 func newSonarStartCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "start",
-		Short:   "Run the analysis",
+		Short:   i18n.T("cmd.sonar.start.short"),
 		Long:    `Render .gofi/sonar-project.properties from the sonar: block and invoke 'sonar-scanner' against the project.`,
 		Example: `gofi sonar start`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,7 +58,7 @@ func newSonarStartCmd() *cobra.Command {
 func newSonarConfigCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "config",
-		Short:   "Render and print sonar-project.properties without scanning",
+		Short:   i18n.T("cmd.sonar.config.short"),
 		Long:    `Render .gofi/sonar-project.properties from the sonar: block and print it, without invoking sonar-scanner. Useful to inspect the exclusions and sources gofi derives.`,
 		Example: `gofi sonar config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -69,7 +70,7 @@ func newSonarConfigCmd() *cobra.Command {
 func newSonarInstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "install",
-		Short:   "Print instructions to install sonar-scanner",
+		Short:   i18n.T("cmd.sonar.install.short"),
 		Long:    `Print platform-appropriate instructions for installing the sonar-scanner CLI. gofi does not install it automatically because there is no single official installer across platforms.`,
 		Example: `gofi sonar install`,
 		RunE: func(cmd *cobra.Command, args []string) error {

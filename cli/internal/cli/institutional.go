@@ -11,13 +11,14 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
 )
 
 func newInstitutionalCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "institutional",
-		Short: "Manage the institutional (business) knowledge base",
+		Short: i18n.T("cmd.institutional.short"),
 		Long: `The institutional base holds business/product knowledge (domain, actors,
 rules, glossary, roadmap) under .claude/institutional/<project>/.
 
@@ -36,7 +37,7 @@ gofi institutional update --yes`,
 func newInstitutionalUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Full-replace .claude/institutional/<project>/ from the org repo",
+		Short: i18n.T("cmd.institutional.up.short"),
 		Long: `Fetch the institutional repo pinned at 'sources.institutional' in .gofi.yaml
 and REPLACE .claude/institutional/<project.name>/ with its <project.name>/ folder.
 

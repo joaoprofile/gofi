@@ -48,6 +48,47 @@ curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | 
 
 Depois de instalar, rode `gofi h` para começar.
 
+### Primeira execução — contexto da CLI (`gofi.json`)
+
+Na primeira vez que a CLI roda em um terminal interativo, ela abre um assistente
+curto para configurar o ambiente e grava as respostas em um **`gofi.json` ao lado
+do executável** — uma instalação portátil leva a configuração junto.
+
+| Configuração | Valores | Padrão |
+|--------------|---------|--------|
+| `language` | `en` (English) · `pt` (Português) · `fr` (Français) | detectado pelo `LANG` |
+| `color` | `auto` · `always` · `never` | `auto` |
+| `output` | `rich` · `plain` | `rich` |
+| `checkin` | `true` · `false` — o `gofi` sem argumentos consulta o repositório de skills | `true` |
+
+O idioma é escolhido no primeiro passo do assistente e as perguntas seguintes já
+aparecem no idioma escolhido. Depois disso, toda a ajuda da CLI (`gofi h`,
+resumos dos comandos, mensagens) é renderizada nesse idioma.
+
+```sh
+gofi settings                   # mostra as configurações ativas e o arquivo
+gofi settings set language pt   # troca o idioma (en | pt | fr)
+gofi settings set output plain  # texto puro, sem logo nem painéis
+gofi settings wizard            # roda o assistente de novo
+gofi settings path              # caminho do gofi.json
+gofi settings reset             # volta aos padrões
+```
+
+Onde o arquivo fica e como sobrescrever:
+
+- **Padrão:** `<pasta do executável>/gofi.json`.
+- **Instalação de sistema** (pasta somente leitura, ex. `/usr/local/bin`):
+  cai para `~/.gofi/gofi.json`.
+- `GOFI_SETTINGS=/caminho/gofi.json` fixa um arquivo explícito.
+- `GOFI_LANG=fr gofi h` troca o idioma só naquela execução, sem gravar nada.
+- `GOFI_NO_SETUP=1` desliga o assistente da primeira execução.
+
+Em CI, sem terminal, o assistente nunca aparece: a CLI usa os padrões em memória
+e **não** grava `gofi.json`.
+
+> `gofi settings` é a configuração **da CLI**; `gofi config` continua sendo a
+> configuração **do projeto** (`.gofi.yaml`).
+
 ---
 
 ## DDA = SDD + SDK + Padrões + Boilerplates + Knowledge + Context

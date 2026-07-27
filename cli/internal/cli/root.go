@@ -10,6 +10,8 @@ import (
 
 	"github.com/joaoprofile/gofi-cli/internal/dotenv"
 	"github.com/joaoprofile/gofi-cli/internal/help"
+	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/joaoprofile/gofi-cli/internal/settings"
 	"github.com/joaoprofile/gofi-cli/internal/sources"
 	"github.com/joaoprofile/gofi-cli/internal/tui/spinner"
 )
@@ -21,10 +23,14 @@ var (
 )
 
 func NewRoot() *cobra.Command {
+	// the persisted context decides the language of every description below,
+	// so it has to be resolved before the tree is built
+	bootstrapSettings()
+
 	root := &cobra.Command{
 		Use:   "gofi",
-		Short: "CLI for gofi project lifecycle",
-		Long:  "gofi is the CLI tool that bootstraps and manages the lifecycle of gofi projects:\nproject scaffolding, agent installation and training, test execution.",
+		Short: i18n.T("root.short"),
+		Long:  i18n.T("root.long"),
 		Example: `gofi init
 gofi agent add gofi-pd
 gofi train -a pd ./docs/fiscal.md
@@ -42,8 +48,8 @@ gofi test cover-html`,
 
 	root.CompletionOptions.HiddenDefaultCmd = true
 
-	root.PersistentFlags().Bool("no-color", false, "disable color output even on TTY")
-	root.PersistentFlags().Bool("plain", false, "plain text output (no colors, no boxes) — useful for CI/pipes")
+	root.PersistentFlags().Bool("no-color", false, i18n.T("root.flag.no_color"))
+	root.PersistentFlags().Bool("plain", false, i18n.T("root.flag.plain"))
 
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		opts := help.DetectOptions(cmd)
@@ -68,6 +74,7 @@ gofi test cover-html`,
 		newInstitutionalCmd(),
 		newDoctorCmd(),
 		newConfigCmd(),
+		newSettingsCmd(),
 		newHsecCmd(),
 		newSonarCmd(),
 	)
@@ -103,16 +110,18 @@ func loadDotenv() {
 // agents source. Then show the splash listing in either case.
 func runRootDefault(cmd *cobra.Command) error {
 	if cfg, root, err := loadProjectConfig(); err == nil {
-		runCheckin(cfg.Sources.Agents, root)
+		if settings.CheckinEnabled() {
+			runCheckin(cfg.Sources.Agents, root)
+		}
 	} else if !errors.Is(err, ErrNotInProject) {
-		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		fmt.Fprintln(os.Stderr, i18n.T("root.warning", err))
 	}
 
 	opts := help.DetectOptions(cmd)
 	fmt.Print(help.RenderRoot(cmd, Version, opts))
 
 	if _, err := findProjectRoot(); errors.Is(err, ErrNotInProject) {
-		fmt.Println("  Tip: run `gofi init` to bootstrap a project in the current directory.")
+		fmt.Println("  " + i18n.T("root.tip_init"))
 		fmt.Println()
 	}
 	return nil
@@ -126,7 +135,7 @@ func runCheckin(agentsRef, projectRoot string) {
 	}
 	steps := []spinner.Step{
 		{
-			Name: "agents source reachable (" + agentsRef + ")",
+			Name: i18n.T("root.checkin", agentsRef),
 			Fn: func() error {
 				ref, err := sources.Parse(agentsRef)
 				if err != nil {

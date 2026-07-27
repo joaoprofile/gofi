@@ -1,0 +1,116 @@
+version: 1
+project:
+    name: winnerbox
+    root: /home/joaocarvalho/winnerbox/wb-workspace
+backend:
+    language: go
+    path: backend
+ui:
+    framework: react # React 18 + Vite + TypeScript
+    path: frontend
+    brand: winnerbox 
+    styling: scss-modules 
+    state: axios-hooks 
+    forms: react-final-form 
+    i18n: react-i18next # pt/en/es
+    testing: jest 
+    ds: makuco-ui 
+    legacy: antd # componentes/, components/legacy/, shared/legacy/ — a remover na migração v2
+ops:
+    cloud: oci # oci | aws | gcp | azure
+    iac: terraform # terraform | opentofu | pulumi
+    target: oke # k8s | oke | eks | gke | swarm | container-instances | paas
+    cicd: azure-devops # github-actions | azure-devops | gitlab-ci | oci-devops
+    registry: ocir # ocir | ecr | gar | acr
+    path: ops
+ai:
+    host: claude-vscode
+    model: claude-opus-4-8
+agents:
+    - gofi-pd
+    - gofi-spec
+    - gofi-eng
+    - gofi-ui
+    - gofi-full
+    - gofi-ops
+    - gofi-qa
+    - gofi-doc
+    - gofi-status
+sources:
+    agents: github.com/joaoprofile/gofi@main
+    sdk:
+        go: github.com/joaoprofile/gofi-sdk-go@main
+git:
+    remote: "https://db1global.visualstudio.com/WinnerBox/_git/wb-workspace"
+test:
+    default: unit
+    hooks:
+        pre: []
+        post: []
+    tasks:
+        cover:
+            desc: Coverage in text
+            run: go -C backend test -cover ./...
+        cover-html:
+            desc: Coverage as coverage.html
+            run: go -C backend test -coverprofile=coverage.out ./... && go -C backend tool cover -html=coverage.out -o coverage.html
+        sonar:
+            desc: SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)
+            run: gofi sonar start
+            needs:
+                - cover
+        unit:
+            desc: Unit tests
+            run: go -C backend test ./...
+hsec:
+    enabled: true
+    ignore_paths:
+        - '**/.gofi/**'
+        - '**/.claude/**'
+        - '**/vendor/**'
+        - '**/node_modules/**'
+        - '**/dist/**'
+        - '**/build/**'
+        - '**/target/**'
+        - '**/.git/**'
+        - '**/*.min.js'
+        - '**/*_test.go'
+    severity_threshold: HIGH
+    return_error_on_finding: true
+    output_format: json
+    timeout_seconds: 600
+sonar:
+    enabled: true
+    project_key: winnerbox
+    project_name: winnerbox
+    sources:
+        - backend
+        - frontend
+    exclusions:
+        - '**/*_test.go'
+        - '**/*.test.ts'
+        - '**/*.test.tsx'
+        - '**/*.test.js'
+        - '**/*.spec.ts'
+        - '**/*.spec.tsx'
+        - '**/*.spec.js'
+        - '**/testdata/**'
+        - '**/__tests__/**'
+        - '**/mocks/**'
+        - '**/mock_*.go'
+        - '**/*_mock.go'
+        - '**/*.mock.ts'
+        - '**/*.gen.go'
+        - '**/*.pb.go'
+        - '**/*_gen.go'
+        - '**/*.min.js'
+        - '**/.gofi/**'
+        - '**/.claude/**'
+        - '**/vendor/**'
+        - '**/node_modules/**'
+        - '**/dist/**'
+        - '**/build/**'
+        - '**/target/**'
+        - '**/coverage.out'
+        - '**/coverage.html'
+    coverage_report: coverage.out
