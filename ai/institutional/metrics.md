@@ -1,6 +1,10 @@
 ---
-description: Métricas e KPIs a elicitar em PRDs que tocam dashboards/relatórios
-topics: [métrica-estrela, KPI, dashboard, {{METRICA_1}}, {{METRICA_2}}, uptime, latência]
+tipo: institucional
+chunk: metrics
+versao: "1.0"
+status: ativo
+keywords: [métrica-estrela, KPI, dashboard, {{METRICA_1}}, {{METRICA_2}}, uptime, latência]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Métricas e KPIs — {{NOME_DO_PRODUTO}}

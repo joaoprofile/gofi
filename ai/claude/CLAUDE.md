@@ -17,7 +17,7 @@ em arquivos cross-AI sob `.claude/sdk/<lang>/knowledge/` e
 
 Eixo ortogonal ao modelo de duas camadas acima. Esta é a regra que governa o
 conteúdo de cada skill — enunciada **uma vez aqui**; as "Leis" no topo de cada
-`.claude/skills/*.md` apenas replicam para auto-contenção.
+`.claude/skills/<name>/SKILL.md` apenas replicam para auto-contenção.
 
 > **Skill carrega só especialidade transferível.** Cada skill é um especialista
 > **genérico e portável**: leva metodologia e técnica que serviriam, sem mudar
@@ -62,7 +62,7 @@ vale neste projeto — nunca entra em skill).
 | Recurso | Caminho no projeto | Natureza |
 |---------|--------------------|----------|
 | Configuração do projeto | `.gofi.yaml` (raiz) | Específico |
-| Skills (slash) | `.claude/skills/<name>.md` | Portável |
+| Skills (slash) | `.claude/skills/<name>/SKILL.md` — pasta por skill, com `name` e `description` no frontmatter; é o único layout que o Claude Code descobre | Portável |
 | Documentação do SDK por linguagem | `.claude/sdk/<lang>/sdk-docs/*.md` | Portável |
 | Boilerplates por camada | `.claude/sdk/<lang>/boilerplates/*.md` | Portável |
 | Knowledge específico da linguagem | `.claude/sdk/<lang>/knowledge/*.md` | Portável |

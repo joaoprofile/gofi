@@ -1,6 +1,10 @@
 ---
-description: Sistemas externos integrados, serviços internos, stack e restrições/premissas
-topics: [{{FONTE_EXTERNA_1}}, {{FONTE_EXTERNA_2}}, {{TECNOLOGIA_1}}, {{TECNOLOGIA_2}}, stack, modelo comercial, geografia, retenção, restrições]
+tipo: institucional
+chunk: integrations
+versao: "1.0"
+status: ativo
+keywords: [{{FONTE_EXTERNA_1}}, {{FONTE_EXTERNA_2}}, {{TECNOLOGIA_1}}, {{TECNOLOGIA_2}}, stack, modelo comercial, geografia, retenção, restrições]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Integrações, stack e restrições — {{NOME_DO_PRODUTO}}

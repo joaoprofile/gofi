@@ -1,6 +1,10 @@
 ---
-description: Domínio principal, subdomínios e não-escopo do produto
-topics: [domínio, {{TIPO_DE_NEGOCIO}}, {{KEYWORD_DOMINIO_1}}, {{KEYWORD_DOMINIO_2}}, não-escopo]
+tipo: institucional
+chunk: domain
+versao: "1.0"
+status: ativo
+keywords: [domínio, {{TIPO_DE_NEGOCIO}}, {{KEYWORD_DOMINIO_1}}, {{KEYWORD_DOMINIO_2}}, não-escopo]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Domínio — {{NOME_DO_PRODUTO}}

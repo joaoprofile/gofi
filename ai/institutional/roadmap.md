@@ -1,6 +1,10 @@
 ---
-description: Itens de roadmap previstos (a virar plataforma, gated por aprovação de QA)
-topics: [roadmap, {{ITEM_ROADMAP_1}}, {{ITEM_ROADMAP_2}}, {{ITEM_ROADMAP_3}}]
+tipo: institucional
+chunk: roadmap
+versao: "1.0"
+status: ativo
+keywords: [roadmap, {{ITEM_ROADMAP_1}}, {{ITEM_ROADMAP_2}}, {{ITEM_ROADMAP_3}}]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Roadmap (a virar plataforma) — {{NOME_DO_PRODUTO}}

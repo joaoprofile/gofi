@@ -1,6 +1,10 @@
 ---
-description: Glossário de negócio e vocabulário público vs interno
-topics: [{{TERMO_1}}, {{TERMO_2}}, {{TERMO_3}}, linguagem ubíqua, glossário]
+tipo: institucional
+chunk: glossary
+versao: "1.0"
+status: ativo
+keywords: [{{TERMO_1}}, {{TERMO_2}}, {{TERMO_3}}, linguagem ubíqua, glossário]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Glossário de negócio — {{NOME_DO_PRODUTO}}

@@ -9,7 +9,7 @@
 
 1. Carregue **só este INDEX** na pré-execução.
 2. Identifique o assunto do discovery atual.
-3. Pelas colunas **Tópicos** e **Carregar quando**, selecione **apenas os
+3. Pelas colunas **Keywords** e **Carregar quando**, selecione **apenas os
    chunks relevantes** e leia esses arquivos.
 4. Não carregue chunks fora do tema. Em dúvida entre 1–2 chunks próximos,
    carregue só o de maior match; expanda só se faltar contexto.
@@ -24,10 +24,13 @@
 
 ## Chunks
 
-> [GUIA] Ajuste a coluna "Tópicos (keywords)" com os termos reais do seu negócio
-> — são eles que a skill usa para casar o assunto do discovery com o chunk.
+> [GUIA] Ajuste a coluna "Keywords" com os termos reais do seu negócio — são
+> eles que a skill usa para casar o assunto do discovery com o chunk. Cada
+> chunk repete essas mesmas keywords no próprio frontmatter, no formato dos
+> demais corpora (`tipo`, `versao`, `status`, `keywords`, `atualizado`), então
+> um doc institucional se lê como uma spec ou um PRD.
 
-| Chunk | Descrição | Tópicos (keywords) | Carregar quando |
+| Chunk | Descrição | Keywords | Carregar quando |
 |-------|-----------|--------------------|-----------------|
 | [domain.md](domain.md) | Domínio principal, subdomínios, não-escopo | {{KEYWORDS_DOMINIO}} | Enquadrar o problema; checar se o tema está no escopo do produto |
 | [glossary.md](glossary.md) | Glossário de negócio + vocabulário público vs interno | {{KEYWORDS_GLOSSARIO}} | Alinhar termos; evitar pedir definição já existente |

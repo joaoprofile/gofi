@@ -79,12 +79,12 @@ Detalhe completo em [`.claude/CLAUDE.md`](.claude/CLAUDE.md).
 | `/gofi-doc`    | Documentation Generator — gera doc de contrato a partir dos handlers Go                     | read-only sobre código |
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama lendo o frontmatter dos `contexts/*.md` | não edita memória      |
 
-### [`/gofi-pd`](.claude/skills/gofi-pd.md) — Product Discovery
+### [`/gofi-pd`](.claude/skills/gofi-pd/SKILL.md) — Product Discovery
 
 Transforma um problema de negócio em PRD navegável: objetivos, personas,
 jobs-to-be-done, métricas de sucesso e escopo.
 
-### [`/gofi-spec`](.claude/skills/gofi-spec.md) — Specification Architect
+### [`/gofi-spec`](.claude/skills/gofi-spec/SKILL.md) — Specification Architect
 
 Transforma PRD em SDD técnico completo.
 
@@ -95,7 +95,7 @@ Transforma PRD em SDD técnico completo.
 - Produz também a **spec de infra/plataforma** consumida pelo `gofi-ops`
 - **Não escreve código** — só especifica
 
-### [`/gofi-eng`](.claude/skills/gofi-eng.md) — Context Engineer
+### [`/gofi-eng`](.claude/skills/gofi-eng/SKILL.md) — Context Engineer
 
 Transforma SDD em implementação Go por camadas.
 
@@ -105,7 +105,7 @@ Transforma SDD em implementação Go por camadas.
 - Registra arquivos criados e decisões na memória do contexto
 - Atualiza a própria spec (rastreabilidade, histórico, divergências)
 
-### [`/gofi-ui`](.claude/skills/gofi-ui.md) — Context UI/UX
+### [`/gofi-ui`](.claude/skills/gofi-ui/SKILL.md) — Context UI/UX
 
 Implementa a camada de apresentação (pages, features, components, layouts,
 hooks) a partir da spec aprovada e — quando existir — do contrato do `gofi-eng`.
@@ -115,7 +115,7 @@ hooks) a partir da spec aprovada e — quando existir — do contrato do `gofi-e
   [`knowledge/ui/ux-principles.md`](.claude/knowledge/ui/ux-principles.md)
 - Não escreve fora do escopo da spec; pergunta antes de codificar quando falta contexto
 
-### [`/gofi-ops`](.claude/skills/gofi-ops.md) — Platform & Delivery
+### [`/gofi-ops`](.claude/skills/gofi-ops/SKILL.md) — Platform & Delivery
 
 Engenheiro DevOps: infraestrutura como código, empacotamento de artefato e
 pipelines de CI/CD a partir da **spec de infra aprovada**.
@@ -125,7 +125,7 @@ pipelines de CI/CD a partir da **spec de infra aprovada**.
 - **Não escolhe** cloud, topologia ou sizing por conta própria — vem do `ops:` + spec
 - Toda mudança passa por `plan`/`diff` aprovado **antes** de `apply`/`deploy`
 
-### [`/gofi-qa`](.claude/skills/gofi-qa.md) — Quality Auditor
+### [`/gofi-qa`](.claude/skills/gofi-qa/SKILL.md) — Quality Auditor
 
 Audita implementação contra spec, SDK e regras absolutas.
 
@@ -134,7 +134,7 @@ Audita implementação contra spec, SDK e regras absolutas.
 - Checa regras absolutas (erros, logging, camadas, mocks, IAM, netx)
 - **Não reescreve código** — reporta e sugere correções específicas
 
-### [`/gofi-doc`](.claude/skills/gofi-doc.md) — Documentation Generator
+### [`/gofi-doc`](.claude/skills/gofi-doc/SKILL.md) — Documentation Generator
 
 Gera doc de contrato de API derivada do código real, para **dois públicos**:
 engenheiro de frontend (cliente) e QA tester (plano de teste).
@@ -142,7 +142,7 @@ engenheiro de frontend (cliente) e QA tester (plano de teste).
 - **Read-only sobre código** — nunca edita, refatora ou sugere mudança de implementação
 - Nunca inventa comportamento; ambiguidades vão para "Armadilhas conhecidas" com tag `[inferido]`
 
-### [`/gofi-status`](.claude/skills/gofi-status.md) — Índice de Contextos
+### [`/gofi-status`](.claude/skills/gofi-status/SKILL.md) — Índice de Contextos
 
 Monta **sob demanda** o panorama de todos os contextos (Implementados / Spec /
 PRD), derivado do frontmatter de cada `contexts/*.md`.
@@ -157,9 +157,10 @@ PRD), derivado do frontmatter de cada `contexts/*.md`.
 ```
 .claude/
 ├── CLAUDE.md                       — instruções raiz (paths, doutrina, protocolos)
-├── skills/                         — definição das skills (slash /gofi-*)
-│   ├── gofi-pd.md    gofi-spec.md   gofi-eng.md   gofi-ui.md
-│   └── gofi-ops.md   gofi-qa.md     gofi-doc.md   gofi-status.md
+├── skills/                         — uma PASTA por skill (slash /gofi-*), cada
+│   │                                 uma com SKILL.md + frontmatter `name`/`description`
+│   ├── gofi-pd/SKILL.md    gofi-spec/SKILL.md   gofi-eng/SKILL.md   gofi-ui/SKILL.md
+│   └── gofi-ops/SKILL.md   gofi-qa/SKILL.md     gofi-doc/SKILL.md   gofi-status/SKILL.md
 ├── sdk/<lang>/
 │   ├── boilerplates/               — esqueletos por camada (linguagem-específicos)
 │   ├── sdk-docs/                   — referência do SDK gofi (MCP Light)
@@ -388,7 +389,7 @@ Evolução típica:
 - Novo módulo/API no SDK → atualiza `sdk/<lang>/sdk-docs/`
 - Novo padrão de projeto → atualiza `sdk/<lang>/boilerplates/` e `sdk/<lang>/knowledge/`
 - Correção do usuário revela regra não-documentada → atualiza
-  `knowledge/{skill}/` e/ou `skills/{skill}.md`
+  `knowledge/{skill}/` e/ou `skills/{skill}/SKILL.md`
 - Novo contexto implementado → memória cresce em `memory/contexts/`
 
 ---

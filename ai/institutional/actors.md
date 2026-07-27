@@ -1,6 +1,10 @@
 ---
-description: Atores humanos, atores não-humanos (workers/agents/integrações) e multi-tenancy
-topics: [persona, {{PERSONA_1}}, {{PERSONA_2}}, agent, worker, tenancy, isolamento, {{ENTIDADE_TENANT_RAIZ}}, {{ENTIDADE_TENANT_FILHA}}]
+tipo: institucional
+chunk: actors
+versao: "1.0"
+status: ativo
+keywords: [persona, {{PERSONA_1}}, {{PERSONA_2}}, agent, worker, tenancy, isolamento, {{ENTIDADE_TENANT_RAIZ}}, {{ENTIDADE_TENANT_FILHA}}]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Atores e personas — {{NOME_DO_PRODUTO}}

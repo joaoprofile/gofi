@@ -1,6 +1,10 @@
 ---
-description: Regras de negócio conhecidas — invariantes, sync, ingestão, identidade, compliance
-topics: [regra, invariante, guard rail, {{REGRA_KEYWORD_1}}, {{REGRA_KEYWORD_2}}, webhook, scheduler, idempotência, chave de resolução, ciclo de vida, compliance, tenancy]
+tipo: institucional
+chunk: business-rules
+versao: "1.0"
+status: ativo
+keywords: [regra, invariante, guard rail, {{REGRA_KEYWORD_1}}, {{REGRA_KEYWORD_2}}, webhook, scheduler, idempotência, chave de resolução, ciclo de vida, compliance, tenancy]
+atualizado: {{AAAA-MM-DD}}
 ---
 
 # Regras de negócio conhecidas — {{NOME_DO_PRODUTO}}

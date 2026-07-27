@@ -63,4 +63,4 @@ segue o mesmo template:
 
 > **Estrutura do projeto:** componentes reutilizáveis ficam em `components/` da app;
 > os específicos de feature em `features/{contexto}/`. Ver
-> [skills/gofi-ui.md](../../../../skills/gofi-ui.md) §Workflow.
+> [skills/gofi-ui/SKILL.md](../../../../skills/gofi-ui/SKILL.md) §Workflow.
