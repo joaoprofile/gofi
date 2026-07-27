@@ -13,8 +13,8 @@
 <p align="center">
   <a href="#instalação-da-cli">Instalação</a> ·
   <a href="#pipeline-de-agents-especializados">Agents</a> ·
-  <a href="#layout-do-repositório">Layout</a> ·
-  <a href="gofi-ai/README.md">GOFI AI</a>
+  <a href="#gofi-ai--a-extensão-do-vscode">GOFI AI</a> ·
+  <a href="#layout-do-repositório">Layout</a>
 </p>
 
 ---
@@ -198,6 +198,16 @@ metodologia; o que é específico do projeto vive em `specs/`, `memory/` e
 | `gofi-doc`    | Documentation Generator → doc de API p/ front e QA        | Não edita código         |
 | `gofi-status` | Índice de contextos derivado do `memory/contexts/*.md`    | Não escreve nada         |
 
+### Orquestração — o ciclo inteiro sem tirar a mão
+
+| Agente       | Responsabilidade                                                | NÃO faz                     |
+|--------------|-----------------------------------------------------------------|-----------------------------|
+| `gofi-full`  | Encadeia `pd → spec → eng → qa` e **volta à fase anterior** quando o QA reprova, até passar sem ressalvas | Não pula o QA nem aprova sozinho |
+
+O `gofi-full` é o que fecha o laço. Sem ele o pipeline seria uma sequência de
+prompts; com ele, uma reprovação do `gofi-qa` devolve o trabalho à etapa que a
+causou — e o ciclo só termina quando a auditoria passa limpa.
+
 A separação é o ponto: cada agente lê apenas o contexto da sua etapa, e o
 output de um é input do próximo. **Sem sobreposição = sem inconsistência.**
 
@@ -237,6 +247,56 @@ ponto de entrada. **Nunca** se aplica o DS de uma superfície na outra.
 
 ---
 
+## GOFI AI — a extensão do VSCode
+
+O painel onde o pipeline é operado. Empacotada dentro do binário da CLI, então
+instala sem rede e sem toolchain Node:
+
+```sh
+gofi install extensions          # instala/atualiza em todo editor no PATH
+gofi install extensions --list   # o que está instalado, e em que versão
+```
+
+O `gofi init` já faz isso ao criar o projeto.
+
+Por baixo ela conversa com o Claude pela CLI do Claude Code, **rodando na raiz
+do workspace**. É essa escolha que faz dela um chat *do gofi* e não um chat
+genérico: o processo herda o `.claude/` do projeto, então as nove skills viram
+comandos do chat e o agente lê spec, memória e knowledge sem nenhuma ligação
+extra.
+
+| | |
+|---|---|
+| **`/`** | chama uma skill do projeto, com autocomplete |
+| **`@`** | referencia um arquivo, por busca aproximada |
+| **`Ctrl+V`** | cola uma imagem direto na conversa |
+| **abas** | várias conversas em paralelo, cada uma com contexto próprio |
+
+### Aprovação por ação
+
+Cada `Edit`, `Write`, `NotebookEdit` e `Bash` para e pede autorização, mostrando
+o diff ou o comando. **Permitir** vale para aquela chamada; **Sempre permitir**
+vale só para aquela ferramenta e só naquela conversa — e não sobrevive a limpar
+ou fechar o chat. Recusar leva o motivo de volta ao agente, então "não, faça
+assim" é um passo só.
+
+O bloqueio é do próprio motor (hook `PreToolUse`), não uma instrução no prompt:
+enquanto a resposta não vem, a chamada não acontece. E falha fechado — sem
+resposta, painel fechado ou erro, a alteração é negada.
+
+### Medidor de tokens e auditoria de RAG
+
+A barra do topo mostra, enquanto o agente trabalha, entrada nova, lida do cache,
+gravada no cache e saída. Abrindo, aparece cada busca com quanto trouxe para o
+contexto, marcada `alvo` quando limitou o próprio escopo e `inteiro` quando não.
+
+Quando um documento não pode ser lido barato — sem frontmatter, sem `keywords`,
+sem seções `##`, ou faltando o `INDEX.md` do corpus — o painel aponta **onde
+mexer**, mostra o trecho a inserir e oferece o botão que manda o agente
+corrigir. Tudo isso é calculado localmente: **medir não gasta token**.
+
+---
+
 ## Layout do Repositório
 
 Mistura conteúdo **genérico cross-AI/cross-language** (agents, knowledge
@@ -254,7 +314,8 @@ Em v1 só Claude Code é suportado.
 │   ├── gofi-qa.md            — Quality Auditor
 │   ├── gofi-ops.md           — Platform & Delivery (IaC/CI/CD)
 │   ├── gofi-doc.md           — Documentation Generator
-│   └── gofi-status.md        — Índice de contextos
+│   ├── gofi-status.md        — Índice de contextos
+│   └── gofi-full.md          — Full-Cycle Orchestrator
 ├── knowledge/
 │   ├── shared/               — knowledge cross-agent/cross-language
 │   ├── eng/                  — knowledge do gofi-eng
@@ -269,6 +330,8 @@ Em v1 só Claude Code é suportado.
 │       ├── CLAUDE.md         — instruções raiz para Claude Code
 │       └── README.md         — visão geral consumida no onboarding
 ├── cli/                      — código-fonte da CLI Go (módulo gofi-cli)
+├── gofi-ai/                  — extensão GOFI AI do VSCode (empacotada na CLI)
+├── assets/                   — logo do projeto
 └── sdk/
     ├── go/                   — backend
     │   ├── boilerplates/     — model, repository, service, handler, …
@@ -349,8 +412,12 @@ O Gofi Ecosystem transforma o desenvolvimento com IA em um processo
 Não é "gerar código com IA". É construir o **harness** onde:
 
 - A arquitetura é respeitada por construção (DDA)
+- A fundação é **código real do SDK**, não invenção do modelo — e os agentes
+  leem a documentação destilada dele, nunca os fontes
 - Recursos reais são acessados sem MCP server (MCP Light)
-- A qualidade é garantida por auditoria automática (gofi-qa)
+- A qualidade é garantida por auditoria automática (`gofi-qa`), e o ciclo só
+  fecha quando ela passa (`gofi-full`)
+- Nada é escrito sem aprovação explícita (GOFI AI)
 - O conhecimento é acumulado entre execuções (knowledge + memory)
 
 > **Harness Engineering: a disciplina de fazer a IA escrever código como o

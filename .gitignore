@@ -19,3 +19,9 @@ gofi.json
 # como um projeto gofi, o que ele não é
 /.gofi.yaml
 /_new_.gofi.yaml
+
+# Binários compilados que caem ao lado do main.go. Go nomeia o executável como
+# o diretório, então eles passam despercebidos num `git add -A` — e são dezenas
+# de MB que ficam no histórico para sempre.
+/cli/cmd/cmd
+/cli/internal/extensions/gen/gen
