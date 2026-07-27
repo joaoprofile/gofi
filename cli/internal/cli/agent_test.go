@@ -55,7 +55,7 @@ func TestRunAgentAdd_NewAgent(t *testing.T) {
 	if !slices.Contains(cfg.Agents, "gofi-qa") {
 		t.Errorf("expected gofi-qa in cfg.Agents, got %v", cfg.Agents)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-qa.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-qa/SKILL.md")); err != nil {
 		t.Errorf("expected gofi-qa.md installed: %v", err)
 	}
 }
@@ -69,7 +69,7 @@ func TestRunAgentRemove(t *testing.T) {
 	if slices.Contains(cfg.Agents, "gofi-eng") {
 		t.Errorf("expected gofi-eng removed, got %v", cfg.Agents)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-eng.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-eng/SKILL.md")); !os.IsNotExist(err) {
 		t.Errorf("expected skill removed")
 	}
 }

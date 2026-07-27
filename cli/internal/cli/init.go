@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -257,6 +258,15 @@ func executePipeline(r *wizard.Result) error {
 			return gitops.AddRemote(r.Root, "origin", r.GitRemote)
 		}})
 	}
+	// The GOFI AI extension is the editor-side half of the harness the steps
+	// above just installed — the panel that talks to the `.claude/skills/` this
+	// project now has. Best effort: a machine with no editor on PATH still gets
+	// a working project, and `gofi install extensions` fixes it later.
+	var extensionsNote string
+	steps = append(steps, spinner.Step{Name: "Install the GOFI AI extension", Fn: func() error {
+		extensionsNote = installExtensionsOnInit(context.Background())
+		return nil
+	}})
 
 	results := spinner.Run(steps)
 	if spinner.AnyFailed(results) {
@@ -265,6 +275,9 @@ func executePipeline(r *wizard.Result) error {
 				return fmt.Errorf("step %q failed: %w", res.Name, res.Err)
 			}
 		}
+	}
+	if extensionsNote != "" {
+		fmt.Println("  " + styles.Note(extensionsNote))
 	}
 
 	// Web/Mobile via official CLIs — streamed output, after the spinner steps.

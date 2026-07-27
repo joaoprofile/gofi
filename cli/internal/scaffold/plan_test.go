@@ -20,10 +20,10 @@ func TestPlanAgentsUpdate_NewProject(t *testing.T) {
 	}
 	wantPaths := []string{
 		".claude/CLAUDE.md",
-		".claude/skills/gofi-pd.md",
-		".claude/skills/gofi-spec.md",
-		".claude/skills/gofi-eng.md",
-		".claude/skills/gofi-qa.md",
+		".claude/skills/gofi-pd/SKILL.md",
+		".claude/skills/gofi-spec/SKILL.md",
+		".claude/skills/gofi-eng/SKILL.md",
+		".claude/skills/gofi-qa/SKILL.md",
 		".claude/templates/sdd-template.md",
 		".claude/templates/prd-template.md",
 	}
@@ -57,7 +57,7 @@ func TestPlanAgentsUpdate_DetectsModifications(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	tampered := filepath.Join(dir, ".claude/skills/gofi-eng.md")
+	tampered := filepath.Join(dir, ".claude/skills/gofi-eng/SKILL.md")
 	if err := os.WriteFile(tampered, []byte("# locally edited"), 0o644); err != nil {
 		t.Fatalf("tamper: %v", err)
 	}
@@ -78,11 +78,11 @@ func TestPlanAgentsUpdate_DetectsModifications(t *testing.T) {
 	if k := kindByPath[".claude/CLAUDE.md"]; k != ChangeNew {
 		t.Errorf("CLAUDE.md should be 'new' after deletion, got %q", k)
 	}
-	if k := kindByPath[".claude/skills/gofi-eng.md"]; k != ChangeModified {
+	if k := kindByPath[".claude/skills/gofi-eng/SKILL.md"]; k != ChangeModified {
 		t.Errorf("gofi-eng.md should be 'modified' after local edit, got %q", k)
 	}
 	for _, untouched := range []string{
-		".claude/skills/gofi-pd.md",
+		".claude/skills/gofi-pd/SKILL.md",
 		".claude/templates/sdd-template.md",
 	} {
 		if _, found := kindByPath[untouched]; found {

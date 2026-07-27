@@ -82,7 +82,7 @@ func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data Template
 			}
 			return nil, fmt.Errorf("read skill %s: %w", skill, err)
 		}
-		if err := add(filepath.Join("skills", skill+".md"), body); err != nil {
+		if err := add(skillRelPath(skill), renderSkill(skill, body)); err != nil {
 			return nil, err
 		}
 	}

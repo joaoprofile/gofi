@@ -87,9 +87,9 @@ func fixtureFS() fs.FS {
 		"ai/knowledge/shared/ddd-principles.md":    {Data: []byte("# ddd principles")},
 		"ai/knowledge/eng/rbac-helper.md":          {Data: []byte("# rbac helper")},
 		"ai/knowledge/ui/design-tokens.md":         {Data: []byte("# design tokens")},
-		"ai/institutional/INDEX.md":                 {Data: []byte("# Institutional Index — {{NOME_DO_PRODUTO}}")},
+		"ai/institutional/INDEX.md":                {Data: []byte("# Institutional Index — {{NOME_DO_PRODUTO}}")},
 		"ai/institutional/README.md":               {Data: []byte("# Institutional — {{NOME_DO_PRODUTO}}")},
-		"ai/institutional/domain.md":               {Data: []byte("# Domain — {{NOME_DO_PRODUTO}}\ntopics: [{{METRICA_1}}]")},
+		"ai/institutional/domain.md":               {Data: []byte("# Domain — {{NOME_DO_PRODUTO}}\nkeywords: [{{METRICA_1}}]")},
 		"ai/sdk/go/boilerplates/model.md":          {Data: []byte("model boilerplate")},
 		"ai/sdk/go/sdk-docs/overview.md":           {Data: []byte("sdk overview")},
 		"ai/sdk/go/knowledge/error-handling.md":    {Data: []byte("knowledge error handling")},
@@ -114,10 +114,10 @@ func TestInstallAgentsContent_AllAgents(t *testing.T) {
 	installAgentsFromFixture(t, dir, sampleData())
 	mustExist(t, dir,
 		".claude/CLAUDE.md",
-		".claude/skills/gofi-pd.md",
-		".claude/skills/gofi-spec.md",
-		".claude/skills/gofi-eng.md",
-		".claude/skills/gofi-qa.md",
+		".claude/skills/gofi-pd/SKILL.md",
+		".claude/skills/gofi-spec/SKILL.md",
+		".claude/skills/gofi-eng/SKILL.md",
+		".claude/skills/gofi-qa/SKILL.md",
 		".claude/templates/sdd-template.md",
 		".claude/memory/project.md",
 		".claude/knowledge/shared",
@@ -165,7 +165,7 @@ func TestInstallAgentsContent_FilterAgents(t *testing.T) {
 	data.Agents = []string{"gofi-spec", "gofi-eng"}
 	installAgentsFromFixture(t, dir, data)
 	// All skills are always installed, regardless of the selected agent set.
-	for _, kept := range []string{"gofi-pd.md", "gofi-spec.md", "gofi-eng.md", "gofi-qa.md"} {
+	for _, kept := range []string{"gofi-pd/SKILL.md", "gofi-spec/SKILL.md", "gofi-eng/SKILL.md", "gofi-qa/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(dir, ".claude/skills", kept)); err != nil {
 			t.Errorf("expected %s to be installed: %v", kept, err)
 		}

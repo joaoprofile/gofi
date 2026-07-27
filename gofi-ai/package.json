@@ -1,0 +1,228 @@
+{
+  "name": "gofi-ai",
+  "displayName": "GOFI AI",
+  "description": "Chat com os agentes gofi dentro do VSCode. Fala com o Claude por padrão; o motor é plugável para qualquer LLM.",
+  "version": "0.1.0",
+  "publisher": "gofi",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "gofi",
+    "claude",
+    "chat",
+    "agent",
+    "sdd"
+  ],
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#0B2B3A",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joaoprofile/gofi"
+  },
+  "homepage": "https://github.com/joaoprofile/gofi",
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gofi-ai",
+          "title": "GOFI AI",
+          "icon": "images/panel-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gofi-ai": [
+        {
+          "id": "gofi-ai.chat",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gofi-ai.focus",
+        "title": "GOFI AI: abrir o chat",
+        "category": "GOFI AI"
+      },
+      {
+        "command": "gofi-ai.openInEditor",
+        "title": "GOFI AI: nova conversa em uma aba",
+        "category": "GOFI AI",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "gofi-ai.open",
+        "title": "GOFI AI: abrir o chat",
+        "category": "GOFI AI",
+        "icon": {
+          "light": "images/panel-icon-light.svg",
+          "dark": "images/panel-icon-dark.svg"
+        }
+      },
+      {
+        "command": "gofi-ai.newSession",
+        "title": "GOFI AI: limpar esta conversa",
+        "category": "GOFI AI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gofi-ai.stop",
+        "title": "GOFI AI: interromper a resposta",
+        "category": "GOFI AI",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "gofi-ai.openTerminal",
+        "title": "GOFI AI: abrir o motor em um terminal",
+        "category": "GOFI AI",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "gofi-ai.doctor",
+        "title": "GOFI AI: diagnosticar a instalação",
+        "category": "GOFI AI"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gofi-ai.openInEditor",
+          "when": "view == gofi-ai.chat",
+          "group": "navigation@0"
+        },
+        {
+          "command": "gofi-ai.newSession",
+          "when": "view == gofi-ai.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gofi-ai.stop",
+          "when": "view == gofi-ai.chat && gofi-ai.running",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gofi-ai.openTerminal",
+          "when": "view == gofi-ai.chat",
+          "group": "navigation@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "gofi-ai.open",
+          "group": "navigation@100"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GOFI AI",
+      "properties": {
+        "gofiAI.provider": {
+          "type": "string",
+          "default": "claude-code",
+          "enum": [
+            "claude-code"
+          ],
+          "enumDescriptions": [
+            "Claude, via a CLI do Claude Code rodando na raiz do workspace."
+          ],
+          "markdownDescription": "Motor de LLM do chat. A camada de provider é plugável — hoje só o Claude está implementado; outros motores entram aqui sem mexer na UI."
+        },
+        "gofiAI.claudeCode.executable": {
+          "type": "string",
+          "default": "claude",
+          "markdownDescription": "Caminho do executável `claude`. Vazio ou `claude` resolve pelo `PATH`."
+        },
+        "gofiAI.model": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Modelo da sessão (ex.: `opus`, `sonnet`, `claude-opus-4-8`). Vazio usa o padrão do motor — que num projeto gofi é o `ai.model` do `.gofi.yaml`."
+        },
+        "gofiAI.permissionMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "acceptEdits",
+            "plan",
+            "default"
+          ],
+          "enumDescriptions": [
+            "Deixa o painel decidir, chamada por chamada, via `gofiAI.requireApproval` (padrão).",
+            "Aceita edições, mas o motor continua bloqueando caminhos que considera sensíveis — inclusive `.claude/`.",
+            "Só planeja — não escreve nada.",
+            "Bloqueia tudo: o motor exige um diálogo próprio que este painel não tem."
+          ],
+          "markdownDescription": "Modo de permissão do motor. Deixe em `auto`: quem decide é a aprovação por chamada do painel (`gofiAI.requireApproval`). Os outros modos adicionam um segundo portão do motor que trava alterações já aprovadas por você — `acceptEdits`, por exemplo, recusa qualquer escrita em `.claude/`."
+        },
+        "gofiAI.effort": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "markdownDescription": "Nível de esforço da sessão. Vazio usa o padrão do motor."
+        },
+        "gofiAI.showThinking": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Mostra os blocos de raciocínio no chat, recolhidos por padrão."
+        },
+        "gofiAI.showToolCalls": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Mostra cada ferramenta que o agente usa (Read, Write, Bash…) como uma linha no chat."
+        },
+        "gofiAI.openLocation": {
+          "type": "string",
+          "default": "beside",
+          "enum": [
+            "beside",
+            "sidebar"
+          ],
+          "enumDescriptions": [
+            "Numa aba do editor, como uma página — o padrão.",
+            "Na barra lateral, no ícone GOFI AI."
+          ],
+          "markdownDescription": "Onde o ícone da barra de título do editor abre o chat. A barra lateral também pode ser arrastada para a **Barra Lateral Secundária** (à direita) — o VSCode lembra a posição."
+        },
+        "gofiAI.showActiveFile": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Mostra o arquivo aberto e focado no momento acima do campo de mensagem. Clicar insere o caminho na mensagem."
+        },
+        "gofiAI.requireApproval": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Retém as ferramentas de escrita (`Edit`, `Write`, `NotebookEdit`, `Bash`) até você autorizar. Não é uma instrução ao agente: as ferramentas **não existem** na sessão, então ele não tem como escrever. Ele descreve a mudança e pergunta **S** aplicar · **N** não · **A** aplicar tudo; você responde no chat. Desligue para liberar a escrita desde o início."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "echo no-build",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "test": "node test/permission-scope.test.js"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
+  }
+}

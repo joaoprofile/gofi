@@ -39,7 +39,7 @@ func TestInstallAgentsContent_UpdateMode_PreservesUserContent(t *testing.T) {
 	}
 
 	mustContain(t, filepath.Join(projectRoot, ".claude/CLAUDE.md"), "updated")
-	mustContain(t, filepath.Join(projectRoot, ".claude/skills/gofi-pd.md"), "new pd skill")
+	mustContain(t, filepath.Join(projectRoot, ".claude/skills/gofi-pd/SKILL.md"), "new pd skill")
 	mustContain(t, filepath.Join(projectRoot, ".claude/templates/sdd-template.md"), "new spec template")
 
 	got, err := os.ReadFile(userTopic)

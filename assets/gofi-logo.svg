@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Gofi">
+  <rect width="512" height="512" rx="96" fill="#0B2B3A"/>
+  <rect x="128" y="128" width="54.4" height="256" fill="#22D3EE"/>
+  <path d="M224 128 L384 256 L224 384 L224 320 L304 256 L224 192 Z" fill="#7DD3FC"/>
+</svg>

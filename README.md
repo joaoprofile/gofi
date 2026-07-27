@@ -1,8 +1,21 @@
-# Gofi Ecosystem — Harness
+<p align="center">
+  <img src="assets/gofi-logo.png" alt="Gofi" width="128" height="128">
+</p>
 
-> Repositório-fonte consumido pela CLI para gerar e
-> manter projetos. Nele vivem os **agents**, **boilerplates**, **SDK docs**,
-> **knowledge** e **memória** que formam o *harness* sobre o qual a IA opera.
+<h1 align="center">Gofi Ecosystem — Harness</h1>
+
+<p align="center">
+  Repositório-fonte consumido pela CLI para gerar e manter projetos.<br>
+  Nele vivem os <strong>agents</strong>, <strong>boilerplates</strong>, <strong>SDK docs</strong>,
+  <strong>knowledge</strong> e <strong>memória</strong> que formam o <em>harness</em> sobre o qual a IA opera.
+</p>
+
+<p align="center">
+  <a href="#instalação-da-cli">Instalação</a> ·
+  <a href="#pipeline-de-agents-especializados">Agents</a> ·
+  <a href="#layout-do-repositório">Layout</a> ·
+  <a href="gofi-ai/README.md">GOFI AI</a>
+</p>
 
 ---
 
@@ -160,8 +173,10 @@ Requisito → gofi-pd → gofi-spec → gofi-eng → gofi-qa
                                    (frontend)
 ```
 
-Cada agente é invocado como **skill** (`/gofi-pd`, `/gofi-spec`, …) e vive em
-`skills/<nome>.md`. Todos são **genéricos e portáveis**: carregam apenas
+Cada agente é invocado como **skill** (`/gofi-pd`, `/gofi-spec`, …). No repo o
+fonte é `ai/skills/<nome>.md`; instalado, vira `.claude/skills/<nome>/SKILL.md`
+— o único layout que o Claude Code descobre. Todos são **genéricos e
+portáveis**: carregam apenas
 metodologia; o que é específico do projeto vive em `specs/`, `memory/` e
 `institutional/`.
 
@@ -231,7 +246,7 @@ Em v1 só Claude Code é suportado.
 
 ```
 .
-├── skills/                   — um arquivo por agente (skill /gofi-*)
+├── skills/                   — um arquivo por agente (fonte da skill /gofi-*)
 │   ├── gofi-pd.md            — Product Discovery
 │   ├── gofi-spec.md          — Specification Architect
 │   ├── gofi-eng.md           — Context Engineer (backend)
@@ -277,7 +292,7 @@ Em v1 só Claude Code é suportado.
 
 | Origem                                 | Destino                            |
 |----------------------------------------|------------------------------------|
-| `skills/<sel>.md` (selecionados)       | `.claude/skills/<sel>.md`          |
+| `skills/*.md` (todas)                  | `.claude/skills/<nome>/SKILL.md`   |
 | `ai/claude/CLAUDE.md`                  | `.claude/CLAUDE.md`                |
 | `specs-template/`                      | `.claude/specs-template/`          |
 | `prd-template/`                        | `.claude/prd-template/`            |

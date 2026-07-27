@@ -24,7 +24,7 @@ func TestInstallAgentFromFS(t *testing.T) {
 	if err := InstallAgentFromFS(fixtureFS(), ".", root, "gofi-pd"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-pd.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-pd/SKILL.md")); err != nil {
 		t.Errorf("expected skills/gofi-pd.md: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".claude/knowledge/pd")); err != nil {
@@ -50,7 +50,7 @@ func TestRemoveAgent_KeepsKnowledge(t *testing.T) {
 	if err := RemoveAgent(root, "gofi-pd", false); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-pd.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".claude/skills/gofi-pd/SKILL.md")); !os.IsNotExist(err) {
 		t.Errorf("expected skill to be removed")
 	}
 	if _, err := os.Stat(topic); err != nil {

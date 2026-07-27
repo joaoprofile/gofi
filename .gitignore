@@ -11,3 +11,11 @@ coverage.html
 
 # contexto da CLI, gerado ao lado do executável
 gofi.json
+
+# Resumo de apresentação — material local, não versionado
+/VISAO-GERAL.md
+
+# Fixture de teste do chat: um .gofi.yaml na raiz faz este repo se identificar
+# como um projeto gofi, o que ele não é
+/.gofi.yaml
+/_new_.gofi.yaml

@@ -1,7 +1,6 @@
 package scaffold
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -26,8 +25,8 @@ func AllAgents() []string {
 
 // InstallAgentFromFS reads ai/skills/<name>.md from the given gofi monorepo
 // tree (rooted at agentsRoot inside srcFS) and writes it to
-// <projectRoot>/.claude/skills/<name>.md. Also creates the per-agent
-// knowledge directory.
+// <projectRoot>/.claude/skills/<name>/SKILL.md — the layout Claude Code
+// discovers. Also creates the per-agent knowledge directory.
 func InstallAgentFromFS(srcFS fs.FS, agentsRoot, projectRoot, agentName string) error {
 	if !IsValidAgent(agentName) {
 		return fmt.Errorf("unknown agent %q", agentName)
@@ -37,11 +36,15 @@ func InstallAgentFromFS(srcFS fs.FS, agentsRoot, projectRoot, agentName string) 
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	dst := filepath.Join(projectRoot, ".claude", "skills", agentName+".md")
+	claudeDir := filepath.Join(projectRoot, ".claude")
+	dst := filepath.Join(claudeDir, skillRelPath(agentName))
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dst, body, 0o644); err != nil {
+	if err := os.WriteFile(dst, renderSkill(agentName, body), 0o644); err != nil {
+		return err
+	}
+	if err := pruneLegacySkillFile(claudeDir, agentName); err != nil {
 		return err
 	}
 	if short := agentToKnowledgeDir[agentName]; short != "" {
@@ -52,15 +55,20 @@ func InstallAgentFromFS(srcFS fs.FS, agentsRoot, projectRoot, agentName string) 
 	return nil
 }
 
-// RemoveAgent deletes commands/<agentName>.md and (optionally) the per-agent
+// RemoveAgent deletes skills/<agentName>/ and (optionally) the per-agent
 // knowledge directory. Returns an error if the agent name is unknown.
 func RemoveAgent(projectRoot, agentName string, removeKnowledge bool) error {
 	if !IsValidAgent(agentName) {
 		return fmt.Errorf("unknown agent %q", agentName)
 	}
-	skill := filepath.Join(projectRoot, ".claude", "skills", agentName+".md")
-	if err := os.Remove(skill); err != nil && !errors.Is(err, os.ErrNotExist) {
+	claudeDir := filepath.Join(projectRoot, ".claude")
+	skillDir := filepath.Join(claudeDir, skillsDirName, agentName)
+	if err := os.RemoveAll(skillDir); err != nil {
 		return fmt.Errorf("remove skill: %w", err)
+	}
+	// Also clear the flat file an older gofi may have left here.
+	if err := pruneLegacySkillFile(claudeDir, agentName); err != nil {
+		return err
 	}
 	if removeKnowledge {
 		if short := agentToKnowledgeDir[agentName]; short != "" {

@@ -54,12 +54,12 @@ const (
 //
 // It installs:
 //   - ai/claude/CLAUDE.md       → .claude/CLAUDE.md
-//   - ai/skills/*.md            → .claude/skills/*.md (all skills, always)
+//   - ai/skills/*.md            → .claude/skills/<name>/SKILL.md (all skills, always)
 //   - ai/templates/             → .claude/templates/
 //   - ai/scripts/               → .claude/scripts/ (RAG index tooling)
 //   - ai/memory/project.md.tmpl → .claude/memory/project.md (InstallNew only)
 //   - ai/institutional/         → .claude/institutional/<name>/ (InstallNew only;
-//                                 embedded scaffold as fallback — see InstallInstitutionalSeed)
+//     embedded scaffold as fallback — see InstallInstitutionalSeed)
 //
 // On InstallNew, knowledge/shared/ is seeded from <srcRoot>/ai/knowledge/shared/
 // (memory/learning protocols, base principles), per-agent knowledge dirs are
@@ -88,6 +88,10 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 	// selected agent set. The agent selection only scopes the per-agent
 	// knowledge dirs below; all skills (including any agent not in the canonical
 	// nine) are always available under .claude/skills/.
+	//
+	// Each lands as skills/<name>/SKILL.md with the frontmatter Claude Code
+	// needs — see skill.go. Anything else is silently ignored by the engine,
+	// which is what used to make every gofi slash command "unknown".
 	skills, err := listSkillNames(agentsFS, srcRoot)
 	if err != nil {
 		return created, fmt.Errorf("list skills: %w", err)
@@ -100,11 +104,15 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 			}
 			return created, fmt.Errorf("read skill %s: %w", skill, err)
 		}
-		target := filepath.Join(dest, "skills", skill+".md")
+		target := filepath.Join(dest, skillRelPath(skill))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return created, err
 		}
-		if err := os.WriteFile(target, body, 0o644); err != nil {
+		if err := os.WriteFile(target, renderSkill(skill, body), 0o644); err != nil {
+			return created, err
+		}
+		// Drop the flat file an older gofi wrote for this same skill.
+		if err := pruneLegacySkillFile(dest, skill); err != nil {
 			return created, err
 		}
 		created = append(created, target)

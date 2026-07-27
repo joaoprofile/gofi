@@ -1,0 +1,25 @@
+# Changelog
+
+## 0.1.0
+
+Primeira versão.
+
+- Painel de chat **GOFI AI** na barra lateral, com streaming token a token,
+  blocos de raciocínio recolhíveis e uma linha por ferramenta usada.
+- Motor plugável (`src/providers/`); implementado o Claude via CLI do Claude
+  Code, rodando na raiz do workspace — as skills `/gofi-*` do projeto viram
+  comandos do chat.
+- Descoberta nativa das skills do projeto: lê `.claude/skills/gofi-*/SKILL.md`
+  do disco (não o `agents:`), mostra cada uma como chip com o papel no tooltip, e
+  oferece autocomplete ao digitar `/` — ↑/↓ navegam, Enter ou Tab escolhem. Um
+  `FileSystemWatcher` mantém a lista viva quando a CLI instala ou remove skills.
+- Medidor de tokens e eficiência de recuperação em tempo real: entrada/cache/
+  saída direto do motor, e o tamanho de cada `Read`/`Grep`/`Glob` conforme
+  acontece.
+- Auditor de RAG: abre os docs que o agente leu e verifica frontmatter,
+  `keywords`, seções `## ` e a existência do `INDEX.md` do corpus. Cada
+  problema vem com um botão que, após confirmação, manda o agente corrigir o
+  arquivo.
+- Comandos: nova sessão, interromper, abrir o motor num terminal, diagnosticar.
+- Instalação pela CLI: `gofi install extensions` (e automaticamente no
+  `gofi init`).
