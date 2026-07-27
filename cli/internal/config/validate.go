@@ -27,8 +27,8 @@ var (
 	validAgents = map[string]bool{
 		AgentPD: true, AgentSpec: true, AgentEng: true, AgentUI: true,
 		AgentOps: true, AgentQA: true, AgentDoc: true, AgentStatus: true,
+		AgentFull: true,
 	}
-	validDS = map[string]bool{DSWeb: true, DSMobile: true}
 )
 
 func (c *GofiConfig) Validate() error {
@@ -93,8 +93,8 @@ func (c *GofiConfig) Validate() error {
 		}
 	}
 	for ds, url := range c.Sources.UI {
-		if !validDS[ds] {
-			return fmt.Errorf("sources.ui: %q is not a supported design system (expected gofi-ui|gofi-ui-native)", ds)
+		if strings.TrimSpace(ds) == "" {
+			return fmt.Errorf("sources.ui: empty design system key")
 		}
 		if !sourceRe.MatchString(url) {
 			return fmt.Errorf("sources.ui.%s: %q is not github.com/<org>/<repo>@<tag>", ds, url)
@@ -126,9 +126,10 @@ func (s *SonarConfig) validate() error {
 }
 
 // validateSurface checks one front-end surface (the top-level frontend: or
-// mobile: block). A present surface needs a framework + slug path;
-// brand/styling/state/testing/ds are validated only when set so future presets
-// don't break older configs. name is the block label for error messages.
+// mobile: block). A present surface needs a framework + slug path; everything
+// else (brand, styling, state, forms, i18n, testing, ds, legacy) is free-form,
+// so a project that brings its own design system and stack is as valid as one
+// on the gofi presets. name is the block label for error messages.
 func validateSurface(name string, s *UISurface) error {
 	if s == nil {
 		return nil
@@ -138,12 +139,6 @@ func validateSurface(name string, s *UISurface) error {
 	}
 	if s.Path == "" || !slugRe.MatchString(s.Path) {
 		return fmt.Errorf("%s.path: %q is not a valid slug", name, s.Path)
-	}
-	if s.Brand != "" && s.Brand != BrandBlue && s.Brand != BrandViolet && s.Brand != BrandGreen {
-		return fmt.Errorf("%s.brand: %q invalid (expected blue|violet|green)", name, s.Brand)
-	}
-	if s.DS != "" && !validDS[s.DS] {
-		return fmt.Errorf("%s.ds: %q invalid (expected gofi-ui|gofi-ui-native)", name, s.DS)
 	}
 	return nil
 }

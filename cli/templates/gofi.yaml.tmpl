@@ -1,123 +1,209 @@
 # .gofi.yaml — configuração do projeto (gerado por `gofi init`)
 #
 # Fonte única das escolhas do projeto. Toda skill lê este arquivo ANTES de
-# qualquer coisa para descobrir linguagem-alvo, nome do projeto, superfície de
-# UI e stack de plataforma. Campos marcados {{ ... }} são renderizados pela CLI.
-version: 1
+# qualquer coisa para descobrir a linguagem do backend, o nome do projeto, as
+# superfícies de UI e a stack de plataforma.
+#
+# Este template é a REFERÊNCIA do schema v2 — o arquivo real é escrito pela CLI
+# (internal/config: Save → yaml.Marshal), não por renderização deste .tmpl.
+# Campos marcados {{ "{{ ... }}" }} correspondem 1:1 aos campos de config.GofiConfig.
+version: 2
 
+# Identidade do projeto. Language e layout de código saíram daqui na v2 —
+# moraram para os blocos backend: / frontend: / mobile:.
 project:
-    name: {{.ProjectName}}              # resolve a pasta institucional e o pathCmd
-    language: {{.Language}}             # determina sdk/<lang>/ lido por gofi-eng/qa
-    root: {{.Root}}                     # raiz do workspace
-    path: {{.Path}}                     # subpasta que contém o manifesto da linguagem (go.mod)
+    name: {{.Project.Name}}                 # slug; resolve a pasta institucional
+    root: {{.Project.Root}}                 # raiz absoluta do workspace
 
-ai:
-    host: {{.AIHost}}                   # ex.: claude-vscode
-    model: {{.AIModel}}                 # ex.: claude-opus-4-8
-
-agents:
-{{- range .Agents}}
-    - {{.}}
-{{- end}}
-
-sources:
-    agents: {{.Sources.Agents}}         # repo-fonte do harness (skills, sdk-docs, knowledge)
-    sdk:
-        go: {{.Sources.SDK.Go}}         # SDK Go (camada de execução, via go.work)
-{{- if .Sources.SDK.Web}}
-        web: {{.Sources.SDK.Web}}       # npm — Design System web (gofi-ui)
-{{- end}}
-{{- if .Sources.SDK.Mobile}}
-        mobile: {{.Sources.SDK.Mobile}} # npm — Design System mobile (gofi-ui-native)
-{{- end}}
-{{- if .Sources.IaC}}
-    iac:
-        {{.Ops.IaC}}: {{.Sources.IaC}}  # módulos de IaC reutilizáveis (opcional)
+# ───────────────────────────────────────────────────────────────────────────
+# BACKEND — omitir o bloco inteiro num projeto front-only
+# ───────────────────────────────────────────────────────────────────────────
+{{- if .Backend}}
+backend:
+    language: {{.Backend.Language}}         # go|rust|java|csharp|python|nodejs → define sdk/<lang>/
+    path: {{.Backend.Path}}                 # pasta do código, relativa a project.root
 {{- end}}
 
 # ───────────────────────────────────────────────────────────────────────────
-# CAMADA UI — consumida por /gofi-ui (omitir o bloco se o projeto não tem front)
+# SUPERFÍCIES DE UI — consumidas por /gofi-ui. Cada uma é um bloco de topo:
+# `frontend:` (web) e `mobile:`. Omitir a que o projeto não tem.
+#
+# Só framework e path são validados. brand, styling, state, forms, i18n,
+# testing, ds e legacy são livres: `gofi init` semeia os presets gofi, e um
+# projeto com design system próprio escreve os seus valores aqui.
 # ───────────────────────────────────────────────────────────────────────────
-# Forma A — UMA superfície (chaves no nível de `ui`):
-{{- if .UI}}
-ui:
-    framework: {{.UI.Framework}}        # react|angular|vue → web · react-native|expo → mobile
-    path: {{.UI.Path}}                  # raiz do app de UI (relativa a project.root)
-    brand: {{.UI.Brand}}                # blue (padrão) | violet | green  (presets vivos, não hex livre)
-    styling: {{.UI.Styling}}            # tailwind (web) | stylesheet (rn)
-    state: {{.UI.State}}                # camada de data/estado (ex.: tanstack-query)
-    testing: {{.UI.Testing}}            # vitest+rtl (web) | jest+rntl (rn)
+{{- if .Frontend}}
+frontend:
+    framework: {{.Frontend.Framework}}      # react|angular|vue
+    path: {{.Frontend.Path}}                # raiz do app, relativa a project.root
+    brand: {{.Frontend.Brand}}              # preset gofi (blue|violet|green) ou marca do projeto
+    styling: {{.Frontend.Styling}}          # tailwind | scss-modules | css-modules | ...
+    state: {{.Frontend.State}}              # camada de data/estado (tanstack-query, axios-hooks, ...)
+{{- if .Frontend.Forms}}
+    forms: {{.Frontend.Forms}}              # react-hook-form | react-final-form | formik | ...
+{{- end}}
+{{- if .Frontend.I18n}}
+    i18n: {{.Frontend.I18n}}                # react-i18next | lingui | ... (ex.: pt/en/es)
+{{- end}}
+    testing: {{.Frontend.Testing}}          # vitest | jest (+ testing-library)
+{{- if .Frontend.DS}}
+    ds: {{.Frontend.DS}}                    # design system: gofi-ui ou pacote próprio
+{{- end}}
+{{- if .Frontend.Legacy}}
+    legacy: {{.Frontend.Legacy}}            # stack em migração — gofi-ui trata como código a substituir
+{{- end}}
 {{- else}}
-# ui:
+# frontend:
 #     framework: react
-#     path: web
+#     path: frontend
 #     brand: blue
 #     styling: tailwind
 #     state: tanstack-query
 #     testing: vitest
+#     ds: gofi-ui
 {{- end}}
-#
-# Forma B — DUAS superfícies (full-stack web + mobile); cada sub-bloco é um alvo:
-# ui:
-#     web:    { framework: react,        path: apps/web,    brand: blue, styling: tailwind,   state: tanstack-query, testing: vitest }
-#     mobile: { framework: react-native, path: apps/mobile, brand: blue, styling: stylesheet, state: tanstack-query, testing: jest }
+{{- if .Mobile}}
+mobile:
+    framework: {{.Mobile.Framework}}        # react-native|expo
+    path: {{.Mobile.Path}}
+    brand: {{.Mobile.Brand}}
+    styling: {{.Mobile.Styling}}            # stylesheet | nativewind | ...
+    state: {{.Mobile.State}}
+{{- if .Mobile.Forms}}
+    forms: {{.Mobile.Forms}}
+{{- end}}
+{{- if .Mobile.I18n}}
+    i18n: {{.Mobile.I18n}}
+{{- end}}
+    testing: {{.Mobile.Testing}}            # jest (+ react-native-testing-library)
+{{- if .Mobile.DS}}
+    ds: {{.Mobile.DS}}                      # gofi-ui-native ou pacote próprio
+{{- end}}
+{{- if .Mobile.Legacy}}
+    legacy: {{.Mobile.Legacy}}
+{{- end}}
+{{- else}}
+# mobile:
+#     framework: react-native
+#     path: mobile
+#     brand: blue
+#     styling: stylesheet
+#     state: tanstack-query
+#     testing: jest
+#     ds: gofi-ui-native
+{{- end}}
 
 # ───────────────────────────────────────────────────────────────────────────
 # CAMADA OPS — consumida por /gofi-ops (omitir o bloco se não há IaC/CI-CD)
 # ───────────────────────────────────────────────────────────────────────────
 {{- if .Ops}}
 ops:
-    cloud: {{.Ops.Cloud}}               # oci|aws|gcp|azure
-    iac: {{.Ops.IaC}}                   # terraform|opentofu|pulumi
-    target: {{.Ops.Target}}             # oke|eks|gke|k8s|container-instances|swarm|paas
-    cicd: {{.Ops.CICD}}                 # azure-devops|github-actions|gitlab-ci|oci-devops
-    registry: {{.Ops.Registry}}         # ocir|ecr|gar|acr
-    path: {{.Ops.Path}}                 # pasta guarda-chuva na raiz (iac/ deploy/ ci/ pipelines/)
+    cloud: {{.Ops.Cloud}}                   # oci | aws | gcp | azure
+    iac: {{.Ops.IaC}}                       # terraform | opentofu | pulumi
+    target: {{.Ops.Target}}                 # k8s | oke | eks | gke | swarm | container-instances | paas
+    cicd: {{.Ops.CICD}}                     # github-actions | azure-devops | gitlab-ci | oci-devops
+    registry: {{.Ops.Registry}}             # ocir | ecr | gar | acr
+    path: {{.Ops.Path}}                     # pasta guarda-chuva na raiz (iac/ deploy/ ci/ pipelines/)
 {{- else}}
 # ops:
 #     cloud: oci
 #     iac: terraform
 #     target: oke
-#     cicd: azure-devops
+#     cicd: github-actions
 #     registry: ocir
 #     path: ops
+{{- end}}
+
+ai:
+    host: {{.AI.Host}}                      # claude-vscode
+    model: {{.AI.Model}}                    # claude-opus-4-8 | claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5
+
+# Agents habilitados. Skills são sempre instaladas em .claude/skills/; esta
+# lista escopa os diretórios .claude/knowledge/{agent}/.
+agents:
+{{- range .Agents}}
+    - {{.}}
+{{- end}}
+
+sources:
+    agents: {{.Sources.Agents}}             # repo-fonte do harness (skills, sdk-docs, knowledge)
+{{- if .Sources.Institutional}}
+    institutional: {{.Sources.Institutional}} # repo de conhecimento institucional (pull-only)
+{{- end}}
+{{- if .Sources.SDK}}
+    sdk:
+{{- range $lang, $ref := .Sources.SDK}}
+        {{$lang}}: {{$ref}}                 # checkout do SDK da linguagem (via go.work)
+{{- end}}
+{{- end}}
+{{- if .Sources.UI}}
+    ui:
+{{- range $ds, $ref := .Sources.UI}}
+        {{$ds}}: {{$ref}}                   # override do repo do design system
+{{- end}}
 {{- end}}
 
 git:
     remote: "{{.Git.Remote}}"
 
+# ───────────────────────────────────────────────────────────────────────────
+# TEST — tasks rodadas por `gofi test [task]`. `needs` encadeia dependências.
+# ───────────────────────────────────────────────────────────────────────────
 test:
-    default: {{.Test.Default}}          # task rodada por padrão
+    default: {{.Test.Default}}              # task rodada por `gofi test` sem argumento
     hooks:
         pre: []
         post: []
     tasks:
-        unit:
-            desc: Unit tests
-            run: go -C {{.Path}} test ./...
-        cover:
-            desc: Coverage in text
-            run: go -C {{.Path}} test -cover ./...
-        cover-html:
-            desc: Coverage as coverage.html
-            run: go -C {{.Path}} test -coverprofile=coverage.out ./... && go -C {{.Path}} tool cover -html=coverage.out -o coverage.html
-        sonar:
-            desc: SonarScanner (requires SONAR_TOKEN, SONAR_HOST_URL)
-            run: sonar-scanner
+{{- range $name, $task := .Test.Tasks}}
+        {{$name}}:
+            desc: {{$task.Desc}}
+            run: {{$task.Run}}
+{{- if $task.Needs}}
             needs:
-                - cover
+{{- range $task.Needs}}
+                - {{.}}
+{{- end}}
+{{- end}}
+{{- end}}
 
+# ───────────────────────────────────────────────────────────────────────────
+# HSEC — SAST via Horusec (`gofi hsec`). Renderizado em .gofi/horusec-config.json.
+# ───────────────────────────────────────────────────────────────────────────
 hsec:
-    enabled: true
+    enabled: {{.Hsec.Enabled}}
     ignore_paths:
-        - .gofi/
-        - .claude/
-        - vendor/
-        - node_modules/
-        - dist/
-        - target/
-        - .git/
-    severity_threshold: HIGH
-    return_error_on_finding: true
-    output_format: text
-    timeout_seconds: 600
+{{- range .Hsec.IgnorePaths}}
+        - '{{.}}'
+{{- end}}
+    severity_threshold: {{.Hsec.SeverityThreshold}}   # CRITICAL | HIGH | MEDIUM | LOW
+    return_error_on_finding: {{.Hsec.ReturnErrorOnFinding}}
+    output_format: {{.Hsec.OutputFormat}}             # text | json | sarif
+{{- if .Hsec.OutputFile}}
+    output_file: {{.Hsec.OutputFile}}
+{{- end}}
+    timeout_seconds: {{.Hsec.TimeoutSeconds}}
+
+# ───────────────────────────────────────────────────────────────────────────
+# SONAR — análise estática (`gofi sonar`). Renderizado em
+# .gofi/sonar-project.properties a cada execução. SONAR_HOST_URL e SONAR_TOKEN
+# vêm do ambiente (.env) e NUNCA são gravados aqui.
+# ───────────────────────────────────────────────────────────────────────────
+sonar:
+    enabled: {{.Sonar.Enabled}}
+    project_key: {{.Sonar.ProjectKey}}
+    project_name: {{.Sonar.ProjectName}}
+{{- if .Sonar.HostURL}}
+    host_url: {{.Sonar.HostURL}}            # override não-secreto do servidor (opcional)
+{{- end}}
+    sources:                                 # pastas de código próprio (backend/frontend/mobile)
+{{- range .Sonar.Sources}}
+        - {{.}}
+{{- end}}
+    exclusions:                              # testes, mocks, gerados, vendored e artefatos de build
+{{- range .Sonar.Exclusions}}
+        - '{{.}}'
+{{- end}}
+{{- if .Sonar.CoverageReport}}
+    coverage_report: {{.Sonar.CoverageReport}}   # artefato produzido pela task `cover`
+{{- end}}

@@ -53,10 +53,18 @@ type Result struct {
 	WebPath string // web app folder inside Root (default "frontend")
 	WebDS   string // config.DSWeb or "" (no design system)
 
-	// Mobile (when EnvMobile selected). MobileDS is gofi-ui-native (always set
-	// when mobile is selected; the lib is an npm package, not a git source).
+	// Mobile (when EnvMobile selected). MobileDS is gofi-ui-native (set when
+	// mobile is selected and the surface declares no other design system; the
+	// lib is an npm package, not a git source).
 	MobilePath string
 	MobileDS   string
+
+	// seededWeb / seededMobile record that the surface came from an existing
+	// .gofi.yaml (`gofi config --wizard`) rather than being created here. A
+	// seeded surface keeps its declared design system — including an explicit
+	// "none" — because the wizard never asks about it.
+	seededWeb    bool
+	seededMobile bool
 
 	Agents    []string
 	GitRemote string
@@ -277,8 +285,11 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 
 	r.SDKURLs = collectSources(sdkGo)
 
-	// Default per-surface paths when blank, and pin the design system for each
-	// selected surface (web → gofi-ui, mobile → gofi-ui-native, always).
+	// Default per-surface paths when blank, and pin the gofi design system on a
+	// selected surface that has none yet (web → gofi-ui, mobile →
+	// gofi-ui-native). A surface seeded from an existing config keeps the design
+	// system it already declares — the wizard never asks about it, so it must
+	// not replace a project's own package with the gofi one.
 	if r.Has(EnvBack) && r.SourcePath == "" {
 		r.SourcePath = config.DefaultBackendPath
 	}
@@ -286,7 +297,9 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 		if r.WebPath == "" {
 			r.WebPath = config.DefaultFrontendPath
 		}
-		r.WebDS = config.DSWeb
+		if !r.seededWeb {
+			r.WebDS = config.DSWeb
+		}
 	} else {
 		r.WebDS = ""
 	}
@@ -294,7 +307,9 @@ func Run(initial *config.GofiConfig) (*Result, error) {
 		if r.MobilePath == "" {
 			r.MobilePath = config.DefaultMobilePath
 		}
-		r.MobileDS = config.DSMobile
+		if !r.seededMobile {
+			r.MobileDS = config.DSMobile
+		}
 	} else {
 		r.MobileDS = ""
 	}
@@ -377,11 +392,13 @@ func seedFromConfig(r *Result, cfg *config.GofiConfig) {
 		envs = append(envs, EnvWeb)
 		r.WebPath = cfg.Frontend.Path
 		r.WebDS = cfg.Frontend.DS
+		r.seededWeb = true
 	}
 	if cfg.Mobile != nil {
 		envs = append(envs, EnvMobile)
 		r.MobilePath = cfg.Mobile.Path
 		r.MobileDS = cfg.Mobile.DS
+		r.seededMobile = true
 	}
 	if len(envs) > 0 {
 		r.Environments = envs
@@ -401,7 +418,7 @@ func seedFromConfig(r *Result, cfg *config.GofiConfig) {
 	}
 }
 
-// buildAgentOptions returns the eight agent options, marking each selected when
+// buildAgentOptions returns the nine agent options, marking each selected when
 // present in the current selection (used to seed the wizard from a config).
 func buildAgentOptions(selected []string) []huh.Option[string] {
 	type entry struct{ slug, label string }
@@ -414,6 +431,7 @@ func buildAgentOptions(selected []string) []huh.Option[string] {
 		{config.AgentQA, "gofi-qa     — Quality Auditor"},
 		{config.AgentDoc, "gofi-doc    — Documentation Generator"},
 		{config.AgentStatus, "gofi-status — Context Index"},
+		{config.AgentFull, "gofi-full   — Full-Cycle Orchestrator"},
 	}
 	sel := map[string]bool{}
 	for _, s := range selected {

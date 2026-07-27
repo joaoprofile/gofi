@@ -14,8 +14,8 @@ func TestNewDefaultResult(t *testing.T) {
 	if !r.Has(EnvBack) {
 		t.Errorf("default should include backend")
 	}
-	if len(r.Agents) != 8 {
-		t.Errorf("default should activate all 8 agents, got %d", len(r.Agents))
+	if len(r.Agents) != len(config.AllAgents()) {
+		t.Errorf("default should activate every agent (%d), got %d", len(config.AllAgents()), len(r.Agents))
 	}
 	if r.AgentsRef != config.DefaultAgentsRef {
 		t.Errorf("default agents ref = %q", r.AgentsRef)
@@ -62,7 +62,7 @@ func TestSeedFromConfig_MultiSurface(t *testing.T) {
 		Frontend: &config.UISurface{Framework: config.FrameworkReact, Path: "apps-web", DS: config.DSWeb},
 		Mobile:   &config.UISurface{Framework: config.FrameworkReactNative, Path: "apps-mobile", DS: ""},
 		Agents:   []string{config.AgentEng},
-		Sources: config.Sources{Agents: config.DefaultAgentsRef},
+		Sources:  config.Sources{Agents: config.DefaultAgentsRef},
 	}
 	seedFromConfig(r, cfg)
 	if !r.Has(EnvBack) || !r.Has(EnvWeb) || !r.Has(EnvMobile) {

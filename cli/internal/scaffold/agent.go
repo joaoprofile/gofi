@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-// IsValidAgent reports whether name is one of the four supported agent names.
+// IsValidAgent reports whether name is one of the supported agent names.
 func IsValidAgent(name string) bool {
 	for _, a := range allAgents {
 		if a == name {

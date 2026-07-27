@@ -137,6 +137,31 @@ func mergeWizardIntoConfig(cfg *config.GofiConfig, r *wizard.Result) *config.Gof
 	} else {
 		cfg.Sources.SDK = nil
 	}
+	cfg.Frontend = mergeSurface(cfg.Frontend, r.Has(wizard.EnvWeb), defaultWebSurface, r.WebPath, r.WebDS)
+	cfg.Mobile = mergeSurface(cfg.Mobile, r.Has(wizard.EnvMobile), defaultMobileSurface, r.MobilePath, r.MobileDS)
 	cfg.Git.Remote = r.GitRemote
 	return cfg
+}
+
+// mergeSurface reconciles one front-end surface with the wizard selection.
+//
+// Deselecting the surface drops it; selecting a surface the config does not
+// have yet seeds it from the gofi presets. An existing surface only takes the
+// path and design system the wizard collected — brand, styling, state, forms,
+// i18n, testing and legacy are the project's own stack and the wizard never
+// asks about them, so overwriting them here would silently reset a project
+// that brought its own design system.
+func mergeSurface(existing *config.UISurface, selected bool, seed func() config.UISurface, path, ds string) *config.UISurface {
+	if !selected {
+		return nil
+	}
+	s := seed()
+	if existing != nil {
+		s = *existing
+	}
+	if path != "" {
+		s.Path = path
+	}
+	s.DS = ds
+	return &s
 }

@@ -81,17 +81,34 @@ func TestValidate_FrontOnly(t *testing.T) {
 	}
 }
 
+// TestValidate_AcceptsProjectOwnedUIStack pins the free-form half of a UI
+// surface: a project that brought its own brand, styling, state and design
+// system is as valid as one on the gofi presets.
+func TestValidate_AcceptsProjectOwnedUIStack(t *testing.T) {
+	c := baseConfig()
+	c.Frontend = &UISurface{
+		Framework: FrameworkReact, Path: "frontend",
+		Brand: "acme", Styling: "scss-modules", State: "axios-hooks",
+		Forms: "react-final-form", I18n: "react-i18next",
+		Testing: "jest", DS: "acme-ui", Legacy: "antd",
+	}
+	c.Sources.UI = map[string]string{"acme-ui": DefaultAgentsRef}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("project-owned UI stack should be valid: %v", err)
+	}
+}
+
 func TestValidate_RejectsBadEnumsAndSources(t *testing.T) {
 	cases := map[string]func(*GofiConfig){
-		"bad brand": func(c *GofiConfig) {
-			c.Frontend = &UISurface{Framework: FrameworkReact, Path: "web", Brand: "neon"}
+		"missing framework": func(c *GofiConfig) {
+			c.Frontend = &UISurface{Path: "web"}
 		},
-		"bad ds": func(c *GofiConfig) {
-			c.Frontend = &UISurface{Framework: FrameworkReact, Path: "web", DS: "nope"}
+		"bad surface path": func(c *GofiConfig) {
+			c.Frontend = &UISurface{Framework: FrameworkReact, Path: "apps/web"}
 		},
 		"bad ops cloud": func(c *GofiConfig) { c.Ops = &Ops{Cloud: "moon", Path: "ops"} },
-		"bad sources.ui key": func(c *GofiConfig) {
-			c.Sources.UI = map[string]string{"bogus": DefaultAgentsRef}
+		"bad sources.ui ref": func(c *GofiConfig) {
+			c.Sources.UI = map[string]string{DSWeb: "not-a-ref"}
 		},
 		"no backend no surface": func(c *GofiConfig) { c.Backend = nil; c.Frontend = nil; c.Mobile = nil },
 	}

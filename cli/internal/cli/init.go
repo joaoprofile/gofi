@@ -364,6 +364,30 @@ func ensureGitignore(projectRoot, entry string) error {
 	return os.WriteFile(path, []byte(body), 0o644)
 }
 
+// defaultWebSurface / defaultMobileSurface are the gofi presets seeded into a
+// brand new surface. Path and DS are filled by the caller from the wizard; the
+// rest is a starting point the project is free to replace in .gofi.yaml — the
+// gofi-ui skill reads whatever is there.
+func defaultWebSurface() config.UISurface {
+	return config.UISurface{
+		Framework: config.FrameworkReact,
+		Brand:     config.BrandBlue,
+		Styling:   config.StylingTailwind,
+		State:     config.StateTanstackQuery,
+		Testing:   config.TestingVitest,
+	}
+}
+
+func defaultMobileSurface() config.UISurface {
+	return config.UISurface{
+		Framework: config.FrameworkReactNative,
+		Brand:     config.BrandBlue,
+		Styling:   config.StylingStylesheet,
+		State:     config.StateTanstackQuery,
+		Testing:   config.TestingJest,
+	}
+}
+
 func buildConfig(r *wizard.Result) *config.GofiConfig {
 	proj := config.Project{Name: r.Name, Root: r.Root}
 	testLang, testPath := "", ""
@@ -375,26 +399,14 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 
 	var frontend, mobile *config.UISurface
 	if r.Has(wizard.EnvWeb) {
-		frontend = &config.UISurface{
-			Framework: config.FrameworkReact,
-			Path:      r.WebPath,
-			Brand:     config.BrandBlue,
-			Styling:   config.StylingTailwind,
-			State:     config.StateTanstackQuery,
-			Testing:   config.TestingVitest,
-			DS:        r.WebDS,
-		}
+		s := defaultWebSurface()
+		s.Path, s.DS = r.WebPath, r.WebDS
+		frontend = &s
 	}
 	if r.Has(wizard.EnvMobile) {
-		mobile = &config.UISurface{
-			Framework: config.FrameworkReactNative,
-			Path:      r.MobilePath,
-			Brand:     config.BrandBlue,
-			Styling:   config.StylingStylesheet,
-			State:     config.StateTanstackQuery,
-			Testing:   config.TestingJest,
-			DS:        r.MobileDS,
-		}
+		s := defaultMobileSurface()
+		s.Path, s.DS = r.MobilePath, r.MobileDS
+		mobile = &s
 	}
 
 	// Go SDK is the only git source the wizard configures (cloned into

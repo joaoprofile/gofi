@@ -214,3 +214,161 @@ hsec:
 		t.Errorf("expected version bumped to %d, got %d", CurrentVersion, loaded.Version)
 	}
 }
+
+// TestLoad_LegacyFlatUI covers the v1 single-surface spelling, where the UI
+// fields sat directly under `ui:` instead of under `frontend:`. Without the
+// migration the block parses into nothing and the surface is silently lost.
+func TestLoad_LegacyFlatUI(t *testing.T) {
+	head := `version: 1
+project:
+  name: my-service
+  root: /abs/my-service
+backend:
+  language: go
+  path: backend
+ai:
+  host: claude-vscode
+  model: claude-opus-4-8
+agents: [gofi-eng, gofi-ui, gofi-full]
+sources:
+  agents: github.com/joaoprofile/gofi@main
+git:
+  remote: ""
+test:
+  default: unit
+  hooks:
+    pre: []
+    post: []
+  tasks:
+    unit:
+      desc: unit tests
+      run: go test ./...
+hsec:
+  enabled: false
+  severity_threshold: HIGH
+  return_error_on_finding: true
+  output_format: json
+`
+	cases := []struct {
+		name          string
+		ui            string
+		wantFrontend  bool
+		wantFramework string
+	}{
+		{
+			name: "web surface",
+			ui: `ui:
+  framework: react
+  path: frontend
+  brand: acme
+  styling: scss-modules
+  state: axios-hooks
+  forms: react-final-form
+  i18n: react-i18next
+  testing: jest
+  ds: acme-ui
+  legacy: antd
+`,
+			wantFrontend:  true,
+			wantFramework: FrameworkReact,
+		},
+		{
+			name: "mobile-only surface lands in mobile",
+			ui: `ui:
+  framework: react-native
+  path: mobile
+`,
+			wantFrontend:  false,
+			wantFramework: FrameworkReactNative,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), FileName)
+			if err := os.WriteFile(path, []byte(head+tc.ui), 0o644); err != nil {
+				t.Fatalf("write legacy: %v", err)
+			}
+			loaded, err := Load(path)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			got := loaded.Mobile
+			if tc.wantFrontend {
+				got = loaded.Frontend
+				if loaded.Mobile != nil {
+					t.Errorf("web surface should not populate mobile: %+v", loaded.Mobile)
+				}
+			} else if loaded.Frontend != nil {
+				t.Errorf("mobile surface should not populate frontend: %+v", loaded.Frontend)
+			}
+			if got == nil {
+				t.Fatalf("flat ui: block was dropped by migration")
+			}
+			if got.Framework != tc.wantFramework {
+				t.Errorf("framework = %q, want %q", got.Framework, tc.wantFramework)
+			}
+		})
+	}
+}
+
+// TestLoad_LegacyFlatUI_KeepsFreeFormFields pins that the project-owned stack
+// values survive the migration verbatim — they are data for the gofi-ui skill,
+// not enums gofi may normalise.
+func TestLoad_LegacyFlatUI_KeepsFreeFormFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	body := `version: 1
+project:
+  name: my-service
+  root: /abs/my-service
+ui:
+  framework: react
+  path: frontend
+  brand: acme
+  styling: scss-modules
+  state: axios-hooks
+  forms: react-final-form
+  i18n: react-i18next
+  testing: jest
+  ds: acme-ui
+  legacy: antd
+ai:
+  host: claude-vscode
+  model: claude-opus-4-8
+agents: [gofi-ui]
+sources:
+  agents: github.com/joaoprofile/gofi@main
+git:
+  remote: ""
+test:
+  default: unit
+  hooks:
+    pre: []
+    post: []
+  tasks:
+    unit:
+      desc: unit tests
+      run: echo ok
+hsec:
+  enabled: false
+  severity_threshold: HIGH
+  return_error_on_finding: true
+  output_format: json
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	want := UISurface{
+		Framework: FrameworkReact, Path: "frontend",
+		Brand: "acme", Styling: "scss-modules", State: "axios-hooks",
+		Forms: "react-final-form", I18n: "react-i18next",
+		Testing: "jest", DS: "acme-ui", Legacy: "antd",
+	}
+	if loaded.Frontend == nil || *loaded.Frontend != want {
+		t.Errorf("frontend = %+v, want %+v", loaded.Frontend, want)
+	}
+}

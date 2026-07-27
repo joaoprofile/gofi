@@ -129,17 +129,28 @@ type Backend struct {
 }
 
 // UISurface is one front-end surface — the shape of both the top-level
-// `frontend:` (web) and `mobile:` blocks. Mirrors the gofi-ui skill schema. DS
-// is the design system package the surface uses, or "" when the surface opts
-// out of the gofi design system.
+// `frontend:` (web) and `mobile:` blocks. Mirrors the gofi-ui skill schema.
+//
+// Only Framework and Path are constrained. Brand, Styling, State, Forms, I18n,
+// Testing and DS are free-form: `gofi init` seeds the gofi presets (blue,
+// tailwind, tanstack-query, gofi-ui …), but a project that brought its own
+// design system or stack writes its own values here and the skill reads them
+// verbatim. DS is the design system package the surface uses, or "" when the
+// surface opts out of a design system.
+//
+// Legacy names a stack the surface is migrating away from (e.g. "antd"); the
+// gofi-ui skill treats anything built on it as code to replace, not to extend.
 type UISurface struct {
 	Framework string `yaml:"framework"`
 	Path      string `yaml:"path"`
 	Brand     string `yaml:"brand,omitempty"`
 	Styling   string `yaml:"styling,omitempty"`
 	State     string `yaml:"state,omitempty"`
+	Forms     string `yaml:"forms,omitempty"`
+	I18n      string `yaml:"i18n,omitempty"`
 	Testing   string `yaml:"testing,omitempty"`
 	DS        string `yaml:"ds,omitempty"`
+	Legacy    string `yaml:"legacy,omitempty"`
 }
 
 // Ops carries the platform/delivery block the gofi-ops skill reads. `gofi init`
@@ -317,19 +328,25 @@ func Load(path string) (*GofiConfig, error) {
 }
 
 // legacyConfig probes the pre-v2 schema (version 1): backend identity lived in
-// project.language/project.path and front-end surfaces nested under ui.web /
-// ui.mobile. We unmarshal the raw bytes into it to lift those values into the
-// current grouped shape (backend:, frontend:, mobile:).
+// project.language/project.path and front-end surfaces lived under `ui:`. We
+// unmarshal the raw bytes into it to lift those values into the current grouped
+// shape (backend:, frontend:, mobile:).
 type legacyConfig struct {
 	Project struct {
 		Language string `yaml:"language"`
 		Path     string `yaml:"path"`
 		Root     string `yaml:"root"`
 	} `yaml:"project"`
-	UI *struct {
-		Web    *UISurface `yaml:"web"`
-		Mobile *UISurface `yaml:"mobile"`
-	} `yaml:"ui"`
+	UI *legacyUI `yaml:"ui"`
+}
+
+// legacyUI covers both v1 spellings of the front-end block: the single-surface
+// form, whose fields sit directly under `ui:` (inlined UISurface), and the
+// two-surface form nesting them under `ui.web` / `ui.mobile`.
+type legacyUI struct {
+	UISurface `yaml:",inline"`
+	Web       *UISurface `yaml:"web"`
+	Mobile    *UISurface `yaml:"mobile"`
 }
 
 // migrate upgrades an on-disk config to the current schema in-memory.
@@ -364,16 +381,40 @@ func migrate(cfg *GofiConfig, data []byte) error {
 		cfg.Backend = &Backend{Language: lg.Project.Language, Path: sourcePath}
 	}
 	if lg.UI != nil {
-		if lg.UI.Web != nil {
-			cfg.Frontend = lg.UI.Web
-		}
-		if lg.UI.Mobile != nil {
-			cfg.Mobile = lg.UI.Mobile
+		switch {
+		case lg.UI.Web != nil || lg.UI.Mobile != nil:
+			if lg.UI.Web != nil {
+				cfg.Frontend = lg.UI.Web
+			}
+			if lg.UI.Mobile != nil {
+				cfg.Mobile = lg.UI.Mobile
+			}
+		case lg.UI.Framework != "":
+			// Single-surface form: the framework decides which block it
+			// becomes, so a lone react-native app lands in mobile:, not
+			// frontend:.
+			surface := lg.UI.UISurface
+			if isMobileFramework(surface.Framework) {
+				cfg.Mobile = &surface
+			} else {
+				cfg.Frontend = &surface
+			}
 		}
 	}
 
 	cfg.Version = CurrentVersion
 	return nil
+}
+
+// isMobileFramework reports whether a framework name denotes a mobile surface.
+// Used only when migrating a v1 single-surface `ui:` block, which does not say
+// which of frontend:/mobile: it should become.
+func isMobileFramework(framework string) bool {
+	switch framework {
+	case FrameworkReactNative, "expo":
+		return true
+	}
+	return false
 }
 
 func Save(path string, cfg *GofiConfig) error {

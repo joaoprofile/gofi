@@ -19,6 +19,7 @@ import (
 var allAgents = []string{
 	"gofi-pd", "gofi-spec", "gofi-eng", "gofi-ui",
 	"gofi-ops", "gofi-qa", "gofi-doc", "gofi-status",
+	"gofi-full",
 }
 
 // agentToKnowledgeDir maps an agent name to the per-agent folder under
@@ -85,8 +86,8 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 
 	// Skills — every .md file under ai/skills/ is installed, regardless of the
 	// selected agent set. The agent selection only scopes the per-agent
-	// knowledge dirs below; all skills (including gofi-full and any agent not in
-	// the canonical eight) are always available under .claude/skills/.
+	// knowledge dirs below; all skills (including any agent not in the canonical
+	// nine) are always available under .claude/skills/.
 	skills, err := listSkillNames(agentsFS, srcRoot)
 	if err != nil {
 		return created, fmt.Errorf("list skills: %w", err)
