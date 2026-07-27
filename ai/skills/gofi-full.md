@@ -48,6 +48,12 @@ responsável pela causa-raiz e continua.
    **código que compila com testes verdes**. Testes **não devem falhar** ao sair
    do `gofi-eng` — uma fase nunca delega ao QA o que era responsabilidade dela
    resolver. O QA audita **qualidade**, não recolhe lixo das fases anteriores.
+6. **Bug fix ou melhoria → teste de regressão junto (LEI, gateada no `gofi-eng`).**
+   Se o passe de implementação corrige um bug ou melhora comportamento, ele só
+   passa o gate com o **teste de regressão** que trava o cenário (falha sem o
+   fix, passa com ele). Entrega sem esse teste **não** avança para o `gofi-qa` —
+   volta ao `gofi-eng` para completá-la. É responsabilidade da fase de
+   implementação, não do QA.
 
 ---
 
@@ -113,7 +119,7 @@ loop:
 |------|---------------|----------------|
 | `gofi-pd`  | PRD gerado, sem ambiguidade bloqueante de escopo; frontmatter `status: prd` | discovery incompleto a ponto de impedir a spec |
 | `gofi-spec`| spec SDD completa e internamente consistente; `status: spec` | spec não fecha por **lacuna de negócio** no PRD |
-| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes); `status: implementado` | spec **ambígua/contraditória**, ou impossível implementar como especificado |
+| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes) **e todo bug fix/melhoria vem com teste de regressão**; `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
 | `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** | qualquer blocker/major, **⚠️ com ressalvas**, ou ❌ reprovado |
 
 > **Minors/suggestions do QA:** o usuário pediu "sem nenhuma ressalva". Trate

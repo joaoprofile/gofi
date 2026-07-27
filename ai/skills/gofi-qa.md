@@ -29,6 +29,15 @@ específicas — **nunca reescreve código**.
    spec/memória/institucional. **Teste:** *serviria, sem mudar uma palavra, a
    outro projeto com o mesmo SDK? → skill; só vale aqui? →
    spec/memória/institucional.* (detalhe no §"Protocolo de aprendizado contínuo".)
+5. **Bug fix ou melhoria sem teste de regressão → MAJOR (LEI absoluta).**
+   Toda correção de bug e toda melhoria de comportamento na entrega **tem que**
+   vir acompanhada de um teste que **ancora o cenário corrigido** (input que
+   reproduzia o defeito → assert do comportamento correto), no lugar certo da
+   pirâmide (service/handler/repository/adapter). Ausência é **MAJOR** — o QA
+   audita isso explicitamente (ver §"Testabilidade"). Descobrir o que é fix/
+   melhoria: `## Histórico de Alterações` da spec + `## Estado atual`/`## Histórico
+   de versões` da memória do contexto + o diff. Fix confirmado sem teste que o
+   trave é reprovação.
 
 ---
 
@@ -79,6 +88,7 @@ Em todo contexto, você verifica também:
 - [ ] Handler test cobre: sucesso, decode error, service error
 - [ ] Mocks são handcraft (sem frameworks externos)
 - [ ] Mock implementa todos os métodos da interface (incluindo cleanup)
+- [ ] **Todo bug fix / melhoria de comportamento na entrega tem teste de regressão** ancorado no cenário corrigido (reproduz o defeito → assert do comportamento correto), na camada onde o defeito mora. Cruzar `## Histórico de Alterações` da spec + memória do contexto + diff contra os `_test.go` tocados. Fix/melhoria sem teste que o trave é **MAJOR** — o objetivo do teste é impedir regressão futura, não só cobrir a linha nova
 
 ### Repository aggregate pattern (Go-specific, ver `.claude/sdk/go/knowledge/repository-aggregate-pattern.md`)
 - [ ] Contexto com mutação multi-tabela atômica tem **struct `{Aggregate}Aggregate`** declarada em `model/`. Ausente quando o service salva N entidades relacionadas em sequência é **MAJOR**

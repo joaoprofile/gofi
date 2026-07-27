@@ -100,6 +100,13 @@ antes de ser dada como pronta.
    spec/memória/institucional. **Teste:** *serviria, sem mudar uma palavra, a
    outro projeto com o mesmo framework? → skill; só vale aqui? →
    spec/memória/institucional.* (detalhe no §"Protocolo de aprendizado contínuo".)
+5. **Bug fix ou melhoria → teste de regressão obrigatório (LEI absoluta).**
+   Toda correção de bug e toda melhoria de comportamento entrega, na **mesma
+   entrega**, um teste que **reproduz o cenário quebrado (ou a nova garantia),
+   falha sem o fix e passa com ele** — via queries acessíveis (`getByRole`,
+   `getByLabelText`), nunca `getByTestId` como primeira opção. O teste nomeia o
+   defeito/mudança para que **nunca regrida**. Sem teste de regressão a entrega
+   **não fecha**.
 
 ---
 

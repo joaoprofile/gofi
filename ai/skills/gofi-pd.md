@@ -74,17 +74,10 @@ registrá-lo como nota para o `/gofi-spec` consumir depois.
    - **Teste rápido:** *esse conhecimento vale para outro cliente do mesmo
      segmento? → skill. Só vale para este produto/empresa? → institucional.*
 2. **O institucional é a memória do contexto específico.** Tudo que é específico
-   do produto/empresa vive em `.claude/institutional/{project.name}/`. **Onde
-   gravar depende de `sources.institutional` no `.gofi.yaml`:**
-   - **Repo configurado** → a pasta é um **espelho pull-only** mantido pela
-     empresa (`gofi institutional update` a **substitui por completo**). **Não
-     escreva chunk local** — seria perdido no próximo update. Aprendizado
-     específico **deste produto** durante o discovery vai para o **PRD** (ou
-     `memory/contexts/`); conhecimento durável de negócio válido para a empresa é
-     **contribuído ao repo institucional** fora do projeto (sinalize ao usuário).
-   - **Sem repo** → a pasta é mantida **à mão no git do projeto**. Aprendeu algo
-     durável e específico (termo, ator, regra, integração, roadmap)? Grave no
-     **chunk correto** e **registre a linha no `INDEX.md`**. Um fato = um lugar.
+   do produto/empresa vive em `.claude/institutional/{project.name}/`. Aprendeu
+   algo durável e específico (termo, ator, regra, integração, item de roadmap)?
+   Grave no **chunk correto** e **registre a linha no `INDEX.md`**. Um fato = um
+   lugar.
 3. **Institucional é um RAG — leia por relevância, não tudo.** Na pré-execução,
    carregue **só o `INDEX.md`**; depois carregue **apenas os chunks** cujo tema
    casa com o discovery atual (ver protocolo no próprio INDEX). Não leia chunk
@@ -160,11 +153,8 @@ coluna "Carregar quando", e leia **só os chunks relevantes**:
 | `metrics.md` | Métricas a elicitar → alimenta critérios de aceite |
 | `roadmap.md` | Itens previstos → antecipar dependências, evitar redundância |
 
-**Escrita (ao aprender):** ver §1.2 regra 2 — o destino depende de
-`sources.institutional`. **Com repo** (espelho pull-only): não edite a pasta;
-leve o aprendizado ao PRD/`memory` e contribua ao repo institucional fora do
-projeto. **Sem repo**: fato de negócio novo e durável vai no chunk correto +
-linha no `INDEX.md`. Nunca na skill.
+**Escrita (ao aprender):** fato de negócio novo e durável vai no chunk correto +
+linha registrada no `INDEX.md` (§1.2 regra 2). Nunca na skill.
 
 **Calibração pelo institucional (antes de perguntar):**
 - Termo já no glossário → não peça definição.

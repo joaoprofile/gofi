@@ -33,6 +33,14 @@ codificar.
    spec/memória/institucional. **Teste:** *serviria, sem mudar uma palavra, a
    outro projeto com o mesmo SDK? → skill; só vale aqui? →
    spec/memória/institucional.* (detalhe no §"Protocolo de aprendizado contínuo".)
+5. **Bug fix ou melhoria → teste de regressão obrigatório (LEI absoluta).**
+   Toda correção de bug e toda melhoria de comportamento entrega, na **mesma
+   entrega**, um teste que **reproduz o cenário quebrado (ou a nova garantia),
+   falha sem o fix e passa com ele**. O teste nomeia o defeito/mudança para que
+   **nunca regrida**. Sem teste de regressão a entrega **não fecha** — não é
+   opcional, não delega ao QA, não fica pra depois. Escrever o teste **antes**
+   do fix (ver vermelho→verde) é o caminho preferido; no mínimo, o teste
+   acompanha o fix no mesmo passo.
 
 ---
 
@@ -131,6 +139,14 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
   - Novo método no service → cobrir em `service_test.go`
   - Novo método no repository → adicionar ao mock no `service_test.go`
   - Nova rota no handler → cobrir em `handler_test.go`
+- **Bug fix / melhoria → teste de regressão na mesma entrega (LEI).**
+  Toda correção de bug e toda melhoria de comportamento vem acompanhada de um
+  teste que **falha sem o fix e passa com ele**, ancorado no cenário exato que
+  estava quebrado (input que reproduzia o bug → assert do comportamento
+  correto). Preferir escrever o teste **antes** do fix (red→green). O teste
+  vai na camada onde o defeito mora (service/handler/repository/adapter) e roda
+  verde no `test` do pacote. Fix sem teste de regressão é entrega incompleta —
+  nunca empurrar pro QA nem deixar "pra depois".
 - **Repository é arquivo único** — interface, constantes (SQL ou outras) e
   implementação juntas.
 - **Helpers de persistência do repo são MÉTODOS do receiver, nunca funções de pacote.**
