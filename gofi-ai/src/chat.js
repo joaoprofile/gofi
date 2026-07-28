@@ -92,6 +92,15 @@ class Chat {
 		this.session = null;
 		/** True while a turn is in flight. */
 		this.running = false;
+		/**
+		 * Messages the user typed while a turn was already in flight. Each one
+		 * is echoed into the transcript immediately (with a queued marker) and
+		 * fed to the same session as the next turn — same process, same
+		 * session_id, so the model continues the conversation and the cached
+		 * prefix is preserved. No new context, no re-billed tokens.
+		 * @type {{prompt: string, images: {mediaType: string, data: string}[]}[]}
+		 */
+		this.pending = [];
 		/** @type {vscode.Disposable[]} */
 		this.watchers = [];
 		/** Token and retrieval accounting for the current session. */
@@ -149,6 +158,7 @@ class Chat {
 			this.approvals = null;
 		}
 		this.alwaysAllow.clear();
+		this.pending.length = 0;
 		this.running = false;
 		if (this.deltaTimer !== null) {
 			clearTimeout(this.deltaTimer);
@@ -412,7 +422,9 @@ class Chat {
 	// ── conversation ────────────────────────────────────────────────────────
 
 	/**
-	 * Starts a turn. Ignored while another one is in flight.
+	 * Accepts a message. Runs it now if idle, queues it if a turn is already
+	 * in flight — the queue drains automatically as each turn completes, on
+	 * the same session, so the conversation and its cached prefix stay intact.
 	 *
 	 * @param {string} text
 	 * @param {{mediaType: string, data: string}[]} [images]
@@ -420,7 +432,7 @@ class Chat {
 	async send(text, images) {
 		const prompt = text.trim();
 		const attached = images || [];
-		if ((prompt === '' && attached.length === 0) || this.running) {
+		if (prompt === '' && attached.length === 0) {
 			return;
 		}
 
@@ -434,6 +446,28 @@ class Chat {
 			return;
 		}
 
+		const queued = this.running;
+		this.nameFrom(prompt);
+		// Echo immediately so the user sees their message landed even when it
+		// is going to wait behind another turn.
+		this.post({ type: 'user', text: prompt, images: attached.length, queued });
+
+		if (queued) {
+			this.pending.push({ prompt, images: attached });
+			return;
+		}
+
+		this.startTurn(prompt, attached);
+	}
+
+	/**
+	 * Sends one turn to the engine. Caller guarantees no other turn is in
+	 * flight on this session.
+	 *
+	 * @param {string} prompt
+	 * @param {{mediaType: string, data: string}[]} attached
+	 */
+	startTurn(prompt, attached) {
 		// The session outlives the turn. Opening one per message would repay the
 		// engine's startup every time — measured at ~2.6s here — and rebuild the
 		// cached prefix, turning cheap cache reads back into expensive writes.
@@ -450,16 +484,16 @@ class Chat {
 				);
 			}
 			this.session = resolveProvider(config).createSession({
-				cwd,
+				cwd: this.cwd,
 				config,
-				project: readGofiProject(this.projectRoot || cwd),
+				project: readGofiProject(this.projectRoot || this.cwd),
 				hookSettings: settings,
 			});
 		}
 
-		this.nameFrom(prompt);
-		this.post({ type: 'user', text: prompt, images: attached.length });
-		this.setRunning(true);
+		if (!this.running) {
+			this.setRunning(true);
+		}
 
 		// The tools are present; the hook is what decides, call by call.
 		this.session.send({ prompt, images: attached, allowWrites: true }, (event) => this.onProviderEvent(event));
@@ -592,15 +626,28 @@ class Chat {
 				// Whatever the turn did, the audit is about to re-read disk; a
 				// finding that survived should be actionable again.
 				this.applying.clear();
-				this.running = false;
 				this.flushDeltas();
-				this.setRunning(false);
 				this.ledger.noteCost(event.costUsd);
 				this.postUsage({ immediate: true });
 				this.post({ type: 'done', isError: event.isError, costUsd: event.costUsd, durationMs: event.durationMs, error: event.error });
+				if (this.pending.length > 0) {
+					// Chain into the next queued turn without dropping running:
+					// same process, same session_id, same cached prefix. Defer
+					// one tick so the frontend renders the finish first.
+					const next = this.pending.shift();
+					this.post({ type: 'dequeued' });
+					setImmediate(() => this.startTurn(next.prompt, next.images));
+				} else {
+					this.running = false;
+					this.setRunning(false);
+				}
 				break;
 
 			case 'error':
+				// An error breaks the current turn's semantics; queued messages
+				// were written assuming success. Safer to drop them than to run
+				// them against a conversation the user just saw fail.
+				this.pending.length = 0;
 				this.running = false;
 				this.flushDeltas();
 				this.setRunning(false);
@@ -715,10 +762,6 @@ class Chat {
 		if (!action) {
 			return;
 		}
-		if (this.running) {
-			vscode.window.showWarningMessage('GOFI AI: espere a resposta atual terminar.');
-			return;
-		}
 
 		const choice = await vscode.window.showInformationMessage(
 			`GOFI AI — ${action.label}?`,
@@ -743,6 +786,10 @@ class Chat {
 			this.approvals.denyAll('O usuário interrompeu a resposta.');
 		}
 		this.pendingApprovals.clear();
+		// A stop means "cancel everything I asked for" — dropping the queue is
+		// the honest read of that intent. If the user wanted to keep some, they
+		// can retype it.
+		this.pending.length = 0;
 		if (this.session && this.running) {
 			this.session.cancel();
 		}
@@ -767,6 +814,7 @@ class Chat {
 		}
 		this.alwaysAllow.clear();
 		this.applying.clear();
+		this.pending.length = 0;
 		this.running = false;
 		this.ledger = new UsageLedger(this.cwd || '');
 		this.post({ type: 'cleared' });

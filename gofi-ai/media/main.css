@@ -361,6 +361,26 @@ body {
   opacity: 0.9;
 }
 
+/* Typed while another turn was in flight — waiting its turn on the same
+   session. The badge disappears when the backend actually starts it. */
+.turn.user.queued .who::after {
+  content: 'aguardando';
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.72em;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--gofi-sky);
+  background: rgba(125, 211, 252, 0.12);
+  border-radius: 10px;
+  opacity: 0.85;
+}
+
+.turn.user.queued .bubble {
+  opacity: 0.7;
+}
+
 .body {
   display: flex;
   flex-direction: column;
@@ -554,15 +574,43 @@ details.thinking .bubble {
   clip-path: polygon(0 0, 100% 50%, 0 100%, 0 72%, 62% 50%, 0 28%);
 }
 
-/* Animated only where something is actually happening: the working row, and
-   the avatar of the turn currently streaming. */
+/* Inline tail-of-text variant. Smaller, sits after the last streamed
+   character, always animated while it exists — it's created with the
+   streaming bubble and removed with it, so "visible" means "still streaming". */
+.gofi-thinking.gofi-cursor {
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.gofi-thinking.gofi-cursor .bar {
+  left: 3px;
+  top: 2px;
+  width: 2px;
+  height: 10px;
+}
+
+.gofi-thinking.gofi-cursor .chev {
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+}
+
+/* Animated only where something is actually happening: the working row, the
+   avatar of the turn currently streaming, and the inline streaming cursor. */
 .working .gofi-thinking .bar,
-.turn.live .avatar.agent .bar {
+.turn.live .avatar.agent .bar,
+.gofi-thinking.gofi-cursor .bar {
   animation: gofi-bar 1.5s ease-in-out infinite;
 }
 
 .working .gofi-thinking .chev,
-.turn.live .avatar.agent .chev {
+.turn.live .avatar.agent .chev,
+.gofi-thinking.gofi-cursor .chev {
   animation: gofi-chev 1.5s ease-in-out infinite;
 }
 

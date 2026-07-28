@@ -83,9 +83,11 @@
 
 	function send() {
 		const text = input.value.trim();
-		if ((text === '' && attachments.length === 0) || submit.disabled) {
+		if (text === '' && attachments.length === 0) {
 			return;
 		}
+		// Submit is never disabled while running — the backend queues the
+		// message onto the same session and drains it after the current turn.
 		vscode.postMessage({
 			type: 'send',
 			text,
@@ -566,6 +568,22 @@
 		label.textContent = 'pensando';
 		pendingIndicator.appendChild(label);
 		log.appendChild(pendingIndicator);
+	}
+
+	/**
+	 * A small inline gofi mark that lives at the tail of the streaming bubble.
+	 * It's a sibling of the growing Text node — appendData() on that node keeps
+	 * the cursor visually right after the last character. Disappears with the
+	 * bubble when `blocks` replaces the streamed preview, so "cursor gone"
+	 * means "this stream is done".
+	 */
+	function streamingCursor() {
+		const c = document.createElement('span');
+		c.className = 'gofi-thinking gofi-cursor';
+		c.setAttribute('aria-hidden', 'true');
+		c.appendChild(Object.assign(document.createElement('i'), { className: 'bar' }));
+		c.appendChild(Object.assign(document.createElement('i'), { className: 'chev' }));
+		return c;
 	}
 
 	function clearIndicator() {
@@ -1235,6 +1253,12 @@
 			case 'user': {
 				endTurn();
 				const body = turn('user', 'você');
+				if (message.queued) {
+					// Waiting behind another turn — badge it and skip the
+					// bottom "pensando" row (the current turn is still
+					// streaming and that would give two indicators).
+					body.parentElement.classList.add('queued');
+				}
 				if (message.images > 0) {
 					const note = document.createElement('div');
 					note.className = 'attached-note';
@@ -1243,6 +1267,20 @@
 				}
 				if (message.text !== '') {
 					userBubble(body, message.text);
+				}
+				if (!message.queued) {
+					showIndicator();
+				}
+				break;
+			}
+
+			case 'dequeued': {
+				// The next queued message just started running. Clear its badge
+				// and cover the gap between the previous turn's `done` and this
+				// turn's first delta with the usual pending row.
+				const first = log.querySelector('.turn.user.queued');
+				if (first) {
+					first.classList.remove('queued');
 				}
 				showIndicator();
 				break;
@@ -1253,11 +1291,15 @@
 				if (message.kind === 'text') {
 					if (!streamingText) {
 						const bubble = document.createElement('div');
-						bubble.className = 'bubble';
+						bubble.className = 'bubble streaming';
 						const node = document.createTextNode('');
 						bubble.appendChild(node);
+						// Cursor as the next sibling of the Text node: appendData
+						// grows the text, cursor stays visually at the tail.
+						const cursor = streamingCursor();
+						bubble.appendChild(cursor);
 						el.appendChild(bubble);
-						streamingText = { bubble, node, raw: '' };
+						streamingText = { bubble, node, cursor, raw: '' };
 					}
 					// Raw append, always: the authoritative `blocks` event that
 					// closes the message renders the Markdown properly, and
@@ -1319,7 +1361,7 @@
 				break;
 
 			case 'running':
-				submit.disabled = message.running;
+				// Submit stays enabled while running so new messages can queue.
 				cancel.hidden = !message.running;
 				document.body.classList.toggle('busy', message.running);
 				if (!message.running) {
