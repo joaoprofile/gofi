@@ -30,6 +30,7 @@ function activate(context) {
 			}
 		}),
 		vscode.commands.registerCommand('gofi-ai.newSession', () => chats.newSession()),
+		vscode.commands.registerCommand('gofi-ai.history', () => chats.history()),
 		vscode.commands.registerCommand('gofi-ai.stop', () => chats.stop()),
 		vscode.commands.registerCommand('gofi-ai.openTerminal', () => openEngineTerminal()),
 		vscode.commands.registerCommand('gofi-ai.doctor', () => runDoctor()),

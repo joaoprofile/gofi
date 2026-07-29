@@ -27,6 +27,11 @@
 	const activeFile = el('activeFile');
 	const attachmentsBar = el('attachments');
 	const writeBadge = el('writeBadge');
+	const historyBtn = /** @type {HTMLButtonElement} */ (el('historyBtn'));
+	const history = el('history');
+	const historyNew = /** @type {HTMLButtonElement} */ (el('historyNew'));
+	const historySearch = /** @type {HTMLInputElement} */ (el('historySearch'));
+	const historyList = el('historyList');
 
 	function el(id) {
 		return /** @type {HTMLElement} */ (document.getElementById(id));
@@ -66,10 +71,37 @@
 	/** Deltas land here and are painted once per animation frame. */
 	let paintQueued = false;
 	let followTail = true;
-	/** The "working…" row shown between turns. */
-	let pendingIndicator = null;
+	/**
+	 * The live "working" row: the last line of the transcript while a turn runs.
+	 *
+	 * Built once and kept, because re-inserting a node restarts every CSS
+	 * animation on it. Everything else is added to the log *before* it, so it
+	 * stays at the end without ever being moved — which is what lets the whip
+	 * keep swinging for the whole turn instead of resetting to its first frame
+	 * each time the agent writes a line.
+	 */
+	let workingRow = null;
 	/** Tool rows awaiting their result, keyed by tool_use id. */
 	const pendingTools = new Map();
+	/**
+	 * Set while a saved transcript is being rebuilt.
+	 *
+	 * Replay reuses the live handlers — the same events, so the same rendering —
+	 * but a few of them are about what is happening *now*: the working indicator
+	 * and the scroll-follow only make sense for a turn in flight.
+	 */
+	let replaying = false;
+	/**
+	 * Whether a turn is in flight, and whether it is currently blocked on the
+	 * user.
+	 *
+	 * The working row follows both: it belongs on screen for as long as the
+	 * agent is working, and off it while the agent is waiting for an answer to
+	 * an approval — at that point the one holding things up is you, and a row
+	 * saying "trabalhando" would be a lie.
+	 */
+	let running = false;
+	let awaitingApprovals = 0;
 
 	renderSkills();
 	showEmptyState();
@@ -457,7 +489,7 @@
 			hints.appendChild(item);
 		}
 		empty.appendChild(hints);
-		log.appendChild(empty);
+		addToLog(empty);
 	}
 
 	function clearEmptyState() {
@@ -499,15 +531,18 @@
 		body.className = 'body';
 		el.appendChild(body);
 
-		log.appendChild(el);
+		addToLog(el);
 		return body;
 	}
 
 	function assistantTurn() {
 		if (!currentTurn) {
-			clearIndicator();
 			currentTurn = turn('assistant', 'GOFI AI');
 			currentTurn.parentElement.classList.add('live');
+			// The indicator belongs *below* the answer being written, so it moves
+			// to the end rather than being dismissed by the first token: the turn
+			// has only started, and a long one keeps working for minutes after.
+			showIndicator();
 		}
 		return currentTurn;
 	}
@@ -532,70 +567,179 @@
 		return el;
 	}
 
+	const SVG_NS = 'http://www.w3.org/2000/svg';
+
+	function svgEl(name, attributes) {
+		const el = document.createElementNS(SVG_NS, name);
+		for (const key of Object.keys(attributes)) {
+			el.setAttribute(key, attributes[key]);
+		}
+		return el;
+	}
+
 	/**
-	 * The gofi mark, animated.
+	 * Three drawings of the same arm, shown one at a time.
 	 *
-	 * Built from two elements rather than the usual gradient background so the
-	 * bar and the chevron can move independently: the bar lights up, then the
-	 * chevron follows and nudges forward. It reads as the play mark advancing,
-	 * which says "working" in the product's own language instead of borrowing a
-	 * generic spinner.
+	 * A whip is not a rigid stick, so swinging one by rotating a curve does not
+	 * read as a whip — it reads as a bent wire being waved. Hand-drawn poses are
+	 * how cartoons have always done this, and they buy something else too: the
+	 * animation is opacity only, with no dependence on how an engine resolves
+	 * `transform-origin` inside an SVG. Nothing can rotate about the wrong point
+	 * because nothing rotates.
+	 *
+	 * Each entry is `[name, elbow-to-hand endpoint, the lash from that hand]`.
+	 * The strike pose ends at x=44, which is the robot's near edge — that is the
+	 * whole point of the picture, and the previous version missed it by six
+	 * units, whipping at empty air.
 	 */
-	function thinkingMark() {
-		const mark = document.createElement('span');
-		mark.className = 'gofi-thinking';
-		mark.setAttribute('aria-hidden', 'true');
-		const bar = document.createElement('i');
-		bar.className = 'bar';
-		const chevron = document.createElement('i');
-		chevron.className = 'chev';
-		mark.appendChild(bar);
-		mark.appendChild(chevron);
+	const WHIP_POSES = [
+		['windup', [3.5, 7.5], 'M3.5 7.5 C 0.5 2.5, 7 -0.2, 13 2.2'],
+		['strike', [16, 10], 'M16 10 C 26 3.5, 35 7.5, 44 12'],
+		['recoil', [15, 13.5], 'M15 13.5 C 22 18, 29 9, 37 15'],
+	];
+
+	/**
+	 * The working indicator: someone standing over the robot with a whip.
+	 *
+	 * A spinner says "wait". This says who is waiting and who is working, which
+	 * is the funnier and more accurate description of what is happening — and
+	 * being a drawing rather than a spinner, you can tell across the room
+	 * whether the panel is busy.
+	 *
+	 * Drawn here rather than shipped as a file because it has to move, and CSS
+	 * can only reach the parts if they are elements: three arm poses, the spark
+	 * where the lash lands, and the robot flinching a beat later.
+	 */
+	function workingMark() {
+		const mark = svgEl('svg', {
+			class: 'whip-mark',
+			viewBox: '0 0 72 32',
+			width: '54',
+			height: '24',
+			'aria-hidden': 'true',
+			focusable: 'false',
+		});
+
+		// The robot, at work: arms down on the keyboard, legs under the body.
+		const robot = svgEl('g', { class: 'robot' });
+		robot.appendChild(svgEl('rect', { class: 'robot-body', x: '46', y: '13', width: '16', height: '13', rx: '3' }));
+		robot.appendChild(svgEl('rect', { class: 'robot-head', x: '48.5', y: '4', width: '11', height: '8.5', rx: '2.5' }));
+		robot.appendChild(svgEl('line', { class: 'wire', x1: '54', y1: '4', x2: '54', y2: '1.6' }));
+		robot.appendChild(svgEl('circle', { class: 'bulb', cx: '54', cy: '1.2', r: '1.3' }));
+		robot.appendChild(svgEl('circle', { class: 'eye', cx: '51.6', cy: '8.2', r: '1.15' }));
+		robot.appendChild(svgEl('circle', { class: 'eye', cx: '56.4', cy: '8.2', r: '1.15' }));
+		robot.appendChild(svgEl('line', { class: 'wire', x1: '46', y1: '17.5', x2: '42.5', y2: '21.5' }));
+		robot.appendChild(svgEl('line', { class: 'wire', x1: '62', y1: '17.5', x2: '65.5', y2: '21.5' }));
+		robot.appendChild(svgEl('line', { class: 'wire', x1: '50', y1: '26', x2: '50', y2: '30' }));
+		robot.appendChild(svgEl('line', { class: 'wire', x1: '58', y1: '26', x2: '58', y2: '30' }));
+		mark.appendChild(robot);
+
+		// Where the lash lands, drawn at the strike pose's endpoint so the flash
+		// and the whip are in the same place at the same instant.
+		const spark = svgEl('g', { class: 'spark' });
+		spark.appendChild(svgEl('line', { x1: '44.5', y1: '11.8', x2: '41', y2: '8.4' }));
+		spark.appendChild(svgEl('line', { x1: '44.5', y1: '11.8', x2: '40.2', y2: '12.6' }));
+		spark.appendChild(svgEl('line', { x1: '44.5', y1: '11.8', x2: '41.6', y2: '15.6' }));
+		mark.appendChild(spark);
+
+		const human = svgEl('g', { class: 'human' });
+		human.appendChild(svgEl('circle', { class: 'head', cx: '8', cy: '7.5', r: '3.2' }));
+		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '10.7', x2: '8', y2: '20' }));
+		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '20', x2: '4', y2: '29.5' }));
+		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '20', x2: '12.5', y2: '29.5' }));
+		// The idle arm, on the other side, so the figure is not all one diagonal.
+		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '14', x2: '13', y2: '18' }));
+		mark.appendChild(human);
+
+		for (const [name, hand, lash] of WHIP_POSES) {
+			const pose = svgEl('g', { class: `pose ${name}` });
+			pose.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '13.5', x2: String(hand[0]), y2: String(hand[1]) }));
+			pose.appendChild(svgEl('path', { class: 'lash', d: lash }));
+			mark.appendChild(pose);
+		}
+
 		return mark;
 	}
 
-	/** A visible "the agent is working" row while nothing has streamed yet. */
+	/**
+	 * Shows the working row, for as long as the work lasts.
+	 *
+	 * It used to be a gap-filler, dismissed by the first token — what said "still
+	 * working" after that was the mark animating on the speaker's avatar. With
+	 * the mark now still, this row is the only signal, and a turn that reads six
+	 * files and writes two spends minutes past its first token. So it stays: the
+	 * last line of the transcript, alive, under whatever is being written, until
+	 * the turn actually ends.
+	 */
 	function showIndicator() {
-		if (pendingIndicator) {
+		if (replaying) {
 			return;
 		}
-		clearEmptyState();
-		pendingIndicator = document.createElement('div');
-		pendingIndicator.className = 'working';
-		pendingIndicator.appendChild(thinkingMark());
-		const label = document.createElement('span');
-		label.className = 'label';
-		label.textContent = 'pensando';
-		pendingIndicator.appendChild(label);
-		log.appendChild(pendingIndicator);
+		if (!workingRow) {
+			workingRow = document.createElement('div');
+			workingRow.className = 'working';
+			workingRow.appendChild(workingMark());
+			const label = document.createElement('span');
+			label.className = 'label';
+			label.textContent = 'trabalhando';
+			workingRow.appendChild(label);
+		}
+		if (workingRow.parentElement !== log) {
+			clearEmptyState();
+			log.appendChild(workingRow);
+		}
 	}
 
 	/**
-	 * A small inline gofi mark that lives at the tail of the streaming bubble.
-	 * It's a sibling of the growing Text node — appendData() on that node keeps
-	 * the cursor visually right after the last character. Disappears with the
-	 * bubble when `blocks` replaces the streamed preview, so "cursor gone"
-	 * means "this stream is done".
+	 * The caret at the tail of the streaming bubble.
+	 *
+	 * A sibling of the growing Text node — appendData() on that node keeps the
+	 * caret visually right after the last character. Deliberately a plain
+	 * blinking block rather than the product mark: the mark identifies who is
+	 * speaking, and it says that once, in the line above.
 	 */
 	function streamingCursor() {
-		const c = document.createElement('span');
-		c.className = 'gofi-thinking gofi-cursor';
-		c.setAttribute('aria-hidden', 'true');
-		c.appendChild(Object.assign(document.createElement('i'), { className: 'bar' }));
-		c.appendChild(Object.assign(document.createElement('i'), { className: 'chev' }));
-		return c;
+		const caret = document.createElement('span');
+		caret.className = 'caret';
+		caret.setAttribute('aria-hidden', 'true');
+		return caret;
 	}
 
+	/**
+	 * Takes the row off the transcript. The element is kept, not destroyed —
+	 * showing it again is the only moment its animation restarts, and that is
+	 * the start of a turn, which is where a restart belongs.
+	 */
 	function clearIndicator() {
-		if (pendingIndicator) {
-			pendingIndicator.remove();
-			pendingIndicator = null;
+		if (workingRow && workingRow.parentElement) {
+			workingRow.remove();
 		}
+	}
+
+	/**
+	 * Adds a node to the transcript, keeping the working row last.
+	 *
+	 * Every append goes through here for one reason: the row must never be
+	 * moved. Inserting before it costs nothing and is what makes the animation
+	 * continuous — `appendChild` on a node the log already holds is a remove and
+	 * an insert, and Chromium restarts CSS animations on re-insertion.
+	 */
+	function addToLog(node) {
+		if (workingRow && workingRow.parentElement === log) {
+			log.insertBefore(node, workingRow);
+		} else {
+			log.appendChild(node);
+		}
+		return node;
 	}
 
 	// Paths in rendered Markdown open in the editor — the agents emit them
 	// constantly, and a path you can click beats one you have to retype.
 	window.gofiMarkdown.setPathHandler((path) => vscode.postMessage({ type: 'openFile', path }));
+
+	// Copying goes through the extension host: the editor's own clipboard works
+	// the same in every VSCode build, which is more than the webview's does.
+	window.gofiMarkdown.setCopyHandler((text) => vscode.postMessage({ type: 'copy', text }));
 
 	/**
 	 * Renders the agent's Markdown into `el`.
@@ -610,10 +754,37 @@
 		window.gofiMarkdown.render(el, text);
 	}
 
+	/**
+	 * A finished message.
+	 *
+	 * It carries its own copy button — what you usually want out of an answer is
+	 * the text of it, and selecting a rendered bubble by hand picks up the
+	 * markup around it. The copy is of the Markdown the agent actually wrote,
+	 * not of what the renderer made of it, so it pastes into an editor as the
+	 * agent meant it.
+	 */
 	function textBubble(parent, text) {
 		const bubble = document.createElement('div');
 		bubble.className = 'bubble';
 		renderInto(bubble, text);
+		const copy = window.gofiMarkdown.copyButton(text);
+		copy.classList.add('bubble-copy');
+		bubble.appendChild(copy);
+		parent.appendChild(bubble);
+		return bubble;
+	}
+
+	/**
+	 * What you typed, shown as you typed it.
+	 *
+	 * Deliberately not run through the Markdown renderer: your message is not a
+	 * document, and a path or an asterisk in a question should come back looking
+	 * like the question you asked. Line breaks are kept by the stylesheet.
+	 */
+	function userBubble(parent, text) {
+		const bubble = document.createElement('div');
+		bubble.className = 'bubble plain';
+		bubble.textContent = text;
 		parent.appendChild(bubble);
 		return bubble;
 	}
@@ -1045,7 +1216,7 @@
 		});
 		card.appendChild(instruction);
 
-		log.appendChild(card);
+		addToLog(card);
 		approvalCards.set(request.id, card);
 		queuePaint();
 	}
@@ -1097,19 +1268,32 @@
 		return { path, body };
 	}
 
-	/** Replaces the card with what was decided, so the transcript records it. */
-	function resolveApproval(id, decision) {
-		const card = approvalCards.get(id);
+	/**
+	 * Replaces the card with what was decided, so the transcript records it.
+	 *
+	 * On replay there is no card to replace — the question was asked in another
+	 * window — so the decision is written straight into the log. What the user
+	 * authorised is part of what happened, and a transcript that omits it reads
+	 * as if the agent acted unasked.
+	 */
+	function resolveApproval(id, decision, tool) {
+		let card = approvalCards.get(id);
 		approvalCards.delete(id);
 		if (!card) {
-			return;
+			if (!tool) {
+				return;
+			}
+			clearEmptyState();
+			card = document.createElement('div');
+			addToLog(card);
 		}
 		card.textContent = '';
 		card.className = `approval settled ${decision === 'deny' ? 'denied' : 'allowed'}`;
 		const line = document.createElement('div');
 		line.className = 'approval-head';
-		line.textContent =
+		const what =
 			decision === 'deny' ? 'Recusado' : decision === 'always' ? 'Permitido — e não perguntar mais' : 'Permitido';
+		line.textContent = tool ? `${what} · ${tool}` : what;
 		card.appendChild(line);
 	}
 
@@ -1188,15 +1372,230 @@
 		activeFile.hidden = false;
 	}
 
+	// ── saved conversations ─────────────────────────────────────────────────
+
+	/**
+	 * The conversations kept for this project, and the one currently open.
+	 *
+	 * A chat that ends when the panel closes is a chat you can only use for
+	 * questions you can finish in one sitting. The list is what makes the other
+	 * kind possible: pick a thread up tomorrow, in another window, with the
+	 * agent still inside the conversation rather than reading a summary of it.
+	 */
+	/** @type {{id: string|null, engineId: string|null, title: string, updatedAt: number, messages: number, source: string}[]} */
+	let sessions = [];
+	let activeSessionId = null;
+	let activeEngineId = null;
+	let canOpenTerminal = false;
+	let historyOpen = false;
+
+	historyBtn.addEventListener('click', () => toggleHistory(!historyOpen));
+	historyNew.addEventListener('click', () => {
+		vscode.postMessage({ type: 'new' });
+		toggleHistory(false);
+	});
+	historySearch.addEventListener('input', renderSessions);
+	historySearch.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape') {
+			toggleHistory(false);
+		}
+	});
+
+	function toggleHistory(open) {
+		historyOpen = open;
+		history.hidden = !open;
+		// The list takes the transcript's place rather than floating over it:
+		// one thing on screen at a time, and no z-index fight with the picker.
+		log.hidden = open;
+		historyBtn.setAttribute('aria-expanded', String(open));
+		historyBtn.classList.toggle('on', open);
+		if (open) {
+			// Render what we have before asking for more, so opening the list is
+			// instant and the answer only ever refreshes it.
+			historySearch.value = '';
+			renderSessions();
+			vscode.postMessage({ type: 'sessions' });
+			historySearch.focus();
+		} else {
+			input.focus();
+		}
+	}
+
+	/** "agora", "12m", "3h", "5d" — the age at a glance, not a full date. */
+	function age(timestamp) {
+		const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+		if (seconds < 60) {
+			return 'agora';
+		}
+		if (seconds < 3600) {
+			return `${Math.floor(seconds / 60)}m`;
+		}
+		if (seconds < 86400) {
+			return `${Math.floor(seconds / 3600)}h`;
+		}
+		return `${Math.floor(seconds / 86400)}d`;
+	}
+
+	function fullDate(timestamp) {
+		try {
+			return new Date(timestamp).toLocaleString();
+		} catch {
+			return '';
+		}
+	}
+
+	function renderSessions() {
+		historyList.textContent = '';
+		const needle = historySearch.value.trim().toLowerCase();
+		const shown = needle === '' ? sessions : sessions.filter((s) => s.title.toLowerCase().includes(needle));
+
+		if (shown.length === 0) {
+			const empty = document.createElement('p');
+			empty.className = 'history-empty';
+			empty.textContent =
+				sessions.length === 0
+					? 'Nenhuma conversa salva ainda neste projeto.'
+					: 'Nenhuma conversa com esse nome.';
+			historyList.appendChild(empty);
+			return;
+		}
+
+		for (const session of shown) {
+			const isCurrent =
+				(session.id !== null && session.id === activeSessionId) ||
+				(session.engineId !== null && session.engineId === activeEngineId);
+
+			const row = document.createElement('div');
+			row.className = isCurrent ? 'history-row current' : 'history-row';
+			row.setAttribute('role', 'listitem');
+
+			const open = document.createElement('button');
+			open.type = 'button';
+			open.className = 'history-open';
+			open.title = [
+				session.title,
+				fullDate(session.updatedAt),
+				session.engineId ? `sessão ${session.engineId}` : 'sem sessão no motor',
+			].join('\n');
+
+			const name = document.createElement('span');
+			name.className = 'history-title';
+			name.textContent = session.title;
+			open.appendChild(name);
+
+			// Where the conversation was had. Only worth saying when it was not
+			// here — a thread from the terminal opening in the chat is the sort
+			// of thing you want to know before you click it.
+			if (session.source === 'engine') {
+				const badge = document.createElement('span');
+				badge.className = 'history-badge';
+				badge.textContent = 'terminal';
+				badge.title = 'Começou fora do painel. Abrir continua a mesma conversa.';
+				open.appendChild(badge);
+			}
+
+			const when = document.createElement('span');
+			when.className = 'history-age';
+			when.textContent = age(session.updatedAt);
+			open.appendChild(when);
+
+			open.addEventListener('click', () => {
+				vscode.postMessage({ type: 'openSession', id: session.id, engineId: session.engineId });
+				toggleHistory(false);
+			});
+			row.appendChild(open);
+
+			// The same conversation, in the engine's own interface. One session,
+			// two doors — nothing is copied or exported to go through either.
+			if (canOpenTerminal && session.engineId) {
+				const terminal = document.createElement('button');
+				terminal.type = 'button';
+				terminal.className = 'history-terminal';
+				terminal.title = 'Continuar esta conversa num terminal';
+				terminal.setAttribute('aria-label', `Continuar ${session.title} num terminal`);
+				terminal.textContent = '›_';
+				terminal.addEventListener('click', (event) => {
+					event.stopPropagation();
+					vscode.postMessage({ type: 'openSessionInTerminal', engineId: session.engineId });
+				});
+				row.appendChild(terminal);
+			}
+
+			// Only what the panel wrote is the panel's to throw away. The engine
+			// keeps its own copy, and a row that lives only there stays.
+			if (session.id) {
+				const remove = document.createElement('button');
+				remove.type = 'button';
+				remove.className = 'history-delete';
+				remove.title = 'Esquecer aqui — a conversa continua no motor';
+				remove.setAttribute('aria-label', `Esquecer ${session.title}`);
+				remove.textContent = '×';
+				remove.addEventListener('click', (event) => {
+					event.stopPropagation();
+					vscode.postMessage({ type: 'deleteSession', id: session.id });
+				});
+				row.appendChild(remove);
+			}
+
+			historyList.appendChild(row);
+		}
+	}
+
+	/**
+	 * Rebuilds a saved conversation from its events.
+	 *
+	 * They are the same events the live chat renders, so replay is the live
+	 * renderer run over a recording — nothing about a restored transcript can
+	 * drift from how it looked the first time.
+	 */
+	function replay(events, title) {
+		log.textContent = '';
+		pendingTools.clear();
+		approvalCards.clear();
+		clearIndicator();
+		endTurn();
+
+		replaying = true;
+		for (const event of events) {
+			try {
+				apply(event);
+			} catch {
+				// One malformed event from an older version of the extension is
+				// not a reason to lose the rest of the conversation.
+			}
+		}
+		replaying = false;
+
+		clearIndicator();
+		endTurn();
+		if (log.childElementCount === 0) {
+			showEmptyState();
+		} else {
+			const mark = document.createElement('div');
+			mark.className = 'resume-mark';
+			mark.textContent = title ? `conversa retomada · ${title}` : 'conversa retomada';
+			addToLog(mark);
+		}
+		followTail = true;
+		queuePaint();
+	}
+
 	// ── extension messages ──────────────────────────────────────────────────
 
 	window.addEventListener('message', (event) => {
-		const message = event.data;
 		// Sample "was the user at the bottom" before mutating, then scroll once
 		// per frame — scrolling synchronously on every message forces a layout
 		// per delta, which is its own source of stutter.
 		followTail = followTail && atBottom();
+		apply(event.data);
+		queuePaint();
+	});
 
+	/** Renders one message from the extension — live, or replayed from disk. */
+	function apply(message) {
+		if (!message || typeof message.type !== 'string') {
+			return;
+		}
 		switch (message.type) {
 			case 'identity': {
 				showThinking = message.showThinking !== false;
@@ -1226,11 +1625,31 @@
 			}
 
 			case 'approval':
+				awaitingApprovals++;
 				showApproval(message);
 				break;
 
 			case 'approvalResolved':
-				resolveApproval(message.id, message.decision);
+				awaitingApprovals = Math.max(0, awaitingApprovals - 1);
+				resolveApproval(message.id, message.decision, message.tool);
+				break;
+
+			case 'sessions':
+				sessions = Array.isArray(message.items) ? message.items : [];
+				activeSessionId = message.activeId || null;
+				activeEngineId = message.activeEngineId || null;
+				canOpenTerminal = message.canOpenTerminal === true;
+				if (historyOpen) {
+					renderSessions();
+				}
+				break;
+
+			case 'replay':
+				replay(Array.isArray(message.events) ? message.events : [], message.title);
+				break;
+
+			case 'toggleHistory':
+				toggleHistory(!historyOpen);
 				break;
 
 			case 'activeFile':
@@ -1362,11 +1781,15 @@
 
 			case 'running':
 				// Submit stays enabled while running so new messages can queue.
-				cancel.hidden = !message.running;
-				document.body.classList.toggle('busy', message.running);
-				if (!message.running) {
+				running = message.running === true;
+				cancel.hidden = !running;
+				document.body.classList.toggle('busy', running);
+				if (running) {
+					showIndicator();
+				} else {
 					clearIndicator();
 					pendingTools.clear();
+					awaitingApprovals = 0;
 				}
 				break;
 
@@ -1395,8 +1818,11 @@
 			case 'cleared':
 				log.textContent = '';
 				pendingTools.clear();
+				approvalCards.clear();
 				clearIndicator();
 				endTurn();
+				running = false;
+				awaitingApprovals = 0;
 				showEmptyState();
 				break;
 
@@ -1404,8 +1830,14 @@
 				break;
 		}
 
-		queuePaint();
-	});
+		// Whatever just landed, the turn is still running and nobody is waiting
+		// on the user: the row goes back to the foot of the transcript, under the
+		// newest content. `done` and `error` are the two that end a turn, and
+		// they have already taken it down.
+		if (running && !replaying && awaitingApprovals === 0 && message.type !== 'done' && message.type !== 'error') {
+			showIndicator();
+		}
+	}
 
 	/** Coalesces scroll-to-tail into one write per animation frame. */
 	function queuePaint() {
@@ -1440,7 +1872,7 @@
 			line.textContent = hint;
 			el.appendChild(line);
 		}
-		log.appendChild(el);
+		addToLog(el);
 	}
 
 	vscode.postMessage({ type: 'ready' });

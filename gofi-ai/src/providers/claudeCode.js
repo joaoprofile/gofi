@@ -1,6 +1,7 @@
 'use strict';
 
 const { spawn, execFile } = require('child_process');
+const claudeSessions = require('./claudeSessions.js');
 
 /** @typedef {import('./types.js').ProviderEvent} ProviderEvent */
 
@@ -117,8 +118,9 @@ function sessionArgs(config, project, resumeId, writesAllowed, settings) {
 	if (effort !== '') {
 		args.push('--effort', effort);
 	}
-	// Only after a cancel: the killed process took the live conversation with
-	// it, and resuming is how the next turn keeps the thread.
+	// After a cancel, or when the panel reopens a saved conversation: in both
+	// cases the process that held the thread is gone, and resuming by id is how
+	// the next turn continues it rather than starting another one.
 	if (resumeId) {
 		args.push('--resume', resumeId);
 	}
@@ -137,8 +139,13 @@ class ClaudeCodeSession {
 		this.ctx = ctx;
 		/** @type {import('child_process').ChildProcess | null} */
 		this.child = null;
-		/** Engine-side conversation id, learned from the init event. */
-		this.sessionId = null;
+		/**
+		 * Engine-side conversation id, learned from the init event — or handed in
+		 * when the panel is reopening a conversation from its history, in which
+		 * case the first process starts with `--resume` and the agent picks the
+		 * thread back up instead of meeting it as a transcript.
+		 */
+		this.sessionId = ctx.resumeSessionId || null;
 		/** Set while a turn is in flight. */
 		this.emit = null;
 		this.settled = true;
@@ -479,6 +486,24 @@ const claudeCodeProvider = {
 
 	createSession(ctx) {
 		return new ClaudeCodeSession(ctx);
+	},
+
+	/**
+	 * The engine's own conversations for this folder — including the ones
+	 * started in a terminal, which is the point: there is one set of sessions,
+	 * not the panel's and the CLI's.
+	 */
+	savedSessions(ctx) {
+		return claudeSessions.list(ctx.cwd);
+	},
+
+	savedTranscript(ctx, engineId) {
+		return claudeSessions.transcript(ctx.cwd, engineId);
+	},
+
+	/** How to continue a given conversation in a terminal, as a command line. */
+	resumeCommand(ctx, engineId) {
+		return `${executableFrom(ctx.config)} --resume ${engineId}`;
 	},
 };
 

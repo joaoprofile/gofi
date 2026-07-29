@@ -13,65 +13,17 @@
  */
 
 const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
-const Module = require('module');
+const { installVscodeStub, makeContext, runner } = require('./vscode-stub.js');
 
-// The panel runs inside the extension host, so `vscode` only exists there.
-// A stub with the handful of members Chat touches is enough to exercise the
-// permission logic without one.
-const vscodeStub = {
-	Uri: { joinPath: (base, ...parts) => ({ fsPath: path.join(base.fsPath, ...parts) }) },
-	workspace: {
-		workspaceFolders: undefined,
-		getConfiguration: () => ({ get: () => undefined }),
-		createFileSystemWatcher: () => ({
-			onDidCreate() {},
-			onDidChange() {},
-			onDidDelete() {},
-			dispose() {},
-		}),
-		asRelativePath: (p) => String(p),
-	},
-	window: {
-		activeTextEditor: undefined,
-		onDidChangeActiveTextEditor: () => ({ dispose() {} }),
-		onDidChangeTextEditorSelection: () => ({ dispose() {} }),
-		showWarningMessage() {},
-		showInformationMessage: async () => undefined,
-	},
-	commands: { executeCommand() {} },
-	RelativePattern: class {},
-	ViewColumn: { One: 1, Beside: 2 },
-	Position: class {},
-	Selection: class {},
-	Range: class {},
-	TextEditorRevealType: { InCenter: 2 },
-	ThemeIcon: class {},
-};
-
-const realResolve = Module._resolveFilename;
-Module._resolveFilename = function (request, ...rest) {
-	if (request === 'vscode') {
-		return 'vscode';
-	}
-	return realResolve.call(this, request, ...rest);
-};
-require.cache.vscode = { id: 'vscode', filename: 'vscode', loaded: true, exports: vscodeStub };
+// The panel runs inside the extension host, so `vscode` only exists there. The
+// stub is enough to exercise the permission logic without one.
+installVscodeStub();
 
 const { Chat } = require('../src/chat.js');
+const { test, run } = runner();
 
 function makeChat(id) {
-	const state = new Map();
-	const context = {
-		extensionUri: { fsPath: path.join(__dirname, '..') },
-		subscriptions: [],
-		workspaceState: {
-			get: (key, fallback) => (state.has(key) ? state.get(key) : fallback),
-			update: (key, value) => state.set(key, value),
-		},
-	};
-	return new Chat(context, id);
+	return new Chat(makeContext(), id);
 }
 
 /** Stands in for the bridge so no engine or filesystem handshake is involved. */
@@ -86,9 +38,6 @@ function stubApprovals(chat) {
 	};
 	return decisions;
 }
-
-const tests = [];
-const test = (name, fn) => tests.push([name, fn]);
 
 test('granting is remembered for the rest of the conversation', () => {
 	const chat = makeChat(1);
@@ -184,18 +133,4 @@ test('an unknown request id is ignored', () => {
 	assert.strictEqual(chat.alwaysAllow.size, 0, 'and nothing may be granted by it');
 });
 
-let failed = 0;
-for (const [name, fn] of tests) {
-	try {
-		fn();
-		console.log(`  ok    ${name}`);
-	} catch (err) {
-		failed++;
-		console.log(`  FALHA ${name}\n        ${err.message}`);
-	}
-}
-console.log(`\n${tests.length - failed}/${tests.length} passaram`);
-process.exit(failed === 0 ? 0 : 1);
-
-// Keep the linter from flagging the unused import in a script with no exports.
-void fs;
+run();

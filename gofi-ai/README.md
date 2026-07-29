@@ -10,6 +10,26 @@ que faz do painel um chat *do gofi* e não um chat genérico — o processo herd
 `/gofi-status`, `/gofi-full`) são comandos que você digita no chat, e o agente
 lê a spec, a memória e o knowledge do projeto sem nenhuma ligação extra.
 
+## Conversas salvas
+
+O botão de lista no canto do cabeçalho (ou `GOFI AI: conversas salvas`) abre as
+conversas deste projeto — a mais recente no topo, com busca por título. Clicar
+numa delas traz o histórico de volta **e retoma o contexto no motor**: a próxima
+mensagem continua a conversa, não começa outra.
+
+Não há duas noções de sessão. Cada conversa do painel é uma sessão do próprio
+Claude Code (`~/.claude/projects/<projeto>/<id>.jsonl`), então:
+
+- uma conversa começada aqui aparece no `claude --resume` do terminal — e o
+  botão `›_` na linha abre um terminal já dentro dela;
+- uma conversa começada no terminal aparece nesta lista, marcada `terminal`, e
+  pode ser continuada no chat;
+- o que for dito de um lado está no outro quando você voltar.
+
+O `×` esquece só a cópia do painel; a conversa continua no motor. O histórico é
+**local** — fica no armazenamento da extensão para este workspace e não sai da
+máquina.
+
 ## Tokens e eficiência do RAG
 
 A barra acima do chat mostra, **enquanto o agente trabalha**, quantos tokens a
@@ -66,7 +86,8 @@ arquivo.
 | Comando | O que faz |
 |---------|-----------|
 | `GOFI AI: abrir o chat` | Foca o painel |
-| `GOFI AI: nova sessão` | Descarta o histórico e o contexto do motor |
+| `GOFI AI: nova sessão` | Guarda a conversa atual e começa outra, com contexto limpo |
+| `GOFI AI: conversas salvas` | Lista as conversas do projeto para retomar uma |
 | `GOFI AI: interromper a resposta` | Mata o turno em andamento |
 | `GOFI AI: abrir o motor em um terminal` | Sobe a TUI interativa do motor num terminal do VSCode |
 | `GOFI AI: diagnosticar a instalação` | Diz se o motor está acessível e de onde |

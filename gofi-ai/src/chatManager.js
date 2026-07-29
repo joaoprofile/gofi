@@ -2,6 +2,7 @@
 
 const vscode = require('vscode');
 const { Chat, VIEW_ID, RUNNING_CONTEXT } = require('./chat.js');
+const { SessionStore } = require('./history.js');
 
 /**
  * Owns the open chats and decides which one a command acts on.
@@ -18,6 +19,12 @@ class ChatManager {
 	/** @param {vscode.ExtensionContext} context */
 	constructor(context) {
 		this.context = context;
+		/**
+		 * Saved conversations, shared by every chat: the history is a property of
+		 * the workspace, so a thread started in a tab is one the sidebar can pick
+		 * up tomorrow.
+		 */
+		this.store = new SessionStore(context);
 		/** @type {Chat | null} The chat docked in the sidebar. */
 		this.sidebar = null;
 		/** @type {Map<vscode.WebviewPanel, Chat>} */
@@ -33,7 +40,7 @@ class ChatManager {
 	/** @param {vscode.WebviewView} view */
 	resolveWebviewView(view) {
 		if (!this.sidebar) {
-			this.sidebar = new Chat(this.context, 0);
+			this.sidebar = new Chat(this.context, 0, this.store);
 		}
 		const chat = this.sidebar;
 		chat.attach(view.webview);
@@ -63,7 +70,7 @@ class ChatManager {
 	 * ask for the second.
 	 */
 	openInEditor() {
-		const chat = new Chat(this.context, this.nextId++);
+		const chat = new Chat(this.context, this.nextId++, this.store);
 		const panel = vscode.window.createWebviewPanel(
 			'gofi-ai.chatPanel',
 			chat.title,
@@ -136,6 +143,14 @@ class ChatManager {
 		const chat = this.current();
 		if (chat) {
 			chat.newSession();
+		}
+	}
+
+	/** Opens (or closes) the list of saved conversations in the chat in view. */
+	history() {
+		const chat = this.current();
+		if (chat) {
+			chat.post({ type: 'toggleHistory' });
 		}
 	}
 

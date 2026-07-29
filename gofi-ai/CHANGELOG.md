@@ -1,5 +1,24 @@
 # Changelog
 
+## Não publicado
+
+- **Conversas salvas.** Cada conversa é gravada localmente e volta pelo botão de
+  lista no cabeçalho — transcrição de volta na tela e contexto retomado no motor
+  (`--resume`), então a próxima mensagem continua de onde parou.
+- Uma conversa do painel **é** uma sessão do Claude Code: a lista junta as duas
+  origens pelo id da sessão, mostra as que começaram no terminal marcadas como
+  tal, e o botão `›_` abre um terminal dentro da mesma conversa. Nada é copiado
+  ou exportado para ir de um lado ao outro.
+- Quando o motor não tem mais a sessão (expirada, ou de outro checkout), o painel
+  diz isso e roda a mensagem sem o contexto antigo em vez de falhar.
+- **Blocos de código viraram cartão**: cabeçalho com a linguagem e botão que
+  copia o conteúdo. Cada resposta também ganhou um botão de copiar no canto —
+  copia o Markdown que o agente escreveu, não o que o renderizador fez dele.
+- **Indicador de trabalho novo**: um bonequinho chicoteando o robô, no lugar da
+  marca do gofi animada. A marca agora só identifica quem fala.
+- Correção: `userBubble` era chamado sem existir — toda mensagem do usuário
+  quebrava a renderização do turno.
+
 ## 0.1.0
 
 Primeira versão.

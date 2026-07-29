@@ -16,6 +16,22 @@
  *           Cheap reachability check. Never throws — it reports.
  * @property {(ctx: ProviderContext) => ChatSession} createSession
  *           Opens a conversation. The caller owns it and disposes it.
+ * @property {(ctx: ProviderContext) => SavedSession[]} [savedSessions]
+ *           Conversations the engine itself has for this folder, newest first.
+ *           Implementing this is what lets a thread started outside the panel —
+ *           in a terminal, say — be listed and continued inside it. A provider
+ *           with no store of its own omits it, and the panel falls back to the
+ *           transcripts it keeps itself.
+ * @property {(ctx: ProviderContext, engineId: string) => object[]} [savedTranscript]
+ *           That conversation as webview events, for replay. Empty means "no
+ *           transcript", not "an empty conversation".
+ * @property {(ctx: ProviderContext, engineId: string) => string} [resumeCommand]
+ *           The command line that continues a conversation in a terminal.
+ *
+ * @typedef {Object} SavedSession
+ * @property {string} engineId
+ * @property {string} title
+ * @property {number} updatedAt  Epoch ms.
  *
  * A session, not a call: engines pay a real startup cost (process spawn,
  * project discovery, prompt-cache warm-up) that must not be repeated per
@@ -33,6 +49,12 @@
  * @property {import('vscode').WorkspaceConfiguration} config
  * @property {import('../gofiConfig.js').GofiProject | null} project
  *           Parsed `.gofi.yaml`, or null outside a gofi project.
+ * @property {object} [hookSettings]  Engine settings installing the panel's
+ *           per-call approval gate. Absent when approval is off.
+ * @property {string | null} [resumeSessionId]
+ *           An engine conversation to continue instead of opening a new one —
+ *           how a chat reopened from the panel's history keeps its context. A
+ *           provider that cannot resume ignores it and starts fresh.
  *
  * @typedef {Object} Turn
  * @property {string} prompt

@@ -8,6 +8,7 @@ const { readGofiProject, readGofiSkills, findProjectRoot, SKILLS_DIR, SKILL_FILE
 const { UsageLedger } = require('./usage.js');
 const ragAudit = require('./ragAudit.js');
 const { ApprovalBridge, hookSettings } = require('./approvals.js');
+const { SessionStore, MAX_EVENTS } = require('./history.js');
 
 const VIEW_ID = 'gofi-ai.chat';
 
@@ -51,6 +52,35 @@ const USAGE_THROTTLE_MS = 400;
 const AUDIT_DEBOUNCE_MS = 600;
 
 /**
+ * Settle time before writing the transcript to disk.
+ *
+ * A busy turn produces events faster than any disk should be asked to keep up
+ * with, and every one of them would rewrite the whole file. What matters is
+ * that nothing is lost when the panel closes — and the ends of a turn, of a
+ * session and of the chat all flush immediately.
+ */
+const SAVE_DEBOUNCE_MS = 1200;
+
+/**
+ * The events that make up a transcript.
+ *
+ * Deltas are deliberately absent: they exist so text appears while it is being
+ * written, and the `blocks` event that closes each message is the authoritative
+ * record of the same words. Persisting both would double the file to replay the
+ * same paragraph twice.
+ */
+const PERSISTED_EVENTS = new Set([
+	'user',
+	'dequeued',
+	'meta',
+	'blocks',
+	'toolResult',
+	'approvalResolved',
+	'done',
+	'error',
+]);
+
+/**
  * One conversation.
  *
  * A chat owns its engine session, its transcript, its token ledger and its
@@ -66,10 +96,13 @@ class Chat {
 	/**
 	 * @param {vscode.ExtensionContext} context
 	 * @param {number} id Ordinal used in the default title
+	 * @param {SessionStore} [store] Where conversations are kept between windows
 	 */
-	constructor(context, id) {
+	constructor(context, id, store) {
 		this.context = context;
 		this.id = id;
+		/** Where this conversation is written, and where old ones are read from. */
+		this.store = store || new SessionStore(context);
 		/** Shown on the editor tab; replaced by the first message's opening words. */
 		this.title = id === 0 ? 'GOFI AI' : `GOFI AI ${id}`;
 		/** @type {((title: string) => void) | null} Told when the title changes. */
@@ -117,6 +150,23 @@ class Chat {
 		this.auditTimer = null;
 		/** Findings whose fix is running, so the panel can say so. */
 		this.applying = new Set();
+		/**
+		 * The conversation being written: transcript, title, and the engine's own
+		 * session id so a later window can pick it back up.
+		 */
+		this.record = this.store.newRecord(this.title);
+		/** Pending write of the transcript. */
+		this.saveTimer = null;
+		/**
+		 * Set while a turn is running on a process that was started with
+		 * `--resume`, and cleared the moment the engine confirms it took. What
+		 * fails in between is a resume that the engine could not honour — a
+		 * conversation it no longer has — and that is recoverable, unlike an
+		 * ordinary error.
+		 */
+		this.resumeArmed = false;
+		/** The turn in flight, kept so a failed resume can be retried without it. */
+		this.lastTurn = null;
 
 		this.watchEditor();
 	}
@@ -148,6 +198,9 @@ class Chat {
 
 	/** Releases the engine and everything scheduled. The chat is dead after. */
 	dispose() {
+		// Before anything else: this may be the window closing, and an unsaved
+		// transcript here is the conversation the user came back for.
+		this.saveNow();
 		this.stop();
 		if (this.session) {
 			this.session.dispose();
@@ -171,6 +224,10 @@ class Chat {
 		if (this.auditTimer !== null) {
 			clearTimeout(this.auditTimer);
 			this.auditTimer = null;
+		}
+		if (this.saveTimer !== null) {
+			clearTimeout(this.saveTimer);
+			this.saveTimer = null;
 		}
 		this.deltaBuffer = { text: '', thinking: '' };
 		for (const watcher of this.watchers) {
@@ -214,6 +271,23 @@ class Chat {
 				break;
 			case 'openFile':
 				this.openFile(String(message.path || ''), Number(message.line) || 0);
+				break;
+			case 'copy':
+				// The editor's clipboard, not the webview's: it needs no
+				// permission and behaves the same on every platform.
+				vscode.env.clipboard.writeText(String(message.text || ''));
+				break;
+			case 'sessions':
+				this.postSessions();
+				break;
+			case 'openSession':
+				this.restoreSession(String(message.id || ''), String(message.engineId || ''));
+				break;
+			case 'deleteSession':
+				this.deleteSession(String(message.id || ''));
+				break;
+			case 'openSessionInTerminal':
+				this.openTerminalSession(String(message.engineId || ''));
 				break;
 			default:
 				break;
@@ -468,6 +542,7 @@ class Chat {
 	 * @param {{mediaType: string, data: string}[]} attached
 	 */
 	startTurn(prompt, attached) {
+		this.lastTurn = { prompt, images: attached };
 		// The session outlives the turn. Opening one per message would repay the
 		// engine's startup every time — measured at ~2.6s here — and rebuild the
 		// cached prefix, turning cheap cache reads back into expensive writes.
@@ -483,11 +558,16 @@ class Chat {
 					this.approvals.dir,
 				);
 			}
+			// A conversation restored from history carries the engine's own id,
+			// so the process starts inside that conversation instead of reading a
+			// transcript of it. Null on a new chat — nothing to resume.
+			this.resumeArmed = Boolean(this.record.engineSessionId);
 			this.session = resolveProvider(config).createSession({
 				cwd: this.cwd,
 				config,
 				project: readGofiProject(this.projectRoot || this.cwd),
 				hookSettings: settings,
+				resumeSessionId: this.record.engineSessionId,
 			});
 		}
 
@@ -565,7 +645,9 @@ class Chat {
 		} else {
 			this.approvals.allow(id);
 		}
-		this.post({ type: 'approvalResolved', id, decision });
+		// The tool travels with the decision so a replayed transcript can say
+		// what was allowed, not just that something was.
+		this.post({ type: 'approvalResolved', id, decision, tool: pending.tool });
 	}
 
 	/**
@@ -590,6 +672,14 @@ class Chat {
 	onProviderEvent(event) {
 		switch (event.type) {
 			case 'meta':
+				// The engine answered, which means it accepted the resume — and
+				// its id is what a future window will resume from, so it is kept
+				// even when it changed underneath us.
+				this.resumeArmed = false;
+				if (event.sessionId && event.sessionId !== this.record.engineSessionId) {
+					this.record.engineSessionId = event.sessionId;
+					this.scheduleSave();
+				}
 				this.post({ type: 'meta', model: event.model });
 				break;
 
@@ -641,9 +731,32 @@ class Chat {
 					this.running = false;
 					this.setRunning(false);
 				}
+				this.saveNow();
 				break;
 
 			case 'error':
+				// A turn that died while resuming means the engine no longer has
+				// that conversation — expired, or from a checkout that has moved.
+				// The transcript is still ours to show, so the honest recovery is
+				// to say the context is gone and run the message anyway, rather
+				// than to fail a question the user did nothing wrong to ask.
+				if (this.resumeArmed && this.lastTurn) {
+					this.resumeArmed = false;
+					this.record.engineSessionId = null;
+					if (this.session) {
+						this.session.dispose();
+						this.session = null;
+					}
+					const again = this.lastTurn;
+					this.flushDeltas();
+					this.post({
+						type: 'error',
+						message: 'o motor não tinha mais esta conversa — seguindo sem o contexto anterior',
+						hint: 'O histórico continua aqui; o agente é que não lembra o que foi dito antes desta mensagem.',
+					});
+					setImmediate(() => this.startTurn(again.prompt, again.images));
+					break;
+				}
 				// An error breaks the current turn's semantics; queued messages
 				// were written assuming success. Safer to drop them than to run
 				// them against a conversation the user just saw fail.
@@ -652,11 +765,278 @@ class Chat {
 				this.flushDeltas();
 				this.setRunning(false);
 				this.post({ type: 'error', message: event.message, hint: event.hint });
+				this.saveNow();
 				break;
 
 			default:
 				break;
 		}
+	}
+
+	// ── history ─────────────────────────────────────────────────────────────
+
+	/**
+	 * Files an event into the transcript, if it is one of the ones a transcript
+	 * is made of.
+	 *
+	 * Recording here — on the way out to the webview — rather than at each call
+	 * site is what keeps the two in step: whatever the panel shows is what a
+	 * later window replays, with no second list of "and also save this".
+	 */
+	remember(message) {
+		if (!message || !PERSISTED_EVENTS.has(message.type)) {
+			return;
+		}
+		// The model line is worth keeping; a meta event without one is noise.
+		if (message.type === 'meta' && !message.model) {
+			return;
+		}
+		this.record.events.push(message);
+		if (this.record.events.length > MAX_EVENTS) {
+			this.record.events.splice(0, this.record.events.length - MAX_EVENTS);
+		}
+		this.record.updatedAt = Date.now();
+		this.scheduleSave();
+	}
+
+	scheduleSave() {
+		if (this.saveTimer !== null) {
+			return;
+		}
+		this.saveTimer = setTimeout(() => {
+			this.saveTimer = null;
+			this.saveNow();
+		}, SAVE_DEBOUNCE_MS);
+	}
+
+	/** Writes the transcript out now. Cheap and safe to call repeatedly. */
+	saveNow() {
+		if (this.saveTimer !== null) {
+			clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		if (this.record.events.length === 0) {
+			return; // nothing was ever said — not a conversation
+		}
+		this.record.title = this.title;
+		this.store.save(this.record);
+	}
+
+	/** What the provider needs to answer questions about this workspace. */
+	providerContext() {
+		return {
+			cwd: this.cwd,
+			config: this.config,
+			project: this.cwd ? readGofiProject(this.projectRoot || this.cwd) : null,
+		};
+	}
+
+	/**
+	 * The list the history panel renders — one row per conversation, whichever
+	 * side it was started on.
+	 *
+	 * Two sources, one list. The panel's own records carry the transcript it
+	 * rendered; the engine's store carries every session for this folder,
+	 * terminal ones included. They are joined on the engine's session id
+	 * because that is what they are both about: the same conversation, seen
+	 * from two places.
+	 */
+	postSessions() {
+		const rows = new Map();
+
+		for (const item of this.store.list()) {
+			const key = item.engineSessionId || `local:${item.id}`;
+			rows.set(key, {
+				id: item.id,
+				engineId: item.engineSessionId || null,
+				title: item.title || 'sem título',
+				updatedAt: item.updatedAt || item.createdAt || 0,
+				messages: item.messages || 0,
+				source: 'panel',
+			});
+		}
+
+		const provider = resolveProvider(this.config);
+		if (typeof provider.savedSessions === 'function' && this.cwd) {
+			let engineRows = [];
+			try {
+				engineRows = provider.savedSessions(this.providerContext());
+			} catch {
+				engineRows = []; // the engine's store is a courtesy, not a dependency
+			}
+			for (const item of engineRows) {
+				const existing = rows.get(item.engineId);
+				if (existing) {
+					// Seen from both sides. The engine's clock is the honest one —
+					// it also ticks for turns run in a terminal.
+					existing.source = 'both';
+					existing.updatedAt = Math.max(existing.updatedAt, item.updatedAt || 0);
+					continue;
+				}
+				rows.set(item.engineId, {
+					id: null,
+					engineId: item.engineId,
+					title: item.title,
+					updatedAt: item.updatedAt || 0,
+					messages: 0,
+					source: 'engine',
+				});
+			}
+		}
+
+		const items = [...rows.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+		this.post({
+			type: 'sessions',
+			activeId: this.record.id,
+			activeEngineId: this.record.engineSessionId,
+			canOpenTerminal: typeof provider.resumeCommand === 'function',
+			items,
+		});
+	}
+
+	/**
+	 * Continues a conversation in a terminal, in the engine's own interface.
+	 *
+	 * Nothing is exported or copied: the id handed to `--resume` is the session
+	 * the panel has been writing all along, so the terminal picks up the same
+	 * thread — and anything said there is in the panel when it comes back.
+	 */
+	openTerminalSession(engineId) {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		const provider = resolveProvider(this.config);
+		if (!folder || !engineId || typeof provider.resumeCommand !== 'function') {
+			return;
+		}
+		const terminal = vscode.window.createTerminal({
+			name: 'GOFI AI — conversa',
+			cwd: folder.uri,
+			iconPath: new vscode.ThemeIcon('comment-discussion'),
+		});
+		terminal.show();
+		terminal.sendText(provider.resumeCommand(this.providerContext(), engineId));
+	}
+
+	/**
+	 * Reopens a saved conversation: the transcript comes back into the panel,
+	 * and the next message continues it in the engine rather than starting over.
+	 *
+	 * The conversation on screen is saved first — switching away from something
+	 * unsaved is exactly the moment a transcript gets lost.
+	 */
+	restoreSession(id, engineId) {
+		const record = id ? this.store.load(id) : this.adopt(engineId);
+		if (!record) {
+			vscode.window.showWarningMessage('GOFI AI: essa conversa não está mais no disco.');
+			this.postSessions();
+			return;
+		}
+		const sameThread =
+			record.id === this.record.id ||
+			(record.engineSessionId !== null && record.engineSessionId === this.record.engineSessionId);
+		if (sameThread) {
+			return; // already the conversation on screen
+		}
+
+		// The engine's file is the one both sides append to, so it is the more
+		// complete account whenever it is readable — a turn run in a terminal
+		// after this panel last saw the thread is in it, and not in our copy.
+		// Our own transcript is the fallback, and it is never worse than empty.
+		const fromEngine = this.engineTranscript(record.engineSessionId);
+		const events = fromEngine.length > 0 ? fromEngine : record.events;
+
+		this.saveNow();
+		this.stop();
+		if (this.session) {
+			this.session.dispose();
+			this.session = null;
+		}
+		// Authority granted inside one conversation says nothing about another.
+		if (this.approvals) {
+			this.approvals.dispose();
+			this.approvals = null;
+		}
+		this.alwaysAllow.clear();
+		this.applying.clear();
+		this.pending.length = 0;
+		this.running = false;
+		this.resumeArmed = false;
+		this.lastTurn = null;
+		// The counters belong to a process, and this conversation's process is
+		// long gone — the restored thread starts its accounting fresh.
+		this.ledger = new UsageLedger(this.cwd || '');
+
+		this.record = record;
+		this.named = true;
+		this.title = record.title || this.title;
+		if (this.onTitle) {
+			this.onTitle(this.title);
+		}
+
+		this.setRunning(false);
+		this.post({ type: 'replay', events, title: this.title });
+		this.postIdentity();
+		this.postActiveFile();
+		this.postUsage({ immediate: true });
+		this.postSessions();
+	}
+
+	/**
+	 * Takes over a conversation the panel has never seen — one started in a
+	 * terminal — as a record of its own.
+	 *
+	 * The transcript is not copied into it: the engine's file is where that
+	 * lives, and duplicating it would be a second copy to keep in step. What
+	 * the record holds is the id, which is all the panel needs to continue the
+	 * conversation and to find it again.
+	 */
+	adopt(engineId) {
+		if (!engineId) {
+			return null;
+		}
+		const known = this.store.list().find((item) => item.engineSessionId === engineId);
+		if (known) {
+			return this.store.load(known.id);
+		}
+		const provider = resolveProvider(this.config);
+		const listed =
+			typeof provider.savedSessions === 'function'
+				? provider.savedSessions(this.providerContext()).find((item) => item.engineId === engineId)
+				: null;
+		const record = this.store.newRecord(listed ? listed.title : 'conversa do terminal');
+		record.engineSessionId = engineId;
+		return record;
+	}
+
+	/** The engine's own account of a conversation, or nothing if it has none. */
+	engineTranscript(engineId) {
+		const provider = resolveProvider(this.config);
+		if (!engineId || !this.cwd || typeof provider.savedTranscript !== 'function') {
+			return [];
+		}
+		try {
+			const events = provider.savedTranscript(this.providerContext(), engineId);
+			return Array.isArray(events) ? events : [];
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Forgets a conversation. Deleting the one on screen leaves it open but
+	 * unrecorded — closing what the user is reading would be a surprise, and the
+	 * next message simply starts a new record.
+	 */
+	deleteSession(id) {
+		this.store.remove(id);
+		if (this.record.id === id) {
+			// The engine's session carries on: forgetting the panel's copy of a
+			// conversation is not a reason for the next message to land in a
+			// different one than the message before it.
+			const engineSessionId = this.record.engineSessionId;
+			this.record = this.store.newRecord(this.title);
+			this.record.engineSessionId = engineSessionId;
+		}
+		this.postSessions();
 	}
 
 	/**
@@ -798,8 +1178,12 @@ class Chat {
 	/**
 	 * Drops the transcript and the engine session, so the next turn starts with
 	 * a clean context instead of resuming.
+	 *
+	 * The conversation being left is written to disk first: "new session" means
+	 * starting another one, not throwing this one away.
 	 */
 	newSession() {
+		this.saveNow();
 		this.stop();
 		if (this.session) {
 			this.session.dispose();
@@ -816,11 +1200,25 @@ class Chat {
 		this.applying.clear();
 		this.pending.length = 0;
 		this.running = false;
+		this.resumeArmed = false;
+		this.lastTurn = null;
 		this.ledger = new UsageLedger(this.cwd || '');
+
+		// A fresh record, and a title that no longer belongs to the old thread —
+		// the tab should not keep advertising a question that was answered in a
+		// conversation the user just left.
+		this.record = this.store.newRecord(this.title);
+		this.named = false;
+		this.title = this.id === 0 ? 'GOFI AI' : `GOFI AI ${this.id}`;
+		if (this.onTitle) {
+			this.onTitle(this.title);
+		}
+
 		this.post({ type: 'cleared' });
 		this.postIdentity();
 		this.postActiveFile();
 		this.postUsage();
+		this.postSessions();
 	}
 
 	setRunning(running) {
@@ -840,6 +1238,7 @@ class Chat {
 	 * do nothing about.
 	 */
 	post(message) {
+		this.remember(message);
 		for (const webview of [...this.surfaces]) {
 			try {
 				const posted = webview.postMessage(message);
@@ -880,7 +1279,21 @@ class Chat {
   <span id="title">GOFI AI</span>
   <span id="writeBadge" hidden></span>
   <span id="subtitle"></span>
+  <button id="historyBtn" class="icon" type="button" title="Conversas salvas neste projeto" aria-label="Conversas salvas" aria-expanded="false" aria-controls="history">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+      <rect x="2" y="3" width="12" height="1.6" rx="0.8" fill="currentColor"></rect>
+      <rect x="2" y="7.2" width="12" height="1.6" rx="0.8" fill="currentColor"></rect>
+      <rect x="2" y="11.4" width="12" height="1.6" rx="0.8" fill="currentColor"></rect>
+    </svg>
+  </button>
 </header>
+<section id="history" hidden aria-label="Conversas salvas">
+  <div class="history-head">
+    <button id="historyNew" class="history-new" type="button">+ Nova conversa</button>
+    <input id="historySearch" type="search" placeholder="Buscar conversas…" aria-label="Buscar conversas">
+  </div>
+  <div id="historyList" role="list"></div>
+</section>
 <button id="usageBar" type="button" aria-expanded="false" aria-controls="usagePanel" title="Tokens e eficiência da recuperação">
   <span class="caret" aria-hidden="true">▸</span>
   <span id="usageSummary">sem uso ainda</span>

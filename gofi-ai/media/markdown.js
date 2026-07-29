@@ -58,6 +58,81 @@
 		openPath = handler;
 	}
 
+	/** @type {((text: string) => void) | null} Puts text on the clipboard. */
+	let copyText = null;
+
+	function setCopyHandler(handler) {
+		copyText = handler;
+	}
+
+	// ── copying ─────────────────────────────────────────────────────────────
+
+	const SVG_NS = 'http://www.w3.org/2000/svg';
+
+	function svg(name, attributes) {
+		const el = document.createElementNS(SVG_NS, name);
+		for (const key of Object.keys(attributes)) {
+			el.setAttribute(key, attributes[key]);
+		}
+		return el;
+	}
+
+	/** Two offset sheets — the copy glyph every editor uses. */
+	function copyIcon() {
+		const icon = svg('svg', { viewBox: '0 0 16 16', width: '12', height: '12', 'aria-hidden': 'true', focusable: 'false' });
+		icon.appendChild(
+			svg('rect', { x: '5.5', y: '2.5', width: '8', height: '9', rx: '1.6', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.3' }),
+		);
+		icon.appendChild(
+			svg('path', {
+				d: 'M10.5 13.5H3.6a1.1 1.1 0 0 1-1.1-1.1V5',
+				fill: 'none',
+				stroke: 'currentColor',
+				'stroke-width': '1.3',
+				'stroke-linecap': 'round',
+			}),
+		);
+		return icon;
+	}
+
+	/**
+	 * A button that puts `text` on the clipboard and says so.
+	 *
+	 * The confirmation lives on the button itself rather than in a toast: the
+	 * thing you clicked is where you are already looking, and a copy that
+	 * silently did nothing is indistinguishable from one that worked.
+	 */
+	function copyButton(text, label) {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.className = 'copy';
+		button.title = 'Copiar';
+		button.appendChild(copyIcon());
+
+		const caption = document.createElement('span');
+		caption.textContent = label || 'copiar';
+		button.appendChild(caption);
+
+		let restore = null;
+		button.addEventListener('click', (event) => {
+			event.stopPropagation();
+			if (copyText) {
+				copyText(text);
+			}
+			button.classList.add('done');
+			caption.textContent = 'copiado';
+			if (restore !== null) {
+				clearTimeout(restore);
+			}
+			restore = setTimeout(() => {
+				restore = null;
+				button.classList.remove('done');
+				caption.textContent = label || 'copiar';
+			}, 1600);
+		});
+		return button;
+	}
+
 	// ── inline ──────────────────────────────────────────────────────────────
 
 	/** Appends the inline-formatted form of `text` to `parent`. */
@@ -204,6 +279,14 @@
 		return paragraph(parent, lines, i);
 	}
 
+	/**
+	 * A fenced block, rendered as a card rather than as a slab of grey.
+	 *
+	 * What the agents put in a fence — a command, a JSON payload, a patch — is
+	 * usually something you are meant to *do* something with. So it gets a
+	 * header saying what it is and a button that copies it, and the code itself
+	 * scrolls sideways inside the card instead of stretching the message.
+	 */
 	function codeBlock(parent, lines, i, language) {
 		const body = [];
 		let j = i + 1;
@@ -211,12 +294,30 @@
 			body.push(lines[j]);
 			j++;
 		}
-		const pre = document.createElement('pre');
+		const code = body.join('\n');
+
+		const card = document.createElement('figure');
+		card.className = 'code-block';
 		if (language !== '') {
-			pre.dataset.lang = language;
+			card.dataset.lang = language;
 		}
-		pre.appendChild(tag('code', body.join('\n')));
-		parent.appendChild(pre);
+
+		const head = document.createElement('figcaption');
+		head.className = 'code-head';
+		const name = document.createElement('span');
+		name.className = 'code-lang';
+		// An unlabelled fence is still a block worth copying; naming it "texto"
+		// is honest, and leaves the header in one shape rather than two.
+		name.textContent = language !== '' ? language : 'texto';
+		head.appendChild(name);
+		head.appendChild(copyButton(code));
+		card.appendChild(head);
+
+		const pre = document.createElement('pre');
+		pre.appendChild(tag('code', code));
+		card.appendChild(pre);
+		parent.appendChild(card);
+
 		// Skip the closing fence, or stop at the end when it never came.
 		return j < lines.length ? j + 1 : j;
 	}
@@ -391,5 +492,5 @@
 		return j;
 	}
 
-	window.gofiMarkdown = { render, setPathHandler };
+	window.gofiMarkdown = { render, setPathHandler, setCopyHandler, copyButton };
 })();

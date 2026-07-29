@@ -79,6 +79,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "gofi-ai.history",
+        "title": "GOFI AI: conversas salvas",
+        "category": "GOFI AI",
+        "icon": "$(history)"
+      },
+      {
         "command": "gofi-ai.stop",
         "title": "GOFI AI: interromper a resposta",
         "category": "GOFI AI",
@@ -109,14 +115,19 @@
           "group": "navigation@1"
         },
         {
+          "command": "gofi-ai.history",
+          "when": "view == gofi-ai.chat",
+          "group": "navigation@2"
+        },
+        {
           "command": "gofi-ai.stop",
           "when": "view == gofi-ai.chat && gofi-ai.running",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "gofi-ai.openTerminal",
           "when": "view == gofi-ai.chat",
-          "group": "navigation@3"
+          "group": "navigation@4"
         }
       ],
       "editor/title": [
@@ -220,7 +231,7 @@
     "vscode:prepublish": "echo no-build",
     "package": "vsce package",
     "publish": "vsce publish",
-    "test": "node test/permission-scope.test.js"
+    "test": "node test/permission-scope.test.js && node test/session-history.test.js && node test/working-row.test.js"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.0.0"
