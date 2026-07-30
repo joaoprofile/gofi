@@ -14,6 +14,10 @@
  * animation on an element when it is re-inserted, so a row that is appended
  * twice in one turn is a whip that never gets past its first frame.
  *
+ * The same booted webview answers two more questions that are only visible on
+ * screen: whether the row says what the agent is actually doing, and what the
+ * composer puts on the wire when a file is attached to a message.
+ *
  * Run with `node test/working-row.test.js`.
  */
 
@@ -140,6 +144,10 @@ class El {
 		(this.listeners[type] = this.listeners[type] || []).push(fn);
 	}
 	removeEventListener() {}
+	/** Counted, not performed: opening a real OS dialog is the editor's business. */
+	click() {
+		this.clicks = (this.clicks || 0) + 1;
+	}
 	focus() {}
 	select() {}
 	setSelectionRange() {}
@@ -152,7 +160,8 @@ class El {
 const ids = [
 	'log', 'chips', 'picker', 'input', 'submit', 'cancel', 'subtitle', 'usageBar', 'usageSummary',
 	'usageFlag', 'usagePanel', 'activeFile', 'attachments', 'writeBadge', 'historyBtn', 'history',
-	'historyNew', 'historySearch', 'historyList', 'title', 'working',
+	'historyNew', 'historySearch', 'historyList', 'title', 'working', 'attachBtn', 'attachMenu',
+	'attachUpload', 'attachProject', 'fileInput',
 ];
 const byId = new Map(ids.map((id) => [id, Object.assign(new El('div'), { attrs: { id } })]));
 
@@ -167,14 +176,31 @@ const document = {
 };
 
 const messageListeners = [];
+/** Everything the webview asked the extension to do, in order. */
+const posted = [];
 const sandbox = {
 	console,
 	document,
 	setTimeout,
 	clearTimeout,
 	requestAnimationFrame: (fn) => setTimeout(fn, 0),
-	acquireVsCodeApi: () => ({ postMessage() {}, getState() {}, setState() {} }),
-	FileReader: class {},
+	acquireVsCodeApi: () => ({ postMessage: (message) => posted.push(message), getState() {}, setState() {} }),
+	TextDecoder,
+	/**
+	 * Enough of a FileReader to answer with the bytes of a fake File. Synchronous
+	 * where the real one is not, which is fine: what is under test is what the
+	 * composer does with the bytes, not when they arrive.
+	 */
+	FileReader: class {
+		readAsArrayBuffer(file) {
+			this.result = file.bytes.buffer;
+			if (this.onload) this.onload();
+		}
+		readAsDataURL(file) {
+			this.result = `data:${file.type};base64,${Buffer.from(file.bytes).toString('base64')}`;
+			if (this.onload) this.onload();
+		}
+	},
 	window: {
 		addEventListener: (type, fn) => {
 			if (type === 'message') messageListeners.push(fn);
@@ -206,19 +232,41 @@ function check(label, condition, detail) {
 }
 
 // ── um turno completo, como a extensão o emite ─────────────────────────────
-send({ type: 'identity', skills: [], providerLabel: 'Claude', hasWorkspace: true });
+send({ type: 'identity', skills: [], providerLabel: 'Claude', hasWorkspace: true, supportsImages: true });
 send({ type: 'user', text: 'audite as specs', images: 0, queued: false });
 check('a linha de trabalho entra ao enviar', Boolean(working()), `último = ${tail()}`);
 
 const row = working();
+/** The word the row is showing, and whether it is a specific one. */
+const label = () => row.querySelector('.label');
+const verb = () => {
+	const found = label() && label().querySelector('.verb');
+	return found ? found.textContent : '(nenhum)';
+};
+const acting = () => Boolean(label() && label().classList.contains('acting'));
+
+check('começa sem verbo específico — as palavras genéricas giram', !acting(), `verbo = ${verb()}`);
+
 send({ type: 'running', running: true });
 send({ type: 'meta', model: 'claude-opus-5' });
+send({ type: 'delta', kind: 'thinking', text: 'preciso achar a spec' });
+check('raciocínio chegando é "pensando"', acting() && verb() === 'pensando', `verbo = ${verb()}`);
+
 send({ type: 'delta', kind: 'text', text: 'vou ler as specs…' });
 check('sobrevive ao primeiro token', row.parentElement === log, 'a linha foi removida quando a resposta começou');
 check('continua sendo a última linha', log.lastElementChild === row, `último = ${tail()}`);
+check('texto chegando é "respondendo"', verb() === 'respondendo', `verbo = ${verb()}`);
 
 send({ type: 'blocks', blocks: [{ type: 'text', text: 'lendo' }, { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'specs/a.md' } }] });
+check('a ferramenta em uso dá o verbo', verb() === 'lendo', `verbo = ${verb()}`);
+
 send({ type: 'toolResult', toolUseId: 't1', isError: false, preview: '120 linhas' });
+check('sem ferramenta em uso volta ao genérico', !acting(), `verbo = ${verb()}`);
+
+send({ type: 'blocks', blocks: [{ type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'go test ./...' } }] });
+check('cada ferramenta tem seu verbo', verb() === 'executando', `verbo = ${verb()}`);
+send({ type: 'toolResult', toolUseId: 't2', isError: false, preview: 'ok' });
+
 send({ type: 'delta', kind: 'text', text: ' pronto' });
 send({ type: 'blocks', blocks: [{ type: 'text', text: 'terminei' }] });
 check('segue a última linha depois de ferramentas e blocos', log.lastElementChild === row, `último = ${tail()}`);
@@ -237,5 +285,43 @@ send({ type: 'approval', id: 'a1', tool: 'Edit', input: { file_path: 'x.md' } })
 check('some enquanto a aprovação espera', !working(), `último = ${tail()}`);
 send({ type: 'approvalResolved', id: 'a1', decision: 'allow', tool: 'Edit' });
 check('volta quando a aprovação é respondida', Boolean(working()), `último = ${tail()}`);
+
+// ── anexos: o que o compositor coloca no fio ────────────────────────────────
+//
+// O `+` abre o diálogo do sistema operacional, e os bytes chegam na janela — não
+// um caminho. Uma imagem viaja como bytes (é a única forma de mostrar uma tela ao
+// modelo); um documento viaja como texto, porque o motor roda na raiz do projeto
+// e, em janela remota, nem é a mesma máquina.
+const bar = byId.get('attachments');
+
+/** A File as the OS dialog would hand it over. */
+function fakeFile(name, type, text) {
+	const bytes = new TextEncoder().encode(text);
+	return { name, type, size: bytes.length, bytes };
+}
+
+const fileInput = byId.get('fileInput');
+const upload = byId.get('attachUpload');
+
+upload.listeners.click[0]();
+check('o item do menu abre o diálogo do sistema', fileInput.clicks === 1, `clicks = ${fileInput.clicks}`);
+
+fileInput.files = [
+	fakeFile('notas.txt', 'text/plain', 'trocar o provedor'),
+	fakeFile('foto.png', 'image/png', 'PNG'),
+];
+fileInput.listeners.change[0]();
+
+check('o que foi escolhido aparece no compositor', !bar.hidden && bar.childElementCount === 2, `chips = ${bar.childElementCount}`);
+check('o chip diz que o arquivo vem de fora do projeto', bar.children[0].textContent.includes('externo'), bar.textContent);
+check('escolher o mesmo arquivo de novo continua funcionando', fileInput.value === '', `value = ${fileInput.value}`);
+
+byId.get('input').value = 'o que tem aqui?';
+byId.get('submit').listeners.click[0]();
+const sent = posted[posted.length - 1];
+check('o documento viaja com o conteúdo já lido na janela', sent.type === 'send' && sent.files.length === 1 && sent.files[0].text === 'trocar o provedor', JSON.stringify(sent.files));
+check('e sem caminho, porque não é um caminho que o agente possa abrir', sent.files[0].path === null, JSON.stringify(sent.files[0]));
+check('a imagem viaja em bytes, num campo separado', sent.images.length === 1 && typeof sent.images[0].data === 'string', JSON.stringify(sent.images.length));
+check('enviar limpa a barra de anexos', bar.hidden && bar.childElementCount === 0, `chips = ${bar.childElementCount}`);
 
 run();

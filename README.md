@@ -269,8 +269,16 @@ extra.
 |---|---|
 | **`/`** | chama uma skill do projeto, com autocomplete |
 | **`@`** | referencia um arquivo, por busca aproximada |
+| **`+`** | anexa um arquivo do computador (imagem, código, markdown, pdf) |
 | **`Ctrl+V`** | cola uma imagem direto na conversa |
 | **abas** | várias conversas em paralelo, cada uma com contexto próprio |
+
+O `+` abre o **diálogo do sistema operacional** — qualquer pasta do computador em
+que você está. Uma imagem vai como imagem para o modelo; um arquivo **do
+computador** vai com o conteúdo, porque o motor roda na raiz do workspace e não
+alcança aquele caminho — em janela remota (WSL, SSH, container) nem é a mesma
+máquina. Para arquivo **do projeto** use `@`: aí vai o caminho, e o agente lê se
+precisar, o que evita despejar mil linhas no prompt para usar dez.
 
 ### Aprovação por ação
 

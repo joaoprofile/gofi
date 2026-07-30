@@ -14,8 +14,39 @@
 - **Blocos de código viraram cartão**: cabeçalho com a linguagem e botão que
   copia o conteúdo. Cada resposta também ganhou um botão de copiar no canto —
   copia o Markdown que o agente escreveu, não o que o renderizador fez dele.
+- **Anexar arquivo pelo `+`.** O botão abre o **diálogo do sistema operacional** —
+  qualquer pasta, qualquer drive da máquina onde você está sentado. É um input de
+  arquivo na própria janela, e não o `showOpenDialog` do editor, porque esse roda
+  onde o workspace está: numa janela remota (WSL, SSH, container) ele responde com
+  o navegador de arquivos do editor, que só vê o outro sistema de arquivos. De
+  quebra, os bytes chegam direto na janela e nenhum caminho precisa sobreviver à
+  viagem entre dois sistemas operacionais.
+
+  Imagem vai como imagem; arquivo de dentro do projeto vai como caminho (o agente
+  lê se precisar, em vez de o prompt carregar o arquivo inteiro — é para isso que
+  serve o outro item do menu, o `@`); arquivo do computador vai com o conteúdo,
+  porque o motor roda na raiz do projeto e não alcança aquele caminho. O chip no
+  compositor diz qual dos dois vai acontecer, e avisa quando o conteúdo foi
+  truncado ou é binário. `Ctrl+V` continua colando imagem.
 - **Indicador de trabalho novo**: um bonequinho chicoteando o robô, no lugar da
   marca do gofi animada. A marca agora só identifica quem fala.
+- O chicote virou uma cena com os personagens do produto: o **mascote do gofi**,
+  de armadura, chicoteia o **robô** que digita sem parar no teclado — com estalo,
+  susto e uma gota de suor um tempo depois. E a palavra ao lado agora diz o que o
+  agente está fazendo de fato (`lendo`, `editando`, `executando`, `pensando`,
+  `delegando`…), voltando a girar entre palavras genéricas quando não há nada
+  mais específico a dizer.
+- O chicote virou o assunto do desenho: **cor de fogo** (gradiente amarelo no
+  cabo, vermelho na ponta, com brilho), mais grosso, e um **movimento circular**
+  de seis tempos — sai de trás do mascote, sobe atrás da cabeça (escondido pelo
+  corpo, que é o que dá a impressão de volta completa), passa por cima, **estala
+  no robô**, **enrola o robô inteiro** (três voltas, do pescoço ao colo, metade
+  na frente e metade atrás do corpo — é isso que faz a corda parecer dar a volta)
+  e volta para trás. O mascote se joga para trás no início e para a frente na
+  chicotada; o robô se contorce enquanto está amarrado — e continua digitando.
+- O mascote ganhou o **G no escudo**: quem está com o chicote é o gofi.
+- **Enviar e parar viraram ícones** — seta e quadrado, no formato e no ciano da
+  marca, no lugar de dois botões escritos.
 - Correção: `userBubble` era chamado sem existir — toda mensagem do usuário
   quebrava a renderização do turno.
 

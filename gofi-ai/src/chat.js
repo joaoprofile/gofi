@@ -52,6 +52,14 @@ const USAGE_THROTTLE_MS = 400;
 const AUDIT_DEBOUNCE_MS = 600;
 
 /**
+ * Cap on a file inlined into the prompt.
+ *
+ * Only reached by files outside the workspace, which the agent cannot open for
+ * itself; ~40k characters is a long file and still a fraction of the window.
+ */
+const MAX_INLINE_CHARS = 40000;
+
+/**
  * Settle time before writing the transcript to disk.
  *
  * A busy turn produces events faster than any disk should be asked to keep up
@@ -246,7 +254,7 @@ class Chat {
 				this.postUsage();
 				break;
 			case 'send':
-				this.send(String(message.text || ''), message.images);
+				this.send(String(message.text || ''), message.images, message.files);
 				break;
 			case 'stop':
 				this.stop();
@@ -468,6 +476,64 @@ class Chat {
 	}
 
 	/**
+	 * The header that puts the attached files in front of the question.
+	 *
+	 * A file in the project is named, not quoted: the agent opens it by path, and
+	 * that is the retrieval doctrine of this whole project — a 900-line spec pasted
+	 * into a prompt is 900 lines billed whether or not they were relevant.
+	 *
+	 * A file from the user's computer has no path worth giving: it was read in the
+	 * window (the engine runs in the project root, and on a remote window it is not
+	 * even the same machine), so its text is quoted here — capped, with the cap
+	 * stated, so a truncated file is never mistaken for a short one.
+	 *
+	 * Pure assembly, no I/O, and that is what makes it safe to call from `send`:
+	 * `send` decides whether a message runs now or queues by reading
+	 * `this.running`, and an `await` between that decision and the `startTurn`
+	 * that sets it lets two messages sent in the same tick both conclude they are
+	 * first — two turns in flight on one session.
+	 *
+	 * @param {{rel?: string|null, name: string, size?: number, state?: string, text?: string, truncated?: boolean}[]} files
+	 * @returns {string}
+	 */
+	filesPreamble(files) {
+		const blocks = [];
+		for (const file of files) {
+			if (file.rel) {
+				blocks.push(`- ${file.rel} — está no projeto; leia com Read se precisar do conteúdo.`);
+				continue;
+			}
+			const from = 'anexado do computador do usuário';
+			if (file.state === 'too-big') {
+				blocks.push(`- ${file.name} — ${from}, ${Math.round((file.size || 0) / 1024)} KB: grande demais para anexar, o conteúdo não veio.`);
+				continue;
+			}
+			if (file.state === 'binary') {
+				// Nothing useful to say about the bytes, and no path to hand over:
+				// saying so is better than a page of mojibake billed as tokens.
+				blocks.push(`- ${file.name} — ${from}, arquivo binário: o conteúdo não pôde ser lido como texto.`);
+				continue;
+			}
+			if (typeof file.text !== 'string') {
+				blocks.push(`- ${file.name} — ${from}, mas o conteúdo não veio.`);
+				continue;
+			}
+			blocks.push(
+				[
+					`- ${file.name} — ${from}, conteúdo abaixo${file.truncated ? ` (truncado nos primeiros ${MAX_INLINE_CHARS} caracteres)` : ''}:`,
+					'```',
+					file.text,
+					'```',
+				].join('\n'),
+			);
+		}
+		if (blocks.length === 0) {
+			return '';
+		}
+		return `<arquivos-anexados>\n${blocks.join('\n')}\n</arquivos-anexados>\n\n`;
+	}
+
+	/**
 	 * Opens a referenced file, so a path in the chat is one click from the code.
 	 * A line puts the cursor on the exact spot a finding is about — pointing at
 	 * a file is advice, pointing at a line is a place to start typing.
@@ -502,11 +568,13 @@ class Chat {
 	 *
 	 * @param {string} text
 	 * @param {{mediaType: string, data: string}[]} [images]
+	 * @param {{path: string, rel: string|null, name: string}[]} [files]
 	 */
-	async send(text, images) {
+	async send(text, images, files) {
 		const prompt = text.trim();
 		const attached = images || [];
-		if (prompt === '' && attached.length === 0) {
+		const documents = Array.isArray(files) ? files : [];
+		if (prompt === '' && attached.length === 0 && documents.length === 0) {
 			return;
 		}
 
@@ -523,15 +591,28 @@ class Chat {
 		const queued = this.running;
 		this.nameFrom(prompt);
 		// Echo immediately so the user sees their message landed even when it
-		// is going to wait behind another turn.
-		this.post({ type: 'user', text: prompt, images: attached.length, queued });
+		// is going to wait behind another turn. What is echoed is what was typed:
+		// the attachment header below is machinery, and the transcript names the
+		// files instead of repeating their contents back at the user.
+		this.post({
+			type: 'user',
+			text: prompt,
+			images: attached.length,
+			files: documents.map((file) => file.rel || file.name),
+			queued,
+		});
+
+		// Read before queueing, not at drain time: the message was composed
+		// against the files as they are now, and a turn that waits three minutes
+		// behind another should not silently pick up an edit made meanwhile.
+		const augmented = documents.length > 0 ? this.filesPreamble(documents) + prompt : prompt;
 
 		if (queued) {
-			this.pending.push({ prompt, images: attached });
+			this.pending.push({ prompt: augmented, images: attached });
 			return;
 		}
 
-		this.startTurn(prompt, attached);
+		this.startTurn(augmented, attached);
 	}
 
 	/**
@@ -1303,14 +1384,55 @@ class Chat {
 <main id="log" role="log" aria-live="polite"></main>
 <div id="chips" aria-label="Skills do projeto"></div>
 <div id="picker" role="listbox" hidden></div>
-<div id="attachments" hidden aria-label="Imagens anexadas"></div>
+<div id="attachments" hidden aria-label="Anexos da próxima mensagem"></div>
 <div id="activeFile" hidden></div>
 <footer>
   <div id="composer">
-    <textarea id="input" rows="1" placeholder="Pergunte  ·  / skill  ·  @ arquivo  ·  Ctrl+V cola imagem" aria-label="Mensagem"></textarea>
+    <!-- The OS file dialog. A file input in the webview opens the picker of the
+         machine the user is sitting at, which is the only way to reach "any folder
+         on the computer": the editor's own showOpenDialog runs where the workspace
+         does, and in a remote window (WSL, SSH, container) that is another
+         filesystem — so the editor answers with its in-window file browser
+         instead. The bytes arrive here directly, which also means no path has to
+         survive the trip between two operating systems. -->
+    <input id="fileInput" type="file" multiple hidden aria-hidden="true" tabindex="-1">
+    <div id="attachMenu" role="menu" hidden>
+      <button id="attachUpload" class="row" type="button" role="menuitem">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+          <path d="M8 11.5V3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"></path>
+          <path d="M4.8 6.2 8 3 11.2 6.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+          <path d="M2.8 12.8h10.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"></path>
+        </svg>
+        <span class="name">Enviar do computador</span>
+        <span class="desc">imagem, código, markdown, pdf…</span>
+      </button>
+      <button id="attachProject" class="row" type="button" role="menuitem">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+          <path d="M2.4 4.2h4l1.2 1.6h5.9v6.6H2.4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"></path>
+        </svg>
+        <span class="name">Arquivo do projeto</span>
+        <span class="desc">@ para buscar no workspace</span>
+      </button>
+    </div>
+    <textarea id="input" rows="1" placeholder="Pergunte  ·  / skill  ·  @ arquivo  ·  + anexa arquivo" aria-label="Mensagem"></textarea>
     <div id="actions">
-      <button id="submit" title="Enviar (Enter)" aria-label="Enviar">Enviar</button>
-      <button id="cancel" title="Interromper" aria-label="Interromper" hidden>Parar</button>
+      <button id="attachBtn" class="attach" type="button" title="Anexar arquivo" aria-label="Anexar arquivo" aria-expanded="false" aria-controls="attachMenu" aria-haspopup="menu">
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+          <rect x="7.2" y="3.2" width="1.6" height="9.6" rx="0.8" fill="currentColor"></rect>
+          <rect x="3.2" y="7.2" width="9.6" height="1.6" rx="0.8" fill="currentColor"></rect>
+        </svg>
+      </button>
+      <button id="submit" class="round" title="Enviar (Enter)" aria-label="Enviar">
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+          <path d="M8 13V4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"></path>
+          <path d="M4.2 8.2 8 4.2l3.8 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+        </svg>
+      </button>
+      <button id="cancel" class="round" title="Interromper" aria-label="Interromper" hidden>
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+          <rect x="5" y="5" width="6" height="6" rx="1.4" fill="currentColor"></rect>
+        </svg>
+      </button>
     </div>
   </div>
 </footer>

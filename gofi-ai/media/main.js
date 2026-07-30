@@ -26,6 +26,11 @@
 	const usagePanel = el('usagePanel');
 	const activeFile = el('activeFile');
 	const attachmentsBar = el('attachments');
+	const attachBtn = /** @type {HTMLButtonElement} */ (el('attachBtn'));
+	const attachMenu = el('attachMenu');
+	const attachUpload = /** @type {HTMLButtonElement} */ (el('attachUpload'));
+	const attachProject = /** @type {HTMLButtonElement} */ (el('attachProject'));
+	const fileInput = /** @type {HTMLInputElement} */ (el('fileInput'));
 	const writeBadge = el('writeBadge');
 	const historyBtn = /** @type {HTMLButtonElement} */ (el('historyBtn'));
 	const history = el('history');
@@ -46,8 +51,16 @@
 	let skills = [];
 	/** Whether the engine accepts images at all. */
 	let supportsImages = false;
-	/** Images pasted into the composer, waiting to go with the next message. */
-	/** @type {{id: number, mediaType: string, data: string, url: string}[]} */
+	/**
+	 * What is riding along with the next message.
+	 *
+	 * Two kinds, because they travel differently: an image goes as bytes (the
+	 * only way to show a picture to a model) and a document goes as a path (the
+	 * agent opens it if it needs it — see `filesPreamble` on the host).
+	 *
+	 * @type {({id: number, kind: 'image', name: string, mediaType: string, data: string, url: string}
+	 *   | {id: number, kind: 'file', name: string, path: string, rel: string|null, size: number})[]}
+	 */
 	let attachments = [];
 	let attachmentSeq = 0;
 	/** From `.gofi.yaml`; null when the project has none. */
@@ -81,6 +94,17 @@
 	 * each time the agent writes a line.
 	 */
 	let workingRow = null;
+	/**
+	 * The label inside that row, and the word currently in it.
+	 *
+	 * `activity` is the verb for what the agent is doing — set from the tools it
+	 * calls and the kind of tokens it streams, null when there is nothing more
+	 * specific to say than that it is working.
+	 */
+	let workingLabel = null;
+	let workingVerb = null;
+	/** @type {string|null} */
+	let activity = null;
 	/** Tool rows awaiting their result, keyed by tool_use id. */
 	const pendingTools = new Map();
 	/**
@@ -123,14 +147,92 @@
 		vscode.postMessage({
 			type: 'send',
 			text,
-			images: attachments.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+			images: attachments
+				.filter((a) => a.kind === 'image')
+				.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+			// Whole items, not a hand-picked subset: a file from outside the project
+			// carries the text the host already read for it, and re-listing fields
+			// here is how that content would get silently dropped.
+			files: attachments.filter((a) => a.kind === 'file'),
 		});
 		input.value = '';
 		attachments = [];
 		renderAttachments();
 		closePicker();
+		closeAttachMenu();
 		autoGrow();
 	}
+
+	// ── the `+` menu ────────────────────────────────────────────────────────
+
+	/**
+	 * Two ways to put a file in front of the agent, in one menu.
+	 *
+	 * "Do computador" is the operating system's own dialog — any folder, any
+	 * drive, wherever the user is sitting. "Do projeto" is the `@` picker, which
+	 * is already the cheapest way to name a file the agent can reach; the menu
+	 * just tells the user it exists.
+	 */
+	function attachMenuOpen() {
+		return !attachMenu.hidden;
+	}
+
+	function openAttachMenu() {
+		attachMenu.hidden = false;
+		attachBtn.setAttribute('aria-expanded', 'true');
+	}
+
+	function closeAttachMenu() {
+		attachMenu.hidden = true;
+		attachBtn.setAttribute('aria-expanded', 'false');
+	}
+
+	attachBtn.addEventListener('click', (event) => {
+		event.stopPropagation();
+		if (attachMenuOpen()) {
+			closeAttachMenu();
+		} else {
+			closePicker();
+			openAttachMenu();
+		}
+	});
+
+	attachUpload.addEventListener('click', () => {
+		closeAttachMenu();
+		fileInput.click();
+	});
+
+	fileInput.addEventListener('change', () => {
+		for (const file of [...(fileInput.files || [])]) {
+			attachFromDisk(file);
+		}
+		// Clearing is what makes picking the same file twice work: `change` does
+		// not fire when the value has not changed.
+		fileInput.value = '';
+	});
+
+	attachProject.addEventListener('click', () => {
+		closeAttachMenu();
+		// Hand the user the trigger rather than explaining it: an `@` at the
+		// caret is the file picker, already open.
+		const caret = input.selectionStart ?? input.value.length;
+		const before = input.value.slice(0, caret);
+		const prefix = before === '' || /\s$/.test(before) ? '' : ' ';
+		input.value = `${before}${prefix}@${input.value.slice(caret)}`;
+		const at = caret + prefix.length + 1;
+		input.focus();
+		input.setSelectionRange(at, at);
+		autoGrow();
+		refreshPicker();
+	});
+
+	// Anywhere else closes it — a menu that needs its own button clicked again to
+	// go away is a menu in the way.
+	document.addEventListener('click', (event) => {
+		if (attachMenuOpen() && !attachMenu.contains(event.target) && event.target !== attachBtn) {
+			closeAttachMenu();
+		}
+	});
 
 	// ── pasted images ───────────────────────────────────────────────────────
 
@@ -158,6 +260,85 @@
 		}
 	});
 
+	/** Bigger than this and neither the engine nor the window wants it. */
+	const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+	const MAX_TEXT_BYTES = 2 * 1024 * 1024;
+	const MAX_INLINE_CHARS = 40000;
+
+	/**
+	 * A file the user picked in the OS dialog.
+	 *
+	 * An image goes the same way a pasted one does — bytes, as an image block.
+	 * Anything else is read here as text and travels in the prompt, because a file
+	 * on the user's machine is not something the agent can open: the engine runs in
+	 * the project root, and on a remote window it is not even the same computer.
+	 * A file *inside* the project should go by path instead, which is what the
+	 * other menu item is for.
+	 */
+	function attachFromDisk(file) {
+		const isImage = (file.type || '').startsWith('image/');
+		if (isImage && !supportsImages) {
+			notice(`${file.name} não foi anexado.`, 'este motor não aceita imagens.');
+			return;
+		}
+		if (isImage) {
+			if (file.size > MAX_IMAGE_BYTES) {
+				notice(
+					`${file.name} não foi anexado.`,
+					`imagem de ${Math.round(file.size / 1024)} KB — o limite é ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`,
+				);
+				return;
+			}
+			attach(file);
+			return;
+		}
+		attachDocument(file);
+	}
+
+	/**
+	 * A document, read in the window and carried in the message.
+	 *
+	 * The states are the chip's whole vocabulary and the prompt's: too big to
+	 * carry, binary (nothing useful to say about the bytes), or text — possibly
+	 * truncated, and if it was, that is stated in the prompt as well. A truncated
+	 * file that looks whole is how someone concludes the model ignored it.
+	 */
+	function attachDocument(file) {
+		const chip = {
+			id: ++attachmentSeq,
+			kind: 'file',
+			name: file.name || 'arquivo',
+			path: null,
+			rel: null,
+			size: file.size || 0,
+		};
+		if (chip.size > MAX_TEXT_BYTES) {
+			attachments.push({ ...chip, state: 'too-big' });
+			renderAttachments();
+			return;
+		}
+		const reader = new FileReader();
+		reader.onload = () => {
+			const bytes = new Uint8Array(/** @type {ArrayBuffer} */ (reader.result));
+			// A NUL byte in the head of the file is the cheap, reliable tell: no
+			// UTF-8 text has one, every binary format we might be handed does.
+			if (bytes.subarray(0, 8192).includes(0)) {
+				attachments.push({ ...chip, state: 'binary' });
+			} else {
+				const text = new TextDecoder('utf-8').decode(bytes);
+				attachments.push({
+					...chip,
+					state: 'text',
+					text: text.slice(0, MAX_INLINE_CHARS),
+					truncated: text.length > MAX_INLINE_CHARS,
+				});
+			}
+			renderAttachments();
+		};
+		reader.onerror = () => notice(`${chip.name} não foi anexado.`, 'não consegui ler o arquivo.');
+		reader.readAsArrayBuffer(file);
+	}
+
 	function attach(file) {
 		const reader = new FileReader();
 		reader.onload = () => {
@@ -168,6 +349,8 @@
 			}
 			attachments.push({
 				id: ++attachmentSeq,
+				kind: 'image',
+				name: file.name || 'imagem colada',
 				mediaType: file.type || 'image/png',
 				data: url.slice(comma + 1),
 				url,
@@ -177,17 +360,62 @@
 		reader.readAsDataURL(file);
 	}
 
+	/** 2048 → "2 KB". Chips have no room for exact bytes and nobody reads them. */
+	function fileSize(bytes) {
+		if (bytes >= 1024 * 1024) {
+			return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+		}
+		return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+	}
+
+	/**
+	 * What will happen to this file, in two words on the chip.
+	 *
+	 * Worth the words: "no projeto" means the agent opens it if it needs to, and
+	 * anything else means the file's text is going into the prompt — including
+	 * whether all of it made it. A truncated attachment that looks whole is how
+	 * someone concludes the model ignored the file.
+	 */
+	function attachmentDetail(item) {
+		if (item.rel) {
+			return 'no projeto';
+		}
+		if (item.state === 'too-big') {
+			return 'grande demais para anexar';
+		}
+		if (item.state === 'binary') {
+			return 'externo · binário';
+		}
+		return item.truncated ? 'externo · truncado' : 'externo';
+	}
+
 	function renderAttachments() {
 		attachmentsBar.textContent = '';
 		attachmentsBar.hidden = attachments.length === 0;
 		for (const item of attachments) {
 			const chip = document.createElement('span');
-			chip.className = 'attachment';
+			chip.className = `attachment ${item.kind}`;
 
-			const thumb = document.createElement('img');
-			thumb.src = item.url;
-			thumb.alt = 'imagem colada';
-			chip.appendChild(thumb);
+			if (item.kind === 'image') {
+				const thumb = document.createElement('img');
+				thumb.src = item.url;
+				thumb.alt = item.name;
+				chip.appendChild(thumb);
+			} else {
+				// A document has nothing to preview, so the chip says the two
+				// things that matter: which file, and whether the agent will be
+				// reading it from the project or from outside it.
+				const name = document.createElement('span');
+				name.className = 'file-name';
+				name.textContent = item.name;
+				chip.appendChild(name);
+
+				const detail = document.createElement('span');
+				detail.className = 'file-detail';
+				detail.textContent = `${attachmentDetail(item)} · ${fileSize(item.size)}`;
+				chip.appendChild(detail);
+				chip.title = item.rel || item.path || item.name;
+			}
 
 			const remove = document.createElement('button');
 			remove.type = 'button';
@@ -220,6 +448,11 @@
 		// The picker owns the keyboard while it is open, so Enter commits a
 		// choice instead of sending a half-typed `/gofi-e`.
 		if (pickerOpen() && handlePickerKey(event)) {
+			return;
+		}
+		if (event.key === 'Escape' && attachMenuOpen()) {
+			event.preventDefault();
+			closeAttachMenu();
 			return;
 		}
 		// Enter sends; Shift+Enter is a newline. Matches every chat the user
@@ -577,8 +810,20 @@
 		return el;
 	}
 
+	/** Appends `[tag, attributes, text?]` triples to a node, in order. */
+	function draw(parent, shapes) {
+		for (const [name, attributes, text] of shapes) {
+			const node = svgEl(name, attributes);
+			if (text !== undefined) {
+				node.textContent = text;
+			}
+			parent.appendChild(node);
+		}
+		return parent;
+	}
+
 	/**
-	 * Three drawings of the same arm, shown one at a time.
+	 * Six drawings of the same arm, shown one at a time — one full turn of the whip.
 	 *
 	 * A whip is not a rigid stick, so swinging one by rotating a curve does not
 	 * read as a whip — it reads as a bent wire being waved. Hand-drawn poses are
@@ -587,78 +832,307 @@
 	 * `transform-origin` inside an SVG. Nothing can rotate about the wrong point
 	 * because nothing rotates.
 	 *
-	 * Each entry is `[name, elbow-to-hand endpoint, the lash from that hand]`.
-	 * The strike pose ends at x=44, which is the robot's near edge — that is the
-	 * whole point of the picture, and the previous version missed it by six
-	 * units, whipping at empty air.
+	 * The hands trace a circle around the shoulder at (25.2, 23.4) — down and
+	 * behind, up behind the head, over the top, forward, and back again. That
+	 * circle is the animation: a whip that only appears and disappears in front
+	 * reads as a flicker, while a whip that comes round from behind reads as one
+	 * being *swung*, with the force that implies.
+	 *
+	 * `behind: true` puts that pose's lash under the mascot instead of over it, so
+	 * the tail genuinely disappears behind the body on the way round. It is the
+	 * cheapest depth an SVG has — drawing order — and the only reason the swing
+	 * looks like it leaves the picture plane.
+	 *
+	 * The strike lash ends at x=63.5, the robot's near edge: landing it on the
+	 * robot is the whole point, so that number is the one to preserve if the scene
+	 * is ever re-laid-out.
 	 */
 	const WHIP_POSES = [
-		['windup', [3.5, 7.5], 'M3.5 7.5 C 0.5 2.5, 7 -0.2, 13 2.2'],
-		['strike', [16, 10], 'M16 10 C 26 3.5, 35 7.5, 44 12'],
-		['recoil', [15, 13.5], 'M15 13.5 C 22 18, 29 9, 37 15'],
+		// Trailing low behind, where the swing starts and ends.
+		{ name: 'back', hand: [18.5, 29.5], lash: 'M18.5 29.5 C 12 34, 5 33.5, 0.5 29', behind: true },
+		// Coming up behind the mascot's own head, hidden by it. The hand stays
+		// outside the head (centre 17, radius 8.8) — an arm drawn across the face
+		// is not a raised whip, it is a mascot punching itself — and the lash goes
+		// up and to the left, where the body swallows it.
+		{ name: 'rise', hand: [26.5, 15], lash: 'M26.5 15 C 23 5.5, 14 2, 7.5 6.5', behind: true },
+		// Over the top: the highest point of the circle, now in front.
+		{ name: 'over', hand: [28.5, 13], lash: 'M28.5 13 C 36 3.5, 47 3, 53 8.5' },
+		// Coming down onto the robot. This is the hit.
+		{ name: 'strike', hand: [34, 19], lash: 'M34 19 C 46 11.5, 55 13.5, 63.5 18.5' },
+		// Taut, into the first coil's left end — this is the pose the wrap hangs
+		// off, so its lash has to arrive exactly where the coil starts (63.5).
+		{ name: 'wrap', hand: [34, 21], lash: 'M34 21 C 44 16.5, 53 19.5, 63.5 22.5' },
+		// Slack, on the way back down and round.
+		{ name: 'pull', hand: [30, 25.5], lash: 'M30 25.5 C 38 31, 47 23, 54 28' },
 	];
 
 	/**
-	 * The working indicator: someone standing over the robot with a whip.
+	 * The coils the lash makes around the robot, as `[cx, cy, rx, ry]`.
+	 *
+	 * Three of them, head to lap, because "wrapped around the robot" is a whole
+	 * body being tied up and not a rope touching it somewhere. Each is drawn
+	 * twice: the far half behind the robot, where its own navy hides it, and the
+	 * near half in front. That over-and-under is the only thing that makes a
+	 * stroke read as *around* a shape rather than on top of it — and it is why
+	 * the endpoints (cx ± rx) sit a unit and a half outside the silhouette, where
+	 * the rope has to be visible for the two halves to join.
+	 */
+	const COILS = [
+		// Neck, not face: a loop at eye level (y=11.8) covers the eyes, and the
+		// eyes are the reaction — the joke dies if you cannot see the robot take it.
+		[74.5, 17.4, 8, 1.8],
+		[74.5, 23, 11, 2],
+		[74.5, 29.5, 10, 1.8],
+	];
+
+	/** The near half of a coil: sags towards the viewer. */
+	function coilFront([cx, cy, rx, ry]) {
+		return `M${cx - rx} ${cy} Q ${cx} ${cy + ry * 2}, ${cx + rx} ${cy}`;
+	}
+
+	/** The far half: arcs away, behind the body. */
+	function coilBack([cx, cy, rx, ry]) {
+		return `M${cx - rx} ${cy} Q ${cx} ${cy - ry * 2}, ${cx + rx} ${cy}`;
+	}
+
+	/**
+	 * The working indicator: the gofi mascot standing over the robot with a whip.
 	 *
 	 * A spinner says "wait". This says who is waiting and who is working, which
 	 * is the funnier and more accurate description of what is happening — and
-	 * being a drawing rather than a spinner, you can tell across the room
-	 * whether the panel is busy.
+	 * being a drawing rather than a spinner, you can tell across the room whether
+	 * the panel is busy.
 	 *
-	 * Drawn here rather than shipped as a file because it has to move, and CSS
-	 * can only reach the parts if they are elements: three arm poses, the spark
-	 * where the lash lands, and the robot flinching a beat later.
+	 * The two characters are the product's own: the armoured mascot holds the
+	 * whip, the robot at the keyboard takes it. Drawn here rather than shipped as
+	 * a file because it has to move, and CSS can only reach the parts if they are
+	 * elements — six arm poses around a full swing, the spark where the lash lands,
+	 * the coils it leaves wrapped around the robot, the robot flinching and
+	 * squirming, the sweat that follows, and hands that never stop typing through
+	 * any of it.
 	 */
 	function workingMark() {
 		const mark = svgEl('svg', {
 			class: 'whip-mark',
-			viewBox: '0 0 72 32',
-			width: '54',
-			height: '24',
+			viewBox: '0 0 104 44',
+			width: '104',
+			height: '44',
 			'aria-hidden': 'true',
 			focusable: 'false',
 		});
 
-		// The robot, at work: arms down on the keyboard, legs under the body.
+		// The lash burns from yellow at the grip to red at the tip — a gradient
+		// rather than a flat stroke, because "hot" is a change along the length and
+		// a single red line is just a red line. In user space, so the colour belongs
+		// to the scene: wherever a pose puts the tip, the tip is the red end.
+		const defs = svgEl('defs', {});
+		const fire = svgEl('linearGradient', {
+			id: 'gofi-lash-fire',
+			gradientUnits: 'userSpaceOnUse',
+			x1: '22',
+			y1: '0',
+			x2: '92',
+			y2: '0',
+		});
+		draw(fire, [
+			['stop', { offset: '0', 'stop-color': '#fde047' }],
+			['stop', { offset: '0.35', 'stop-color': '#fb923c' }],
+			['stop', { offset: '0.7', 'stop-color': '#ef4444' }],
+			['stop', { offset: '1', 'stop-color': '#dc2626' }],
+		]);
+		defs.appendChild(fire);
+		mark.appendChild(defs);
+
+		// The floor, so the two characters read as one scene rather than two
+		// drawings that happen to be side by side.
+		draw(mark, [['line', { class: 'floor', x1: '6', y1: '39.4', x2: '98', y2: '39.4' }]]);
+
+		// The poses whose lash passes behind the mascot go down before it, so the
+		// tail disappears behind the body on the way round. Their arms are added
+		// with the others further down, in front, where an arm belongs.
+		const trailing = svgEl('g', { class: 'trailing' });
+		for (const pose of WHIP_POSES.filter((entry) => entry.behind)) {
+			const group = svgEl('g', { class: `pose ${pose.name}` });
+			draw(group, [['path', { class: 'lash', d: pose.lash }]]);
+			trailing.appendChild(group);
+		}
+		mark.appendChild(trailing);
+
+		// The far half of each coil goes down first, so the robot drawn next
+		// covers it: that is the whole trick behind the rope looking wrapped.
+		const behind = svgEl('g', { class: 'coil back' });
+		draw(behind, COILS.map((coil) => ['path', { class: 'rope', d: coilBack(coil) }]));
+		mark.appendChild(behind);
+
 		const robot = svgEl('g', { class: 'robot' });
-		robot.appendChild(svgEl('rect', { class: 'robot-body', x: '46', y: '13', width: '16', height: '13', rx: '3' }));
-		robot.appendChild(svgEl('rect', { class: 'robot-head', x: '48.5', y: '4', width: '11', height: '8.5', rx: '2.5' }));
-		robot.appendChild(svgEl('line', { class: 'wire', x1: '54', y1: '4', x2: '54', y2: '1.6' }));
-		robot.appendChild(svgEl('circle', { class: 'bulb', cx: '54', cy: '1.2', r: '1.3' }));
-		robot.appendChild(svgEl('circle', { class: 'eye', cx: '51.6', cy: '8.2', r: '1.15' }));
-		robot.appendChild(svgEl('circle', { class: 'eye', cx: '56.4', cy: '8.2', r: '1.15' }));
-		robot.appendChild(svgEl('line', { class: 'wire', x1: '46', y1: '17.5', x2: '42.5', y2: '21.5' }));
-		robot.appendChild(svgEl('line', { class: 'wire', x1: '62', y1: '17.5', x2: '65.5', y2: '21.5' }));
-		robot.appendChild(svgEl('line', { class: 'wire', x1: '50', y1: '26', x2: '50', y2: '30' }));
-		robot.appendChild(svgEl('line', { class: 'wire', x1: '58', y1: '26', x2: '58', y2: '30' }));
+		draw(robot, [
+			['rect', { class: 'robot-body', x: '65', y: '18', width: '19', height: '15.5', rx: '4' }],
+			['rect', { class: 'robot-head', x: '68', y: '7', width: '13', height: '10', rx: '3' }],
+			['line', { class: 'wire', x1: '74.5', y1: '7', x2: '74.5', y2: '3.2' }],
+			['circle', { class: 'bulb', cx: '74.5', cy: '2.2', r: '1.5' }],
+			['circle', { class: 'eye', cx: '71.3', cy: '11.8', r: '1.4' }],
+			['circle', { class: 'eye', cx: '77.7', cy: '11.8', r: '1.4' }],
+			['line', { class: 'mouth', x1: '72.2', y1: '15', x2: '76.8', y2: '15' }],
+			// Arms down and out to the keyboard, where the hands are.
+			['line', { class: 'wire', x1: '65', y1: '22', x2: '61.2', y2: '28.4' }],
+			['line', { class: 'wire', x1: '84', y1: '22', x2: '87.8', y2: '28.4' }],
+			['line', { class: 'wire', x1: '69', y1: '33.5', x2: '69', y2: '38.6' }],
+			['line', { class: 'wire', x1: '80', y1: '33.5', x2: '80', y2: '38.6' }],
+		]);
 		mark.appendChild(robot);
+
+		// And the near half on top of it. Same group name, opposite side: one
+		// animation rule drives both halves, so they can never fall out of step.
+		const front = svgEl('g', { class: 'coil front' });
+		draw(front, COILS.map((coil) => ['path', { class: 'rope', d: coilFront(coil) }]));
+		mark.appendChild(front);
+
+		// It is not the whip that gets the work done — the typing never stops,
+		// which is the other half of the joke.
+		draw(mark, [
+			['circle', { class: 'hand left', cx: '61.2', cy: '28.4', r: '1.7' }],
+			['circle', { class: 'hand right', cx: '87.8', cy: '28.4', r: '1.7' }],
+		]);
+
+		// The keyboard goes on top of the robot's lower body: it is in front of
+		// the desk, and drawing order is the only depth an SVG has.
+		draw(mark, [
+			['rect', { class: 'keyboard', x: '58.5', y: '29.6', width: '32', height: '4.4', rx: '1.5' }],
+			['line', { class: 'key', x1: '65', y1: '30.8', x2: '65', y2: '32.8' }],
+			['line', { class: 'key', x1: '72', y1: '30.8', x2: '72', y2: '32.8' }],
+			['line', { class: 'key', x1: '79', y1: '30.8', x2: '79', y2: '32.8' }],
+			['line', { class: 'key', x1: '86', y1: '30.8', x2: '86', y2: '32.8' }],
+		]);
+
+		// A drop, one beat after the lash lands. It overlaps the head's top-right
+		// corner (the head ends at x=81) so it reads as coming off the robot
+		// rather than floating beside it.
+		draw(mark, [['path', { class: 'sweat', d: 'M82 7.4 C 83.5 10, 83.5 11.6, 82 11.6 C 80.5 11.6, 80.5 9.9, 82 7.4 Z' }]]);
 
 		// Where the lash lands, drawn at the strike pose's endpoint so the flash
 		// and the whip are in the same place at the same instant.
 		const spark = svgEl('g', { class: 'spark' });
-		spark.appendChild(svgEl('line', { x1: '44.5', y1: '11.8', x2: '41', y2: '8.4' }));
-		spark.appendChild(svgEl('line', { x1: '44.5', y1: '11.8', x2: '40.2', y2: '12.6' }));
-		spark.appendChild(svgEl('line', { x1: '44.5', y1: '11.8', x2: '41.6', y2: '15.6' }));
+		draw(spark, [
+			['line', { x1: '64', y1: '18.5', x2: '60', y2: '14.6' }],
+			['line', { x1: '64', y1: '18.5', x2: '59.2', y2: '19.4' }],
+			['line', { x1: '64', y1: '18.5', x2: '60.6', y2: '23' }],
+		]);
 		mark.appendChild(spark);
 
-		const human = svgEl('g', { class: 'human' });
-		human.appendChild(svgEl('circle', { class: 'head', cx: '8', cy: '7.5', r: '3.2' }));
-		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '10.7', x2: '8', y2: '20' }));
-		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '20', x2: '4', y2: '29.5' }));
-		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '20', x2: '12.5', y2: '29.5' }));
-		// The idle arm, on the other side, so the figure is not all one diagonal.
-		human.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '14', x2: '13', y2: '18' }));
-		mark.appendChild(human);
+		// The mascot: the gofi bear in armour, drawn as a caricature of itself —
+		// at this size the plate lettering would be a smudge, so the chest plate
+		// carries the gold and the shape carries the rest.
+		const mascot = svgEl('g', { class: 'mascot' });
+		draw(mascot, [
+			['circle', { class: 'fur', cx: '10.5', cy: '7.4', r: '2.9' }],
+			['circle', { class: 'fur', cx: '23.5', cy: '7.4', r: '2.9' }],
+			['rect', { class: 'armor', x: '9.6', y: '21.6', width: '14.8', height: '12.6', rx: '3.4' }],
+			['rect', { class: 'plate', x: '12.2', y: '24', width: '9.6', height: '7', rx: '1.6' }],
+			// The G on the breastplate: who is holding the whip. At this size the
+			// full name would be a smudge, so the initial carries it — centred on
+			// the plate, in the navy the gold was chosen to sit against.
+			//
+			// The baseline is a number rather than `dominant-baseline: central`: the
+			// plate spans y 24–31, a 6.4px cap is ~4.6 tall, so 29.8 puts the letter
+			// in the middle of it without depending on how an engine resolves
+			// baseline keywords inside an SVG.
+			['text', { class: 'emblem', x: '17', y: '29.8', 'text-anchor': 'middle' }, 'G'],
+			['rect', { class: 'armor', x: '12', y: '33.4', width: '4', height: '5.6', rx: '1.6' }],
+			['rect', { class: 'armor', x: '18.2', y: '33.4', width: '4', height: '5.6', rx: '1.6' }],
+			// The idle arm, on the other side, so the figure is not all one diagonal.
+			['line', { class: 'armor-limb', x1: '10.2', y1: '25.4', x2: '6.4', y2: '30.4' }],
+			['circle', { class: 'fur', cx: '17', cy: '13.5', r: '8.8' }],
+			['circle', { class: 'sclera', cx: '13.4', cy: '12', r: '3.1' }],
+			['circle', { class: 'sclera', cx: '20.6', cy: '12', r: '3.1' }],
+			['circle', { class: 'pupil', cx: '14.1', cy: '12.3', r: '1.35' }],
+			['circle', { class: 'pupil', cx: '21.3', cy: '12.3', r: '1.35' }],
+			['ellipse', { class: 'pupil', cx: '17', cy: '16', rx: '1.7', ry: '1.2' }],
+			['rect', { class: 'tooth', x: '15.7', y: '17', width: '1.3', height: '2.8', rx: '0.4' }],
+			['rect', { class: 'tooth', x: '17.4', y: '17', width: '1.3', height: '2.8', rx: '0.4' }],
+			// The pauldron sits over the shoulder the whip comes out of, so the
+			// arm poses read as attached to something.
+			['circle', { class: 'armor', cx: '25.2', cy: '23.4', r: '3.4' }],
+		]);
+		mark.appendChild(mascot);
 
-		for (const [name, hand, lash] of WHIP_POSES) {
-			const pose = svgEl('g', { class: `pose ${name}` });
-			pose.appendChild(svgEl('line', { class: 'limb', x1: '8', y1: '13.5', x2: String(hand[0]), y2: String(hand[1]) }));
-			pose.appendChild(svgEl('path', { class: 'lash', d: lash }));
-			mark.appendChild(pose);
+		for (const pose of WHIP_POSES) {
+			const group = svgEl('g', { class: `pose ${pose.name}` });
+			// The arm is always in front; the lash only when it is not the tail
+			// already drawn behind the mascot.
+			draw(group, [['line', { class: 'armor-limb', x1: '25.2', y1: '23.4', x2: String(pose.hand[0]), y2: String(pose.hand[1]) }]]);
+			if (!pose.behind) {
+				draw(group, [['path', { class: 'lash', d: pose.lash }]]);
+			}
+			mark.appendChild(group);
 		}
 
 		return mark;
+	}
+
+	/**
+	 * What the row says the agent is doing, by tool name.
+	 *
+	 * The verb is not decoration: "lendo" for two minutes and "executando" for
+	 * two minutes mean very different things about a turn that is taking long,
+	 * and the transcript above may be scrolled away while this row is not.
+	 */
+	const TOOL_VERBS = {
+		Read: 'lendo',
+		NotebookRead: 'lendo',
+		Grep: 'procurando',
+		Glob: 'procurando',
+		LS: 'procurando',
+		Write: 'escrevendo',
+		Edit: 'editando',
+		MultiEdit: 'editando',
+		NotebookEdit: 'editando',
+		Bash: 'executando',
+		BashOutput: 'executando',
+		KillShell: 'executando',
+		WebSearch: 'pesquisando',
+		WebFetch: 'pesquisando',
+		Task: 'delegando',
+		Agent: 'delegando',
+		TodoWrite: 'planejando',
+		ExitPlanMode: 'planejando',
+		Skill: 'aplicando a skill',
+		SlashCommand: 'aplicando a skill',
+	};
+
+	/** The words the row cycles through when nothing more specific is known. */
+	const IDLE_VERBS = ['pensando', 'trabalhando', 'analisando'];
+
+	function verbForTool(name) {
+		if (TOOL_VERBS[name]) {
+			return TOOL_VERBS[name];
+		}
+		// An MCP tool is `mcp__server__tool` and there is no useful verb for an
+		// arbitrary one — but "consultando" beats falling back to nothing.
+		return typeof name === 'string' && name.startsWith('mcp__') ? 'consultando' : 'trabalhando';
+	}
+
+	/**
+	 * Says what the agent is doing right now, or nothing in particular.
+	 *
+	 * Passing null hands the label back to the cycling words, which is the honest
+	 * state between one tool result and whatever the model decides next. The verb
+	 * node is replaced rather than rewritten so its entrance animation plays on
+	 * every change — replacing a child of the label never touches the row itself,
+	 * which is what keeps the whip swinging (see `addToLog`).
+	 */
+	function setActivity(verb) {
+		activity = verb || null;
+		if (!workingLabel) {
+			return;
+		}
+		workingLabel.classList.toggle('acting', activity !== null);
+		if (workingVerb) {
+			workingVerb.remove();
+		}
+		workingVerb = document.createElement('span');
+		workingVerb.className = 'verb';
+		workingVerb.textContent = activity || '';
+		workingLabel.appendChild(workingVerb);
 	}
 
 	/**
@@ -679,10 +1153,28 @@
 			workingRow = document.createElement('div');
 			workingRow.className = 'working';
 			workingRow.appendChild(workingMark());
-			const label = document.createElement('span');
-			label.className = 'label';
-			label.textContent = 'trabalhando';
-			workingRow.appendChild(label);
+
+			// Two labels in one: a stack of generic words cross-faded by CSS while
+			// nothing specific is known, and one verb when it is. The cycling is
+			// CSS rather than a timer because a timer would have to be cancelled
+			// on every path that ends a turn, and forgetting one leaves a word
+			// changing under a finished conversation.
+			workingLabel = document.createElement('span');
+			workingLabel.className = 'label';
+			const cycle = document.createElement('span');
+			cycle.className = 'cycle';
+			// The cycling words are decoration for a screen reader — the verb,
+			// when there is one, is the part worth announcing.
+			cycle.setAttribute('aria-hidden', 'true');
+			for (const word of IDLE_VERBS) {
+				const slot = document.createElement('i');
+				slot.textContent = word;
+				cycle.appendChild(slot);
+			}
+			workingLabel.appendChild(cycle);
+			workingRow.appendChild(workingLabel);
+			workingVerb = null;
+			setActivity(activity);
 		}
 		if (workingRow.parentElement !== log) {
 			clearEmptyState();
@@ -714,6 +1206,10 @@
 		if (workingRow && workingRow.parentElement) {
 			workingRow.remove();
 		}
+		// Whatever it was doing, it is not doing it now: the next time the row
+		// appears it starts from the generic words rather than resuming a verb
+		// that belonged to the turn before.
+		setActivity(null);
 	}
 
 	/**
@@ -1684,10 +2180,19 @@
 					note.textContent = message.images === 1 ? '1 imagem anexada' : `${message.images} imagens anexadas`;
 					body.appendChild(note);
 				}
+				if (Array.isArray(message.files) && message.files.length > 0) {
+					// The names, not the contents: what was attached is part of the
+					// conversation, what was inside it is the agent's business.
+					const note = document.createElement('div');
+					note.className = 'attached-note';
+					note.textContent = `anexado: ${message.files.join(', ')}`;
+					body.appendChild(note);
+				}
 				if (message.text !== '') {
 					userBubble(body, message.text);
 				}
 				if (!message.queued) {
+					setActivity(null);
 					showIndicator();
 				}
 				break;
@@ -1701,12 +2206,16 @@
 				if (first) {
 					first.classList.remove('queued');
 				}
+				setActivity(null);
 				showIndicator();
 				break;
 			}
 
 			case 'delta': {
 				const el = assistantTurn();
+				// The tokens themselves say what it is doing: prose is an answer
+				// being written, reasoning is thinking. Both beat "trabalhando".
+				setActivity(message.kind === 'text' ? 'respondendo' : 'pensando');
 				if (message.kind === 'text') {
 					if (!streamingText) {
 						const bubble = document.createElement('div');
@@ -1751,14 +2260,24 @@
 						textBubble(el, block.text);
 					} else if (block.type === 'thinking' && showThinking) {
 						thinkingBlock(el, block.text);
-					} else if (block.type === 'tool_use' && showToolCalls) {
-						pendingTools.set(block.id, toolRow(el, block.name, block.input));
+					} else if (block.type === 'tool_use') {
+						// The verb follows the tool whether or not the row for it is
+						// shown: hiding tool calls is about the transcript, not about
+						// what the indicator is allowed to know.
+						setActivity(verbForTool(block.name));
+						if (showToolCalls) {
+							pendingTools.set(block.id, toolRow(el, block.name, block.input));
+						}
 					}
 				}
 				break;
 			}
 
 			case 'toolResult': {
+				// The tool is done and the model has not said what comes next, so
+				// the row goes back to saying it is working — which is all anyone
+				// knows at this instant.
+				setActivity(null);
 				const row = pendingTools.get(message.toolUseId);
 				pendingTools.delete(message.toolUseId);
 				if (!row) {

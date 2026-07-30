@@ -13,7 +13,10 @@ const Module = require('module');
  */
 function installVscodeStub() {
 	const stub = {
-		Uri: { joinPath: (base, ...parts) => ({ fsPath: path.join(base.fsPath, ...parts) }) },
+		Uri: {
+			file: (fsPath) => ({ fsPath, scheme: 'file' }),
+			joinPath: (base, ...parts) => ({ fsPath: path.join(base.fsPath, ...parts) }),
+		},
 		workspace: {
 			workspaceFolders: undefined,
 			getConfiguration: () => ({ get: () => undefined }),

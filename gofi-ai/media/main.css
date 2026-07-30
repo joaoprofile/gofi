@@ -12,6 +12,10 @@
   --gofi-navy: #0b2b3a;
   --column: 780px;
   --gutter: 16px;
+  /* One clock for the whole working indicator: the six whip beats, the robot's
+     reaction, and the word breathing next to it. Changing the pace is changing
+     this number and nothing else. */
+  --whip-loop: 2s;
 }
 
 * {
@@ -536,13 +540,88 @@ details.thinking .bubble {
 .working {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   font-size: 0.85em;
 }
 
+/* The word for what the agent is doing. Two states share this box: a stack of
+   generic words cross-faded while nothing specific is known, and a single verb
+   the moment it is — a tool call, or the kind of tokens arriving. */
 .working .label {
+  display: inline-flex;
+  align-items: baseline;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.working .label::after {
+  content: '…';
   opacity: 0.7;
-  animation: working-breathe 1.2s ease-in-out infinite;
+}
+
+/* All the words in one grid cell: the box is as wide as the longest of them, so
+   the ellipsis after it never moves while they change. */
+.working .cycle {
+  display: inline-grid;
+}
+
+.working .cycle i {
+  grid-area: 1 / 1;
+  font-style: normal;
+  opacity: 0;
+  animation: verb-cycle 5.4s linear infinite;
+}
+
+/* The base state is the first word alone, which is what a frozen row shows. */
+.working .cycle i:first-child {
+  opacity: 1;
+}
+
+.working .cycle i:nth-child(2) {
+  animation-delay: 1.8s;
+}
+
+.working .cycle i:nth-child(3) {
+  animation-delay: 3.6s;
+}
+
+/* Once there is something specific to say, the generic words get out of the way
+   and the row breathes on the same clock as the whip instead. */
+.working .label.acting .cycle {
+  display: none;
+}
+
+.working .label.acting {
+  animation: working-breathe var(--whip-loop) ease-in-out infinite;
+}
+
+.working .verb {
+  animation: verb-in 260ms ease-out;
+}
+
+/* Each word gets a third of the loop, with a beat of overlap so one fades as the
+   next arrives — a hard cut reads as a glitch at this size. */
+@keyframes verb-cycle {
+  0%,
+  33.4%,
+  100% {
+    opacity: 0;
+  }
+  4%,
+  29% {
+    opacity: 1;
+  }
+}
+
+@keyframes verb-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* The label breathes on the same clock as the whip, so the row reads as alive
@@ -550,10 +629,10 @@ details.thinking .bubble {
 @keyframes working-breathe {
   0%,
   100% {
-    opacity: 0.45;
+    opacity: 0.55;
   }
   45% {
-    opacity: 0.9;
+    opacity: 1;
   }
 }
 
@@ -626,26 +705,38 @@ details.thinking .bubble {
 }
 
 /* ── the working indicator ──────────────────────────────────────────────────
-   Someone standing over the robot with a whip, on a 1.2s loop: wind up, strike,
-   recoil. Cause, effect, and the joke, in that order.
+   The gofi mascot standing over the robot with a whip, on a `--whip-loop` cycle:
+   wind up, strike, wrap the robot, let go. Cause, effect, and the joke, in that
+   order — and the robot keeps typing through all of it on its own faster clock,
+   which is the point.
 
-   The arm is three hand-drawn poses shown one at a time, not one pose rotated.
+   The arm is four hand-drawn poses shown one at a time, not one pose rotated.
    A whip bends, so rotating a curve reads as waving a bent wire — and poses cost
-   nothing in robustness: the whole animation is opacity plus one horizontal
-   nudge, so there is no `transform-origin` inside an SVG for an engine to
-   resolve differently than intended, and nothing can pivot about the wrong
-   point. Frozen (reduced motion) it settles on the wind-up, which is a pose
-   rather than an accident. */
+   nothing in robustness: everything here is opacity, stroke width, a horizontal
+   nudge and a vertical tap, so there is no `transform-origin` inside an SVG for
+   an engine to resolve differently than intended, and nothing can pivot about
+   the wrong point. Frozen (reduced motion) it settles on the wind-up, which is a
+   pose rather than an accident.
+
+   The palette is the product's: the mascot is the gofi bear in armour, the robot
+   is navy and sky like the mark. Steel and gold are literals because armour has
+   no theme token — both readable on a light and a dark editor. */
 
 .whip-mark {
   flex: 0 0 auto;
+  --steel: #94a3b8;
+  --steel-edge: #475569;
+  --gold: #eab308;
 }
 
-.whip-mark .limb,
-.whip-mark .head,
 .whip-mark .lash,
+.whip-mark .rope,
 .whip-mark .wire,
-.whip-mark .spark line {
+.whip-mark .mouth,
+.whip-mark .armor-limb,
+.whip-mark .spark line,
+.whip-mark .key,
+.whip-mark .floor {
   fill: none;
   stroke: var(--vscode-foreground);
   stroke-width: 1.6;
@@ -653,21 +744,52 @@ details.thinking .bubble {
   opacity: 0.85;
 }
 
-.whip-mark .lash {
-  stroke: var(--gofi-sky);
-  stroke-width: 1.4;
+/* The whip itself: the thickest, hottest thing in the picture. Everything else
+   in this drawing is the product's cyan, which is exactly why the lash is not —
+   it has to be the thing your eye lands on, and fire is what a whip in motion
+   looks like. The gradient (yellow at the grip, red at the tip) lives in the SVG
+   because a stroke cannot take a CSS gradient. */
+.whip-mark .lash,
+.whip-mark .rope {
+  stroke: url(#gofi-lash-fire);
+  stroke-width: 3;
   opacity: 1;
+  /* The heat. Small radius: at this size a wide glow is a smudge. */
+  filter: drop-shadow(0 0 1.6px rgba(239, 68, 68, 0.75));
+}
+
+/* The far half of a coil is dimmer: light does not reach behind the robot, and
+   the shading is what tells the eye which half is which where both are visible.
+   The dimming lives on the group, not on the paths — the paths' own opacity is
+   animated, and group opacity multiplies with it instead of fighting it. */
+.whip-mark .coil.back {
+  opacity: 0.5;
 }
 
 .whip-mark .wire {
   stroke: var(--gofi-sky);
 }
 
+.whip-mark .mouth {
+  stroke: var(--gofi-sky);
+  stroke-width: 1.3;
+  opacity: 0.75;
+}
+
+/* The floor is what makes the two of them share a room. Barely there — it is
+   staging, not information. */
+.whip-mark .floor {
+  stroke-width: 1.2;
+  opacity: 0.22;
+}
+
+/* ── the robot ─────────────────────────────────────────────────────────────── */
+
 .whip-mark .robot-body,
 .whip-mark .robot-head {
   fill: var(--gofi-navy);
   stroke: var(--gofi-sky);
-  stroke-width: 1.3;
+  stroke-width: 1.4;
 }
 
 .whip-mark .eye,
@@ -676,132 +798,402 @@ details.thinking .bubble {
   stroke: none;
 }
 
+.whip-mark .hand {
+  fill: var(--gofi-sky);
+  stroke: none;
+}
+
+.whip-mark .keyboard {
+  fill: var(--gofi-navy);
+  stroke: var(--steel);
+  stroke-width: 1.2;
+}
+
+.whip-mark .key {
+  stroke: var(--gofi-sky);
+  stroke-width: 1.4;
+  opacity: 0.55;
+}
+
+.whip-mark .sweat {
+  fill: var(--gofi-cyan);
+  stroke: none;
+  opacity: 0;
+}
+
+/* The impact, in the whip's own heat rather than the robot's cyan — it belongs
+   to the thing that hit, not to the thing that was hit. */
 .whip-mark .spark line {
-  stroke: var(--gofi-cyan);
-  stroke-width: 1.5;
+  stroke: #fde047;
+  stroke-width: 1.8;
+  opacity: 1;
+  filter: drop-shadow(0 0 1.6px rgba(251, 146, 60, 0.9));
+}
+
+/* ── the mascot ────────────────────────────────────────────────────────────── */
+
+.whip-mark .fur {
+  fill: var(--gofi-sky);
+  stroke: var(--gofi-navy);
+  stroke-width: 1.2;
+}
+
+.whip-mark .sclera {
+  fill: #ffffff;
+  stroke: var(--gofi-navy);
+  stroke-width: 1;
+}
+
+.whip-mark .pupil {
+  fill: var(--gofi-navy);
+  stroke: none;
+}
+
+.whip-mark .tooth {
+  fill: #ffffff;
+  stroke: var(--gofi-navy);
+  stroke-width: 0.7;
+}
+
+.whip-mark .armor {
+  fill: var(--steel);
+  stroke: var(--steel-edge);
+  stroke-width: 1.1;
+}
+
+/* The chest plate is where the name is on the real thing. At this size the full
+   word would be a smudge, so the plate carries the gold and a single G. */
+.whip-mark .plate {
+  fill: var(--gold);
+  stroke: var(--steel-edge);
+  stroke-width: 0.8;
+}
+
+.whip-mark .emblem {
+  fill: var(--gofi-navy);
+  stroke: none;
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 6.4px;
+  font-weight: 700;
+  /* The letter is a drawing, not text: no selection, no cursor, no accidental
+     drag of a "G" out of the animation. */
+  user-select: none;
+}
+
+.whip-mark .armor-limb {
+  stroke: var(--steel);
+  stroke-width: 2.2;
   opacity: 1;
 }
 
-/* One pose visible at a time. The wind-up is the base state, so a frozen mark
-   is a drawing rather than three arms at once. */
+/* ── the loop ────────────────────────────────────────────────────────────────
+   Six beats of a 2s turn, as percentages:
+   0–14 trailing behind · 15–26 coming up behind the head · 27–37 over the top ·
+   38–48 the hit · 49–72 wrapped · 73–88 letting go · 89–100 behind again.
+
+   The order is a circle, not a flicker: the lash leaves the picture behind the
+   mascot, comes back over the top, and lands. That is where the sense of force
+   comes from — a whip that only appears in front is a line blinking on. */
+
+/* One pose visible at a time. Trailing-behind is the base state, so a frozen
+   mark is a drawing rather than six arms at once. */
 .whip-mark .pose {
   opacity: 0;
 }
 
-.whip-mark .pose.windup {
+.whip-mark .pose.back {
   opacity: 1;
-  animation: whip-windup 1.2s linear infinite;
+  animation: whip-back var(--whip-loop) linear infinite;
+}
+
+.whip-mark .pose.rise {
+  animation: whip-rise var(--whip-loop) linear infinite;
+}
+
+.whip-mark .pose.over {
+  animation: whip-over var(--whip-loop) linear infinite;
 }
 
 .whip-mark .pose.strike {
-  animation: whip-strike 1.2s linear infinite;
+  animation: whip-strike var(--whip-loop) linear infinite;
 }
 
-.whip-mark .pose.recoil {
-  animation: whip-recoil 1.2s linear infinite;
+.whip-mark .pose.wrap {
+  animation: whip-wrap var(--whip-loop) linear infinite;
+}
+
+.whip-mark .pose.pull {
+  animation: whip-pull var(--whip-loop) linear infinite;
 }
 
 .whip-mark .spark {
   opacity: 0;
-  animation: whip-spark 1.2s linear infinite;
+  animation: whip-spark var(--whip-loop) linear infinite;
+}
+
+/* The rope arrives around the robot in the beat after the strike and lets go
+   before the swing carries on. Both halves of a coil run the same rule from the
+   same group, so the near and far side can never disagree about whether the rope
+   is there — the one artefact that would give the trick away. */
+.whip-mark .coil .rope {
+  opacity: 0;
+  animation: coil-cinch var(--whip-loop) linear infinite;
+}
+
+/* Head first, then the chest, then the lap: a rope that lands everywhere at
+   once reads as three hoops appearing, not as one being pulled around. */
+.whip-mark .coil .rope:nth-child(2) {
+  animation-delay: 0.07s;
+}
+
+.whip-mark .coil .rope:nth-child(3) {
+  animation-delay: 0.14s;
 }
 
 /* Translation only — it needs no origin, so it cannot land anywhere unintended. */
 .whip-mark .robot {
-  animation: robot-flinch 1.2s ease-out infinite;
+  animation: robot-flinch var(--whip-loop) ease-out infinite;
 }
 
 .whip-mark .eye {
-  animation: robot-blink 1.2s linear infinite;
+  animation: robot-blink var(--whip-loop) linear infinite;
 }
 
-@keyframes whip-windup {
+.whip-mark .sweat {
+  animation: robot-sweat var(--whip-loop) ease-in infinite;
+}
+
+/* The mascot loads the swing — leans back while the whip goes up behind, throws
+   its weight forward on the hit, holds while the rope is taut. Two units is
+   enough to read as effort and little enough not to detach it from its own legs. */
+.whip-mark .mascot {
+  animation: mascot-lean var(--whip-loop) ease-out infinite;
+}
+
+/* The hands are on their own clock, deliberately out of step with the whip: the
+   work does not pause for the whipping, not even while tied up. */
+.whip-mark .hand.left {
+  animation: type-tap 0.34s ease-in-out infinite;
+}
+
+.whip-mark .hand.right {
+  animation: type-tap 0.34s ease-in-out infinite;
+  animation-delay: 0.17s;
+}
+
+@keyframes whip-back {
   0%,
-  40% {
+  14% {
     opacity: 1;
   }
-  41%,
-  74% {
+  15%,
+  88% {
     opacity: 0;
   }
-  75%,
+  89%,
   100% {
     opacity: 1;
+  }
+}
+
+@keyframes whip-rise {
+  0%,
+  14% {
+    opacity: 0;
+  }
+  15%,
+  26% {
+    opacity: 1;
+  }
+  27%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes whip-over {
+  0%,
+  26% {
+    opacity: 0;
+  }
+  27%,
+  37% {
+    opacity: 1;
+  }
+  38%,
+  100% {
+    opacity: 0;
   }
 }
 
 @keyframes whip-strike {
   0%,
-  40% {
+  37% {
     opacity: 0;
   }
-  41%,
-  55% {
+  38%,
+  48% {
     opacity: 1;
   }
-  56%,
+  49%,
   100% {
     opacity: 0;
   }
 }
 
-@keyframes whip-recoil {
+@keyframes whip-wrap {
   0%,
-  55% {
+  48% {
     opacity: 0;
   }
-  56%,
-  74% {
+  49%,
+  72% {
     opacity: 1;
   }
-  75%,
+  73%,
   100% {
     opacity: 0;
   }
 }
 
-/* Lands with the strike pose and is gone before the recoil — a flash, not a
+@keyframes whip-pull {
+  0%,
+  72% {
+    opacity: 0;
+  }
+  73%,
+  88% {
+    opacity: 1;
+  }
+  89%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Lands with the strike and is gone before the rope closes — a flash, not a
    fixture. */
 @keyframes whip-spark {
   0%,
-  40% {
+  37% {
     opacity: 0;
   }
-  43% {
+  40% {
     opacity: 1;
   }
-  54%,
+  47%,
   100% {
     opacity: 0;
   }
 }
 
+/* Cinching: the rope snaps on thick and settles thinner as it pulls tight.
+   Stroke width rather than a scale — scaling a path inside an SVG is measured
+   from the user-space origin unless `transform-box` is set, which would slide
+   the coils sideways instead of tightening them, and the whole point of this
+   animation being opacity-and-width is that nothing depends on an origin. */
+@keyframes coil-cinch {
+  0%,
+  48% {
+    opacity: 0;
+    stroke-width: 3.2;
+  }
+  51% {
+    opacity: 1;
+    stroke-width: 3.2;
+  }
+  58%,
+  70% {
+    opacity: 1;
+    stroke-width: 2.4;
+  }
+  73%,
+  100% {
+    opacity: 0;
+    stroke-width: 3.2;
+  }
+}
+
+/* The hit, then squirming against the rope while it is on. */
 @keyframes robot-flinch {
   0%,
-  41% {
+  37% {
     transform: translateX(0);
   }
-  46% {
-    transform: translateX(2.5px);
+  41% {
+    transform: translateX(3.4px);
   }
-  58% {
-    transform: translateX(0.8px);
+  52% {
+    transform: translateX(0.6px);
   }
-  70%,
+  60% {
+    transform: translateX(1.8px);
+  }
+  68% {
+    transform: translateX(0.4px);
+  }
+  78%,
   100% {
     transform: translateX(0);
   }
 }
 
+/* Eyes screwed shut from the hit until the rope comes off. */
 @keyframes robot-blink {
   0%,
-  41%,
+  37%,
   100% {
     opacity: 1;
   }
-  45%,
-  57% {
+  41%,
+  70% {
     opacity: 0.25;
+  }
+}
+
+/* A beat after the rope closes, because that is how a reaction reads. */
+@keyframes robot-sweat {
+  0%,
+  50% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  60% {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+  86%,
+  100% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@keyframes mascot-lean {
+  0% {
+    transform: translateX(0);
+  }
+  20%,
+  32% {
+    transform: translateX(-1.4px);
+  }
+  44%,
+  70% {
+    transform: translateX(2px);
+  }
+  84%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes type-tap {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.4px);
   }
 }
 
@@ -852,17 +1244,27 @@ body.busy #title::after {
   }
 }
 
-/* Respect the user's motion preference — this is decoration, not information. */
+/* Respect the user's motion preference — this is decoration, not information.
+   The words stop cycling too: with the animation off the first one stays, which
+   is why `.cycle i:first-child` carries its opacity as a base state rather than
+   only inside a keyframe. The verb still changes, because that one *is*
+   information — it is the agent saying what it is doing. */
 @media (prefers-reduced-motion: reduce) {
   .dots i,
   .tool.running .name::after,
   .chip.ghost,
   .caret,
-  .working .label,
+  .working .label.acting,
+  .working .cycle i,
+  .working .verb,
   .whip-mark .pose,
+  .whip-mark .coil .rope,
   .whip-mark .spark,
   .whip-mark .robot,
   .whip-mark .eye,
+  .whip-mark .sweat,
+  .whip-mark .mascot,
+  .whip-mark .hand,
   body.busy #title::after {
     animation: none;
   }
@@ -1110,6 +1512,7 @@ footer {
 /* One card holding the textarea and its actions, the way every chat composer
    the user already has open is shaped. */
 #composer {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1149,6 +1552,91 @@ footer {
   gap: 6px;
 }
 
+/* ── anexar ─────────────────────────────────────────────────────────────────
+   The `+` sits at the far left of the action row, where every chat the user
+   already has open puts it, and takes the auto margin so Enviar/Parar stay
+   right-aligned without a spacer element. */
+
+#attachBtn {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--vscode-foreground);
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.4));
+  border-radius: 7px;
+  opacity: 0.75;
+}
+
+#attachBtn:hover,
+#attachBtn[aria-expanded='true'] {
+  opacity: 1;
+  color: var(--gofi-cyan);
+  border-color: var(--gofi-cyan);
+  background: transparent;
+}
+
+/* Above the composer, like the `/` and `@` picker — the two menus of this
+   composer open the same way, so neither has to be learned twice. */
+#attachMenu {
+  position: absolute;
+  left: 0;
+  right: auto;
+  bottom: calc(100% + 6px);
+  min-width: 260px;
+  z-index: 3;
+  padding: 4px;
+  border: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.4));
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+#attachMenu[hidden] {
+  display: none;
+}
+
+#attachMenu .row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--vscode-foreground);
+  background: transparent;
+}
+
+#attachMenu .row:hover {
+  color: var(--vscode-list-activeSelectionForeground);
+  background: var(--vscode-list-activeSelectionBackground);
+}
+
+#attachMenu .row svg {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+
+#attachMenu .name {
+  flex: 0 0 auto;
+}
+
+#attachMenu .desc {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+
 button {
   flex: 0 0 auto;
   padding: 4px 14px;
@@ -1170,9 +1658,57 @@ button:disabled {
   cursor: default;
 }
 
+/* ── enviar e parar ─────────────────────────────────────────────────────────
+   Two icons where two words used to be. The composer is read a hundred times a
+   day and the shape of an arrow is faster than a label in any language — and the
+   rounded square is the gofi mark's own silhouette, so the send button is the
+   product's shape in the product's cyan. Only ever one of the two is on screen:
+   an arrow while you compose, a stop square while a turn runs. */
+
+.round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+/* Spelling out what `hidden` means for these two: an explicit `display` beats the
+   attribute's own `display: none`, and the stop button is hidden by attribute. */
+.round[hidden] {
+  display: none;
+}
+
+#submit {
+  color: var(--gofi-navy);
+  background: var(--gofi-cyan);
+}
+
+#submit:hover {
+  /* Cyan is already the loudest thing in the panel, so hover lifts rather than
+     recolours — a brighter cyan would just glare. */
+  background: var(--gofi-sky);
+}
+
+#submit:focus-visible,
+#cancel:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+/* Stopping is not the loud action — it is the one you reach for when the loud
+   one is already running, so it is outlined rather than filled. */
 #cancel {
-  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
-  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--gofi-cyan);
+  background: transparent;
+  border: 1px solid var(--gofi-cyan);
+}
+
+#cancel:hover {
+  color: var(--gofi-navy);
+  background: var(--gofi-cyan);
 }
 
 .empty-state .subtle {
@@ -1498,6 +2034,45 @@ button:disabled {
   display: block;
   max-width: 96px;
   max-height: 72px;
+}
+
+/* A document has no thumbnail, so the chip says the two things that decide what
+   will happen to it: which file, and whether it is inside the project (the agent
+   reads it by path) or outside (its text rides along with the message). */
+.attachment.file {
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 26px 4px 10px;
+  border-radius: 13px;
+  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.18));
+}
+
+.attachment .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.82em;
+}
+
+.attachment .file-detail {
+  flex: 0 0 auto;
+  font-size: 0.74em;
+  opacity: 0.6;
+}
+
+.attachment.file .remove {
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  color: var(--vscode-foreground);
+  background: transparent;
+}
+
+.attachment.file .remove:hover {
+  color: var(--gofi-cyan);
+  background: transparent;
 }
 
 .attachment .remove {
