@@ -21,15 +21,24 @@ var (
 		LanguagePython: true,
 		LanguageNodeJS: true,
 	}
-	validModels = map[string]bool{
-		ModelOpus48: true, ModelOpus47: true, ModelSonnet46: true, ModelHaiku45: true,
-	}
+	// validModels stays in lockstep with AllModels(): the map is built at
+	// package load so adding a new Model* const + entry in AllModels() is
+	// enough — no separate list to keep in sync.
+	validModels = buildValidModels()
 	validAgents = map[string]bool{
 		AgentPD: true, AgentSpec: true, AgentEng: true, AgentUI: true,
 		AgentOps: true, AgentQA: true, AgentDoc: true, AgentStatus: true,
 		AgentFull: true,
 	}
 )
+
+func buildValidModels() map[string]bool {
+	m := make(map[string]bool, len(AllModels()))
+	for _, id := range AllModels() {
+		m[id] = true
+	}
+	return m
+}
 
 func (c *GofiConfig) Validate() error {
 	if c.Version != CurrentVersion {

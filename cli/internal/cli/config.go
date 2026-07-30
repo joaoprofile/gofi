@@ -127,6 +127,12 @@ func mergeWizardIntoConfig(cfg *config.GofiConfig, r *wizard.Result) *config.Gof
 	}
 	cfg.AI.Host = r.AIHost
 	cfg.AI.Model = r.AIModel
+	// Seed the picker list on legacy configs; a customised list is left
+	// alone. New projects start with only the selected model active — the
+	// rest of AllModels() is written as commented items by AI.MarshalYAML.
+	if len(cfg.AI.Models) == 0 {
+		cfg.AI.Models = []string{r.AIModel}
+	}
 	cfg.Agents = append([]string(nil), r.Agents...)
 	cfg.Sources.Agents = r.AgentsRef
 	if len(r.SDKURLs) > 0 {

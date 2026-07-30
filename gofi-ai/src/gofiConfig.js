@@ -8,19 +8,20 @@ const path = require('path');
  * @typedef {Object} GofiProject
  * @property {string} name     `project.name`
  * @property {string} model    `ai.model`, or '' when unset
+ * @property {string[]} models `ai.models` — model IDs the picker offers; empty when unset
  * @property {string[]} agents Enabled agent slugs, in file order
  */
 
 /**
- * Reads the three fields of `.gofi.yaml` the chat actually uses: the project
- * name for the header, `ai.model` as the default model, and the agent list for
- * the slash-command chips.
+ * Reads the fields of `.gofi.yaml` the chat actually uses: the project name for
+ * the header, `ai.model` as the default model, `ai.models` as the model list
+ * the /model picker offers, and the agent list for the slash-command chips.
  *
  * This is a targeted scanner, not a YAML parser — pulling a YAML dependency in
- * to read three scalars would be the whole extension's only runtime dep. It
- * reads the shape `gofi init` writes (two-space indent, block sequences) and
- * returns null on anything it doesn't recognise, which degrades to "no project
- * context" rather than to a wrong answer.
+ * to read a handful of scalars would be the whole extension's only runtime dep.
+ * It reads the shape `gofi init` writes (indented mappings, block sequences)
+ * and returns null on anything it doesn't recognise, which degrades to "no
+ * project context" rather than to a wrong answer.
  *
  * @param {string} root Workspace folder
  * @returns {GofiProject | null}
@@ -36,9 +37,15 @@ function readGofiProject(root) {
 	let name = '';
 	let model = '';
 	/** @type {string[]} */
+	const models = [];
+	/** @type {string[]} */
 	const agents = [];
 	/** @type {string|null} */
 	let section = null;
+	// Sub-block state inside the current section. Only `ai.models` uses it
+	// today — an inline sequence that the flat top/section split can't see.
+	/** @type {string|null} */
+	let subsection = null;
 
 	for (const line of raw.split(/\r?\n/)) {
 		if (line.trim() === '' || line.trimStart().startsWith('#')) {
@@ -49,12 +56,14 @@ function readGofiProject(root) {
 		const top = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
 		if (top) {
 			section = top[1];
+			subsection = null;
 			continue;
 		}
 
 		const indented = /^\s+(.*)$/.exec(line);
 		if (!indented) {
 			section = null;
+			subsection = null;
 			continue;
 		}
 		const body = indented[1];
@@ -67,6 +76,15 @@ function readGofiProject(root) {
 			continue;
 		}
 
+		if (section === 'ai' && subsection === 'models') {
+			const item = /^-\s*(\S+)/.exec(body);
+			if (item) {
+				models.push(unquote(stripComment(item[1])));
+				continue;
+			}
+			// A sibling key inside `ai:` closes the models list.
+		}
+
 		const pair = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(body);
 		if (!pair) {
 			continue;
@@ -76,13 +94,18 @@ function readGofiProject(root) {
 			name = unquote(stripComment(value));
 		} else if (section === 'ai' && key === 'model') {
 			model = unquote(stripComment(value));
+			subsection = null;
+		} else if (section === 'ai' && key === 'models' && stripComment(value) === '') {
+			subsection = 'models';
+		} else if (section === 'ai') {
+			subsection = null;
 		}
 	}
 
 	if (name === '') {
 		return null; // no identity — treat it as not a gofi project
 	}
-	return { name, model, agents };
+	return { name, model, models, agents };
 }
 
 /**
@@ -104,6 +127,23 @@ const SKILL_FILE = 'SKILL.md';
 
 /** The file that marks a gofi project root. */
 const CONFIG_FILE = '.gofi.yaml';
+
+/**
+ * Model IDs the /model picker offers when a project has no `ai.models:` yet,
+ * and the baseline used by `persistSelectedModel` when rewriting the yaml so
+ * the full cardápio is preserved even for configs that started with a short
+ * list. Keep in sync with `cli/internal/config/config.go: AllModels()` — adding
+ * a model there without mirroring it here means legacy users won't see it.
+ */
+const PINNED_MODELS = [
+	'claude-fable-5',
+	'claude-opus-5',
+	'claude-opus-4-8',
+	'claude-opus-4-7',
+	'claude-sonnet-5',
+	'claude-sonnet-4-6',
+	'claude-haiku-4-5',
+];
 
 /**
  * Finds the gofi project root at or above `start`.
@@ -240,4 +280,136 @@ function unquote(value) {
 	return value;
 }
 
-module.exports = { readGofiProject, readGofiSkills, findProjectRoot, SKILLS_DIR, SKILL_FILE, CONFIG_FILE };
+/**
+ * Rewrites the `ai:` block of `.gofi.yaml` so `newModel` becomes both the
+ * default (`ai.model`) and the only active entry in `ai.models` — every other
+ * known model is written back as a `# - id` comment, preserving the
+ * "cardápio" pattern that `gofi init` establishes.
+ *
+ * The known-models list is taken from the current file (active + commented),
+ * so anything the user or `gofi config` already introduced is kept. If
+ * `newModel` isn't listed at all, it's added to the top.
+ *
+ * The write is line-based on purpose: pulling a YAML dependency in just to
+ * rewrite a single block would be the extension's only runtime dep, and a
+ * naïve full re-serialisation would drop the comments the Go marshaller
+ * produces. Only the `ai:` block is touched — every other section of the
+ * file is spliced through byte-for-byte.
+ *
+ * @param {string} root      Project root (folder holding `.gofi.yaml`)
+ * @param {string} newModel  Model ID (e.g. `claude-opus-5`)
+ * @returns {'written' | 'no-project' | 'no-ai-block'}
+ * @throws {Error} on filesystem errors (caller decides how to surface them)
+ */
+function persistSelectedModel(root, newModel) {
+	if (!root || typeof newModel !== 'string' || newModel.trim() === '') {
+		return 'no-project';
+	}
+	const filePath = path.join(root, CONFIG_FILE);
+	let raw;
+	try {
+		raw = fs.readFileSync(filePath, 'utf8');
+	} catch {
+		return 'no-project';
+	}
+
+	// Preserve the original line ending so the diff is minimal on both LF and CRLF checkouts.
+	const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+	const lines = raw.split(/\r?\n/);
+
+	// Find `ai:` (top-level key, no indent) and the next top-level key that closes it.
+	let aiStart = -1;
+	let aiEnd = lines.length;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (aiStart === -1) {
+			if (/^ai\s*:\s*(#.*)?$/.test(line)) {
+				aiStart = i;
+			}
+			continue;
+		}
+		// A non-indented `key:` after `ai:` ends the block. Comments and
+		// blanks belong to whatever comes next — go-yaml groups them with
+		// the following key — so they close the ai block too.
+		if (line.trim() === '' || /^#/.test(line)) {
+			aiEnd = i;
+			break;
+		}
+		if (/^[A-Za-z_][\w-]*\s*:/.test(line)) {
+			aiEnd = i;
+			break;
+		}
+	}
+	if (aiStart === -1) {
+		return 'no-ai-block';
+	}
+
+	// Walk the ai: block to pull host and the union of active + commented models.
+	let host = 'claude-vscode';
+	/** @type {string[]} */
+	const knownModels = [];
+	const seen = new Set();
+	let inModels = false;
+	for (let i = aiStart + 1; i < aiEnd; i++) {
+		const line = lines[i];
+		const hostMatch = /^\s+host\s*:\s*(\S+)/.exec(line);
+		if (hostMatch) {
+			host = unquote(stripComment(hostMatch[1]));
+			inModels = false;
+			continue;
+		}
+		if (/^\s+models\s*:\s*$/.test(line)) {
+			inModels = true;
+			continue;
+		}
+		if (inModels) {
+			const active = /^\s+-\s*(\S+)/.exec(line);
+			if (active) {
+				const id = unquote(stripComment(active[1]));
+				if (id && !seen.has(id)) { seen.add(id); knownModels.push(id); }
+				continue;
+			}
+			const commented = /^\s*#\s*-\s*(\S+)/.exec(line);
+			if (commented) {
+				const id = unquote(stripComment(commented[1]));
+				if (id && !seen.has(id)) { seen.add(id); knownModels.push(id); }
+				continue;
+			}
+			// Another key at the same indent as `models` ends the sublist.
+			if (/^\s+[A-Za-z_][\w-]*\s*:/.test(line)) {
+				inModels = false;
+			}
+		}
+	}
+	// Fold in the full cardápio so a yaml that started with a short `ai.models:`
+	// list ends up carrying every pinned version — the ones not in use as
+	// `# - id` comments. Without this, picking one model would silently prune
+	// the menu the next `/model` sees.
+	for (const id of PINNED_MODELS) {
+		if (!seen.has(id)) { seen.add(id); knownModels.push(id); }
+	}
+	if (!seen.has(newModel)) {
+		knownModels.unshift(newModel);
+	}
+
+	// Rebuild the ai: block. Indentation matches what MarshalYAML in Go emits (4 spaces).
+	const indent = '    ';
+	const rebuilt = [
+		'ai:',
+		`${indent}host: ${host}`,
+		`${indent}model: ${newModel}`,
+		`${indent}# Modelos exibidos pelo /model no gofi-ai. Descomente para adicionar ao picker.`,
+		`${indent}models:`,
+		`${indent}${indent}- ${newModel}`,
+	];
+	for (const id of knownModels) {
+		if (id === newModel) { continue; }
+		rebuilt.push(`${indent}${indent}# - ${id}`);
+	}
+
+	const updated = [...lines.slice(0, aiStart), ...rebuilt, ...lines.slice(aiEnd)].join(eol);
+	fs.writeFileSync(filePath, updated, 'utf8');
+	return 'written';
+}
+
+module.exports = { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, PINNED_MODELS, SKILLS_DIR, SKILL_FILE, CONFIG_FILE };

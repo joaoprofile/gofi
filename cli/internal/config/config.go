@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,8 +22,11 @@ const (
 	LanguagePython = "python"
 	LanguageNodeJS = "nodejs"
 
+	ModelFable5   = "claude-fable-5"
+	ModelOpus5    = "claude-opus-5"
 	ModelOpus48   = "claude-opus-4-8"
 	ModelOpus47   = "claude-opus-4-7"
+	ModelSonnet5  = "claude-sonnet-5"
 	ModelSonnet46 = "claude-sonnet-4-6"
 	ModelHaiku45  = "claude-haiku-4-5"
 
@@ -97,6 +101,20 @@ func AllAgents() []string {
 		AgentPD, AgentSpec, AgentEng, AgentUI,
 		AgentOps, AgentQA, AgentDoc, AgentStatus,
 		AgentFull,
+	}
+}
+
+// AllModels returns the canonical Claude model IDs the /model picker offers.
+// Single source of truth: `gofi init` seeds it into .gofi.yaml as `ai.models`,
+// and the gofi-ai extension reads that list. Adding a new model = one entry
+// here (plus a Model* const above). Ordered by family (flagship → light) and,
+// within a family, newest → oldest.
+func AllModels() []string {
+	return []string{
+		ModelFable5,
+		ModelOpus5, ModelOpus48, ModelOpus47,
+		ModelSonnet5, ModelSonnet46,
+		ModelHaiku45,
 	}
 }
 
@@ -241,9 +259,72 @@ type Project struct {
 	Root string `yaml:"root"`
 }
 
+// AI captures the AI host and model used by the project.
+//
+// Models is the list of model IDs the gofi-ai extension's /model picker
+// offers (the active picks). Any ID in AllModels() that isn't in Models is
+// still written to the file as a `# - id` comment — the "cardápio" — so the
+// user can discover options and opt in by uncommenting.
 type AI struct {
-	Host  string `yaml:"host"`
-	Model string `yaml:"model"`
+	Host   string   `yaml:"host"`
+	Model  string   `yaml:"model"`
+	Models []string `yaml:"models,omitempty"`
+}
+
+// MarshalYAML renders the AI block with the picker "menu" comment: active
+// models are written as normal sequence items, and every known model
+// (AllModels()) that isn't active is glued after the last active item as a
+// commented line — go-yaml prefixes each newline of a FootComment with `# `.
+//
+// This means: adding a Model* to AllModels() automatically shows up as a
+// commented entry the next time any project's config is (re)saved. No
+// per-project edit needed to advertise new models.
+func (a AI) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{Kind: yaml.MappingNode}
+	add := func(key, val string) {
+		node.Content = append(node.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: key},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: val},
+		)
+	}
+	add("host", a.Host)
+	add("model", a.Model)
+
+	if len(a.Models) == 0 && len(AllModels()) == 0 {
+		return node, nil
+	}
+
+	active := make(map[string]bool, len(a.Models))
+	seq := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.LiteralStyle}
+	seq.Style = 0 // block style (default) — one item per line
+	for _, m := range a.Models {
+		active[m] = true
+		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: m})
+	}
+
+	// Known-but-inactive models become commented items glued after the last
+	// active one. If nothing is active (shouldn't happen — init seeds
+	// a.Model), fall back to a HeadComment on the (empty) sequence so the
+	// menu is still visible.
+	var inactive []string
+	for _, m := range AllModels() {
+		if !active[m] {
+			inactive = append(inactive, "- "+m)
+		}
+	}
+	if len(inactive) > 0 {
+		commented := strings.Join(inactive, "\n")
+		if len(seq.Content) > 0 {
+			seq.Content[len(seq.Content)-1].FootComment = commented
+		} else {
+			seq.HeadComment = commented
+		}
+	}
+
+	key := &yaml.Node{Kind: yaml.ScalarNode, Value: "models"}
+	key.HeadComment = "Modelos exibidos pelo /model no gofi-ai. Descomente para adicionar ao picker."
+	node.Content = append(node.Content, key, seq)
+	return node, nil
 }
 
 type Sources struct {

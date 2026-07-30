@@ -55,6 +55,10 @@
  *           An engine conversation to continue instead of opening a new one —
  *           how a chat reopened from the panel's history keeps its context. A
  *           provider that cannot resume ignores it and starts fresh.
+ * @property {string | null} [modelOverride]
+ *           Model chosen for this conversation via the `/model` command, taking
+ *           precedence over `gofiAI.model` and `.gofi.yaml` `ai.model`. Null
+ *           means no override — fall back to the configured default.
  *
  * @typedef {Object} Turn
  * @property {string} prompt

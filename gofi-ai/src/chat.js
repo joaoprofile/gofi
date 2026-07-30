@@ -4,7 +4,7 @@ const vscode = require('vscode');
 const crypto = require('crypto');
 const path = require('path');
 const { resolveProvider } = require('./providers/index.js');
-const { readGofiProject, readGofiSkills, findProjectRoot, SKILLS_DIR, SKILL_FILE } = require('./gofiConfig.js');
+const { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, PINNED_MODELS, SKILLS_DIR, SKILL_FILE } = require('./gofiConfig.js');
 const { UsageLedger } = require('./usage.js');
 const ragAudit = require('./ragAudit.js');
 const { ApprovalBridge, hookSettings } = require('./approvals.js');
@@ -175,6 +175,12 @@ class Chat {
 		this.resumeArmed = false;
 		/** The turn in flight, kept so a failed resume can be retried without it. */
 		this.lastTurn = null;
+		/**
+		 * Model chosen for this conversation via `/model`, live only for the life
+		 * of the chat: it wins over `gofiAI.model` and `.gofi.yaml` `ai.model`.
+		 * @type {string|null}
+		 */
+		this.modelOverride = null;
 
 		this.watchEditor();
 	}
@@ -578,6 +584,18 @@ class Chat {
 			return;
 		}
 
+		// `/model [nome]` is a client-side switch: no round-trip to the engine,
+		// no bill. Only recognised when the whole message is the command, so a
+		// real question that happens to mention it (`o que é /model?`) still goes
+		// through.
+		const modelMatch = attached.length === 0 && documents.length === 0
+			? /^\/model(?:\s+(.+))?\s*$/.exec(prompt)
+			: null;
+		if (modelMatch) {
+			this.handleModelCommand((modelMatch[1] || '').trim());
+			return;
+		}
+
 		const cwd = this.cwd;
 		if (!cwd) {
 			this.post({
@@ -616,6 +634,148 @@ class Chat {
 	}
 
 	/**
+	 * Swaps the model this conversation runs on.
+	 *
+	 * The change is scoped to this chat and lives until the panel goes away —
+	 * `gofiAI.model` is left alone, so other conversations keep whatever the user
+	 * configured. The running process (if any) is disposed so the next turn spawns
+	 * with the new `--model` flag; the engine's session id is preserved and the
+	 * conversation continues instead of restarting.
+	 *
+	 * `/model` alone (no argument) prints a hint instead of changing anything —
+	 * the user asked what was available, not to switch blindly.
+	 *
+	 * @param {string} name Bare model name (`opus`, `sonnet`, `claude-opus-4-8`…).
+	 */
+	handleModelCommand(name) {
+		if (name === '') {
+			this.pickModel();
+			return;
+		}
+
+		this.modelOverride = name;
+		// The engine's model is fixed at spawn: dropping the running process is
+		// what makes the next turn come up with `--model <novo>`. The engine's
+		// session id stays on the record, so `--resume` keeps the conversation.
+		this.stop();
+		if (this.session) {
+			this.session.dispose();
+			this.session = null;
+		}
+		if (this.approvals) {
+			this.approvals.dispose();
+			this.approvals = null;
+		}
+		this.pendingApprovals.clear();
+		this.pending.length = 0;
+		this.running = false;
+		this.resumeArmed = false;
+		this.lastTurn = null;
+		this.setRunning(false);
+
+		// Persist the selection to .gofi.yaml so other panels, future sessions
+		// and CLI agents pick up the same default. Failure here doesn't block
+		// the switch: modelOverride already routes the next turn to `name`.
+		let persistHint = 'A próxima mensagem já sobe o motor com esse modelo.';
+		if (this.projectRoot) {
+			try {
+				const result = persistSelectedModel(this.projectRoot, name);
+				if (result === 'written') {
+					persistHint += ' Gravado em .gofi.yaml (demais modelos ficam comentados).';
+				}
+			} catch (err) {
+				persistHint += ` Não consegui gravar em .gofi.yaml: ${err.message}.`;
+				vscode.window.showWarningMessage(`GOFI AI: modelo trocado, mas falha ao persistir em .gofi.yaml — ${err.message}`);
+			}
+		}
+
+		this.post({
+			type: 'notice',
+			text: `Modelo trocado para ${name}.`,
+			hint: persistHint,
+		});
+		vscode.window.showInformationMessage(`GOFI AI: modelo trocado para ${name}.`);
+	}
+
+	/**
+	 * Opens the model picker.
+	 *
+	 * Only versioned IDs are offered — aliases like `opus`/`sonnet`/`haiku`
+	 * resolve to a different underlying model over time, and would silently
+	 * change what `.gofi.yaml` locks in. The list is the union of `ai.models:`
+	 * from `.gofi.yaml` (seeded by `gofi init` from `config.AllModels()`) with
+	 * PINNED_MODELS, so a legacy config still gets choices. A free-form
+	 * input covers variants (dated builds, `[1m]` context…) that nobody thought
+	 * to pin yet.
+	 */
+	async pickModel() {
+		const project = this.projectRoot ? readGofiProject(this.projectRoot) : null;
+		// `ai.model` in `.gofi.yaml` is the current selection when there is no
+		// session override yet — otherwise a fresh chat shows nothing preselected
+		// and the user can't tell what is running.
+		const current = this.modelOverride
+			|| (project && project.model)
+			|| (this.config.get('model') || '').trim();
+
+		const fromProject = project && Array.isArray(project.models)
+			? project.models.filter((m) => typeof m === 'string' && m.trim() !== '')
+			: [];
+		// Merge the project list with the fallback so someone who ran `gofi init`
+		// months ago (only `opus` under `ai.models`) still sees every pinned
+		// version. Project entries come first — they are what the project intends
+		// — and dedup preserves that order.
+		const seen = new Set();
+		const versions = [];
+		for (const id of [...fromProject, ...PINNED_MODELS]) {
+			if (!seen.has(id)) {
+				seen.add(id);
+				versions.push(id);
+			}
+		}
+
+		/** @type {(vscode.QuickPickItem & {value?: string, custom?: boolean})[]} */
+		const items = versions.map((id) => ({
+			label: id,
+			description: fromProject.includes(id) ? 'do .gofi.yaml' : undefined,
+			detail: id === current ? 'em uso nesta conversa' : undefined,
+			picked: id === current,
+			value: id,
+		}));
+		items.push(
+			{ label: 'outro', kind: vscode.QuickPickItemKind.Separator },
+			{
+				label: 'Digitar outro modelo…',
+				description: 'ex.: claude-haiku-4-5-20251001, claude-opus-4-7[1m]',
+				custom: true,
+			},
+		);
+
+		const choice = await vscode.window.showQuickPick(items, {
+			title: 'GOFI AI — trocar o modelo desta conversa',
+			placeHolder: current
+				? `atual: ${current} — escolha uma versão específica`
+				: 'escolha uma versão específica',
+		});
+		if (!choice) {
+			return;
+		}
+		let name = choice.value || '';
+		if (choice.custom) {
+			const typed = await vscode.window.showInputBox({
+				title: 'GOFI AI — nome do modelo',
+				prompt: 'Ex.: claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5-20251001',
+				value: current,
+				validateInput: (v) => (v.trim() === '' ? 'informe um nome de modelo.' : null),
+			});
+			if (!typed) {
+				return;
+			}
+			name = typed.trim();
+		}
+		this.handleModelCommand(name);
+	}
+
+	/**
 	 * Sends one turn to the engine. Caller guarantees no other turn is in
 	 * flight on this session.
 	 *
@@ -649,6 +809,7 @@ class Chat {
 				project: readGofiProject(this.projectRoot || this.cwd),
 				hookSettings: settings,
 				resumeSessionId: this.record.engineSessionId,
+				modelOverride: this.modelOverride,
 			});
 		}
 

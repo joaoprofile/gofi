@@ -116,7 +116,16 @@ ops:
 
 ai:
     host: {{.AI.Host}}                      # claude-vscode
-    model: {{.AI.Model}}                    # claude-opus-4-8 | claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5
+    model: {{.AI.Model}}                    # modelo default; deve estar ativo em models
+    # Modelos exibidos pelo /model no gofi-ai.
+    # `gofi init` grava só o selecionado como ativo; os demais de config.AllModels()
+    # ficam como `# - id` (cardápio). Descomente para adicionar ao picker.
+    models:
+        - {{.AI.Model}}
+        # - claude-fable-5
+        # - claude-opus-5
+        # - claude-opus-4-8
+        # ... (demais IDs de config.AllModels())
 
 # Agents habilitados. Skills são sempre instaladas em .claude/skills/; esta
 # lista escopa os diretórios .claude/knowledge/{agent}/.

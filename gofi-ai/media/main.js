@@ -538,9 +538,19 @@
 
 		if (token.mode === 'skill') {
 			const needle = token.query.toLowerCase();
-			pickerItems = skills
-				.filter((s) => s.slug.toLowerCase().includes(needle))
-				.map((s) => ({ value: `/${s.slug}`, label: `/${s.slug}`, detail: s.title }));
+			// `/model` is a client-side switch, not a project skill — but it lives
+			// in the same picker so users find it the same way. Prepended, and
+			// only when the query still matches it.
+			const items = [];
+			if ('model'.startsWith(needle)) {
+				items.push({ value: '/model', label: '/model', detail: 'trocar o modelo desta conversa' });
+			}
+			for (const s of skills) {
+				if (s.slug.toLowerCase().includes(needle)) {
+					items.push({ value: `/${s.slug}`, label: `/${s.slug}`, detail: s.title });
+				}
+			}
+			pickerItems = items;
 			if (pickerItems.length === 0) {
 				closePicker();
 				return;
@@ -713,7 +723,10 @@
 		}
 
 		const hints = document.createElement('ul');
-		for (const [key, text] of [['/', 'chama uma skill do projeto'], ['@', 'referencia um arquivo']]) {
+		for (const [key, text] of [
+			['/', 'chama uma skill do projeto  ·  /model troca o modelo'],
+			['@', 'referencia um arquivo'],
+		]) {
 			const item = document.createElement('li');
 			const kbd = document.createElement('kbd');
 			kbd.textContent = key;
@@ -2332,6 +2345,12 @@
 				clearIndicator();
 				notice(message.message, message.hint);
 				endTurn();
+				break;
+
+			case 'notice':
+				// Informative aside from the host (a `/model` switch, for now).
+				// Not an error and not a turn — no indicator, no `endTurn`.
+				notice(message.text, message.hint);
 				break;
 
 			case 'cleared':

@@ -68,7 +68,7 @@ function chatSystemPrompt(askPerCall) {
 }
 
 /** Flags for a persistent, streaming session. */
-function sessionArgs(config, project, resumeId, writesAllowed, settings) {
+function sessionArgs(config, project, resumeId, writesAllowed, settings, modelOverride) {
 	const this_askPerCall = Boolean(settings);
 	const args = [
 		'--print',
@@ -84,9 +84,11 @@ function sessionArgs(config, project, resumeId, writesAllowed, settings) {
 		chatSystemPrompt(this_askPerCall),
 	];
 
-	// An explicit setting wins; otherwise a gofi project's own `ai.model` is the
-	// right default, so the chat and the CLI agents run on the same model.
-	const model = (config.get('model') || '').trim() || (project && project.model) || '';
+	// A per-conversation `/model` wins; otherwise an explicit setting; otherwise
+	// a gofi project's own `ai.model`, so the chat and the CLI agents run on the
+	// same model by default.
+	const override = typeof modelOverride === 'string' ? modelOverride.trim() : '';
+	const model = override !== '' ? override : ((config.get('model') || '').trim() || (project && project.model) || '');
 	if (model !== '') {
 		args.push('--model', model);
 	}
@@ -174,7 +176,14 @@ class ClaudeCodeSession {
 			this.killChild();
 		}
 		const exe = executableFrom(this.ctx.config);
-		const args = sessionArgs(this.ctx.config, this.ctx.project, this.sessionId, writesAllowed, this.ctx.hookSettings);
+		const args = sessionArgs(
+			this.ctx.config,
+			this.ctx.project,
+			this.sessionId,
+			writesAllowed,
+			this.ctx.hookSettings,
+			this.ctx.modelOverride || null,
+		);
 		this.childWritesAllowed = writesAllowed;
 
 		let child;
