@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    // The alias table lives in the base config, the way an Nx workspace ships it.
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["src/*"],
+    }
+  }
+}

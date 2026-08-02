@@ -1,0 +1,6 @@
+{
+  "name": "shop-astro",
+  "dependencies": {
+    "astro": "^5.0.0"
+  }
+}

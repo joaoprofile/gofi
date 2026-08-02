@@ -1,0 +1,6 @@
+{
+  "name": "shop-vue",
+  "dependencies": {
+    "vue": "^3.5.0"
+  }
+}

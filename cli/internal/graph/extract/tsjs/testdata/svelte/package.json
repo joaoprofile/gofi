@@ -1,0 +1,6 @@
+{
+  "name": "shop-svelte",
+  "dependencies": {
+    "svelte": "^5.0.0"
+  }
+}

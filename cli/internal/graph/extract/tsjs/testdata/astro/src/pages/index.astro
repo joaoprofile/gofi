@@ -1,0 +1,10 @@
+---
+import Hero from '../components/Hero.astro';
+import { greet } from '../lib/greet';
+
+const title = greet('gofi');
+---
+
+<main>
+  <Hero title={title} />
+</main>

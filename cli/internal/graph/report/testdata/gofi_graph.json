@@ -1,0 +1,712 @@
+{
+ "schema": "gofi-graph/v1",
+ "tool": "gofi-graph",
+ "language": "go",
+ "module": "sample",
+ "mode": "fast",
+ "stats": {
+  "packages": 3,
+  "types": 5,
+  "funcs": 7,
+  "methods": 6,
+  "files": 3,
+  "loc": 80,
+  "nodes": 21,
+  "edges": 39,
+  "call_edges": 7,
+  "unresolved_calls": 0,
+  "ambiguous_calls": 5,
+  "communities": 1
+ },
+ "files": {
+  "api/api.go": {
+   "path": "api/api.go",
+   "hash": "f1359da8563e2d988efdf99ae9ee2c64",
+   "unit": "sample/api",
+   "lines": 42
+  },
+  "main.go": {
+   "path": "main.go",
+   "hash": "f3d2c5752fe7dea3ad8ddf71931fcd62",
+   "unit": "sample",
+   "lines": 12
+  },
+  "store/store.go": {
+   "path": "store/store.go",
+   "hash": "de92385a920298f1587bd2e527dfccef",
+   "unit": "sample/store",
+   "lines": 26
+  }
+ },
+ "communities": [
+  {
+   "id": 0,
+   "label": "api",
+   "size": 11,
+   "packages": [
+    "sample/api",
+    "sample/store",
+    "sample"
+   ],
+   "top": [
+    "func:sample/api.par",
+    "func:sample/api.Bootstrap",
+    "func:sample/store.NewAudit",
+    "type:sample/store.Repo",
+    "func:sample.main"
+   ]
+  }
+ ],
+ "cycles": [
+  [
+   "func:sample/api.impar",
+   "func:sample/api.par"
+  ]
+ ],
+ "surprises": null,
+ "nodes": [
+  {
+   "id": "func:sample.main",
+   "kind": "func",
+   "name": "main",
+   "unit": "sample",
+   "file": "main.go",
+   "line": 8,
+   "lines": 4,
+   "vis": "private",
+   "sig": "func()",
+   "community": 0,
+   "in_deg": 0,
+   "out_deg": 3,
+   "score": 3
+  },
+  {
+   "id": "func:sample/api.Bootstrap",
+   "kind": "func",
+   "name": "Bootstrap",
+   "unit": "sample/api",
+   "file": "api/api.go",
+   "line": 33,
+   "lines": 9,
+   "vis": "public",
+   "sig": "func(r store.Repo) error",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 2,
+   "score": 4
+  },
+  {
+   "id": "func:sample/api.NewServer",
+   "kind": "func",
+   "name": "NewServer",
+   "unit": "sample/api",
+   "file": "api/api.go",
+   "line": 8,
+   "lines": 1,
+   "vis": "public",
+   "sig": "func(r store.Repo) *Server",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 1,
+   "score": 3
+  },
+  {
+   "id": "func:sample/api.impar",
+   "kind": "func",
+   "name": "impar",
+   "unit": "sample/api",
+   "file": "api/api.go",
+   "line": 26,
+   "lines": 6,
+   "vis": "private",
+   "sig": "func(n int) bool",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 1,
+   "score": 3
+  },
+  {
+   "id": "func:sample/api.par",
+   "kind": "func",
+   "name": "par",
+   "unit": "sample/api",
+   "file": "api/api.go",
+   "line": 19,
+   "lines": 6,
+   "vis": "private",
+   "doc": "par and impar are mutually recursive.",
+   "sig": "func(n int) bool",
+   "community": 0,
+   "in_deg": 2,
+   "out_deg": 1,
+   "score": 5
+  },
+  {
+   "id": "func:sample/store.NewAudit",
+   "kind": "func",
+   "name": "NewAudit",
+   "unit": "sample/store",
+   "file": "store/store.go",
+   "line": 23,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "sig": "func(inner Repo) *Audit",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 2,
+   "score": 4
+  },
+  {
+   "id": "func:sample/store.NewMemory",
+   "kind": "func",
+   "name": "NewMemory",
+   "unit": "sample/store",
+   "file": "store/store.go",
+   "line": 13,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "sig": "func() *Memory",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 1,
+   "score": 3
+  },
+  {
+   "id": "method:sample/api.Server.Start",
+   "kind": "method",
+   "name": "Start",
+   "unit": "sample/api",
+   "owner": "Server",
+   "file": "api/api.go",
+   "line": 11,
+   "lines": 1,
+   "vis": "public",
+   "doc": "Start brings the server up.",
+   "sig": "func() error",
+   "community": 1,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "method:sample/api.Worker.Start",
+   "kind": "method",
+   "name": "Start",
+   "unit": "sample/api",
+   "owner": "Worker",
+   "file": "api/api.go",
+   "line": 16,
+   "lines": 1,
+   "vis": "public",
+   "sig": "func() error",
+   "community": 2,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "method:sample/store.Audit.Get",
+   "kind": "method",
+   "name": "Get",
+   "unit": "sample/store",
+   "owner": "Audit",
+   "file": "store/store.go",
+   "line": 24,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "sig": "func(id string) (string, error)",
+   "community": 3,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "method:sample/store.Audit.Put",
+   "kind": "method",
+   "name": "Put",
+   "unit": "sample/store",
+   "owner": "Audit",
+   "file": "store/store.go",
+   "line": 25,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "sig": "func(id, v string) error",
+   "community": 4,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "method:sample/store.Memory.Get",
+   "kind": "method",
+   "name": "Get",
+   "unit": "sample/store",
+   "owner": "Memory",
+   "file": "store/store.go",
+   "line": 15,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "sig": "func(id string) (string, error)",
+   "community": 5,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "method:sample/store.Memory.Put",
+   "kind": "method",
+   "name": "Put",
+   "unit": "sample/store",
+   "owner": "Memory",
+   "file": "store/store.go",
+   "line": 16,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "sig": "func(id, v string) error",
+   "community": 6,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "pkg:sample",
+   "kind": "package",
+   "name": "main",
+   "unit": "sample",
+   "lines": 12,
+   "vis": "public",
+   "community": 0,
+   "in_deg": 0,
+   "out_deg": 2,
+   "score": 2
+  },
+  {
+   "id": "pkg:sample/api",
+   "kind": "package",
+   "name": "api",
+   "unit": "sample/api",
+   "lines": 42,
+   "vis": "public",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 1,
+   "score": 3
+  },
+  {
+   "id": "pkg:sample/store",
+   "kind": "package",
+   "name": "store",
+   "unit": "sample/store",
+   "lines": 26,
+   "vis": "public",
+   "context": "storage",
+   "community": 0,
+   "in_deg": 2,
+   "out_deg": 0,
+   "score": 4
+  },
+  {
+   "id": "type:sample/api.Server",
+   "kind": "struct",
+   "name": "Server",
+   "unit": "sample/api",
+   "file": "api/api.go",
+   "line": 6,
+   "lines": 1,
+   "vis": "public",
+   "doc": "Server exposes the API.",
+   "sig": "struct com 1 campo(s)",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 0,
+   "score": 2
+  },
+  {
+   "id": "type:sample/api.Worker",
+   "kind": "struct",
+   "name": "Worker",
+   "unit": "sample/api",
+   "file": "api/api.go",
+   "line": 14,
+   "lines": 1,
+   "vis": "public",
+   "doc": "Worker also has a Start: the case that confuses the syntactic heuristic.",
+   "sig": "struct com 1 campo(s)",
+   "community": 7,
+   "in_deg": 0,
+   "out_deg": 0,
+   "score": 0
+  },
+  {
+   "id": "type:sample/store.Audit",
+   "kind": "struct",
+   "name": "Audit",
+   "unit": "sample/store",
+   "file": "store/store.go",
+   "line": 21,
+   "lines": 1,
+   "vis": "public",
+   "context": "audit",
+   "doc": "Audit wraps another Repo. It also satisfies Repo.",
+   "sig": "struct com 1 campo(s)",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 1,
+   "score": 3
+  },
+  {
+   "id": "type:sample/store.Memory",
+   "kind": "struct",
+   "name": "Memory",
+   "unit": "sample/store",
+   "file": "store/store.go",
+   "line": 11,
+   "lines": 1,
+   "vis": "public",
+   "context": "storage",
+   "doc": "Memory keeps everything in memory.",
+   "sig": "struct com 1 campo(s)",
+   "community": 0,
+   "in_deg": 1,
+   "out_deg": 0,
+   "score": 2
+  },
+  {
+   "id": "type:sample/store.Repo",
+   "kind": "interface",
+   "name": "Repo",
+   "unit": "sample/store",
+   "file": "store/store.go",
+   "line": 5,
+   "lines": 4,
+   "vis": "public",
+   "context": "storage",
+   "doc": "Repo is the data output port.",
+   "sig": "interface{Get, Put}",
+   "community": 0,
+   "in_deg": 2,
+   "out_deg": 0,
+   "score": 4
+  }
+ ],
+ "edges": [
+  {
+   "from": "func:sample.main",
+   "to": "func:sample/api.Bootstrap",
+   "rel": "calls",
+   "file": "main.go",
+   "line": 10,
+   "conf": 0.95
+  },
+  {
+   "from": "func:sample.main",
+   "to": "func:sample/store.NewAudit",
+   "rel": "calls",
+   "file": "main.go",
+   "line": 9,
+   "conf": 0.95
+  },
+  {
+   "from": "func:sample.main",
+   "to": "func:sample/store.NewMemory",
+   "rel": "calls",
+   "file": "main.go",
+   "line": 9,
+   "conf": 0.95
+  },
+  {
+   "from": "func:sample/api.Bootstrap",
+   "to": "func:sample/api.NewServer",
+   "rel": "calls",
+   "file": "api/api.go",
+   "line": 34,
+   "conf": 0.9
+  },
+  {
+   "from": "func:sample/api.Bootstrap",
+   "to": "func:sample/api.par",
+   "rel": "calls",
+   "file": "api/api.go",
+   "line": 39,
+   "conf": 0.9
+  },
+  {
+   "from": "func:sample/api.NewServer",
+   "to": "type:sample/api.Server",
+   "rel": "uses",
+   "file": "api/api.go",
+   "line": 8,
+   "conf": 1
+  },
+  {
+   "from": "func:sample/api.impar",
+   "to": "func:sample/api.par",
+   "rel": "calls",
+   "file": "api/api.go",
+   "line": 30,
+   "conf": 0.9
+  },
+  {
+   "from": "func:sample/api.par",
+   "to": "func:sample/api.impar",
+   "rel": "calls",
+   "file": "api/api.go",
+   "line": 23,
+   "conf": 0.9
+  },
+  {
+   "from": "func:sample/store.NewAudit",
+   "to": "type:sample/store.Audit",
+   "rel": "uses",
+   "file": "store/store.go",
+   "line": 23,
+   "conf": 1
+  },
+  {
+   "from": "func:sample/store.NewAudit",
+   "to": "type:sample/store.Repo",
+   "rel": "uses",
+   "file": "store/store.go",
+   "line": 23,
+   "conf": 1
+  },
+  {
+   "from": "func:sample/store.NewMemory",
+   "to": "type:sample/store.Memory",
+   "rel": "uses",
+   "file": "store/store.go",
+   "line": 13,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample",
+   "to": "func:sample.main",
+   "rel": "contains",
+   "file": "main.go",
+   "line": 8,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample",
+   "to": "pkg:sample/api",
+   "rel": "imports",
+   "file": "main.go",
+   "line": 4,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample",
+   "to": "pkg:sample/store",
+   "rel": "imports",
+   "file": "main.go",
+   "line": 5,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "func:sample/api.Bootstrap",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 33,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "func:sample/api.NewServer",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 8,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "func:sample/api.impar",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 26,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "func:sample/api.par",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 19,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "method:sample/api.Server.Start",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 11,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "method:sample/api.Worker.Start",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 16,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "type:sample/api.Server",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 6,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "type:sample/api.Worker",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 14,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/api",
+   "to": "pkg:sample/store",
+   "rel": "imports",
+   "file": "api/api.go",
+   "line": 3,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "func:sample/store.NewAudit",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 23,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "func:sample/store.NewMemory",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 13,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "method:sample/store.Audit.Get",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 24,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "method:sample/store.Audit.Put",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 25,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "method:sample/store.Memory.Get",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 15,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "method:sample/store.Memory.Put",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 16,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "type:sample/store.Audit",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 21,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "type:sample/store.Memory",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 11,
+   "conf": 1
+  },
+  {
+   "from": "pkg:sample/store",
+   "to": "type:sample/store.Repo",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 5,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/api.Server",
+   "to": "method:sample/api.Server.Start",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 11,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/api.Worker",
+   "to": "method:sample/api.Worker.Start",
+   "rel": "contains",
+   "file": "api/api.go",
+   "line": 16,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/store.Audit",
+   "to": "method:sample/store.Audit.Get",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 24,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/store.Audit",
+   "to": "method:sample/store.Audit.Put",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 25,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/store.Audit",
+   "to": "type:sample/store.Repo",
+   "rel": "uses",
+   "file": "store/store.go",
+   "line": 21,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/store.Memory",
+   "to": "method:sample/store.Memory.Get",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 15,
+   "conf": 1
+  },
+  {
+   "from": "type:sample/store.Memory",
+   "to": "method:sample/store.Memory.Put",
+   "rel": "contains",
+   "file": "store/store.go",
+   "line": 16,
+   "conf": 1
+  }
+ ]
+}
