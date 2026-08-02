@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -35,7 +36,7 @@ gofi update --training`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			yes, _ := cmd.Flags().GetBool("yes")
 			training, _ := cmd.Flags().GetBool("training")
-			return runUpdate(yes, training)
+			return runUpdate(cmd.Context(), yes, training)
 		},
 	}
 	cmd.Flags().Bool("training", false, "also revalidate training topics with URL sources")
@@ -43,7 +44,7 @@ gofi update --training`,
 	return cmd
 }
 
-func runUpdate(autoConfirm, training bool) error {
+func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 	if training {
 		fmt.Fprintln(os.Stderr, "warning: --training is not yet implemented; running update without it")
 	}
@@ -152,6 +153,22 @@ func runUpdate(autoConfirm, training bool) error {
 	}
 	if err := writeInstalledSha(cfg.Project.Root, sha); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", installedFileName, err)
+	}
+	// A project scaffolded before the graph existed ignores all of .gofi/, which
+	// would keep the graph out of git for good.
+	if graphEnabled(cfg) {
+		if err := ensureGofiIgnored(cfg.Project.Root); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %v\n", err)
+		}
+	}
+	// The SDK checkout just moved, so the SDK scope of the graph describes code
+	// that is no longer there. Rebuilding is keyed on the recorded SDK SHA, so
+	// this is a no-op when the SDK did not actually change.
+	if note := buildGraphQuietly(ctx, cfg, cfg.Project.Root); note != "" {
+		fmt.Println(note)
+	}
+	if note := installGraphHooksQuietly(cfg, cfg.Project.Root); note != "" {
+		fmt.Println(note)
 	}
 
 	fmt.Printf("\nUpdate complete — .claude/ now at %s.\n", short(sha))

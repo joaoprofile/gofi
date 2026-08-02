@@ -42,12 +42,12 @@ func TestValidateEnvironments(t *testing.T) {
 }
 
 func TestValidateSurfacePath(t *testing.T) {
-	for _, ok := range []string{"", "web", "services", "back-end"} {
+	for _, ok := range []string{"", "web", "services", "back-end", ".", "apps/web", "Web"} {
 		if err := validateSurfacePath(ok); err != nil {
 			t.Errorf("%q should be valid: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"apps/web", "Web", "1web", "a/b"} {
+	for _, bad := range []string{"../up", "/abs", `a\b`} {
 		if err := validateSurfacePath(bad); err == nil {
 			t.Errorf("%q should be invalid", bad)
 		}

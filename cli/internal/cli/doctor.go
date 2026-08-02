@@ -12,6 +12,8 @@ import (
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/doctor"
+	"github.com/joaoprofile/gofi-cli/internal/githooks"
+	"github.com/joaoprofile/gofi-cli/internal/graph/workspace"
 	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
@@ -46,6 +48,10 @@ func runDoctor() error {
 	// check is orchestrated here and appended to the report.
 	if cfg != nil && cfg.Sources.Institutional != "" {
 		checks = append(checks, checkInstitutionalFreshness(cfg))
+	}
+	if graphEnabled(cfg) {
+		root := projectRootFromCfg(cfg)
+		checks = append(checks, checkGraph(cfg, root), checkGraphHooks(cfg, root))
 	}
 
 	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(int(os.Stdout.Fd()))
@@ -165,6 +171,57 @@ func institutionalFreshnessCheck(ref, committed, resolved string, resolveErr err
 			Hint:   "run `gofi institutional update` to sync the org base",
 		}
 	}
+}
+
+// checkGraph reports whether the agents have a map of this code to read, and
+// whether it still matches the code. A stale graph is worse than a missing one:
+// it is confidently wrong.
+func checkGraph(cfg *config.GofiConfig, root string) doctor.Check {
+	const name = "code graph"
+	ix, err := workspace.LoadIndex(root, backendLang(cfg))
+	if err != nil {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: "not built",
+			Hint:   "run `gofi graph build`",
+		}
+	}
+	var nodes int
+	scopes := make([]string, 0, len(ix.Scopes))
+	for _, s := range ix.Scopes {
+		scopes = append(scopes, s.Name)
+		nodes += s.Nodes
+	}
+	detail := fmt.Sprintf("%d nodes across %s", nodes, strings.Join(scopes, ", "))
+
+	if stale, err := graphIsStale(cfg, root); err == nil && stale {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: detail + ", older than the code",
+			Hint:   "run `gofi graph build --update`",
+		}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: detail}
+}
+
+// checkGraphHooks reports whether the graph is being kept current on its own.
+func checkGraphHooks(cfg *config.GofiConfig, root string) doctor.Check {
+	const name = "graph git hooks"
+	if !cfg.Graph.HooksOn() {
+		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "disabled in .gofi.yaml"}
+	}
+	installed := githooks.Installed(root)
+	if len(installed) < len(githooks.Managed) {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: fmt.Sprintf("%d of %d installed", len(installed), len(githooks.Managed)),
+			Hint:   "run `gofi graph hooks --install`",
+		}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: strings.Join(installed, ", ")}
 }
 
 func anyFailed(checks []doctor.Check) bool {

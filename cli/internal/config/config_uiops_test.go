@@ -104,7 +104,7 @@ func TestValidate_RejectsBadEnumsAndSources(t *testing.T) {
 			c.Frontend = &UISurface{Path: "web"}
 		},
 		"bad surface path": func(c *GofiConfig) {
-			c.Frontend = &UISurface{Framework: FrameworkReact, Path: "apps/web"}
+			c.Frontend = &UISurface{Framework: FrameworkReact, Path: "../outside"}
 		},
 		"bad ops cloud": func(c *GofiConfig) { c.Ops = &Ops{Cloud: "moon", Path: "ops"} },
 		"bad sources.ui ref": func(c *GofiConfig) {

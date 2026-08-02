@@ -42,7 +42,7 @@ func TestValidate_Invalid(t *testing.T) {
 		{"bad language", func(c *GofiConfig) { c.Backend.Language = "haskell" }},
 		{"empty root", func(c *GofiConfig) { c.Project.Root = "" }},
 		{"empty path", func(c *GofiConfig) { c.Backend.Path = "" }},
-		{"path with slash", func(c *GofiConfig) { c.Backend.Path = "src/inner" }},
+		{"path escaping the workspace", func(c *GofiConfig) { c.Backend.Path = "../elsewhere" }},
 		{"no backend no surface", func(c *GofiConfig) { c.Backend = nil; c.Frontend = nil; c.Mobile = nil }},
 		{"bad host", func(c *GofiConfig) { c.AI.Host = "cursor" }},
 		{"bad model", func(c *GofiConfig) { c.AI.Model = "gpt-5" }},
@@ -60,6 +60,45 @@ func TestValidate_Invalid(t *testing.T) {
 				t.Fatalf("expected error for %s", tc.name)
 			}
 		})
+	}
+}
+
+func TestValidSurfacePath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"src", true},
+		{".", true},
+		{"services/api", true},
+		{"apps/web/client", true},
+		{"src/App", true}, // an existing repo may capitalise
+		{"my_app", true},  // and use underscores
+		{"v2", true},      // and start with a digit
+		{".config", true}, // and hide the folder
+		{"", false},       // no path at all
+		{"/abs", false},   // outside the workspace
+		{"../up", false},  // climbing out
+		{"a/../b", false}, // climbing out mid-path
+		{"./src", false},  // redundant, and ambiguous once joined
+		{"a//b", false},   // empty segment
+		{`a\b`, false},    // Windows separator
+		{"C:/src", false}, // Windows drive
+		{"src ", false},   // stray whitespace (callers trim first)
+		{"src/*", false},  // glob, not a folder
+	}
+	for _, tc := range cases {
+		if got := ValidSurfacePath(tc.path); got != tc.want {
+			t.Errorf("ValidSurfacePath(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestValidate_SurfacePathAtRoot(t *testing.T) {
+	c := validConfig()
+	c.Backend.Path = "."
+	if err := c.Validate(); err != nil {
+		t.Fatalf("a backend at the workspace root should be valid: %v", err)
 	}
 }
 

@@ -50,6 +50,36 @@ func TestInstallGo(t *testing.T) {
 	mustExist(t, dir, "src/.migrations", "src/domain")
 }
 
+func TestInstallGo_KeepsExistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	data := sampleData()
+
+	// An existing repository already carries its own go.mod and main.go.
+	if err := os.MkdirAll(filepath.Join(dir, "src/my-svc"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	existing := map[string]string{
+		"src/go.mod":         "module github.com/acme/legacy\n",
+		"src/my-svc/main.go": "package main // legacy\n",
+		"README.md":          "# legacy readme\n",
+	}
+	for rel, body := range existing {
+		if err := os.WriteFile(filepath.Join(dir, rel), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	if _, err := InstallGo(dir, data); err != nil {
+		t.Fatalf("InstallGo: %v", err)
+	}
+
+	for rel, body := range existing {
+		mustContain(t, filepath.Join(dir, rel), strings.TrimSpace(body))
+	}
+	// Missing pieces are still filled in.
+	mustExist(t, dir, "go.work", ".gitignore", "src/domain")
+}
+
 func TestInstallRust(t *testing.T) {
 	dir := t.TempDir()
 	data := sampleData()

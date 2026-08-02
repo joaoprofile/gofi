@@ -44,9 +44,14 @@ const (
 	DSWeb    = "gofi-ui"
 	DSMobile = "gofi-ui-native"
 
-	// UI surface frameworks.
+	// UI surface frameworks. The field is free-form — a project may name one
+	// that is not here — and these are the ones gofi recognises on its own.
 	FrameworkReact       = "react"
 	FrameworkReactNative = "react-native"
+	FrameworkAngular     = "angular"
+	FrameworkVue         = "vue"
+	FrameworkSvelte      = "svelte"
+	FrameworkAstro       = "astro"
 
 	// UI brand presets (gofi-ui skill).
 	BrandBlue   = "blue"
@@ -129,6 +134,7 @@ type GofiConfig struct {
 	Agents   []string    `yaml:"agents"`
 	Sources  Sources     `yaml:"sources"`
 	Git      Git         `yaml:"git"`
+	Graph    *Graph      `yaml:"graph,omitempty"`
 	Training Training    `yaml:"training,omitempty"`
 	Test     TestSection `yaml:"test"`
 	Hsec     HsecConfig  `yaml:"hsec"`
@@ -351,6 +357,43 @@ type Sources struct {
 
 type Git struct {
 	Remote string `yaml:"remote"`
+}
+
+// Graph configures the code graph kept under .gofi/graph/. The whole block is
+// optional, and its absence means every default: the graph is what the agents
+// read before they open a file, so a project has one unless it says otherwise.
+type Graph struct {
+	// Enabled turns the graph off. nil (yaml absence) defaults to true.
+	Enabled *bool `yaml:"enabled,omitempty"`
+	// Hooks keeps the graph in step with the code through git hooks. nil
+	// (yaml absence) defaults to true.
+	Hooks *bool `yaml:"hooks,omitempty"`
+	// Deep resolves calls with the type-checker instead of the syntax tree:
+	// exact, at the cost of the project having to compile.
+	Deep bool `yaml:"deep,omitempty"`
+	// Exclude are directory glob patterns left out of the scan.
+	Exclude []string `yaml:"exclude,omitempty"`
+}
+
+// On reports whether the project keeps a graph.
+func (g *Graph) On() bool { return g == nil || g.Enabled == nil || *g.Enabled }
+
+// HooksOn reports whether gofi maintains the git hooks that rebuild the graph.
+// Turning the graph off turns the hooks off with it: a hook rebuilding
+// something the project does not want is worse than no hook.
+func (g *Graph) HooksOn() bool {
+	return g.On() && (g == nil || g.Hooks == nil || *g.Hooks)
+}
+
+// UseDeep reports whether builds use the type-checker.
+func (g *Graph) UseDeep() bool { return g != nil && g.Deep }
+
+// Excludes returns the scan exclusions.
+func (g *Graph) Excludes() []string {
+	if g == nil {
+		return nil
+	}
+	return g.Exclude
 }
 
 type Training struct {

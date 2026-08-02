@@ -6,23 +6,15 @@ coverage.html
 .env
 .env.local
 
-# Copiado pelo goreleaser before-hook a partir da raiz
 /cli/README.md
 
-# contexto da CLI, gerado ao lado do executável
 gofi.json
 
-# Resumo de apresentação — material local, não versionado
 /VISAO-GERAL.md
 /gofi.html
 
-# Fixture de teste do chat: um .gofi.yaml na raiz faz este repo se identificar
-# como um projeto gofi, o que ele não é
 /.gofi.yaml
-/_new_.gofi.yaml
+/.claude
 
-# Binários compilados que caem ao lado do main.go. Go nomeia o executável como
-# o diretório, então eles passam despercebidos num `git add -A` — e são dezenas
-# de MB que ficam no histórico para sempre.
 /cli/cmd/cmd
 /cli/internal/extensions/gen/gen

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,7 +14,10 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/detect"
 	"github.com/joaoprofile/gofi-cli/internal/gitops"
+	"github.com/joaoprofile/gofi-cli/internal/graph"
+	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
 	"github.com/joaoprofile/gofi-cli/internal/hsec"
 	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
@@ -172,7 +176,7 @@ func executePipeline(r *wizard.Result) error {
 			if err := os.MkdirAll(filepath.Join(r.Root, ".gofi"), 0o755); err != nil {
 				return err
 			}
-			if err := ensureGitignore(r.Root, ".gofi/"); err != nil {
+			if err := ensureGofiIgnored(r.Root); err != nil {
 				return err
 			}
 			return ensureGitignore(r.Root, ".env")
@@ -267,6 +271,15 @@ func executePipeline(r *wizard.Result) error {
 		extensionsNote = installExtensionsOnInit(context.Background())
 		return nil
 	}})
+	// The graph is the map the agents read before they open a file, so a
+	// project ships with one. Best effort like the extension above: a scaffold
+	// that cannot be scanned yet is still a working scaffold.
+	var graphNote, hooksNote string
+	steps = append(steps, spinner.Step{Name: "Build the code graph", Fn: func() error {
+		graphNote = buildGraphQuietly(context.Background(), cfg, r.Root)
+		hooksNote = installGraphHooksQuietly(cfg, r.Root)
+		return nil
+	}})
 
 	results := spinner.Run(steps)
 	if spinner.AnyFailed(results) {
@@ -276,8 +289,10 @@ func executePipeline(r *wizard.Result) error {
 			}
 		}
 	}
-	if extensionsNote != "" {
-		fmt.Println("  " + styles.Note(extensionsNote))
+	for _, note := range []string{extensionsNote, graphNote, hooksNote} {
+		if note != "" {
+			fmt.Println("  " + styles.Note(note))
+		}
 	}
 
 	// Web/Mobile via official CLIs — streamed output, after the spinner steps.
@@ -356,6 +371,48 @@ func ensureEnvFile(projectRoot string) error {
 	return os.WriteFile(path, []byte{}, 0o600)
 }
 
+// gofiIgnoreRules keep .gofi/ out of git except for the graph.
+//
+// The graph is versioned on purpose: it is the map the agents read, so the team
+// and CI should share the one the code actually produced instead of each
+// rebuilding their own. Canonical ordering in the JSON is what makes that
+// bearable to diff.
+//
+// Excluding a directory and re-including a child of it needs the `.gofi/*`
+// spelling — a plain `.gofi/` stops git from ever descending, and the negation
+// below would never be reached.
+var gofiIgnoreRules = []string{
+	".gofi/*",
+	"!" + graph.OutDir + "/",
+	external.ExtractorsDir + "/",
+}
+
+// ensureGofiIgnored writes those rules, upgrading a .gitignore written before
+// the graph existed. Order matters, so the legacy line is rewritten in place
+// rather than left to compete with the new ones.
+func ensureGofiIgnored(projectRoot string) error {
+	path := filepath.Join(projectRoot, ".gitignore")
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	var kept []string
+	for line := range strings.Lines(string(existing)) {
+		if trimmed := strings.TrimSpace(line); trimmed == ".gofi/" || slices.Contains(gofiIgnoreRules, trimmed) {
+			continue
+		}
+		kept = append(kept, strings.TrimRight(line, "\n"))
+	}
+	for len(kept) > 0 && strings.TrimSpace(kept[len(kept)-1]) == "" {
+		kept = kept[:len(kept)-1]
+	}
+	body := strings.Join(append(kept, gofiIgnoreRules...), "\n") + "\n"
+	if body == string(existing) {
+		return nil
+	}
+	return os.WriteFile(path, []byte(body), 0o644)
+}
+
 // ensureGitignore appends entry to <projectRoot>/.gitignore if not already
 // present, creating the file when missing.
 func ensureGitignore(projectRoot, entry string) error {
@@ -381,9 +438,9 @@ func ensureGitignore(projectRoot, entry string) error {
 // brand new surface. Path and DS are filled by the caller from the wizard; the
 // rest is a starting point the project is free to replace in .gofi.yaml — the
 // gofi-ui skill reads whatever is there.
-func defaultWebSurface() config.UISurface {
+func defaultWebSurface(dir string) config.UISurface {
 	return config.UISurface{
-		Framework: config.FrameworkReact,
+		Framework: detect.WebFramework(dir),
 		Brand:     config.BrandBlue,
 		Styling:   config.StylingTailwind,
 		State:     config.StateTanstackQuery,
@@ -412,7 +469,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 
 	var frontend, mobile *config.UISurface
 	if r.Has(wizard.EnvWeb) {
-		s := defaultWebSurface()
+		s := defaultWebSurface(filepath.Join(r.Root, r.WebPath))
 		s.Path, s.DS = r.WebPath, r.WebDS
 		frontend = &s
 	}

@@ -16,8 +16,11 @@ import (
 //
 // data.SourceRoot is required; the installer replaces the RootMarker in path
 // components and references {{.SourceRoot}} from go.work.tmpl.
+//
+// Files already present are never overwritten: `gofi init` runs on existing
+// repositories too, where go.mod, main.go and friends belong to the user.
 func InstallGo(projectRoot string, data TemplateData) ([]string, error) {
-	return installEmbedded("golang", projectRoot, data)
+	return installFS(embeddedFS, "embedded/golang", projectRoot, data, InstallOptions{KeepExisting: true})
 }
 
 // EnsureGoWorkSDK keeps <projectRoot>/go.work aligned with the local SDK

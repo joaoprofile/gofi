@@ -31,6 +31,24 @@ func findProjectRoot() (string, error) {
 	}
 }
 
+// declaredRoot is the workspace folder .gofi.yaml names, which is where the rest
+// of gofi — update, doctor, agent — already reads and writes. found is where the
+// file was located.
+//
+// The declared root is stored absolute, so it goes stale the moment the project
+// is cloned or copied somewhere else. When it no longer holds a .gofi.yaml it is
+// a path from another machine, and the directory the file was actually found in
+// is the only one that can be trusted.
+func declaredRoot(cfg *config.GofiConfig, found string) string {
+	if cfg == nil || cfg.Project.Root == "" {
+		return found
+	}
+	if _, err := os.Stat(filepath.Join(cfg.Project.Root, config.FileName)); err != nil {
+		return found
+	}
+	return cfg.Project.Root
+}
+
 // loadProjectConfig finds the project root and loads .gofi.yaml from there.
 // Returns the loaded config plus the project root path.
 func loadProjectConfig() (*config.GofiConfig, string, error) {

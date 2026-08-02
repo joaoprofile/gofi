@@ -160,6 +160,165 @@ estruturado**:
 
 ---
 
+## gofi graph — o mapa do código que o agente lê antes de abrir arquivo
+
+O MCP Light resolve o acesso a **recursos**. Falta o acesso à **estrutura do
+próprio projeto** — e o caminho natural do agente ali é varrer arquivos:
+`grep`, `glob`, abrir dezenas de arquivos até montar o quadro. Isso queima
+contexto e, pior, é impreciso: ele vê texto, não estrutura.
+
+O `gofi graph` inverte isso. Extrai a estrutura de uma vez, grava em disco, e o
+agente passa a consultar o grafo e abrir **só** os arquivos que a consulta
+apontou.
+
+> Escala real: a biblioteca padrão do Go tem 42 MB de código-fonte. O relatório
+> que a descreve tem 22 KB. É o mapa que entra no contexto, não a cidade inteira.
+
+### Não é um RAG
+
+Um RAG quebra arquivos em pedaços, gera embeddings e recupera por similaridade —
+"me traga o que se parece com isso". É probabilístico e opaco.
+
+Aqui não há embedding, vector store nem chamada de API. O grafo é
+**determinístico** e vem da árvore de sintaxe da linguagem. Cada aresta é um
+fato verificável:
+
+```json
+{
+  "from": "func:api.Bootstrap",
+  "to":   "method:api.Server.Start",
+  "rel":  "calls",
+  "file": "api/api.go", "line": 41,
+  "conf": 1
+}
+```
+
+Toda aresta carrega **onde no código ela existe** e **quanta confiança** tem. A
+mesma base de código sempre produz exatamente o mesmo JSON — diff limpo no git,
+nenhuma surpresa entre execuções.
+
+### Os dois modos
+
+| | `fast` (padrão) | `--deep` |
+|---|---|---|
+| Motor | `go/ast` — só sintaxe | `go/types` — type-checker de verdade |
+| Velocidade | 1,4 s para 336 pacotes / 700 mil linhas | ~10× mais lento |
+| Chamada de método | só resolve quando o nome é único no módulo | resolve sempre, pelo tipo do receptor |
+| Implementação de interface | não detecta | detecta |
+| Exige que o projeto compile | não | sim |
+| Confiança das arestas | 0,55 a 0,95 | 1,00 |
+
+O modo rápido **se recusa a adivinhar**. Se dois tipos têm um método `Start()`,
+ele conta a chamada como ambígua em vez de criar uma aresta que pode estar
+errada — um grafo com aresta errada é pior que um grafo incompleto, porque o
+agente confia nele.
+
+### O que ele extrai
+
+**Nós:** pacotes, structs, interfaces, tipos nomeados, funções e métodos — cada
+um com arquivo, linha, assinatura e a primeira linha do doc comment.
+
+**Arestas:** `contains`, `imports`, `calls`, `implements`, `embeds`, `uses`.
+
+**Análise:** pontos centrais (maior acoplamento), instabilidade por pacote
+(`I = saída/(entrada+saída)`), comunidades por Louvain determinístico, ciclos de
+chamada por Tarjan, e conexões inesperadas — ligações que atravessam comunidades
+por um caminho quase único, que ou são integração legítima ou vazamento de
+camada.
+
+Um símbolo pode declarar a qual contexto pertence com a diretiva
+`//gofi:context <nome>` no doc do pacote; o `explain` então aponta a spec e a
+memória daquele contexto.
+
+### Escopos, lidos do `.gofi.yaml`
+
+Um projeto gofi não é uma base de código, são várias — e quais pastas o grafo
+varre sai do `.gofi.yaml`, nunca de convenção:
+
+| Escopo | Pasta | Vem de | Stack |
+|--------|-------|--------|-------|
+| `project` | o código do time | `backend.path` | `backend.language` |
+| `frontend` | a superfície web | `frontend.path` | `frontend.framework` |
+| `mobile` | a superfície mobile | `mobile.path` | `mobile.framework` |
+| `sdk` | o SDK vendorizado | `.gofi/gofi-sdk-<lang>/` | `backend.language` |
+
+Linguagem e framework ficam gravados no grafo (`language`, `framework`) e no
+índice, e abrem o relatório — quem abre um `gofi_graph.json` sozinho descobre ali
+mesmo qual base de código ele descreve, sem deduzir pelos imports.
+
+Cada um é um grafo próprio, porque cada um é lido por um extractor próprio:
+juntar tudo exigiria um extractor que entendesse Go e TypeScript ao mesmo tempo,
+e afogaria a estrutura do projeto em internals do SDK. Deixar de fora faria toda
+chamada para lá terminar em beco sem saída — então uma consulta que erra num
+escopo cai no seguinte.
+
+A raiz também sai do arquivo (`project.root`), como no resto da CLI; se ela não
+existe mais — o projeto foi clonado noutro caminho — vale o diretório onde o
+`.gofi.yaml` está. Um escopo só é planejado quando a pasta existe **e** há
+extractor capaz de lê-la: um projeto sem extractor de TypeScript é um projeto sem
+grafo de front, não um build quebrado.
+
+### Comandos
+
+```sh
+gofi graph build              # constrói (ou reconstrói) o grafo
+gofi graph build --deep       # resolve chamadas pelo type-checker
+gofi graph build --update     # sai em milissegundos se nenhum arquivo mudou
+gofi graph explain Server.Start
+gofi graph explain handler.Login --to store.User
+gofi graph open               # visualização offline no navegador
+gofi graph hooks --install    # pre-commit, post-checkout e post-merge
+gofi graph install <lang>     # extractor de uma linguagem não-nativa
+```
+
+Saídas em `.gofi/graph/`:
+
+- **`gofi_graph_report.md`** — o mapa compacto, o que o agente lê primeiro
+- **`gofi_graph.json`** — a fonte de verdade, com todos os nós e arestas
+- **`gofi_graph.html`** — visualização interativa, autocontida, sem CDN
+
+### Versionado, e por quê
+
+`.gofi/` inteiro fica fora do git — **menos `.gofi/graph/`**. O grafo é o mapa
+que os agents leem: o time e a CI devem compartilhar o mapa que o código de fato
+produziu, em vez de cada um reconstruir o seu. Quem clona já tem o mapa antes do
+primeiro build. Os extractors (`.gofi/graph/extractors/`) continuam ignorados —
+são binários baixados.
+
+É a ordenação canônica do JSON que torna isso suportável de revisar: o mesmo
+código gera exatamente os mesmos bytes, então o diff mostra a mudança de
+estrutura, não ruído de serialização.
+
+`gofi init` constrói o grafo e instala os hooks. O **`pre-commit`** reconstrói e
+dá `git add` — o mapa viaja no mesmo commit do código que ele descreve.
+`post-checkout` e `post-merge` são o conserto: normalmente não fazem nada, mas
+um merge que resolveu o JSON linha a linha produz algo que build nenhum
+emitiria, e é ali que se corrige. Todos rodam `gofi graph build --update`, que
+compara hashes antes de qualquer trabalho pesado. O bloco escrito nos hooks é
+delimitado e convive com husky/lefthook. `gofi doctor` avisa quando o grafo está
+velho ou os hooks sumiram.
+
+Nada disso é obrigatório: o bloco `graph:` do `.gofi.yaml` desliga o grafo
+(`enabled: false`), só os hooks (`hooks: false`), fixa o modo (`deep: true`) ou
+exclui diretórios (`exclude:`). A ausência do bloco significa tudo ligado.
+
+### Outras linguagens
+
+Go é nativo — a precisão vem de `go/ast` e `go/types`. Para as demais, o gofi
+define um **protocolo de extractor externo**: um executável que emite NDJSON com
+os mesmos nós e arestas. `gofi graph install <lang> --from <caminho|url>`
+registra um no projeto (com verificação de `--sha256`), e daí em diante
+`gofi graph build --lang <lang>` funciona igual.
+
+### Limites conhecidos
+
+- **`--deep` precisa que o projeto compile.** Usa os dados de export do `go list -export`; se faltarem, cai para o importador de código-fonte e segue com resolução parcial em vez de falhar.
+- **Chamadas por variável de função e reflexão não aparecem.** Não existem estaticamente.
+- **Módulos aninhados são ignorados.** Um subdiretório com `go.mod` próprio tem o próprio grafo.
+- **A visualização mostra até 500 pacotes**, escolhidos por conectividade. Os demais continuam no grafo e nas consultas.
+
+---
+
 ## Pipeline de Agents Especializados
 
 Fluxo determinístico, cada agente com responsabilidade única. O **core**

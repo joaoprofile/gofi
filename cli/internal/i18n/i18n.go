@@ -1,8 +1,8 @@
 // Package i18n holds the CLI translation catalogs and the active language.
 // The language is picked on first run and persisted in gofi.json.
 //
-// TODO: Joao — os textos Long dos comandos antigos ainda estão só em inglês;
-// basta criar as chaves cmd.<nome>.long nos catálogos para traduzi-los.
+// TODO: the Long text of the older commands is still English only; adding
+// cmd.<name>.long keys to the catalogs is all it takes to translate them.
 package i18n
 
 import (

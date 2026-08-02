@@ -10,7 +10,11 @@ var (
 	// slugRe accepts a leading lowercase letter, then optional lowercase
 	// letters, digits and hyphens, ending with letter or digit. Single-char
 	// slugs are allowed; trailing hyphen is rejected.
-	slugRe     = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
+	slugRe = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
+	// segRe accepts one path segment. Deliberately permissive: it names a
+	// folder that may already exist in someone else's repository, where App,
+	// my_app and v2 are all real.
+	segRe      = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	sourceRe   = regexp.MustCompile(`^github\.com/[^/]+/[^@]+@[^@]+$`)
 	validHosts = map[string]bool{AIHostClaudeVSCode: true}
 	validLangs = map[string]bool{
@@ -31,6 +35,31 @@ var (
 		AgentFull: true,
 	}
 )
+
+// ValidSurfacePath reports whether p can name where a surface's code lives.
+// Accepted: "." — the workspace root itself, for a repository gofi is adopting
+// rather than scaffolding — or a relative path of one or more segments, so a
+// monorepo can say services/api. Rejected is anything that would take the path
+// out of the workspace: absolute paths, "..", and Windows separators or drive
+// letters, which would not survive being written into .gofi.yaml and read back
+// on another machine.
+func ValidSurfacePath(p string) bool {
+	if p == "" {
+		return false
+	}
+	if p == "." {
+		return true
+	}
+	if strings.HasPrefix(p, "/") || strings.ContainsAny(p, `\:`) {
+		return false
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "." || seg == ".." || !segRe.MatchString(seg) {
+			return false
+		}
+	}
+	return true
+}
 
 func buildValidModels() map[string]bool {
 	m := make(map[string]bool, len(AllModels()))
@@ -58,8 +87,8 @@ func (c *GofiConfig) Validate() error {
 		if !validLangs[c.Backend.Language] {
 			return fmt.Errorf("backend.language: %q invalid (expected go|rust|java|csharp|python|nodejs)", c.Backend.Language)
 		}
-		if c.Backend.Path == "" || !slugRe.MatchString(c.Backend.Path) {
-			return fmt.Errorf("backend.path: %q is not a valid slug (e.g. src, services, backend)", c.Backend.Path)
+		if !ValidSurfacePath(c.Backend.Path) {
+			return fmt.Errorf("backend.path: %q is not a valid path (e.g. src, services/api, or . for the root)", c.Backend.Path)
 		}
 	}
 	if err := validateSurface("frontend", c.Frontend); err != nil {
@@ -135,7 +164,7 @@ func (s *SonarConfig) validate() error {
 }
 
 // validateSurface checks one front-end surface (the top-level frontend: or
-// mobile: block). A present surface needs a framework + slug path; everything
+// mobile: block). A present surface needs a framework + path; everything
 // else (brand, styling, state, forms, i18n, testing, ds, legacy) is free-form,
 // so a project that brings its own design system and stack is as valid as one
 // on the gofi presets. name is the block label for error messages.
@@ -146,8 +175,8 @@ func validateSurface(name string, s *UISurface) error {
 	if s.Framework == "" {
 		return fmt.Errorf("%s.framework: required", name)
 	}
-	if s.Path == "" || !slugRe.MatchString(s.Path) {
-		return fmt.Errorf("%s.path: %q is not a valid slug", name, s.Path)
+	if !ValidSurfacePath(s.Path) {
+		return fmt.Errorf("%s.path: %q is not a valid path", name, s.Path)
 	}
 	return nil
 }

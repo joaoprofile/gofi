@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/huh"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/detect"
 	"github.com/joaoprofile/gofi-cli/internal/tui/styles"
 )
 
@@ -85,6 +86,27 @@ type Result struct {
 	// Skipped lists surfaces the pipeline could not create (missing toolchain),
 	// surfaced in the next-steps. Filled by the init pipeline.
 	Skipped []string
+
+	// Detected is what the scan of the root found before the wizard ran. It
+	// seeds the surface paths, and the init pipeline reads it back to tell an
+	// adopted tree from one it is about to create.
+	Detected detect.Result
+}
+
+// Adopted reports whether the surface at the given path is code that was
+// already there. The path is compared because the user may have overridden the
+// detected one in the wizard, and a hand-typed path points at a folder gofi
+// still has to scaffold.
+func (r *Result) Adopted(env string) bool {
+	switch env {
+	case EnvBack:
+		return r.Detected.Backend.Found() && r.Detected.Backend.Path == r.SourcePath
+	case EnvWeb:
+		return r.Detected.Web.Found() && r.Detected.Web.Path == r.WebPath
+	case EnvMobile:
+		return r.Detected.Mobile.Found() && r.Detected.Mobile.Path == r.MobilePath
+	}
+	return false
 }
 
 // Has reports whether env is among the selected environments.
@@ -100,12 +122,17 @@ var ErrCancelled = errors.New("init cancelled")
 // error if the user cancels (Ctrl+C) or input fails validation.
 //
 // When initial != nil, its values pre-populate the form (edit mode used by
-// `gofi config --wizard`); when nil, fresh defaults are used.
-func Run(initial *config.GofiConfig) (*Result, error) {
+// `gofi config --wizard`); when nil, fresh defaults are used, refined by found
+// — what a scan of the target folder recognised, so a repository that already
+// exists is described back to the user instead of being asked about.
+func Run(initial *config.GofiConfig, found detect.Result) (*Result, error) {
 	r := newDefaultResult()
 	if initial != nil {
 		seedFromConfig(r, initial)
+	} else {
+		seedFromDetect(r, found)
 	}
+	r.Detected = found
 
 	configureRemote := r.GitRemote != ""
 	proceed := true
@@ -460,17 +487,15 @@ func validateSlug(s string) error {
 }
 
 // validateSurfacePath accepts an empty value (the wizard fills the default
-// later) or a single-folder slug.
+// later) or any path config would accept — including "." for a repository
+// whose code already sits at the root.
 func validateSurfacePath(s string) error {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
-	if strings.ContainsAny(s, "/\\") {
-		return errors.New("must be a single folder name (no slashes)")
-	}
-	if !slugRe.MatchString(s) {
-		return errors.New("must match ^[a-z][a-z0-9-]+$")
+	if !config.ValidSurfacePath(s) {
+		return errors.New("must be a relative folder path (e.g. src, services/api) or . for the root")
 	}
 	return nil
 }

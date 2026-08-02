@@ -39,6 +39,11 @@ type InstallOptions struct {
 	// these prefixes are skipped. Used by `gofi update` to preserve
 	// user-managed dirs like knowledge/ and memory/.
 	ExcludePrefixes []string
+
+	// KeepExisting: files already present at the destination are left alone.
+	// Adoption of an existing codebase relies on this — the scaffold fills the
+	// gaps without overwriting code the user already wrote.
+	KeepExisting bool
 }
 
 // installFS walks srcFS rooted at root, substitutes the ProjectMarker in
@@ -100,6 +105,12 @@ func installFS(srcFS fs.FS, root, dest string, data TemplateData, opts InstallOp
 				return fmt.Errorf("render %s: %w", p, err)
 			}
 			content = buf.Bytes()
+		}
+
+		if opts.KeepExisting {
+			if _, statErr := os.Stat(target); statErr == nil {
+				return nil
+			}
 		}
 
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {

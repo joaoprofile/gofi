@@ -143,7 +143,8 @@ func mergeWizardIntoConfig(cfg *config.GofiConfig, r *wizard.Result) *config.Gof
 	} else {
 		cfg.Sources.SDK = nil
 	}
-	cfg.Frontend = mergeSurface(cfg.Frontend, r.Has(wizard.EnvWeb), defaultWebSurface, r.WebPath, r.WebDS)
+	web := func() config.UISurface { return defaultWebSurface(filepath.Join(r.Root, r.WebPath)) }
+	cfg.Frontend = mergeSurface(cfg.Frontend, r.Has(wizard.EnvWeb), web, r.WebPath, r.WebDS)
 	cfg.Mobile = mergeSurface(cfg.Mobile, r.Has(wizard.EnvMobile), defaultMobileSurface, r.MobilePath, r.MobileDS)
 	cfg.Git.Remote = r.GitRemote
 	return cfg
