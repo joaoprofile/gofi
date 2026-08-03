@@ -1,6 +1,11 @@
 # Boilerplate — Handler
 
+> **`//gofi:context {contexto}`** abre a cláusula `package` (basta em um arquivo
+> do pacote) — é o elo entre o símbolo no grafo e `specs/{contexto}/`. Ver
+> `.claude/sdk/go/boilerplates/model.md`.
+
 ```go
+//gofi:context {contexto}
 package handler
 
 import (

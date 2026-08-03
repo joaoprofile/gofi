@@ -121,12 +121,24 @@ func checkBinary(lookup func(string) (string, error), name string, warnOnMissing
 	}
 }
 
+// checkToolchain verifies the compiler/runtime the declared backend language
+// needs. Every language config accepts is answered here, including Python,
+// which gofi has no scaffold for — a project may already have a Python backend
+// and adopt it, and then its toolchain is as real as Go's.
 func checkToolchain(lookup func(string) (string, error), language string) Check {
 	switch language {
 	case config.LanguageGo:
 		return checkBinary(lookup, "go", false, "install Go from https://go.dev/dl/")
 	case config.LanguageRust:
 		return checkBinary(lookup, "cargo", false, "install Rust from https://rustup.rs/")
+	case config.LanguageJava:
+		return checkBinary(lookup, "java", false, "install a JDK from https://adoptium.net/")
+	case config.LanguageCSharp:
+		return checkBinary(lookup, "dotnet", false, "install the .NET SDK from https://dotnet.microsoft.com/download")
+	case config.LanguagePython:
+		return checkBinary(lookup, "python3", false, "install Python from https://www.python.org/downloads/")
+	case config.LanguageNodeJS:
+		return checkBinary(lookup, "node", false, "install Node.js LTS from https://nodejs.org/")
 	}
 	return Check{
 		Name:   "toolchain",

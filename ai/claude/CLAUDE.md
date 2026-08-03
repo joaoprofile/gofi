@@ -78,6 +78,8 @@ vale neste projeto — nunca entra em skill).
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
 | Índice de retrieval de specs/PRDs (derivado do frontmatter) | `specs/INDEX.md`, `prd/INDEX.md` (regen: `.claude/scripts/gen-index.sh`) | Específico |
 | Protocolo de retrieval (ler os corpora gastando poucos tokens) | `.claude/knowledge/shared/rag-retrieval-protocol.md` | Portável |
+| Grafo de código (mapa derivado: quem chama quem, a que contexto pertence) | `.gofi/graph/` — `gofi_graph_index.json` + `gofi_graph_report.md`; consulta por `gofi graph explain`. Gerado por `gofi graph build`, **nunca** editado à mão | Específico (derivado) |
+| Protocolo de consulta ao grafo | `.claude/knowledge/shared/graph-retrieval-protocol.md` | Portável |
 
 ## Convenção de leitura dos agents
 
@@ -88,7 +90,7 @@ e arquivos variam por agent); aqui fica o denominador comum:
 2. Ler `.claude/CLAUDE.md` (este arquivo) — mapa de paths físicos + doutrina das skills.
 3. Ler `.claude/memory/project.md` para visão global (serviços + convenções). Para o índice de contextos existentes, rodar `/gofi-status`.
 4. Ler `.claude/memory/contexts/{contexto}.md` se já houver — frontmatter (estado) + handoff de fases anteriores.
-5. Ler **`.claude/knowledge/shared/*.md`** — princípios universais cross-agent (DDD, protocolo de memória, **protocolo de retrieval RAG**, protocolo de aprendizado).
+5. Ler **`.claude/knowledge/shared/*.md`** — princípios universais cross-agent (DDD, protocolo de memória, **protocolo de retrieval RAG**, **protocolo de consulta ao grafo**, protocolo de aprendizado).
 6. Ler **`.claude/knowledge/{agent}/*.md`** — knowledge user-treinado para esse agent (criado sob demanda por `gofi train`).
 7. **Contexto institucional (RAG)** — quando precisar de negócio além da spec, ler `.claude/institutional/{project.name}/INDEX.md` e **só os chunks relevantes**; nunca a pasta inteira.
 8. Para a linguagem-alvo, ler conteúdo language-specific:
@@ -99,6 +101,14 @@ e arquivos variam por agent); aqui fica o denominador comum:
 > **Specs/PRDs/contextos são RAG — gaste poucos tokens.** Regras de **leitura e criação** em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
 > - **Ler:** nunca leia um doc inteiro por reflexo. Descubra por `keywords` em `specs/INDEX.md`/`prd/INDEX.md` (ou `/gofi-status` p/ memória) → leia só o **frontmatter** do alvo → `grep -n '^## '` + `Read` apenas da §relevante.
 > - **Criar/editar:** emita **frontmatter + `keywords`** (base nos templates `.claude/templates/`), **zero proveniência** (sem `**Autor/Versão/Data:**`, sem `## Rastreabilidade`, sem nome de agent/pessoa, sem journal), Histórico de **1 linha**, e **regenere** o INDEX (`.claude/scripts/gen-index.sh`). Todo doc tem `versao: "1.0"` + `keywords`.
+
+> **O código também tem índice — o grafo.** Antes de varrer a árvore atrás de
+> "quem chama isso", suba a escada de 3 degraus: `gofi_graph_index.json` →
+> `gofi_graph_report.md` → `gofi graph explain <símbolo>`. **Nunca** leia
+> `gofi_graph.json`. Quem implementa roda **`gofi graph build --update` ao
+> fechar**, para que a fase seguinte leia um mapa atualizado. Todo pacote de um
+> contexto nasce com **`//gofi:context {contexto}`** — é o elo entre o símbolo e
+> `specs/{contexto}/`. Protocolo em `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 ## Persistência de estado
 

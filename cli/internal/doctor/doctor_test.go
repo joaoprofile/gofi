@@ -138,6 +138,35 @@ func TestRun_RustToolchain(t *testing.T) {
 	}
 }
 
+// TestCheckToolchain_EveryConfigLanguage guards the pairing between the
+// language enum and the binary doctor looks for: a language the config accepts
+// must never come back as "unknown".
+func TestCheckToolchain_EveryConfigLanguage(t *testing.T) {
+	for lang, binary := range map[string]string{
+		config.LanguageGo:     "go",
+		config.LanguageRust:   "cargo",
+		config.LanguageJava:   "java",
+		config.LanguageCSharp: "dotnet",
+		config.LanguagePython: "python3",
+		config.LanguageNodeJS: "node",
+	} {
+		c := checkToolchain(mockLookup(map[string]string{binary: "/x/" + binary}), lang)
+		if c.Status != StatusOK {
+			t.Errorf("%s: status = %s, detail %q", lang, c.Status, c.Detail)
+		}
+		if !strings.HasPrefix(c.Name, binary+" ") {
+			t.Errorf("%s should be checked via %q, got %q", lang, binary, c.Name)
+		}
+		missing := checkToolchain(mockLookup(nil), lang)
+		if missing.Status != StatusFail || missing.Hint == "" {
+			t.Errorf("%s missing: status = %s, hint = %q", lang, missing.Status, missing.Hint)
+		}
+	}
+	if c := checkToolchain(mockLookup(nil), "cobol"); c.Status != StatusWarn {
+		t.Errorf("a language outside the enum should warn, got %s", c.Status)
+	}
+}
+
 func TestStatus_String(t *testing.T) {
 	if !strings.HasPrefix(StatusOK.String(), "ok") {
 		t.Error("expected ok")

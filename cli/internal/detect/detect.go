@@ -5,9 +5,12 @@
 package detect
 
 import (
+	"cmp"
 	"encoding/json"
+	"encoding/xml"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -27,11 +30,19 @@ const maxDepth = 2
 // the code sits at the root itself. Marker names the file that proved it, which
 // the wizard shows so the user can tell whether the guess is worth accepting.
 // Language is set for the backend, Framework for the web and mobile surfaces.
+//
+// Module is the ecosystem identifier read out of the marker file — the go.mod
+// module path, the npm name, the Maven groupId.artifactId. It is empty when the
+// marker does not carry one or is not worth parsing; the wizard then falls back
+// to asking. Reading it matters because the alternative is the user retyping an
+// identifier the repository already states, and a typo there leaves .gofi.yaml
+// describing a module that does not exist.
 type Surface struct {
 	Path      string
 	Marker    string
 	Language  string
 	Framework string
+	Module    string
 }
 
 // Found reports whether the surface was detected at all.
@@ -39,7 +50,12 @@ func (s Surface) Found() bool { return s.Path != "" }
 
 // Result is what a scan of the workspace turned up. Any of the three may be
 // absent — a repository with only a backend is as ordinary as a monorepo.
+//
+// Name is the workspace folder rendered as a project slug, empty when the
+// folder name cannot become one. It is a suggestion for the wizard, not a fact
+// about the code.
 type Result struct {
+	Name    string
 	Backend Surface
 	Web     Surface
 	Mobile  Surface
@@ -60,7 +76,7 @@ func Scan(root string) Result {
 		depth    int
 	}
 
-	var res Result
+	res := Result{Name: slug(filepath.Base(root))}
 	queue := []node{{abs: root, rel: ".", depth: 0}}
 	for len(queue) > 0 {
 		n := queue[0]
@@ -107,7 +123,10 @@ func Scan(root string) Result {
 func classify(abs, rel string, files []string, res *Result) {
 	if !res.Backend.Found() {
 		if lang, marker := backendLanguage(files); lang != "" {
-			res.Backend = Surface{Path: rel, Marker: marker, Language: lang}
+			res.Backend = Surface{
+				Path: rel, Marker: marker, Language: lang,
+				Module: readModule(abs, marker, lang),
+			}
 		}
 	}
 	if !slices.Contains(files, packageJSON) {
@@ -125,7 +144,10 @@ func classify(abs, rel string, files []string, res *Result) {
 		}
 	case hasAny(deps, nodeBackendPackages):
 		if !res.Backend.Found() {
-			res.Backend = Surface{Path: rel, Marker: packageJSON, Language: config.LanguageNodeJS}
+			res.Backend = Surface{
+				Path: rel, Marker: packageJSON, Language: config.LanguageNodeJS,
+				Module: readNPMName(abs),
+			}
 		}
 	}
 	// A package.json matching none of the three is left unclassified on
@@ -172,6 +194,112 @@ func backendLanguage(files []string) (language, marker string) {
 		}
 	}
 	return "", ""
+}
+
+// slugSeparators are the runs the folder name is broken on: everything a
+// project slug cannot hold collapses into a single hyphen.
+var slugSeparators = regexp.MustCompile(`[^a-z0-9]+`)
+
+// slug renders a folder name as a project slug — lowercase letters, digits and
+// hyphens, starting with a letter. It returns "" when nothing usable survives,
+// which is the signal to ask instead of suggesting.
+func slug(name string) string {
+	s := slugSeparators.ReplaceAllString(strings.ToLower(name), "-")
+	s = strings.Trim(s, "-")
+	for s != "" && (s[0] < 'a' || s[0] > 'z') {
+		s = strings.TrimLeft(s[1:], "-")
+	}
+	// The wizard's own rule is ^[a-z][a-z0-9-]+$, so a single letter is as
+	// unusable as an empty string.
+	if len(s) < 2 {
+		return ""
+	}
+	return s
+}
+
+// readModule returns the ecosystem identifier the marker file declares, or ""
+// when it declares none gofi can use. Rust and Python are absent because the
+// wizard asks them for no module at all; Gradle is absent because the
+// identifier lives in a build script rather than in a field.
+func readModule(dir, marker, language string) string {
+	switch {
+	case marker == "go.mod":
+		return readGoModule(dir)
+	case marker == packageJSON:
+		return readNPMName(dir)
+	case marker == "pom.xml":
+		return readMavenPackage(dir)
+	case language == config.LanguageCSharp:
+		// The project file is named after the root namespace, so its base name is
+		// the identifier. A name without a dot is dropped: the wizard requires a
+		// dotted namespace, and pre-filling a value it will reject only blocks the
+		// form on a guess the user has to clear before typing anything.
+		base := strings.TrimSuffix(marker, filepath.Ext(marker))
+		if strings.Contains(base, ".") {
+			return base
+		}
+	}
+	return ""
+}
+
+// readGoModule returns the module path declared by dir's go.mod. The file is
+// read line-wise rather than through modfile so the detect package keeps its
+// only dependency being the standard library and config.
+func readGoModule(dir string) string {
+	body, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	for line := range strings.Lines(string(body)) {
+		line = strings.TrimSpace(line)
+		if path, ok := strings.CutPrefix(line, "module "); ok {
+			return strings.TrimSpace(path)
+		}
+	}
+	return ""
+}
+
+// readNPMName returns the name declared by dir's package.json.
+func readNPMName(dir string) string {
+	body, err := os.ReadFile(filepath.Join(dir, packageJSON))
+	if err != nil {
+		return ""
+	}
+	var pkg struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(body, &pkg) != nil {
+		return ""
+	}
+	return pkg.Name
+}
+
+// readMavenPackage returns groupId.artifactId from dir's pom.xml — the shape
+// gofi calls the base package, and the one the scaffold splits back apart. Only
+// the project's own elements are read; a groupId inherited from <parent> is
+// used when the project omits its own, which is how a module of a multi-module
+// build states it.
+func readMavenPackage(dir string) string {
+	body, err := os.ReadFile(filepath.Join(dir, "pom.xml"))
+	if err != nil {
+		return ""
+	}
+	var project struct {
+		GroupID    string `xml:"groupId"`
+		ArtifactID string `xml:"artifactId"`
+		Parent     struct {
+			GroupID string `xml:"groupId"`
+		} `xml:"parent"`
+	}
+	if xml.Unmarshal(body, &project) != nil {
+		return ""
+	}
+	group := cmp.Or(strings.TrimSpace(project.GroupID), strings.TrimSpace(project.Parent.GroupID))
+	artifact := strings.TrimSpace(project.ArtifactID)
+	if group == "" || artifact == "" {
+		return ""
+	}
+	return group + "." + artifact
 }
 
 // mobilePackages / webPackages / nodeBackendPackages sort a package.json into a

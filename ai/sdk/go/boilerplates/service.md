@@ -1,8 +1,13 @@
 # Boilerplate — Service
 
+> **`//gofi:context {contexto}`** abre a cláusula `package` (basta em um arquivo
+> do pacote) — é o elo entre o símbolo no grafo e `specs/{contexto}/`. Ver
+> `.claude/sdk/go/boilerplates/model.md`.
+
 ## errors.go
 
 ```go
+//gofi:context {contexto}
 package service
 
 import "github.com/joaoprofile/gofi/base/errs"

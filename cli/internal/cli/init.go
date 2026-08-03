@@ -52,7 +52,12 @@ Failures roll back the created directory.`,
 }
 
 func runInit() error {
-	res, err := wizard.Run(nil)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve current directory: %w", err)
+	}
+
+	res, err := wizard.Run(nil, detect.Scan(cwd))
 	if err != nil {
 		if errors.Is(err, wizard.ErrCancelled) {
 			fmt.Println("init cancelled.")
@@ -61,7 +66,13 @@ func runInit() error {
 		return err
 	}
 
-	if err := checkRootIsUsable(res.Root); err != nil {
+	// The wizard may point the root somewhere other than here, in which case the
+	// pre-wizard scan describes the wrong tree.
+	if res.Root != cwd {
+		res.Detected = detect.Scan(res.Root)
+	}
+
+	if err := checkRootIsUsable(res.Root, res.Detected); err != nil {
 		return err
 	}
 
@@ -91,8 +102,10 @@ func runInit() error {
 // gofi project, and rejects any non-empty pre-existing folder *unless* it is
 // the current working directory — which is the documented "init in place"
 // case (e.g. running `gofi init` inside an empty new repo with a stray
-// README.md or .git already there).
-func checkRootIsUsable(root string) error {
+// README.md or .git already there) — or a folder holding a codebase gofi
+// recognised, which is the adoption case: the content is the reason to init
+// there, not an obstacle.
+func checkRootIsUsable(root string, found detect.Result) error {
 	yamlPath := filepath.Join(root, config.FileName)
 	if _, err := os.Stat(yamlPath); err == nil {
 		return fmt.Errorf("%s already contains a gofi project (%s present)", root, config.FileName)
@@ -111,6 +124,9 @@ func checkRootIsUsable(root string) error {
 			return nil
 		}
 	}
+	if found.Any() {
+		return nil
+	}
 	return fmt.Errorf("path %s already exists and is not empty", root)
 }
 
@@ -118,10 +134,22 @@ func checkRootIsUsable(root string) error {
 // missing/present toolchain without depending on the host environment.
 var detectToolchain = toolchain.Detect
 
+// createViteApp and createExpoApp are indirected for the same reason: they
+// shell out to npm/npx, so tests swap them to assert whether a surface was
+// scaffolded at all.
+var (
+	createViteApp = scaffold.CreateViteApp
+	createExpoApp = scaffold.CreateExpoApp
+)
+
 func executePipeline(r *wizard.Result) error {
 	hasBack := r.Has(wizard.EnvBack)
 	goBackend := hasBack && r.Language == config.LanguageGo
-	needNode := r.Has(wizard.EnvWeb) || r.Has(wizard.EnvMobile)
+	adoptedBack := hasBack && r.Adopted(wizard.EnvBack)
+	// Only a surface gofi is going to create needs Node: an adopted app is never
+	// scaffolded, so demanding a toolchain for it would warn about nothing.
+	needNode := (r.Has(wizard.EnvWeb) && !r.Adopted(wizard.EnvWeb)) ||
+		(r.Has(wizard.EnvMobile) && !r.Adopted(wizard.EnvMobile))
 
 	pre := detectToolchain(toolchain.Needs{Go: goBackend, Node: needNode})
 	renderPreflight(pre)
@@ -133,9 +161,9 @@ func executePipeline(r *wizard.Result) error {
 		AIModel:     r.AIModel,
 		Agents:      r.Agents,
 	}
-	if goBackend {
+	if hasBack {
 		data.Language = r.Language
-		data.GoModule = r.GoModule
+		data.Module = r.Module
 		data.SourceRoot = r.SourcePath
 	}
 
@@ -148,8 +176,10 @@ func executePipeline(r *wizard.Result) error {
 	uiSurfaces := uiSurfacesFromResult(r)
 
 	var skipped []string
-	if hasBack && r.Language != config.LanguageGo {
-		skipped = append(skipped, fmt.Sprintf("backend (%s) — scaffold not implemented yet (only Go today)", r.Language))
+	// An adopted backend needs no scaffold whatever its language, so reporting a
+	// missing one would describe a gap that is not there.
+	if hasBack && !adoptedBack && !scaffold.HasBackendScaffold(r.Language) {
+		skipped = append(skipped, fmt.Sprintf("backend (%s) — no project skeleton for this language yet", r.Language))
 	}
 
 	steps := []spinner.Step{
@@ -160,13 +190,27 @@ func executePipeline(r *wizard.Result) error {
 			return gitops.Init(r.Root)
 		}},
 	}
-	if goBackend && pre.GoOK {
-		steps = append(steps, spinner.Step{Name: "Scaffold Go (" + r.SourcePath + "/)", Fn: func() error {
-			_, err := scaffold.InstallGo(r.Root, data)
+	switch {
+	case !hasBack || !scaffold.HasBackendScaffold(r.Language):
+		// Nothing to write — already reported in skipped above.
+	case goBackend && !pre.GoOK:
+		skipped = append(skipped, "backend (Go) — Go toolchain not found; install Go and run scaffold later")
+	case goBackend && adoptedBack:
+		// The tree is already there. Writing the scaffold over it would litter
+		// someone's repository with a README, a main.go and empty folders it
+		// never asked for; only go.work is added, because the SDK needs it.
+		steps = append(steps, spinner.Step{Name: "Adopt Go backend (" + r.SourcePath + ")", Fn: func() error {
+			return scaffold.EnsureGoWork(r.Root, r.SourcePath)
+		}})
+	case adoptedBack:
+		// Same reasoning as Go, minus go.work: outside Go there is no workspace
+		// file to reconcile, so adoption means leaving the tree exactly as is.
+		skipped = append(skipped, fmt.Sprintf("backend (%s) — adopted the existing project at %s/; left untouched", r.Language, r.SourcePath))
+	default:
+		steps = append(steps, spinner.Step{Name: "Scaffold " + r.Language + " (" + r.SourcePath + "/)", Fn: func() error {
+			_, err := scaffold.InstallBackend(r.Language, r.Root, data)
 			return err
 		}})
-	} else if goBackend && !pre.GoOK {
-		skipped = append(skipped, "backend (Go) — Go toolchain not found; install Go and run scaffold later")
 	}
 	steps = append(steps,
 		spinner.Step{Name: "Write .gofi.yaml", Fn: func() error {
@@ -297,23 +341,40 @@ func executePipeline(r *wizard.Result) error {
 
 	// Web/Mobile via official CLIs — streamed output, after the spinner steps.
 	// Gated on the Node preflight; missing Node = skipped, not fatal.
+	//
+	// An adopted surface is never handed to a scaffolder: create-vite and
+	// create-expo-app write into the folder they are given, and the design-system
+	// starter that follows replaces the app entry files. Over a repository that
+	// already has an app that is not a scaffold, it is data loss.
 	if r.Has(wizard.EnvWeb) {
-		if pre.NodeOK {
+		switch {
+		case r.Adopted(wizard.EnvWeb):
+			fmt.Println("\n" + styles.Note("Adopted the web app at "+r.WebPath+"/ — left untouched."))
+			if r.WebDS == config.DSWeb {
+				skipped = append(skipped, "web design system — adopted app; install it yourself: npm install "+config.DSWeb)
+			}
+		case pre.NodeOK:
 			fmt.Println("\n" + styles.Header("▶ Creating web app (Vite) at "+r.WebPath+"/"))
-			if err := scaffold.CreateViteApp(r.Root, r.WebPath, r.WebDS == config.DSWeb); err != nil {
+			if err := createViteApp(r.Root, r.WebPath, r.WebDS == config.DSWeb); err != nil {
 				return fmt.Errorf("create web app: %w", err)
 			}
-		} else {
+		default:
 			skipped = append(skipped, "web — Node.js LTS not found; install it, then: npm create vite@latest "+r.WebPath)
 		}
 	}
 	if r.Has(wizard.EnvMobile) {
-		if pre.NodeOK {
+		switch {
+		case r.Adopted(wizard.EnvMobile):
+			fmt.Println("\n" + styles.Note("Adopted the mobile app at "+r.MobilePath+"/ — left untouched."))
+			if r.MobileDS == config.DSMobile {
+				skipped = append(skipped, "mobile design system — adopted app; install it yourself: npm install "+config.DSMobile)
+			}
+		case pre.NodeOK:
 			fmt.Println("\n" + styles.Header("▶ Creating mobile app (Expo) at "+r.MobilePath+"/"))
-			if err := scaffold.CreateExpoApp(r.Root, r.MobilePath, r.MobileDS == config.DSMobile); err != nil {
+			if err := createExpoApp(r.Root, r.MobilePath, r.MobileDS == config.DSMobile); err != nil {
 				return fmt.Errorf("create mobile app: %w", err)
 			}
-		} else {
+		default:
 			skipped = append(skipped, "mobile — Node.js LTS not found; install it, then: npx create-expo-app "+r.MobilePath)
 		}
 	}
@@ -547,7 +608,7 @@ func confirmSummary(r *wizard.Result) {
 	if r.Has(wizard.EnvBack) {
 		b := r.Language + " (" + r.SourcePath + "/)"
 		if r.Language == config.LanguageGo {
-			b += "  module=" + r.GoModule
+			b += "  module=" + r.Module
 		}
 		lines = append(lines, row("backend", b))
 	}
@@ -581,6 +642,15 @@ func printNextSteps(r *wizard.Result) {
 		for _, s := range r.Skipped {
 			fmt.Println("    - " + s)
 		}
+		fmt.Println()
+	}
+	// Adopting a repository leaves the code unannotated, so the graph knows the
+	// calls but not which context a symbol belongs to. That bridge is built by
+	// the agents, and nothing else in the output says so.
+	if r.Detected.Any() {
+		fmt.Println("  " + styles.Note("Existing code was adopted and left untouched."))
+		fmt.Println("  " + styles.Note("Run /gofi-spec to map it into contexts, then /gofi-eng to"))
+		fmt.Println("  " + styles.Note("write the //gofi:context directives the graph reads."))
 		fmt.Println()
 	}
 	fmt.Println("  " + styles.Header("Next steps"))

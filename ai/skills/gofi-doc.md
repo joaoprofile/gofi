@@ -110,6 +110,15 @@ ordem:**
 4. **`.claude/memory/contexts/{contexto}.md`** se já há handoff de fases
    anteriores — decisões de design (ADRs, presets, integrações) que afetam
    o contrato.
+4b. **O grafo (`.gofi/graph/`), quando existe** — é o caminho barato para a
+   topologia: `gofi_graph_index.json` diz os escopos; `gofi_graph_report.md`
+   dá pacotes e pontos centrais; `gofi graph explain {Handler}` mostra o que o
+   handler chama (service/application, DTOs, erros) **sem abrir arquivo**, e
+   `gofi graph explain {Handler} --to {Repo}` traça o caminho até a
+   persistência. Use-o para **escolher o que abrir**, não para substituir a
+   leitura do handler — assinatura de rota, status code e tag de struct só o
+   arquivo tem. **Nunca** abra `gofi_graph.json`. Protocolo:
+   `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 5. **`.claude/knowledge/shared/*.md`** e **`.claude/sdk/{lang}/knowledge/*.md`**
    — **convenções reais do projeto**: naming de campo, casing de enum,
    envelope de paginação, formato de código de erro, shape do filtro

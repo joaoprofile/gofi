@@ -53,6 +53,7 @@ Antes de qualquer linha de código:
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-spec
 5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` (descoberta por keywords) → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §seções relevantes (Modelo de Dados §3, Operações §4, Regras §5, ADRs §9). Nunca leia a spec inteira por reflexo. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
+5a. **Ler o grafo antes de varrer o código.** Se `.gofi/graph/` existir: `gofi_graph_index.json` (escopos e modo do scan) → `gofi_graph_report.md` do escopo (pacotes, pontos centrais, conexões inesperadas) → `gofi graph explain <símbolo>` só nos símbolos que a tarefa toca. **Nunca** abra `gofi_graph.json`. `grep -r` pelo módulo é fallback (linguagem sem extractor, alvo que não é símbolo). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
 7. Ler **knowledge per-agent**: `.claude/knowledge/eng/*.md` (user-treinado)
 8. Para `project.language` (a partir do `.gofi.yaml`):
@@ -67,7 +68,7 @@ Antes de qualquer linha de código:
    - Ler boilerplates por camada: `.claude/sdk/<lang>/boilerplates/*.md`
 9. Confirmar com o dev se há ambiguidades **antes** de escrever código
 10. **Perguntar onde está o código legado/base** sempre que a tarefa for refactor, migração de formato, reescrita ou reestruturação (mover camadas, trocar padrão, eng. reversa). O código existente é a **base de referência** do novo formato — peça o caminho (pasta/arquivo/binário legado) e leia antes de gerar. Não reescreva do zero quando há legado: o objetivo é preservar comportamento e migrar para o formato-alvo da spec.
-11. **Se a tarefa edita um contexto já implementado** (e não cria do zero), fazer **análise de impacto detalhada antes de fechar**: toda mudança em artefato compartilhado (struct de `model/`, enum/`kafka.Type*`, interface, coluna de migration, helper comum) tem contrato implícito com **todos** os consumidores. Grep pelos consumidores em todo o módulo, classifique cada um (válido/ajuste/quebra), ajuste todos na mesma entrega, e `build`+`test` dos pacotes **consumidores** — não só o editado. Procedimento e casos de quebra silenciosa (scan posicional do `sqln`, coluna de `JOIN`, enum sem destino) em `.claude/knowledge/eng/impact-analysis-on-change.md`.
+11. **Se a tarefa edita um contexto já implementado** (e não cria do zero), fazer **análise de impacto detalhada antes de fechar**: toda mudança em artefato compartilhado (struct de `model/`, enum/`kafka.Type*`, interface, coluna de migration, helper comum) tem contrato implícito com **todos** os consumidores. **Levante os consumidores pelo grafo, não varrendo o módulo:** `gofi graph explain <símbolo>` lista quem chama; `gofi graph explain <A> --to <B>` mostra o caminho. Como a conclusão aqui é "quebra / não quebra", exija um grafo **`deep`** (`gofi graph build --deep`) — no modo `fast` a chamada ambígua não vira aresta, e ausência de aresta **não** é prova de ausência de uso. Sem grafo da linguagem (ou para alvo que não é símbolo — SQL, string de config, registro por tabela), caia no `grep -r` e diga que caiu. Classifique cada consumidor (válido/ajuste/quebra), ajuste todos na mesma entrega, e `build`+`test` dos pacotes **consumidores** — não só o editado. Procedimento e casos de quebra silenciosa (scan posicional do `sqln`, coluna de `JOIN`, enum sem destino) em `.claude/knowledge/eng/impact-analysis-on-change.md`.
 
 > Se algo na spec for ambíguo ou contradizer um padrão do `sdk-knowledge`,
 > pare e pergunte. Nunca infira.
@@ -98,7 +99,7 @@ Antes de qualquer linha de código:
     - service/{contexto}_service_test.go com mock de repository handcraft
     - handler/{contexto}_handler_test.go com stub de service handcraft
 12. **Sincronizar `.env` na raiz do projeto** — adicionar variáveis ausentes com placeholders e avisar o dev nos "Próximos passos" (regra completa em `.claude/knowledge/eng/env-file-management.md`)
-13. Atualizar memória e spec (ver §"Atualização de memória ao concluir")
+13. Atualizar o grafo (`gofi graph build --update`), memória e spec (ver §"Atualização de memória ao concluir")
 ```
 
 A ordem é guia, não rígida — ajuste se a spec exigir.
@@ -109,12 +110,32 @@ A ordem é guia, não rígida — ajuste se a spec exigir.
 
 Aplicam-se em todo contexto, em qualquer linguagem suportada:
 
+- **Todo pacote de um contexto nasce com `//gofi:context {contexto}`.** Os
+  pacotes são por camada (`model`, `service`, `repository`, `handler`), então é
+  a diretiva — não o nome do pacote — que diz a **qual contexto** o símbolo
+  pertence. É o único elo entre o grafo e `specs/{contexto}/` +
+  `.claude/memory/contexts/{contexto}.md`; sem ela o agent seguinte volta a
+  adivinhar pelo nome da pasta.
+
+  ```go
+  //gofi:context billing
+  package model
+  ```
+
+  Na cláusula `package` basta em **um** arquivo do pacote — vale para todos os
+  símbolos dele. O nome é **o mesmo** de `specs/{contexto}/`, kebab-case, sem
+  variação. Um símbolo que serve outro contexto leva a diretiva na própria
+  declaração, sobrescrevendo a do pacote. Hoje só o extractor Go lê a diretiva;
+  nas demais linguagens ela é documentação até o extractor passar a lê-la.
 - **Editar contexto implementado → análise de impacto nos consumidores antes de fechar.**
   Mudança em artefato compartilhado (struct de `model/` reusada por outro
   contexto, enum/`kafka.Type*`, interface, coluna de migration, helper comum)
-  carrega contrato implícito com **todos** os consumidores. Grep o símbolo em
-  todo o módulo, classifique cada consumidor (válido/ajuste/quebra), ajuste
-  todos na mesma entrega e rode `build`+`test` dos pacotes **consumidores**.
+  carrega contrato implícito com **todos** os consumidores. Levante os
+  consumidores pelo grafo — `gofi graph explain <símbolo>` responde "quem chama"
+  sem varrer a árvore, e a conclusão só é confiável com grafo `--deep` (`grep -r`
+  é o fallback: linguagem sem extractor, ou alvo que não é símbolo).
+  Classifique cada consumidor (válido/ajuste/quebra), ajuste todos na mesma
+  entrega e rode `build`+`test` dos pacotes **consumidores**.
   Caso recorrente e mais perigoso: o **scan posicional do `sqln`** —
   `FindFromCriteria[T]` escaneia por `GetMappedCols(&T)` (folhas `db` na ordem
   de declaração), independente da string do `Select(...)`; logo um `model.{Type}`
@@ -659,9 +680,76 @@ do sqln`, etc.), consulte
 
 ---
 
+## Adoção de repositório existente — gravar `//gofi:context` no código legado
+
+Ativa quando o `gofi init` rodou sobre uma base que já existia: o código está
+lá, o grafo está construído, e o campo `contexto` de todo símbolo vem **vazio**
+— a ponte grafo→`specs/`→`memory/` não existe ainda. Esta é a tarefa que a
+liga, e ela é **exclusivamente aditiva**: você acrescenta uma linha de diretiva
+por pacote e **não toca em mais nada**.
+
+**Entrada obrigatória:** o mapa pacote→contexto já confirmado pelo dev, gravado
+em `.claude/memory/contexts/{contexto}.md` pelo `/gofi-spec` (Modo 3). **Sem o
+mapa, pare e peça o `/gofi-spec` primeiro** — inferir a fronteira de contexto
+por conta própria é justamente a decisão que não é sua.
+
+**Procedimento:**
+
+1. Para cada contexto do mapa, para cada pacote listado nele: escrever
+   `//gofi:context {contexto}` imediatamente acima da cláusula `package`, em
+   **um único** arquivo do pacote — a diretiva vale para todos os símbolos.
+   Escolha o arquivo de forma **determinística e óbvia** (o que dá nome ao
+   pacote, ou o primeiro em ordem alfabética), para que uma segunda passada
+   encontre a diretiva onde a deixou em vez de criar uma nova.
+2. Um símbolo que serve **outro** contexto leva a diretiva na própria
+   declaração, sobrescrevendo a do pacote. Aplique isso só onde o mapa disser —
+   é o caso raro, não o padrão.
+3. **Pacote fora do mapa fica sem diretiva.** Infraestrutura compartilhada
+   (`pkg/`, `internal/platform`, utilitários) não pertence a contexto nenhum, e
+   inventar um para ela suja o grafo com um contexto que não tem spec nem
+   memória. Liste os pacotes que ficaram de fora nos "Próximos passos".
+4. **Nada além da diretiva.** Sem mover arquivo, sem renomear pacote, sem
+   reordenar import, sem "já que estou aqui". Um repositório adotado é código
+   que funciona; a adoção não é a hora de refatorá-lo. Se a leitura revelar algo
+   que merece mudança, **reporte** — não execute.
+5. Reconstruir e conferir:
+
+   ```sh
+   gofi graph build --update
+   gofi graph explain <um símbolo de cada contexto>
+   ```
+
+   O `explain` tem que passar a imprimir `contexto: {contexto}` apontando para
+   `specs/{contexto}/` e `.claude/memory/contexts/{contexto}.md`. Se vier vazio,
+   a diretiva está no arquivo errado ou o nome divergiu do mapa.
+6. Atualizar o `## Estado atual` de cada `memory/contexts/{contexto}.md` com o
+   fato de que o contexto já está anotado, e o frontmatter (`atualizado`).
+
+> **Limite a declarar, não a esconder:** hoje **só o extractor Go lê a
+> diretiva**. Num pacote TypeScript/JavaScript ela é documentação para o
+> humano e para o próximo agent, mas **não** aparece no grafo — ali a ponte
+> ainda é o nome da pasta. Diga isso ao dev em vez de deixá-lo achar que o mapa
+> ficou completo.
+
+---
+
 ## Atualização de memória ao concluir
 
-Aplicar **todas** as três:
+**Primeiro, atualize o grafo.** As fases seguintes (`/gofi-qa`, `/gofi-doc`) e a
+próxima tarefa consultam o mapa; o hook de pre-commit só o reconstrói **no
+commit**, que ainda não aconteceu — sem isto o QA auditaria um mapa que não
+contém a implementação recém-escrita:
+
+```sh
+gofi graph build --update
+```
+
+`--update` pula o scan quando nenhum fonte mudou, então rodar sempre é barato.
+Se a entrega mexeu em artefato compartilhado, use `--deep` — é o modo em que as
+arestas de chamada são exatas. Protocolo:
+`.claude/knowledge/shared/graph-retrieval-protocol.md`.
+
+Depois, aplicar **todas** as três:
 
 ### 1. `.claude/memory/contexts/{contexto}.md`
 

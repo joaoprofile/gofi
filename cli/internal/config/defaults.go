@@ -36,20 +36,21 @@ func DefaultTestSection(language, sourceRoot string) TestSection {
 			},
 		}
 	case LanguageRust:
+		manifest := sourceRoot + "/Cargo.toml"
 		return TestSection{
 			Default: "unit",
 			Tasks: map[string]TestTask{
 				"unit": {
 					Desc: "Unit tests",
-					Run:  "cargo test",
+					Run:  "cargo test --manifest-path " + manifest,
 				},
 				"cover": {
 					Desc: "Coverage via cargo-tarpaulin (cargo install cargo-tarpaulin)",
-					Run:  "cargo tarpaulin --out Stdout",
+					Run:  "cargo tarpaulin --manifest-path " + manifest + " --out Stdout",
 				},
 				"cover-html": {
 					Desc: "Coverage as HTML",
-					Run:  "cargo tarpaulin --out Html",
+					Run:  "cargo tarpaulin --manifest-path " + manifest + " --out Html",
 				},
 				"sonar": {
 					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
@@ -58,16 +59,65 @@ func DefaultTestSection(language, sourceRoot string) TestSection {
 				},
 			},
 		}
-	case LanguageJava, LanguageCSharp, LanguagePython, LanguageNodeJS:
-		// Preview languages: minimal placeholder task so the YAML stays
-		// valid. The real scaffold will arrive when the SDK lands in
-		// gofi-agents/sdk/<lang>/.
+	case LanguageJava:
+		// jacoco:report emits HTML, XML and CSV in one pass, so there is no
+		// separate cover-html task to write.
+		mvn := "mvn -f " + sourceRoot + "/pom.xml"
+		return TestSection{
+			Default: "unit",
+			Tasks: map[string]TestTask{
+				"unit":  {Desc: "Unit tests", Run: mvn + " test"},
+				"cover": {Desc: "Coverage via JaCoCo (target/site/jacoco/)", Run: mvn + " test jacoco:report"},
+				"sonar": {
+					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
+					Needs: []string{"cover"},
+					Run:   "gofi sonar start",
+				},
+			},
+		}
+	case LanguageCSharp:
+		return TestSection{
+			Default: "unit",
+			Tasks: map[string]TestTask{
+				"unit":  {Desc: "Unit tests", Run: "dotnet test " + sourceRoot},
+				"cover": {Desc: "Coverage via coverlet", Run: `dotnet test ` + sourceRoot + ` --collect:"XPlat Code Coverage"`},
+				"sonar": {
+					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
+					Needs: []string{"cover"},
+					Run:   "gofi sonar start",
+				},
+			},
+		}
+	case LanguageNodeJS:
+		npm := "npm --prefix " + sourceRoot
+		return TestSection{
+			Default: "unit",
+			Tasks: map[string]TestTask{
+				"unit": {Desc: "Unit tests", Run: npm + " test"},
+				// A second reporter is needed because naming one replaces the
+				// default, and a coverage run that prints nothing looks hung.
+				"cover": {
+					Desc: "Coverage as lcov (node --experimental-test-coverage)",
+					Run: "node --test --experimental-test-coverage" +
+						" --test-reporter=spec --test-reporter-destination=stdout" +
+						" --test-reporter=lcov --test-reporter-destination=" + sourceRoot + "/coverage/lcov.info " + sourceRoot,
+				},
+				"sonar": {
+					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
+					Needs: []string{"cover"},
+					Run:   "gofi sonar start",
+				},
+			},
+		}
+	case LanguagePython:
+		// gofi has no Python scaffold, so there is no layout to write a real
+		// command against; the placeholder keeps the YAML schema-valid.
 		return TestSection{
 			Default: "unit",
 			Tasks: map[string]TestTask{
 				"unit": {
-					Desc: "TODO — language scaffold not implemented yet",
-					Run:  `echo "gofi test: ` + language + ` scaffold not yet implemented; edit .gofi.yaml when ready"`,
+					Desc: "TODO — no Python scaffold yet; wire your own runner",
+					Run:  `echo "gofi test: configure the python test task in .gofi.yaml"`,
 				},
 			},
 		}
@@ -191,6 +241,12 @@ func defaultCoverageReport(language string) string {
 		return "coverage.out"
 	case LanguageRust:
 		return "cobertura.xml"
+	case LanguageJava:
+		return "target/site/jacoco/jacoco.xml"
+	case LanguageCSharp:
+		return "coverage.cobertura.xml"
+	case LanguageNodeJS:
+		return "coverage/lcov.info"
 	}
 	return ""
 }
@@ -221,16 +277,6 @@ const (
 	DefaultFrontendPath = "frontend"
 	DefaultMobilePath   = "mobile"
 )
-
-// DefaultSources returns the source pin used for a brand new project.
-func DefaultSources() Sources {
-	return Sources{
-		Agents: DefaultAgentsRef,
-		SDK: map[string]string{
-			LanguageGo: DefaultSDKGoRef,
-		},
-	}
-}
 
 // DefaultOps returns the platform block seeded into a freshly created
 // .gofi.yaml. It ships the first-class gofi-ops stack (OCI + Terraform + OKE +

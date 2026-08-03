@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/detect"
 )
 
 func TestNewDefaultResult(t *testing.T) {
@@ -19,6 +20,80 @@ func TestNewDefaultResult(t *testing.T) {
 	}
 	if r.AgentsRef != config.DefaultAgentsRef {
 		t.Errorf("default agents ref = %q", r.AgentsRef)
+	}
+}
+
+func TestSeedFromDetect(t *testing.T) {
+	r := newDefaultResult()
+	seedFromDetect(r, detect.Result{
+		Backend: detect.Surface{Path: "services/api", Marker: "go.mod", Language: config.LanguageGo},
+		Web:     detect.Surface{Path: "apps/web", Marker: "package.json", Framework: config.FrameworkVue},
+	})
+
+	if r.SourcePath != "services/api" || r.Language != config.LanguageGo {
+		t.Errorf("backend = %q/%q", r.Language, r.SourcePath)
+	}
+	if r.WebPath != "apps/web" {
+		t.Errorf("web path = %q", r.WebPath)
+	}
+	if !r.Has(EnvBack) || !r.Has(EnvWeb) {
+		t.Errorf("environments = %v, want backend and web", r.Environments)
+	}
+	if r.Has(EnvMobile) {
+		t.Errorf("mobile was not detected but is selected: %v", r.Environments)
+	}
+}
+
+// The scanned identifier replaces the placeholder module, but only when the
+// marker actually carried one — otherwise the question is still a real one and
+// the example is the better prompt.
+func TestSeedFromDetect_Identifiers(t *testing.T) {
+	placeholder := newDefaultResult().Module
+
+	withModule := newDefaultResult()
+	seedFromDetect(withModule, detect.Result{
+		Name:    "billing-api",
+		Backend: detect.Surface{Path: ".", Marker: "go.mod", Language: config.LanguageGo, Module: "github.com/acme/billing"},
+	})
+	if withModule.Module != "github.com/acme/billing" {
+		t.Errorf("Module = %q, want the one read from go.mod", withModule.Module)
+	}
+	if withModule.Name != "billing-api" {
+		t.Errorf("Name = %q, want billing-api", withModule.Name)
+	}
+
+	withoutModule := newDefaultResult()
+	seedFromDetect(withoutModule, detect.Result{
+		Backend: detect.Surface{Path: ".", Marker: "build.gradle", Language: config.LanguageJava},
+	})
+	if withoutModule.Module != placeholder {
+		t.Errorf("Module = %q, want the placeholder %q", withoutModule.Module, placeholder)
+	}
+}
+
+func TestSeedFromDetect_EmptyScanKeepsDefaults(t *testing.T) {
+	r := newDefaultResult()
+	seedFromDetect(r, detect.Result{})
+	if r.SourcePath != config.DefaultBackendPath || !r.Has(EnvBack) {
+		t.Errorf("a brand-new project must keep its defaults, got %q / %v", r.SourcePath, r.Environments)
+	}
+}
+
+func TestAdopted(t *testing.T) {
+	r := newDefaultResult()
+	r.Detected = detect.Result{Backend: detect.Surface{Path: "src", Marker: "go.mod", Language: config.LanguageGo}}
+
+	r.SourcePath = "src"
+	if !r.Adopted(EnvBack) {
+		t.Error("the detected path should count as adopted")
+	}
+	// Overriding the detected path points at a folder gofi still has to create.
+	r.SourcePath = "backend"
+	if r.Adopted(EnvBack) {
+		t.Error("a hand-typed path is not an adopted tree")
+	}
+	if r.Adopted(EnvWeb) || r.Adopted(EnvMobile) {
+		t.Error("undetected surfaces are never adopted")
 	}
 }
 

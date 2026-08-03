@@ -1,0 +1,27 @@
+# {{.ProjectName}}
+
+Node.js service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+{{.SourceRoot}}/
+├── package.json
+├── tsconfig.json
+├── .migrations/
+└── src/
+    ├── main.ts
+    └── domain/               # one folder per bounded context
+```
+
+## Build & run
+
+```sh
+cd {{.SourceRoot}} && npm install && npm run build && npm start
+```
+
+## Tests
+
+```sh
+gofi test
+```

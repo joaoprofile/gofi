@@ -1,0 +1,30 @@
+# {{.ProjectName}}
+
+Java service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+{{.SourceRoot}}/
+├── pom.xml
+├── .migrations/
+└── src/
+    ├── main/
+    │   ├── java/{{.PackagePath}}/
+    │   │   ├── Application.java
+    │   │   └── domain/       # one package per bounded context
+    │   └── resources/application.yaml
+    └── test/java/{{.PackagePath}}/
+```
+
+## Build & run
+
+```sh
+mvn -f {{.SourceRoot}}/pom.xml compile exec:java -Dexec.mainClass={{.Module}}.Application
+```
+
+## Tests
+
+```sh
+gofi test
+```

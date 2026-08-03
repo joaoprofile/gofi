@@ -1,0 +1,28 @@
+# {{.ProjectName}}
+
+C# service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+{{.SourceRoot}}/
+├── .migrations/
+└── {{.ProjectName}}/
+    ├── {{.ProjectName}}.csproj
+    ├── Program.cs
+    └── Domain/               # one folder per bounded context
+```
+
+## Build & run
+
+```sh
+dotnet run --project {{.SourceRoot}}/{{.ProjectName}}
+```
+
+## Tests
+
+```sh
+gofi test
+```
+
+A solution file is not generated. Add one with `dotnet new sln` if you need it.

@@ -13,7 +13,7 @@ func sampleData() TemplateData {
 	return TemplateData{
 		ProjectName: "my-svc",
 		Language:    "go",
-		GoModule:    "github.com/acme/my-svc",
+		Module:      "github.com/acme/my-svc",
 		SourceRoot:  "src",
 		Date:        "2026-04-25",
 		AIHost:      "claude-vscode",
@@ -80,23 +80,132 @@ func TestInstallGo_KeepsExistingFiles(t *testing.T) {
 	mustExist(t, dir, "go.work", ".gitignore", "src/domain")
 }
 
-func TestInstallRust(t *testing.T) {
-	dir := t.TempDir()
-	data := sampleData()
-	data.Language = "rust"
-	if _, err := InstallRust(dir, data); err != nil {
-		t.Fatalf("InstallRust: %v", err)
+// TestInstallBackend_EveryLanguage locks the shape each scaffold produces: the
+// manifest, the entrypoint and the domain/ + .migrations/ folders the gofi
+// conventions expect, under the source root the user chose.
+func TestInstallBackend_EveryLanguage(t *testing.T) {
+	cases := []struct {
+		language string
+		module   string
+		files    []string
+		dirs     []string
+		contains map[string]string
+	}{
+		{
+			language: "go",
+			module:   "github.com/acme/my-svc",
+			files:    []string{"go.work", "backend/go.mod", "backend/my-svc/main.go"},
+			dirs:     []string{"backend/domain", "backend/.migrations"},
+			contains: map[string]string{"backend/go.mod": "module github.com/acme/my-svc"},
+		},
+		{
+			language: "rust",
+			module:   "",
+			files: []string{
+				"backend/Cargo.toml",
+				"backend/my-svc/Cargo.toml",
+				"backend/my-svc/src/main.rs",
+				"backend/my-svc/src/domain/mod.rs",
+			},
+			dirs: []string{"backend/.migrations"},
+			contains: map[string]string{
+				"backend/Cargo.toml":         `members = ["my-svc"]`,
+				"backend/my-svc/Cargo.toml":  `name = "my-svc"`,
+				"backend/my-svc/src/main.rs": "mod domain;",
+			},
+		},
+		{
+			language: "java",
+			module:   "com.acme.mysvc",
+			files: []string{
+				"backend/pom.xml",
+				"backend/src/main/java/com/acme/mysvc/Application.java",
+				"backend/src/main/resources/application.yaml",
+			},
+			dirs: []string{
+				"backend/src/main/java/com/acme/mysvc/domain",
+				"backend/src/test/java/com/acme/mysvc",
+				"backend/.migrations",
+			},
+			contains: map[string]string{
+				"backend/pom.xml": "<groupId>com.acme</groupId>",
+				"backend/src/main/java/com/acme/mysvc/Application.java": "package com.acme.mysvc;",
+			},
+		},
+		{
+			language: "csharp",
+			module:   "Acme.MySvc",
+			files:    []string{"backend/my-svc/my-svc.csproj", "backend/my-svc/Program.cs"},
+			dirs:     []string{"backend/my-svc/Domain", "backend/.migrations"},
+			contains: map[string]string{
+				"backend/my-svc/my-svc.csproj": "<RootNamespace>Acme.MySvc</RootNamespace>",
+				"backend/my-svc/Program.cs":    "namespace Acme.MySvc;",
+			},
+		},
+		{
+			language: "nodejs",
+			module:   "@acme/my-svc",
+			files:    []string{"backend/package.json", "backend/tsconfig.json", "backend/src/main.ts"},
+			dirs:     []string{"backend/src/domain", "backend/.migrations"},
+			contains: map[string]string{"backend/package.json": `"name": "@acme/my-svc"`},
+		},
 	}
 
-	mustExist(t, dir,
-		".gitignore",
-		"README.md",
-		"Cargo.toml",
-		"crates/my-svc/Cargo.toml",
-		"crates/my-svc/src/main.rs",
-	)
-	mustContain(t, filepath.Join(dir, "Cargo.toml"), `members = ["crates/my-svc"]`)
-	mustContain(t, filepath.Join(dir, "crates/my-svc/Cargo.toml"), `name = "my-svc"`)
+	for _, tc := range cases {
+		t.Run(tc.language, func(t *testing.T) {
+			dir := t.TempDir()
+			data := sampleData()
+			data.Language = tc.language
+			data.Module = tc.module
+			data.SourceRoot = "backend"
+
+			if _, err := InstallBackend(tc.language, dir, data); err != nil {
+				t.Fatalf("InstallBackend: %v", err)
+			}
+
+			mustExist(t, dir, append([]string{".gitignore", "README.md"}, append(tc.files, tc.dirs...)...)...)
+			for rel, want := range tc.contains {
+				mustContain(t, filepath.Join(dir, rel), want)
+			}
+			mustHaveNoMarkers(t, dir)
+		})
+	}
+}
+
+func TestInstallBackend_UnknownLanguageIsANoop(t *testing.T) {
+	dir := t.TempDir()
+	created, err := InstallBackend("cobol", dir, sampleData())
+	if err != nil {
+		t.Fatalf("InstallBackend: %v", err)
+	}
+	if len(created) != 0 {
+		t.Errorf("created %v, want nothing", created)
+	}
+	if HasBackendScaffold("cobol") {
+		t.Error("HasBackendScaffold(cobol) = true, want false")
+	}
+}
+
+// mustHaveNoMarkers fails when a path placeholder survived into the installed
+// tree — a missing substitution is silent otherwise, and the project only
+// breaks much later when the toolchain trips over a __ROOT__ directory.
+func mustHaveNoMarkers(t *testing.T, dir string) {
+	t.Helper()
+	markers := []string{ProjectMarker, RootMarker, PackageMarker, TemplateExt, GitkeepName}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		for _, m := range markers {
+			if strings.Contains(d.Name(), m) {
+				t.Errorf("%s: unsubstituted %q in installed tree", p, m)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
 }
 
 // fixtureFS returns an in-memory gofi monorepo tree mirroring the layout
@@ -295,6 +404,34 @@ func TestInstallGo_CustomSourceRoot(t *testing.T) {
 		t.Fatalf("__ROOT__ marker should not leak into dest")
 	}
 	mustContain(t, filepath.Join(dir, "go.work"), "use ./services")
+}
+
+// TestInstallGo_NestedAndRootSourceRoot covers the two path shapes the wizard
+// accepts beyond a single folder name: a nested path, and "." for code that
+// already lives at the workspace root.
+func TestInstallGo_NestedAndRootSourceRoot(t *testing.T) {
+	t.Run("nested", func(t *testing.T) {
+		dir := t.TempDir()
+		data := sampleData()
+		data.SourceRoot = "services/api"
+		if _, err := InstallGo(dir, data); err != nil {
+			t.Fatalf("InstallGo: %v", err)
+		}
+		mustExist(t, dir, "services/api/go.mod", "services/api/my-svc/main.go", "services/api/domain")
+		mustContain(t, filepath.Join(dir, "go.work"), "use ./services/api")
+	})
+	t.Run("root", func(t *testing.T) {
+		dir := t.TempDir()
+		data := sampleData()
+		data.SourceRoot = "."
+		if _, err := InstallGo(dir, data); err != nil {
+			t.Fatalf("InstallGo: %v", err)
+		}
+		mustExist(t, dir, "go.mod", "my-svc/main.go", "domain")
+		if _, err := os.Stat(filepath.Join(dir, "src")); !os.IsNotExist(err) {
+			t.Fatal("src/ should not exist when the source root is the workspace root")
+		}
+	})
 }
 
 func mustExist(t *testing.T, root string, paths ...string) {

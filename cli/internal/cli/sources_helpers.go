@@ -291,7 +291,9 @@ func seedLocalstackEnv(projectRoot, agentsRef string) error {
 		if e.IsDir() || e.Name() == envExampleFile {
 			continue
 		}
-		if err := copyFile(filepath.Join(srcDir, e.Name()), filepath.Join(destDir, e.Name()), 0o644); err != nil {
+		// Absent-only, like the .env below: init now runs over repositories that
+		// already exist, and a compose file the team edited is theirs to keep.
+		if err := copyFileIfAbsent(filepath.Join(srcDir, e.Name()), filepath.Join(destDir, e.Name()), 0o644); err != nil {
 			return fmt.Errorf("copy ops/localstack/%s: %w", e.Name(), err)
 		}
 	}

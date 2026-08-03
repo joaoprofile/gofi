@@ -121,6 +121,66 @@ func TestScanMonorepo(t *testing.T) {
 	}
 }
 
+// The identifier is read off the marker so the user confirms it instead of
+// retyping it; a wrong one here silently puts a module in .gofi.yaml that the
+// repository does not have.
+func TestScanReadsBackendModule(t *testing.T) {
+	pom := `<project><groupId>com.acme</groupId><artifactId>billing</artifactId></project>`
+	inherited := `<project><parent><groupId>com.acme</groupId></parent><artifactId>billing</artifactId></project>`
+	cases := []struct {
+		name   string
+		files  map[string]string
+		module string
+	}{
+		{"go", map[string]string{"go.mod": "// comment\nmodule github.com/acme/svc\n\ngo 1.24\n"}, "github.com/acme/svc"},
+		{"npm", map[string]string{"package.json": `{"name":"@acme/api","dependencies":{"express":"4"}}`}, "@acme/api"},
+		{"maven", map[string]string{"pom.xml": pom}, "com.acme.billing"},
+		{"maven-parent-group", map[string]string{"pom.xml": inherited}, "com.acme.billing"},
+		{"csharp", map[string]string{"Acme.Billing.csproj": ""}, "Acme.Billing"},
+		// The wizard rejects a namespace without a dot, so suggesting one would
+		// only block the form on a value the user has to clear first.
+		{"csharp-undotted", map[string]string{"Api.csproj": ""}, ""},
+		// Rust and Python are asked for no module at all.
+		{"rust", map[string]string{"Cargo.toml": "[package]\nname = \"svc\"\n"}, ""},
+		{"python", map[string]string{"pyproject.toml": ""}, ""},
+		// Gradle states the identifier in a build script, not in a field.
+		{"gradle", map[string]string{"build.gradle": ""}, ""},
+		{"go-mod-without-module", map[string]string{"go.mod": "go 1.24\n"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Scan(tree(t, tc.files))
+			if !got.Backend.Found() {
+				t.Fatalf("expected a backend, got %+v", got)
+			}
+			if got.Backend.Module != tc.module {
+				t.Errorf("Module = %q, want %q", got.Backend.Module, tc.module)
+			}
+		})
+	}
+}
+
+func TestScanName(t *testing.T) {
+	cases := []struct{ dir, want string }{
+		{"billing-api", "billing-api"},
+		{"Billing API", "billing-api"},
+		{"2024_billing", "billing"},
+		{"...", ""},
+		{"x", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.dir, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), tc.dir)
+			if err := os.MkdirAll(root, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if got := Scan(root).Name; got != tc.want {
+				t.Errorf("Name = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestScanNestedWorkspace(t *testing.T) {
 	// A workspace root whose package.json is nothing but tooling must not claim
 	// the web surface away from the real app two levels down.

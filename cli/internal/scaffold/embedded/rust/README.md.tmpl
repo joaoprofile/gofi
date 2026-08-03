@@ -5,19 +5,20 @@ Rust service bootstrapped by `gofi init`.
 ## Layout
 
 ```
-.
+{{.SourceRoot}}/
 ├── Cargo.toml                # workspace
-├── crates/
-│   └── {{.ProjectName}}/
-│       ├── Cargo.toml
-│       └── src/main.rs
-└── .claude/                  # gofi agents config
+├── .migrations/
+└── {{.ProjectName}}/
+    ├── Cargo.toml
+    └── src/
+        ├── main.rs
+        └── domain/           # one module per bounded context
 ```
 
 ## Build & run
 
 ```sh
-cargo run -p {{.ProjectName}}
+cargo run --manifest-path {{.SourceRoot}}/Cargo.toml -p {{.ProjectName}}
 ```
 
 ## Tests

@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,15 +13,42 @@ import (
 
 // InstallGo installs the Go scaffold at projectRoot — go.work plus the source
 // folder (data.SourceRoot, e.g. "src" or "services") containing go.mod,
-// main.go, domain/ and .migrations/. The directory must already exist.
+// main.go, domain/ and .migrations/.
 //
-// data.SourceRoot is required; the installer replaces the RootMarker in path
-// components and references {{.SourceRoot}} from go.work.tmpl.
-//
-// Files already present are never overwritten: `gofi init` runs on existing
-// repositories too, where go.mod, main.go and friends belong to the user.
+// Go is the only language with a dedicated entry point because it is the only
+// one that also gets go.work wiring; every other backend goes through
+// InstallBackend directly.
 func InstallGo(projectRoot string, data TemplateData) ([]string, error) {
-	return installFS(embeddedFS, "embedded/golang", projectRoot, data, InstallOptions{KeepExisting: true})
+	return InstallBackend("go", projectRoot, data)
+}
+
+// EnsureGoWork writes a minimal go.work at projectRoot when there is none,
+// pointing at the module under sourcePath ("." when it sits at the root).
+//
+// An adopted repository normally carries a go.mod and no go.work, and without a
+// workspace the SDK checkout under .gofi/ cannot be reached: EnsureGoWorkSDK
+// edits go.work and has nothing to edit. The go directive is copied from the
+// adopted module rather than invented, and EnsureGoWorkSDK bumps it afterwards
+// if the SDK requires more.
+func EnsureGoWork(projectRoot, sourcePath string) error {
+	path := filepath.Join(projectRoot, "go.work")
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	modPath := filepath.Join(projectRoot, sourcePath, "go.mod")
+	body, err := os.ReadFile(modPath)
+	if err != nil {
+		return fmt.Errorf("go.work: read %s: %w", modPath, err)
+	}
+	version := parseGoDirective(string(body))
+	if version == "" {
+		return fmt.Errorf("go.work: no go directive in %s", modPath)
+	}
+	use := "./" + sourcePath
+	if sourcePath == "." || sourcePath == "" {
+		use = "."
+	}
+	return os.WriteFile(path, fmt.Appendf(nil, "go %s\n\nuse %s\n", version, use), 0o644)
 }
 
 // EnsureGoWorkSDK keeps <projectRoot>/go.work aligned with the local SDK

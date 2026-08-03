@@ -1,8 +1,15 @@
 # Boilerplate — Model
 
+> **`//gofi:context {contexto}`** abre a cláusula `package` — é o elo entre o
+> símbolo no grafo e `specs/{contexto}/` + `.claude/memory/contexts/{contexto}.md`.
+> Basta em **um** arquivo do pacote (vale para todos os símbolos dele); use o
+> mesmo nome de `specs/{contexto}/`, kebab-case. Detalhe em
+> `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+
 ## entity.go — Entidade de domínio
 
 ```go
+//gofi:context {contexto}
 package model
 
 import (

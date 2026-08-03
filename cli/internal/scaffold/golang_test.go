@@ -24,6 +24,55 @@ func writeGoModWithVersion(t *testing.T, root, rel, module, goVersion string) {
 	}
 }
 
+func TestEnsureGoWork_CreatesFromAdoptedModule(t *testing.T) {
+	root := t.TempDir()
+	writeGoModWithVersion(t, root, "services/api", "github.com/acme/api", "1.24")
+
+	if err := EnsureGoWork(root, "services/api"); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "go.work"))
+	if want := "go 1.24\n\nuse ./services/api\n"; string(got) != want {
+		t.Errorf("go.work =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestEnsureGoWork_ModuleAtRoot(t *testing.T) {
+	root := t.TempDir()
+	writeGoModWithVersion(t, root, ".", "github.com/acme/api", "1.25")
+
+	if err := EnsureGoWork(root, "."); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "go.work"))
+	if want := "go 1.25\n\nuse .\n"; string(got) != want {
+		t.Errorf("go.work =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestEnsureGoWork_LeavesExistingAlone(t *testing.T) {
+	root := t.TempDir()
+	writeGoMod(t, root, "src", "github.com/acme/api")
+	existing := "go 1.25\n\nuse (\n\t./src\n\t./tools\n)\n"
+	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureGoWork(root, "src"); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "go.work"))
+	if string(got) != existing {
+		t.Errorf("an existing go.work must not be rewritten, got:\n%s", got)
+	}
+}
+
+func TestEnsureGoWork_ErrorsWithoutGoMod(t *testing.T) {
+	if err := EnsureGoWork(t.TempDir(), "src"); err == nil {
+		t.Fatal("expected an error when the adopted module has no go.mod")
+	}
+}
+
 func TestEnsureGoWorkSDK_AddsRootModuleWhenSinglePresent(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.25\n\nuse ./src\n"), 0o644); err != nil {

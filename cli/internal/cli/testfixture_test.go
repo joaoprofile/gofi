@@ -12,15 +12,18 @@ import (
 // intentionally tiny so tests stay fast and the shape stays obvious;
 // production repos will have far richer content.
 var fixtureRepoFiles = map[string]string{
-	"ai/skills/gofi-pd.md":                  "# /gofi-pd — fixture skill",
-	"ai/skills/gofi-spec.md":                "# /gofi-spec — fixture skill",
-	"ai/skills/gofi-eng.md":                 "# /gofi-eng — fixture skill",
-	"ai/skills/gofi-qa.md":                  "# /gofi-qa — fixture skill",
-	"ai/claude/CLAUDE.md":                   "# CLAUDE — fixture",
-	"ai/claude/README.md":                   "# README — fixture",
-	"ai/templates/sdd-template.md":          "# SDD — fixture",
-	"ai/templates/prd-template.md":          "# PRD — fixture",
-	"ai/memory/project.md.tmpl":             "# Memory — {{.ProjectName}}",
+	"ai/skills/gofi-pd.md":         "# /gofi-pd — fixture skill",
+	"ai/skills/gofi-spec.md":       "# /gofi-spec — fixture skill",
+	"ai/skills/gofi-eng.md":        "# /gofi-eng — fixture skill",
+	"ai/skills/gofi-qa.md":         "# /gofi-qa — fixture skill",
+	"ai/claude/CLAUDE.md":          "# CLAUDE — fixture",
+	"ai/claude/README.md":          "# README — fixture",
+	"ai/templates/sdd-template.md": "# SDD — fixture",
+	"ai/templates/prd-template.md": "# PRD — fixture",
+	// Mirrors every field the real project.md.tmpl interpolates: a template
+	// referencing a renamed field only fails when it is actually rendered, and
+	// a fixture that reads fewer fields hides the break until runtime.
+	"ai/memory/project.md.tmpl":             "# Memory — {{.ProjectName}}\n{{.Language}} {{.Module}} {{.AIHost}} {{.AIModel}}\n{{range .Agents}}{{.}} {{end}}",
 	"ai/sdk/go/boilerplates/model.md":       "fixture model boilerplate",
 	"ai/sdk/go/sdk-docs/overview.md":        "fixture sdk overview",
 	"ai/sdk/go/knowledge/error-handling.md": "fixture error handling knowledge",

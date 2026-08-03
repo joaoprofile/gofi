@@ -20,8 +20,8 @@
 {{.ProjectName}} — projeto bootstrapped via `gofi init`.
 
 - Linguagem: {{.Language}}
-{{- if eq .Language "go"}}
-- Go module: `{{.GoModule}}`
+{{- if .Module}}
+- Módulo: `{{.Module}}`
 {{- end}}
 - AI host: {{.AIHost}}
 - Modelo Claude: {{.AIModel}}

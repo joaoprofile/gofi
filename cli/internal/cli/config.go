@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/detect"
 	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/tui/editor"
 	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
@@ -90,7 +91,9 @@ func runConfigWizard() error {
 		return fmt.Errorf("%w — run `gofi init` to create one", err)
 	}
 
-	res, err := wizard.Run(cfg)
+	// No detection here: the config already says where every surface lives, and
+	// a scan could only contradict a decision the project already made.
+	res, err := wizard.Run(cfg, detect.Result{})
 	if err != nil {
 		if errors.Is(err, wizard.ErrCancelled) {
 			fmt.Println("config cancelled.")

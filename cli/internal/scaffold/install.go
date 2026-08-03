@@ -13,6 +13,7 @@ import (
 const (
 	ProjectMarker = "__PROJECT__"
 	RootMarker    = "__ROOT__"
+	PackageMarker = "__PKG__"
 	TemplateExt   = ".tmpl"
 	GitkeepName   = ".gitkeep"
 )
@@ -22,15 +23,43 @@ const (
 // SourceRoot is the source folder name inside the workspace (e.g. "src",
 // "services", "backend"). It replaces the RootMarker in path components and
 // is exposed as {{.SourceRoot}} to .tmpl files.
+//
+// Module is the one identifier the user supplies for the backend, spelled the
+// way its ecosystem spells it: a Go module path, a Java base package, a .NET
+// root namespace, an npm package name. PackagePath, GroupID and ArtifactID are
+// derived from it — see moduleParts.
 type TemplateData struct {
 	ProjectName string
 	Language    string
-	GoModule    string
+	Module      string
+	PackagePath string // Module as a path: com.acme.svc -> com/acme/svc
+	GroupID     string // Module minus its last segment, for Maven
+	ArtifactID  string // Module's last segment
 	SourceRoot  string
 	Date        string
 	AIHost      string
 	AIModel     string
 	Agents      []string
+}
+
+// WithModuleParts returns a copy of d with PackagePath, GroupID and ArtifactID
+// derived from Module. Dotted (Java, C#) and slash-separated (Go, npm) module
+// strings both work; a scoped npm name (@acme/svc) drops the sigil.
+func (d TemplateData) WithModuleParts() TemplateData {
+	m := strings.TrimPrefix(strings.TrimSpace(d.Module), "@")
+	if m == "" {
+		return d
+	}
+	segs := strings.FieldsFunc(m, func(r rune) bool { return r == '.' || r == '/' })
+	if len(segs) == 0 {
+		return d
+	}
+	d.PackagePath = strings.Join(segs, "/")
+	d.ArtifactID = segs[len(segs)-1]
+	if len(segs) > 1 {
+		d.GroupID = strings.Join(segs[:len(segs)-1], ".")
+	}
+	return d
 }
 
 // InstallOptions tweaks how installFS handles entries.
@@ -74,6 +103,9 @@ func installFS(srcFS fs.FS, root, dest string, data TemplateData, opts InstallOp
 		rel = strings.ReplaceAll(rel, ProjectMarker, data.ProjectName)
 		if data.SourceRoot != "" {
 			rel = strings.ReplaceAll(rel, RootMarker, data.SourceRoot)
+		}
+		if data.PackagePath != "" {
+			rel = strings.ReplaceAll(rel, PackageMarker, data.PackagePath)
 		}
 		target := filepath.Join(dest, rel)
 
@@ -124,12 +156,6 @@ func installFS(srcFS fs.FS, root, dest string, data TemplateData, opts InstallOp
 	})
 
 	return created, walkErr
-}
-
-// installEmbedded is a thin wrapper that points installFS at the embedded
-// snapshot bundled with the binary.
-func installEmbedded(source, dest string, data TemplateData) ([]string, error) {
-	return installFS(embeddedFS, "embedded/"+source, dest, data, InstallOptions{})
 }
 
 func hasAnyPrefix(p string, prefixes []string) bool {

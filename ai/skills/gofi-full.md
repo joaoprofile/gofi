@@ -119,8 +119,14 @@ loop:
 |------|---------------|----------------|
 | `gofi-pd`  | PRD gerado, sem ambiguidade bloqueante de escopo; frontmatter `status: prd` | discovery incompleto a ponto de impedir a spec |
 | `gofi-spec`| spec SDD completa e internamente consistente; `status: spec` | spec não fecha por **lacuna de negócio** no PRD |
-| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes) **e todo bug fix/melhoria vem com teste de regressão**; `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
+| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes), **todo bug fix/melhoria vem com teste de regressão** e o **grafo foi reconstruído** (`gofi graph build --update`); `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
 | `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** | qualquer blocker/major, **⚠️ com ressalvas**, ou ❌ reprovado |
+
+> **Grafo entre fases.** O hook de pre-commit só reconstrói o grafo **no
+> commit**, e este loop não commita entre fases — sem `gofi graph build --update`
+> ao fim do `gofi-eng`, o `gofi-qa` auditaria um mapa sem a implementação recém
+> escrita. Se a fase anterior não rodou, rode você antes de invocar o QA.
+> Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 > **Minors/suggestions do QA:** o usuário pediu "sem nenhuma ressalva". Trate
 > minors como itens a corrigir no mesmo passe de `gofi-eng` antes de reauditar.
