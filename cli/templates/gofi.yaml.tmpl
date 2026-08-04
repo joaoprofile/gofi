@@ -31,12 +31,16 @@ backend:
 # Só framework e path são validados. brand, styling, state, forms, i18n,
 # testing, ds e legacy são livres: `gofi init` semeia os presets gofi, e um
 # projeto com design system próprio escreve os seus valores aqui.
+#
+# TODOS são ESCALARES (uma string). Escrever qualquer um como bloco — o caso
+# comum é `brand:` com surface/onBrand/action/… — impede o config de carregar
+# e nenhum comando gofi roda no projeto. `gofi update --audit` nomeia a chave.
 # ───────────────────────────────────────────────────────────────────────────
 {{- if .Frontend}}
 frontend:
     framework: {{.Frontend.Framework}}      # react|angular|vue
     path: {{.Frontend.Path}}                # raiz do app, relativa a project.root
-    brand: {{.Frontend.Brand}}              # preset gofi (blue|violet|green) ou marca do projeto
+    brand: {{.Frontend.Brand}}              # UMA string: preset (blue|violet|green) ou cor-semente ("#AAD7FF")
     styling: {{.Frontend.Styling}}          # tailwind | scss-modules | css-modules | ...
     state: {{.Frontend.State}}              # camada de data/estado (tanstack-query, axios-hooks, ...)
 {{- if .Frontend.Forms}}
@@ -66,7 +70,7 @@ frontend:
 mobile:
     framework: {{.Mobile.Framework}}        # react-native|expo
     path: {{.Mobile.Path}}
-    brand: {{.Mobile.Brand}}
+    brand: {{.Mobile.Brand}}                # idem frontend: uma string, nunca um bloco
     styling: {{.Mobile.Styling}}            # stylesheet | nativewind | ...
     state: {{.Mobile.State}}
 {{- if .Mobile.Forms}}
@@ -93,6 +97,15 @@ mobile:
 #     ds: gofi-ui-native
 {{- end}}
 
+# Superfícies além do front web e do app: back office, console de admin.
+# Mesmos campos, sob o nome que o projeto deu. O grafo cria um escopo por
+# nome e o sonar inclui cada `path` nas suas fontes.
+# surfaces:
+#     backoffice:
+#         framework: react
+#         path: frontend/backoffice
+#         brand: violet
+
 # ───────────────────────────────────────────────────────────────────────────
 # CAMADA OPS — consumida por /gofi-ops (omitir o bloco se não há IaC/CI-CD)
 # ───────────────────────────────────────────────────────────────────────────
@@ -117,15 +130,20 @@ ops:
 ai:
     host: {{.AI.Host}}                      # claude-vscode
     model: {{.AI.Model}}                    # modelo default; deve estar ativo em models
-    # Modelos exibidos pelo /model no gofi-ai.
-    # `gofi init` grava só o selecionado como ativo; os demais de config.AllModels()
-    # ficam como `# - id` (cardápio). Descomente para adicionar ao picker.
+    # Modelos exibidos pelo /model no gofi-ai. Descomente para adicionar ao picker.
+    #
+    # O picker do `gofi init` e este cardápio saem da MESMA tabela
+    # (config.Models()): o selecionado entra ativo, os demais como `# - id`.
+    # Adicionar um modelo é uma entrada lá — não edite esta lista à mão aqui.
     models:
         - {{.AI.Model}}
         # - claude-fable-5
         # - claude-opus-5
         # - claude-opus-4-8
-        # ... (demais IDs de config.AllModels())
+        # - claude-opus-4-7
+        # - claude-sonnet-5
+        # - claude-sonnet-4-6
+        # - claude-haiku-4-5
 
 # Agents habilitados. Skills são sempre instaladas em .claude/skills/; esta
 # lista escopa os diretórios .claude/knowledge/{agent}/.

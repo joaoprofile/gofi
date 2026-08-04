@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
@@ -9,8 +10,8 @@ import (
 
 func TestNewDefaultResult(t *testing.T) {
 	r := newDefaultResult()
-	if r.AIModel != config.ModelOpus48 {
-		t.Errorf("default model = %q, want %q", r.AIModel, config.ModelOpus48)
+	if r.AIModel != config.DefaultModel {
+		t.Errorf("default model = %q, want %q", r.AIModel, config.DefaultModel)
 	}
 	if !r.Has(EnvBack) {
 		t.Errorf("default should include backend")
@@ -20,6 +21,34 @@ func TestNewDefaultResult(t *testing.T) {
 	}
 	if r.AgentsRef != config.DefaultAgentsRef {
 		t.Errorf("default agents ref = %q", r.AgentsRef)
+	}
+}
+
+// The wizard's pick is what lands in .gofi.yaml as ai.models, which is the list
+// the extension's /model picker reads. A model the wizard omits is a model the
+// user can never reach without editing YAML by hand.
+func TestModelOptionsOfferEveryModel(t *testing.T) {
+	opts := modelOptions()
+	if len(opts) != len(config.Models()) {
+		t.Fatalf("picker offers %d models, table has %d", len(opts), len(config.Models()))
+	}
+	var marked int
+	for i, m := range config.Models() {
+		if opts[i].Value != m.ID {
+			t.Errorf("option %d = %q, want %q", i, opts[i].Value, m.ID)
+		}
+		if !strings.HasPrefix(opts[i].Key, m.Label) {
+			t.Errorf("option %d label = %q, want it to start with %q", i, opts[i].Key, m.Label)
+		}
+		if strings.Contains(opts[i].Key, "default") {
+			marked++
+			if m.ID != config.DefaultModel {
+				t.Errorf("%q is marked default, but the default is %q", m.ID, config.DefaultModel)
+			}
+		}
+	}
+	if marked != 1 {
+		t.Errorf("%d options marked default, want exactly 1", marked)
 	}
 }
 

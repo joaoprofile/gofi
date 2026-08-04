@@ -52,25 +52,19 @@ func graphOptions(cfg *config.GofiConfig, root string) workspace.Options {
 	return opt
 }
 
-// graphSurfaces turns the front-end and mobile blocks into scopes. The folders
-// come from the configuration because that is where `gofi init` recorded them;
-// no layout is assumed.
+// graphSurfaces turns every declared UI surface into a scope. The folders come
+// from the configuration because that is where `gofi init` recorded them; no
+// layout is assumed.
 func graphSurfaces(cfg *config.GofiConfig) []workspace.Surface {
 	var out []workspace.Surface
-	for _, s := range []struct {
-		name    string
-		surface *config.UISurface
-	}{
-		{"frontend", cfg.Frontend},
-		{"mobile", cfg.Mobile},
-	} {
-		if s.surface == nil || s.surface.Path == "" {
+	for _, s := range cfg.UISurfaces() {
+		if s.Surface.Path == "" {
 			continue
 		}
 		out = append(out, workspace.Surface{
-			Name: s.name, Dir: s.surface.Path,
+			Name: s.Name, Dir: s.Surface.Path,
 			Language:  surfaceLang,
-			Framework: s.surface.Framework,
+			Framework: s.Surface.Framework,
 		})
 	}
 	return out

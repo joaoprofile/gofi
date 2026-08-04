@@ -242,7 +242,7 @@ func installAgentsFromFixture(t *testing.T, root string, data TemplateData) {
 		t.Fatalf("InstallAgentsContent: %v", err)
 	}
 	if data.Language != "" {
-		if _, err := InstallSDKContent(fsys, "ai/sdk/"+data.Language, root, data.Language); err != nil {
+		if _, err := InstallSDKContent(fsys, "ai/sdk/"+data.Language, root, data.Language, InstallNew); err != nil {
 			t.Fatalf("InstallSDKContent: %v", err)
 		}
 	}
@@ -296,6 +296,29 @@ func TestInstallAgentsContent_UpdatePreservesSharedKnowledge(t *testing.T) {
 
 	mustContain(t, editedPath, "team-edited")
 	mustContain(t, teamPath, "team only")
+}
+
+// The other half of preserving knowledge/: a protocol added upstream after the
+// project was scaffolded has to arrive, or the skills shipped by the same
+// update cite a file that is not there.
+func TestInstallAgentsContent_UpdateDeliversNewKnowledge(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := InstallAgentsContent(fixtureFS(), ".", dir, sampleData(), InstallNew); err != nil {
+		t.Fatalf("InstallAgentsContent (new): %v", err)
+	}
+
+	upstream := fixtureFS().(fstest.MapFS)
+	upstream["ai/knowledge/shared/graph-retrieval-protocol.md"] = &fstest.MapFile{Data: []byte("# graph protocol")}
+	upstream["ai/knowledge/eng/novo-padrao.md"] = &fstest.MapFile{Data: []byte("# novo padrao")}
+
+	if _, err := InstallAgentsContent(upstream, ".", dir, sampleData(), InstallUpdate); err != nil {
+		t.Fatalf("InstallAgentsContent (update): %v", err)
+	}
+
+	mustExist(t, dir,
+		".claude/knowledge/shared/graph-retrieval-protocol.md",
+		".claude/knowledge/eng/novo-padrao.md",
+	)
 }
 
 func TestInstallAgentsContent_FilterAgents(t *testing.T) {

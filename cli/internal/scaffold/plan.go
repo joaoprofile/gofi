@@ -20,6 +20,9 @@ type ChangeKind string
 const (
 	ChangeNew      ChangeKind = "new"
 	ChangeModified ChangeKind = "modified"
+	// ChangeKept marks a file upstream changed that the update will not write:
+	// the project edited it, so the local version stays.
+	ChangeKept ChangeKind = "kept"
 )
 
 // Change is a single entry in the update plan. RelPath is relative to the
@@ -35,30 +38,43 @@ type Change struct {
 // project's existing files.
 //
 // The walk mirrors the InstallUpdate branch of InstallAgentsContent:
-// CLAUDE.md, skills/*.md (all skills), templates/* and
-// scripts/*. memory/ and knowledge/ are skipped because update preserves them.
+// CLAUDE.md, skills/*.md (all skills), templates/*, scripts/* and the
+// knowledge/ files the project is missing. memory/ and institutional/ are
+// skipped because update preserves them whole.
 func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data TemplateData) ([]Change, error) {
 	var changes []Change
+	p := newPreserver(projectRoot, InstallUpdate)
 
 	add := func(claudeRel string, content []byte) error {
-		target := filepath.Join(projectRoot, ".claude", claudeRel)
+		rel := filepath.Join(".claude", claudeRel)
+		target := filepath.Join(projectRoot, rel)
 		existing, err := os.ReadFile(target)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				changes = append(changes, Change{
-					RelPath: filepath.Join(".claude", claudeRel),
-					Kind:    ChangeNew,
-				})
+				changes = append(changes, Change{RelPath: rel, Kind: ChangeNew})
 				return nil
 			}
 			return err
 		}
-		if !bytes.Equal(existing, content) {
-			changes = append(changes, Change{
-				RelPath: filepath.Join(".claude", claudeRel),
-				Kind:    ChangeModified,
-			})
+		if bytes.Equal(existing, content) {
+			return nil
 		}
+		kind := ChangeModified
+		if p.keeps(filepath.ToSlash(rel), existing) {
+			kind = ChangeKept
+		}
+		changes = append(changes, Change{RelPath: rel, Kind: kind})
+		return nil
+	}
+
+	addNewOnly := func(claudeRel string, _ []byte) error {
+		if _, err := os.Stat(filepath.Join(projectRoot, ".claude", claudeRel)); err == nil {
+			return nil
+		}
+		changes = append(changes, Change{
+			RelPath: filepath.Join(".claude", claudeRel),
+			Kind:    ChangeNew,
+		})
 		return nil
 	}
 
@@ -95,6 +111,15 @@ func PlanAgentsUpdate(agentsFS fs.FS, srcRoot, projectRoot string, data Template
 
 	if srcDir := path.Join(srcRoot, "ai", "scripts"); dirExistsInFS(agentsFS, srcDir) {
 		if err := walkAndPlan(agentsFS, srcDir, "scripts", data, add); err != nil {
+			return nil, err
+		}
+	}
+
+	// Knowledge arrives additively, so only the files the project never received
+	// are listed. A local edit is not a pending change — the update will not
+	// touch it, and showing it would promise otherwise.
+	if srcDir := path.Join(srcRoot, "ai", "knowledge"); dirExistsInFS(agentsFS, srcDir) {
+		if err := walkAndPlan(agentsFS, srcDir, "knowledge", data, addNewOnly); err != nil {
 			return nil, err
 		}
 	}

@@ -131,7 +131,7 @@ func installFromSource(projectRoot, language string, uiSurfaces []string, agents
 	// Front-end design-system docs (gofi-ui / gofi-ui-native) for surfaces that
 	// use a DS. Installed from the monorepo tree; harmless for front-only.
 	for _, surface := range uiSurfaces {
-		if _, err := scaffold.InstallUIContent(fsys, "ai/sdk/"+surface, projectRoot, surface); err != nil {
+		if _, err := scaffold.InstallUIContent(fsys, "ai/sdk/"+surface, projectRoot, surface, mode); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not install %s design-system docs: %v\n", surface, err)
 		}
 	}
@@ -142,14 +142,14 @@ func installFromSource(projectRoot, language string, uiSurfaces []string, agents
 
 	docsInstalled := false
 	if sdkRef != "" {
-		ok, err := tryInstallSDKOverride(projectRoot, language, sdkRef)
+		ok, err := tryInstallSDKOverride(projectRoot, language, sdkRef, mode)
 		if err != nil {
 			return "", err
 		}
 		docsInstalled = ok
 	}
 	if !docsInstalled {
-		if _, err := scaffold.InstallSDKContent(fsys, "ai/sdk/"+language, projectRoot, language); err != nil {
+		if _, err := scaffold.InstallSDKContent(fsys, "ai/sdk/"+language, projectRoot, language, mode); err != nil {
 			if errors.Is(err, scaffold.ErrNoSDKLayout) {
 				fmt.Fprintf(os.Stderr, "warning: gofi/ai/sdk/%s/ has no SDK layout (boilerplates/, sdk-docs/, knowledge/); skipping docs install\n", language)
 				return resolved.Ref, nil
@@ -168,7 +168,7 @@ func installFromSource(projectRoot, language string, uiSurfaces []string, agents
 // (false, err) on a hard failure that should abort the pipeline. The .gofi/
 // checkout itself is preserved on the docs-missing fallback so the toolchain
 // can still consume the override as a Go module.
-func tryInstallSDKOverride(projectRoot, language, sdkRef string) (bool, error) {
+func tryInstallSDKOverride(projectRoot, language, sdkRef string, mode scaffold.InstallMode) (bool, error) {
 	sdkDir, resolved, err := fetchSDKToProject(projectRoot, language, sdkRef)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: SDK override fetch failed (%v); falling back to gofi-agents/sdk/%s/\n", err, language)
@@ -178,7 +178,7 @@ func tryInstallSDKOverride(projectRoot, language, sdkRef string) (bool, error) {
 		return false, nil
 	}
 	sdkFS := os.DirFS(sdkDir)
-	if _, err := scaffold.InstallSDKContent(sdkFS, ".", projectRoot, language); err != nil {
+	if _, err := scaffold.InstallSDKContent(sdkFS, ".", projectRoot, language, mode); err != nil {
 		if errors.Is(err, scaffold.ErrNoSDKLayout) {
 			fmt.Fprintf(os.Stderr, "warning: SDK override %s does not contain a gofi SDK layout (boilerplates/, sdk-docs/, knowledge/); falling back to gofi-agents/sdk/%s/\n", sdkRef, language)
 			recordSDKSha(projectRoot, language, resolved)

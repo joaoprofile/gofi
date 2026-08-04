@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +31,11 @@ const (
 	ModelSonnet5  = "claude-sonnet-5"
 	ModelSonnet46 = "claude-sonnet-4-6"
 	ModelHaiku45  = "claude-haiku-4-5"
+
+	// DefaultModel is what the init wizard preselects. It is pinned rather than
+	// derived from the head of Models(), so adding a newer release offers it
+	// without changing what a project gets when the user just presses enter.
+	DefaultModel = ModelOpus48
 
 	AgentPD     = "gofi-pd"
 	AgentSpec   = "gofi-spec"
@@ -109,18 +116,44 @@ func AllAgents() []string {
 	}
 }
 
-// AllModels returns the canonical Claude model IDs the /model picker offers.
-// Single source of truth: `gofi init` seeds it into .gofi.yaml as `ai.models`,
-// and the gofi-ai extension reads that list. Adding a new model = one entry
-// here (plus a Model* const above). Ordered by family (flagship → light) and,
-// within a family, newest → oldest.
-func AllModels() []string {
-	return []string{
-		ModelFable5,
-		ModelOpus5, ModelOpus48, ModelOpus47,
-		ModelSonnet5, ModelSonnet46,
-		ModelHaiku45,
+// Model is one entry of the model picker: the ID recorded in .gofi.yaml, the
+// name a picker shows, and a short note on what the family is for. The note is
+// carried only by the newest member of each family — repeating it down the list
+// would say nothing about the choice between two Opus releases.
+type Model struct {
+	ID    string
+	Label string
+	Note  string
+}
+
+// Models returns the canonical Claude models, ordered by family (flagship →
+// light) and, within a family, newest → oldest.
+//
+// Single source of truth: the `gofi init` wizard offers exactly this list and
+// seeds the pick into .gofi.yaml as `ai.models`, which is the list the gofi-ai
+// extension's /model picker reads. Adding a model is one entry here (plus a
+// Model* const above) and it appears in every picker at once.
+func Models() []Model {
+	return []Model{
+		{ModelFable5, "Fable 5", ""},
+		{ModelOpus5, "Opus 5", "most capable"},
+		{ModelOpus48, "Opus 4.8", ""},
+		{ModelOpus47, "Opus 4.7", ""},
+		{ModelSonnet5, "Sonnet 5", "fast & sharp"},
+		{ModelSonnet46, "Sonnet 4.6", ""},
+		{ModelHaiku45, "Haiku 4.5", "fastest"},
 	}
+}
+
+// AllModels returns just the IDs from Models, for the callers that validate or
+// serialise them.
+func AllModels() []string {
+	models := Models()
+	out := make([]string, 0, len(models))
+	for _, m := range models {
+		out = append(out, m.ID)
+	}
+	return out
 }
 
 type GofiConfig struct {
@@ -129,6 +162,10 @@ type GofiConfig struct {
 	Backend  *Backend    `yaml:"backend,omitempty"`
 	Frontend *UISurface  `yaml:"frontend,omitempty"`
 	Mobile   *UISurface  `yaml:"mobile,omitempty"`
+	// Surfaces holds UI surfaces beyond the web front end and the mobile app —
+	// a back office, an admin console — keyed by the name the project gave
+	// them. Absence means there are none.
+	Surfaces map[string]*UISurface `yaml:"surfaces,omitempty"`
 	Ops      *Ops        `yaml:"ops,omitempty"`
 	AI       AI          `yaml:"ai"`
 	Agents   []string    `yaml:"agents"`
@@ -139,6 +176,46 @@ type GofiConfig struct {
 	Test     TestSection `yaml:"test"`
 	Hsec     HsecConfig  `yaml:"hsec"`
 	Sonar    SonarConfig `yaml:"sonar"`
+}
+
+// NamedSurface pairs a UI surface with the name it answers to.
+type NamedSurface struct {
+	Name    string
+	Surface *UISurface
+}
+
+// Key is where the surface sits in the document, so a message can point at a
+// line the user can find.
+func (n NamedSurface) Key() string {
+	if n.Name == "frontend" || n.Name == "mobile" {
+		return n.Name
+	}
+	return "surfaces." + n.Name
+}
+
+// UISurfaces returns every declared UI surface — frontend and mobile first, then
+// the extra ones in name order. Callers that treat all surfaces alike (graph
+// scopes, sonar sources) walk this instead of naming two blocks and silently
+// skipping the rest.
+func (c *GofiConfig) UISurfaces() []NamedSurface {
+	out := make([]NamedSurface, 0, 2+len(c.Surfaces))
+	if c.Frontend != nil {
+		out = append(out, NamedSurface{"frontend", c.Frontend})
+	}
+	if c.Mobile != nil {
+		out = append(out, NamedSurface{"mobile", c.Mobile})
+	}
+	names := make([]string, 0, len(c.Surfaces))
+	for name := range c.Surfaces {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if s := c.Surfaces[name]; s != nil {
+			out = append(out, NamedSurface{name, s})
+		}
+	}
+	return out
 }
 
 // Backend carries the backend language and its source folder. nil for a
@@ -438,6 +515,14 @@ func Load(path string) (*GofiConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	// Shapes the old material told projects to write are folded into the
+	// current ones before anything reads the document, because a file the
+	// parser rejects takes down every gofi command — including the update that
+	// exists to repair it.
+	data, _, err = normalizeLegacy(data)
+	if err != nil {
+		return nil, fmt.Errorf("normalize %s: %w", path, err)
+	}
 	var cfg GofiConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
@@ -445,6 +530,11 @@ func Load(path string) (*GofiConfig, error) {
 	if err := migrate(&cfg, data); err != nil {
 		return nil, fmt.Errorf("migrate %s: %w", path, err)
 	}
+	// Blocks that came after the first releases are required by Validate, so a
+	// project created before them would fail to load — including under the very
+	// `gofi update` that rewrites the file. Seeding first makes validation judge
+	// the effective config instead of the age of the file.
+	Backfill(&cfg)
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate %s: %w", path, err)
 	}
@@ -479,12 +569,8 @@ type legacyUI struct {
 // ui.mobile → mobile. Also folds the even older pre-root layout (absolute
 // workspace stored in project.path, no project.root) into root + "src".
 func migrate(cfg *GofiConfig, data []byte) error {
-	// Default the backend source folder for already-current configs.
-	if cfg.Version >= CurrentVersion {
-		if cfg.Backend != nil && cfg.Backend.Path == "" {
-			cfg.Backend.Path = DefaultSourceRoot
-		}
-		return nil
+	if cfg.Backend != nil && cfg.Backend.Path == "" {
+		cfg.Backend.Path = DefaultSourceRoot
 	}
 
 	var lg legacyConfig
@@ -492,25 +578,31 @@ func migrate(cfg *GofiConfig, data []byte) error {
 		return err
 	}
 
-	sourcePath := lg.Project.Path
-	// Pre-root layout: absolute workspace in project.path, no project.root.
-	if cfg.Project.Root == "" && filepath.IsAbs(sourcePath) {
-		cfg.Project.Root = sourcePath
-		sourcePath = ""
-	}
-	if lg.Project.Language != "" {
-		if sourcePath == "" {
-			sourcePath = DefaultSourceRoot
+	if cfg.Version < CurrentVersion {
+		sourcePath := lg.Project.Path
+		// Pre-root layout: absolute workspace in project.path, no project.root.
+		if cfg.Project.Root == "" && filepath.IsAbs(sourcePath) {
+			cfg.Project.Root = sourcePath
+			sourcePath = ""
 		}
-		cfg.Backend = &Backend{Language: lg.Project.Language, Path: sourcePath}
+		if lg.Project.Language != "" {
+			if sourcePath == "" {
+				sourcePath = DefaultSourceRoot
+			}
+			cfg.Backend = &Backend{Language: lg.Project.Language, Path: sourcePath}
+		}
 	}
+
+	// `ui:` is folded whatever version the file declares. The current schema has
+	// no such key, so a config that says v2 and still carries one would lose
+	// every surface in it the next time the file is written.
 	if lg.UI != nil {
 		switch {
 		case lg.UI.Web != nil || lg.UI.Mobile != nil:
-			if lg.UI.Web != nil {
+			if lg.UI.Web != nil && cfg.Frontend == nil {
 				cfg.Frontend = lg.UI.Web
 			}
-			if lg.UI.Mobile != nil {
+			if lg.UI.Mobile != nil && cfg.Mobile == nil {
 				cfg.Mobile = lg.UI.Mobile
 			}
 		case lg.UI.Framework != "":
@@ -518,10 +610,20 @@ func migrate(cfg *GofiConfig, data []byte) error {
 			// becomes, so a lone react-native app lands in mobile:, not
 			// frontend:.
 			surface := lg.UI.UISurface
-			if isMobileFramework(surface.Framework) {
+			if isMobileFramework(surface.Framework) && cfg.Mobile == nil {
 				cfg.Mobile = &surface
-			} else {
+			} else if cfg.Frontend == nil {
 				cfg.Frontend = &surface
+			}
+		}
+		// Anything else under `ui:` is a surface the project declared and the
+		// two named blocks cannot hold. It keeps its name under surfaces:.
+		for name, surface := range extraSurfaces(data) {
+			if cfg.Surfaces == nil {
+				cfg.Surfaces = map[string]*UISurface{}
+			}
+			if _, taken := cfg.Surfaces[name]; !taken {
+				cfg.Surfaces[name] = surface
 			}
 		}
 	}
@@ -552,6 +654,7 @@ func Save(path string, cfg *GofiConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
+	backup(path)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write tmp: %w", err)
@@ -561,4 +664,44 @@ func Save(path string, cfg *GofiConfig) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 	return nil
+}
+
+// BackupDir holds the previous versions of .gofi.yaml, relative to the project
+// root. It sits under .gofi/ because projects already ignore that tree, so a
+// rewrite never turns up as an untracked file in the user's git status.
+const BackupDir = ".gofi/backup"
+
+// keptBackups is how many previous versions survive: enough to walk back from a
+// rewrite the user did not want, few enough that the folder stays readable.
+const keptBackups = 5
+
+// backup copies the config as it stands before Save overwrites it. Best effort
+// and on every write, not only the migrations — a project that cannot be backed
+// up is still a project that has to be able to save.
+func backup(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// Nothing on disk yet: this is `gofi init`, not a rewrite.
+		return
+	}
+	dir := filepath.Join(filepath.Dir(path), BackupDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	// Milliseconds, so two rewrites in the same second do not land on the same
+	// name. The format still sorts oldest-first as plain text, which is what
+	// the pruning below relies on.
+	stamp := time.Now().UTC().Format("20060102-150405.000")
+	if os.WriteFile(filepath.Join(dir, FileName+"."+stamp), data, 0o644) != nil {
+		return
+	}
+	// The stamp sorts lexicographically, so the oldest come first.
+	old, err := filepath.Glob(filepath.Join(dir, FileName+".*"))
+	if err != nil || len(old) <= keptBackups {
+		return
+	}
+	sort.Strings(old)
+	for _, f := range old[:len(old)-keptBackups] {
+		os.Remove(f)
+	}
 }

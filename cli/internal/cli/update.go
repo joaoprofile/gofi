@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/joaoprofile/gofi-cli/internal/audit"
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
@@ -24,27 +27,64 @@ func newUpdateCmd() *cobra.Command {
 		Long: `Resolve the gofi-agents source pinned in the global config and, after
 confirmation, reinstall .claude/ from the new tarball.
 
-User-managed directories under .claude/knowledge/ and .claude/memory/ are
-preserved. Everything else (CLAUDE.md, commands/, specs-template/,
-prd-template/, sdk/<lang>/) is overwritten from the new ref. Pre-v2.4 layout
-dirs (boilerplates/, gofi-sdk-<lang>/, sdk-knowledge/) are removed.
+Nothing the project wrote is lost. .claude/memory/ and .claude/institutional/
+are preserved whole; .claude/knowledge/ is filled additively (a file added
+upstream arrives, an edited one is left alone); and every other managed file —
+CLAUDE.md, skills/, templates/, scripts/, sdk/<lang>/, sdk/<surface>/ — is only
+refreshed while it still matches what gofi installed there. Edit one and the
+update keeps your version and says so. Pre-v2.4 layout dirs (boilerplates/,
+gofi-sdk-<lang>/, sdk-knowledge/) are removed.
 
+Every run also brings the project up to the current standards: .gofi.yaml is
+rewritten in the current schema with any missing block seeded (values already
+in the file are kept; hand-written comments are not), the graph is rebuilt and
+its git hooks reinstalled. It then reports the drift it cannot fix on its own —
+document frontmatter and missing INDEXes belong to the agents.
+
+With --audit, only that report runs and nothing is changed.
+With --force, edited managed files go back to upstream; the replaced content is
+copied to .gofi/backup/ first.
 With --training, also revalidates training topics with URL sources (planned).`,
 		Example: `gofi update
 gofi update --yes
+gofi update --audit
+gofi update --force
 gofi update --training`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if auditOnly, _ := cmd.Flags().GetBool("audit"); auditOnly {
+				return runAuditOnly()
+			}
 			yes, _ := cmd.Flags().GetBool("yes")
 			training, _ := cmd.Flags().GetBool("training")
-			return runUpdate(cmd.Context(), yes, training)
+			force, _ := cmd.Flags().GetBool("force")
+			return runUpdate(cmd.Context(), yes, training, force)
 		},
 	}
 	cmd.Flags().Bool("training", false, "also revalidate training topics with URL sources")
 	cmd.Flags().BoolP("yes", "y", false, "skip the confirmation prompt")
+	cmd.Flags().Bool("audit", false, "only report structure drift; change nothing")
+	cmd.Flags().Bool("force", false, "overwrite managed files that carry local edits (backed up to .gofi/backup/)")
 	return cmd
 }
 
-func runUpdate(ctx context.Context, autoConfirm, training bool) error {
+// runAuditOnly reports drift without touching the project, which is the only
+// way to ask "is this project old?" without also answering it.
+func runAuditOnly() error {
+	cfg, err := config.Load(config.FileName)
+	if err != nil {
+		// A config the current schema cannot read is the drift this command
+		// exists to report, so refusing to run here would hide the worst case.
+		// Without a parsed config there is no ref to fetch, so the upstream
+		// knowledge check is skipped; an absent graph block means enabled.
+		fmt.Fprintf(os.Stderr, "warning: %s did not load (%v); reporting what can still be read\n", config.FileName, err)
+		printAudit(audit.Run(".", audit.Options{GraphEnabled: true}))
+		return nil
+	}
+	printAudit(runAudit(cfg))
+	return nil
+}
+
+func runUpdate(ctx context.Context, autoConfirm, training, force bool) error {
 	if training {
 		fmt.Fprintln(os.Stderr, "warning: --training is not yet implemented; running update without it")
 	}
@@ -75,7 +115,9 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 	}
 
 	currentSha := readInstalledSha(cfg.Project.Root)
-	if currentSha == resolved.Ref {
+	// --force is how a project asks for its managed files back, which is a
+	// reason to reinstall even when upstream has not moved.
+	if currentSha == resolved.Ref && !force {
 		fmt.Printf("Already up to date (sha=%s).\n", short(currentSha))
 		// Even when content hasn't changed, realign go.work with the on-disk
 		// SDK checkout — handles cases where .gofi/gofi-sdk-<lang>/ gained or
@@ -86,6 +128,14 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 				fmt.Fprintf(os.Stderr, "warning: could not align go.work with local SDK: %v\n", err)
 			}
 		}
+		// A matching sha only says .claude/ is current. The config schema, the
+		// git hooks and the graph all drift on their own, and this is the path a
+		// project takes most of the time — skipping them here would mean they
+		// were only ever repaired when upstream happened to move.
+		syncProjectStandards(ctx, cfg)
+		// Nothing above rewrites .gofi.yaml's contents, specs/ or prd/, so a
+		// project that stopped here for months is exactly the one that drifted.
+		printAudit(runAudit(cfg))
 		return nil
 	}
 
@@ -117,7 +167,14 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 	if err != nil {
 		return fmt.Errorf("plan update: %w", err)
 	}
-	printUpdatePlan(plan, backendLang(cfg))
+	printUpdatePlan(plan, scaffold.PreservedFiles(cfg.Project.Root), force)
+
+	mode := scaffold.InstallUpdate
+	confirm := "Confirms applying the changes listed above. Memory (memory/) and institutional/ are preserved, knowledge/ only gains what it lacks, and managed files you edited keep your version. .gofi.yaml is rewritten in the current schema (hand-written comments are lost) and the graph is rebuilt. Legacy SDK dirs (boilerplates/, gofi-sdk-<lang>/, sdk-knowledge/) are removed."
+	if force {
+		mode = scaffold.InstallReset
+		confirm = "--force: every managed file goes back to upstream, including the ones you edited. The replaced content is copied to .gofi/backup/ first. Memory (memory/), institutional/ and knowledge/ are still preserved."
+	}
 
 	if !autoConfirm {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -126,7 +183,7 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 		ok := false
 		if err := huh.NewConfirm().
 			Title("Apply this update?").
-			Description("Confirms applying the changes listed above. Knowledge (knowledge/) and memory (memory/) are preserved. Legacy SDK dirs (boilerplates/, gofi-sdk-<lang>/, sdk-knowledge/) are removed.").
+			Description(confirm).
 			Affirmative("Update").
 			Negative("Cancel").
 			Value(&ok).Run(); err != nil {
@@ -139,7 +196,7 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 	}
 
 	sdkRef := cfg.Sources.SDK[backendLang(cfg)]
-	sha, err := installFromSource(cfg.Project.Root, backendLang(cfg), uiSurfacesFromConfig(cfg), ref, sdkRef, data, scaffold.InstallUpdate)
+	sha, err := installFromSource(cfg.Project.Root, backendLang(cfg), uiSurfacesFromConfig(cfg), ref, sdkRef, data, mode)
 	if err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
@@ -154,6 +211,29 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 	if err := writeInstalledSha(cfg.Project.Root, sha); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", installedFileName, err)
 	}
+	// The SDK checkout just moved, so the SDK scope of the graph describes code
+	// that is no longer there. Rebuilding is keyed on the recorded SDK SHA, so
+	// this is a no-op when the SDK did not actually change.
+	syncProjectStandards(ctx, cfg)
+
+	fmt.Printf("\nUpdate complete — .claude/ now at %s.\n", short(sha))
+	// Reported after the install so the findings describe the project as it now
+	// stands, not as it was a moment ago.
+	printAudit(runAudit(cfg))
+	return nil
+}
+
+// syncProjectStandards applies what an update can repair on its own: the config
+// blocks a newer CLI writes, the .gitignore entry the graph depends on, the
+// graph itself and the hooks that keep it in step with the code.
+//
+// Nothing here authors content. Document frontmatter and knowledge the team
+// owns are left to the agents and reported by the audit instead — a repair that
+// guesses at meaning is worse than a finding the user reads.
+func syncProjectStandards(ctx context.Context, cfg *config.GofiConfig) {
+	if note := syncConfig(cfg); note != "" {
+		fmt.Println(note)
+	}
 	// A project scaffolded before the graph existed ignores all of .gofi/, which
 	// would keep the graph out of git for good.
 	if graphEnabled(cfg) {
@@ -161,25 +241,104 @@ func runUpdate(ctx context.Context, autoConfirm, training bool) error {
 			fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %v\n", err)
 		}
 	}
-	// The SDK checkout just moved, so the SDK scope of the graph describes code
-	// that is no longer there. Rebuilding is keyed on the recorded SDK SHA, so
-	// this is a no-op when the SDK did not actually change.
 	if note := buildGraphQuietly(ctx, cfg, cfg.Project.Root); note != "" {
 		fmt.Println(note)
 	}
 	if note := installGraphHooksQuietly(cfg, cfg.Project.Root); note != "" {
 		fmt.Println(note)
 	}
-
-	fmt.Printf("\nUpdate complete — .claude/ now at %s.\n", short(sha))
-	return nil
 }
 
-// printUpdatePlan renders the diff between upstream and the project's
-// current .claude/ files. New + modified entries are listed; unchanged
-// files are omitted. The SDK reset line always appears when language is
-// set because update wipes and recopies .claude/sdk/<lang>/ unconditionally.
-func printUpdatePlan(plan []scaffold.Change, language string) {
+// syncConfig rewrites .gofi.yaml when it still carries an older schema or lacks
+// blocks a current `gofi init` writes. Nothing the file already says is lost:
+// Backfill only fills gaps, so a block the team turned off stays off, and every
+// value written in an older shape is carried into the current one — the legacy
+// notes name each move rather than letting it happen silently.
+func syncConfig(cfg *config.GofiConfig) string {
+	path := filepath.Join(cfg.Project.Root, config.FileName)
+	// Load already migrated and backfilled the struct in memory, so the file
+	// itself is the only thing that can say what the user is still missing.
+	stale := config.FileVersion(path) < config.CurrentVersion
+	missing := config.MissingBlocks(path)
+	legacy := config.LegacyShapes(path)
+	if !stale && len(missing) == 0 && len(legacy) == 0 {
+		return ""
+	}
+
+	config.Backfill(cfg)
+	if err := config.Save(path, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not rewrite %s: %v\n", config.FileName, err)
+		return ""
+	}
+
+	note := fmt.Sprintf("Config: rewritten in schema v%d.", config.CurrentVersion)
+	if len(missing) > 0 {
+		note = fmt.Sprintf("Config: schema v%d, seeded missing block(s): %s.",
+			config.CurrentVersion, strings.Join(missing, ", "))
+	}
+	for _, l := range legacy {
+		note += "\n  " + l
+	}
+	return note + "\n  previous version kept in " + config.BackupDir + "/"
+}
+
+// runAudit inspects what the update itself never rewrites: .gofi.yaml, specs/,
+// prd/ and the preserved .claude/knowledge/ tree.
+func runAudit(cfg *config.GofiConfig) []audit.Finding {
+	opts := audit.Options{GraphEnabled: graphEnabled(cfg)}
+	// The upstream tree is what reveals which knowledge/shared files never
+	// reached the project. It comes from the same cache the update just used,
+	// so asking again is cheap; when it cannot be fetched the check is skipped
+	// rather than guessed.
+	if srcDir, _, err := fetchSource(cfg.Project.Root, cfg.Sources.Agents); err == nil {
+		opts.Upstream = os.DirFS(srcDir)
+		opts.UpstreamRoot = "."
+	}
+	return audit.Run(cfg.Project.Root, opts)
+}
+
+// printAudit renders the drift report grouped by area. It never fails the
+// command: everything it reports is a migration the user chooses to do.
+func printAudit(findings []audit.Finding) {
+	fmt.Println()
+	if len(findings) == 0 {
+		fmt.Println("Structure audit: nothing to migrate.")
+		return
+	}
+
+	var warns int
+	for _, f := range findings {
+		if f.Severity == audit.SeverityWarn {
+			warns++
+		}
+	}
+	fmt.Printf("Structure audit — %d finding(s), %d needing attention:\n", len(findings), warns)
+
+	area := ""
+	for _, f := range findings {
+		if f.Area != area {
+			area = f.Area
+			fmt.Printf("\n  %s\n", area)
+		}
+		mark := "·"
+		if f.Severity == audit.SeverityWarn {
+			mark = "!"
+		}
+		fmt.Printf("    %s %s — %s\n", mark, f.Item, f.Detail)
+		if f.Hint != "" {
+			fmt.Printf("        %s\n", f.Hint)
+		}
+	}
+	fmt.Println()
+}
+
+// printUpdatePlan renders the diff between upstream and the project's current
+// .claude/ files. New + modified entries are listed; unchanged files are
+// omitted. edited lists the managed files that carry local changes — under a
+// normal run they are what the update will NOT touch, and under --force they
+// are exactly what it is about to replace, which is the one thing the user
+// needs to see before confirming.
+func printUpdatePlan(plan []scaffold.Change, edited []string, force bool) {
 	fmt.Println()
 	if len(plan) == 0 {
 		fmt.Println("No agent files would change in .claude/.")
@@ -190,10 +349,21 @@ func printUpdatePlan(plan []scaffold.Change, language string) {
 		}
 		fmt.Println()
 	}
-	if language != "" {
-		fmt.Printf("Plus: .claude/sdk/%s/ will be reset to upstream.\n", language)
+
+	if len(edited) > 0 {
+		if force {
+			fmt.Printf("--force will overwrite %d file(s) you edited (copy kept in .gofi/backup/):\n\n", len(edited))
+		} else {
+			fmt.Printf("Kept as-is — %d file(s) carry your edits:\n\n", len(edited))
+		}
+		for _, f := range edited {
+			fmt.Printf("  %s\n", f)
+		}
+		fmt.Println()
 	}
-	fmt.Println("Preserved: .claude/knowledge/ and .claude/memory/.")
+
+	fmt.Println("Knowledge listed above is only what the project is missing; existing files are never overwritten.")
+	fmt.Println("Preserved whole: .claude/memory/ and .claude/institutional/.")
 	fmt.Println()
 }
 

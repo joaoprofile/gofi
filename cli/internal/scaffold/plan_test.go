@@ -78,8 +78,10 @@ func TestPlanAgentsUpdate_DetectsModifications(t *testing.T) {
 	if k := kindByPath[".claude/CLAUDE.md"]; k != ChangeNew {
 		t.Errorf("CLAUDE.md should be 'new' after deletion, got %q", k)
 	}
-	if k := kindByPath[".claude/skills/gofi-eng/SKILL.md"]; k != ChangeModified {
-		t.Errorf("gofi-eng.md should be 'modified' after local edit, got %q", k)
+	// The project edited this skill, so the update leaves it alone and the plan
+	// has to say so rather than promise a rewrite.
+	if k := kindByPath[".claude/skills/gofi-eng/SKILL.md"]; k != ChangeKept {
+		t.Errorf("gofi-eng.md should be 'kept' after local edit, got %q", k)
 	}
 	for _, untouched := range []string{
 		".claude/skills/gofi-pd/SKILL.md",

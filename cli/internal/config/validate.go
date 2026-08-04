@@ -80,7 +80,7 @@ func (c *GofiConfig) Validate() error {
 		return fmt.Errorf("project.root: required")
 	}
 	// A project must have at least one area: backend, frontend or mobile.
-	if c.Backend == nil && c.Frontend == nil && c.Mobile == nil {
+	if c.Backend == nil && len(c.UISurfaces()) == 0 {
 		return fmt.Errorf("config: at least one of backend, frontend or mobile is required")
 	}
 	if c.Backend != nil {
@@ -91,11 +91,10 @@ func (c *GofiConfig) Validate() error {
 			return fmt.Errorf("backend.path: %q is not a valid path (e.g. src, services/api, or . for the root)", c.Backend.Path)
 		}
 	}
-	if err := validateSurface("frontend", c.Frontend); err != nil {
-		return err
-	}
-	if err := validateSurface("mobile", c.Mobile); err != nil {
-		return err
+	for _, s := range c.UISurfaces() {
+		if err := validateSurface(s.Key(), s.Surface); err != nil {
+			return err
+		}
 	}
 	if err := validateOps(c.Ops); err != nil {
 		return err

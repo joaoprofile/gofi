@@ -53,7 +53,7 @@ frontend:                 # ou `ui:`
   styling: <styling>      # ex.: tailwind | scss-modules | stylesheet — NÃO presuma
   state: <state>          # ex.: tanstack-query | axios-hooks | redux
   testing: <testing>      # ex.: jest | vitest
-  brand: <brand>          # cores DO PROJETO (string ou surface/onBrand/action/accent) — omitir = neutro
+  brand: <brand>          # UMA string: preset (blue|violet|green) ou a cor-semente do projeto ("#AAD7FF") — omitir = neutro
 ```
 
 **Duas superfícies** (sub-blocos `web:`/`mobile:`, cada um com o seu `ds`/`framework`/`path`):
@@ -64,9 +64,17 @@ ui:
   mobile: { framework: react-native, path: apps/mobile, ds: <ds-mobile> }
 ```
 
+**Além dessas duas** — um back office, um console de admin — o projeto usa
+`surfaces:`, com os mesmos campos sob o nome que ele deu:
+
+```yaml
+surfaces:
+  backoffice: { framework: react, path: frontend/backoffice, ds: <ds> }
+```
+
 Regra de leitura: se existir `ui.web`/`ui.mobile`, processe **cada** sub-bloco como
 superfície-alvo independente (com o seu `ds`); senão é superfície única (derive pelo
-`framework`). **Em todos os casos, `<ds>` vem do config — a skill nunca fixa o nome,
+`framework`). Cada entrada de `surfaces:` é mais uma superfície-alvo independente. **Em todos os casos, `<ds>` vem do config — a skill nunca fixa o nome,
 nem a stack.** Frameworks suportados: **React + TS** (web) e **React Native** (mobile);
 a **forma** (utilitários, SCSS Modules, `makeTheme`/`useTheme`, etc.) e os componentes
 são os que o **DS configurado** documenta.
@@ -172,10 +180,17 @@ Antes de qualquer linha de código:
 ## Bootstrap de marca — antes da primeira tela
 
 **As cores são do projeto — não há paleta fixa nem catálogo fechado.** Se
-`.gofi.yaml` não tiver `ui.brand`, **pergunte ao usuário as cores da marca** (uma
-vez por projeto): no mínimo a cor de **superfície de marca** e a de **ação**; opcional
-o **apoio**. Se o usuário não tiver preferência, use o padrão neutro de
-[knowledge/ui/design-tokens.md](../knowledge/ui/design-tokens.md).
+`.gofi.yaml` não tiver `ui.brand`, **pergunte ao usuário a marca** (uma vez por
+projeto): **um** valor — um preset (`blue|violet|green`) ou a **cor-semente**
+(a superfície de marca, ex. `"#AAD7FF"`). Os demais papéis (`onBrand`, `action`,
+`focus`, apoio) são **derivados** dela pela receita de contraste em
+[knowledge/ui/design-tokens.md](../knowledge/ui/design-tokens.md) §"Escolher
+cores com segurança" — não os pergunte um a um. Sem preferência do usuário, use
+o padrão neutro do mesmo arquivo.
+
+> `brand` é **uma string** no `.gofi.yaml`. Escrevê-lo como bloco
+> (`surface:`/`onBrand:`/…) impede o config de carregar e **nenhum comando gofi
+> roda no projeto**. Ajustes finos de tom vivem no tema do DS, não no config.
 
 O agente aplica as cores do projeto pelo **mecanismo de tema do DS configurado** —
 **exatamente como o manifesto do DS documenta**, sem presumir. Conforme a superfície e
@@ -192,11 +207,7 @@ dentro da cor do projeto se reprovar.
 # .gofi.yaml
 ui:
   framework: react      # ou react-native
-  brand:                # cores do projeto — omitir = padrão neutro
-    surface: "#AAD7FF"  #   superfície de marca
-    onBrand: "#0B2942"  #   texto sobre a marca (AA sobre surface)
-    action:  "#1B72D8"  #   affordance (AA sobre branco)
-    accent:  "#444CE7"  #   apoio (opcional)
+  brand: "#AAD7FF"      # preset ou cor-semente — omitir = padrão neutro
 ```
 
 - Gravar `brand` no bloco de UI do `.gofi.yaml` e refletir as cores pelo **mecanismo

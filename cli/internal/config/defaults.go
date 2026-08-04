@@ -161,22 +161,21 @@ func DefaultHsec() HsecConfig {
 // .gofi.yaml. Enabled by default; users can disable per project later via
 // `gofi config`.
 //
-// projectName seeds the project key/name. backend/frontend/mobile scope
-// sonar.sources to the project's own source folders, and language picks the
-// coverage report path so `gofi sonar` ships meaningful coverage on day one.
+// projectName seeds the project key/name. The backend and every UI surface
+// scope sonar.sources to the project's own source folders, and language picks
+// the coverage report path so `gofi sonar` ships meaningful coverage on day one.
 // The exclusions keep analysis to first-party project code: tests, mocks,
 // generated code, the vendored SDK under .gofi/, and build artefacts are all
 // dropped so the dashboard reflects only the code the team owns.
-func DefaultSonar(projectName string, backend *Backend, frontend, mobile *UISurface) SonarConfig {
+func DefaultSonar(projectName string, backend *Backend, surfaces ...*UISurface) SonarConfig {
 	var sources []string
 	if backend != nil && backend.Path != "" {
 		sources = append(sources, backend.Path)
 	}
-	if frontend != nil && frontend.Path != "" {
-		sources = append(sources, frontend.Path)
-	}
-	if mobile != nil && mobile.Path != "" {
-		sources = append(sources, mobile.Path)
+	for _, s := range surfaces {
+		if s != nil && s.Path != "" {
+			sources = append(sources, s.Path)
+		}
 	}
 	if len(sources) == 0 {
 		sources = []string{"."}

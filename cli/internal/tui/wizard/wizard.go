@@ -253,12 +253,7 @@ func Run(initial *config.GofiConfig, found detect.Result) (*Result, error) {
 			huh.NewSelect[string]().
 				Title("Claude model").
 				Description("Recorded in .gofi.yaml; change later in .claude/settings.json.").
-				Options(
-					huh.NewOption("Opus 4.8   — most capable (default)", config.ModelOpus48),
-					huh.NewOption("Opus 4.7", config.ModelOpus47),
-					huh.NewOption("Sonnet 4.6 — fast & sharp", config.ModelSonnet46),
-					huh.NewOption("Haiku 4.5  — fastest", config.ModelHaiku45),
-				).
+				Options(modelOptions()...).
 				Value(&r.AIModel),
 		),
 		// 9 — Agents
@@ -383,7 +378,7 @@ func collectSources(sdkGo string) map[string]string {
 func newDefaultResult() *Result {
 	return &Result{
 		AIHost:         config.AIHostClaudeVSCode,
-		AIModel:        config.ModelOpus48,
+		AIModel:        config.DefaultModel,
 		Environments:   []string{EnvBack},
 		Language:       config.LanguageGo,
 		SourcePath:     config.DefaultBackendPath,
@@ -513,6 +508,36 @@ func seedFromConfig(r *Result, cfg *config.GofiConfig) {
 	if cfg.Git.Remote != "" {
 		r.GitRemote = cfg.Git.Remote
 	}
+}
+
+// modelOptions renders the picker from config.Models(), so the wizard offers
+// exactly what the extension's /model does. Labels are padded to a common width
+// so the notes line up regardless of how many models the table carries.
+func modelOptions() []huh.Option[string] {
+	models := config.Models()
+	width := 0
+	for _, m := range models {
+		if len(m.Label) > width {
+			width = len(m.Label)
+		}
+	}
+	out := make([]huh.Option[string], 0, len(models))
+	for _, m := range models {
+		label := m.Label
+		note := m.Note
+		if m.ID == config.DefaultModel {
+			if note == "" {
+				note = "default"
+			} else {
+				note += " (default)"
+			}
+		}
+		if note != "" {
+			label = fmt.Sprintf("%-*s — %s", width, label, note)
+		}
+		out = append(out, huh.NewOption(label, m.ID))
+	}
+	return out
 }
 
 // buildAgentOptions returns the nine agent options, marking each selected when

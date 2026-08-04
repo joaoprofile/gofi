@@ -43,10 +43,22 @@ const (
 	// knowledge dirs. Used by `gofi init`.
 	InstallNew InstallMode = iota
 
-	// InstallUpdate refreshes only files managed by the source repos and
-	// preserves user-managed dirs (knowledge/, memory/). Used by `gofi update`.
+	// InstallUpdate refreshes files managed by the source repos, preserves
+	// memory/ and institutional/, and fills knowledge/ additively — an upstream
+	// file the project never received arrives, an edited one is left alone.
+	// Managed files carrying local edits are kept too; see preserver.
+	// Used by `gofi update`.
 	InstallUpdate
+
+	// InstallReset is InstallUpdate without that last guarantee: every managed
+	// file goes back to upstream, whatever the project did to it. Replaced
+	// content still lands in .gofi/backup/. Used by `gofi update --force`.
+	InstallReset
 )
+
+// refreshes reports whether the mode is one of the two update flavours, which
+// share everything except how they treat a locally edited file.
+func (m InstallMode) refreshes() bool { return m == InstallUpdate || m == InstallReset }
 
 // InstallAgentsContent copies the gofi-agents tree into <projectRoot>/.claude/.
 // agentsFS is rooted at the gofi-agents repo and srcRoot is the relative
@@ -65,21 +77,32 @@ const (
 // (memory/learning protocols, base principles), per-agent knowledge dirs are
 // created empty, and the institutional RAG scaffold (README + INDEX) is seeded
 // under .claude/institutional/<project name>/ for gofi-pd. On InstallUpdate,
-// memory, knowledge and institutional are left untouched.
-func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data TemplateData, mode InstallMode) ([]string, error) {
+// memory and institutional are left untouched and knowledge is filled without
+// overwriting.
+func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data TemplateData, mode InstallMode) (created []string, err error) {
 	dest := filepath.Join(projectRoot, ".claude")
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
-	var created []string
+	// Every managed write goes through the preserver, so a partial install still
+	// records what it managed to write and the next update knows about it.
+	p := newPreserver(projectRoot, mode)
+	defer func() {
+		if saveErr := p.save(); saveErr != nil && err == nil {
+			err = fmt.Errorf("record installed files: %w", saveErr)
+		}
+	}()
 
 	// CLAUDE.md
-	if data, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "claude", "CLAUDE.md")); err == nil {
+	if body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "claude", "CLAUDE.md")); err == nil {
 		target := filepath.Join(dest, "CLAUDE.md")
-		if err := os.WriteFile(target, data, 0o644); err != nil {
+		written, err := p.write(target, body)
+		if err != nil {
 			return created, err
 		}
-		created = append(created, target)
+		if written {
+			created = append(created, target)
+		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return created, fmt.Errorf("read CLAUDE.md: %w", err)
 	}
@@ -105,22 +128,22 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 			return created, fmt.Errorf("read skill %s: %w", skill, err)
 		}
 		target := filepath.Join(dest, skillRelPath(skill))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return created, err
-		}
-		if err := os.WriteFile(target, renderSkill(skill, body), 0o644); err != nil {
+		written, err := p.write(target, renderSkill(skill, body))
+		if err != nil {
 			return created, err
 		}
 		// Drop the flat file an older gofi wrote for this same skill.
 		if err := pruneLegacySkillFile(dest, skill); err != nil {
 			return created, err
 		}
-		created = append(created, target)
+		if written {
+			created = append(created, target)
+		}
 	}
 
 	// templates/ (PRD + SDD templates)
 	if srcDir := path.Join(srcRoot, "ai", "templates"); dirExistsInFS(agentsFS, srcDir) {
-		c, err := installFS(agentsFS, srcDir, filepath.Join(dest, "templates"), data, InstallOptions{})
+		c, err := installFS(agentsFS, srcDir, filepath.Join(dest, "templates"), data, InstallOptions{preserve: p})
 		if err != nil {
 			return created, err
 		}
@@ -130,13 +153,17 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 	// scripts/ (RAG tooling: gen-index.sh regenerates specs/prd INDEX.md from
 	// frontmatter). Portable tool code — refreshed on new and update installs.
 	if srcDir := path.Join(srcRoot, "ai", "scripts"); dirExistsInFS(agentsFS, srcDir) {
-		c, err := installFS(agentsFS, srcDir, filepath.Join(dest, "scripts"), data, InstallOptions{})
+		scriptsDir := filepath.Join(dest, "scripts")
+		c, err := installFS(agentsFS, srcDir, scriptsDir, data, InstallOptions{preserve: p})
 		if err != nil {
 			return created, err
 		}
-		for _, p := range c {
-			if strings.HasSuffix(p, ".sh") {
-				_ = os.Chmod(p, 0o755)
+		// Every .sh, not only the ones just written: a run that rewrites nothing
+		// is also the run that must not leave a script unexecutable.
+		entries, _ := os.ReadDir(scriptsDir)
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".sh") {
+				_ = os.Chmod(filepath.Join(scriptsDir, e.Name()), 0o755)
 			}
 		}
 		created = append(created, c...)
@@ -147,17 +174,23 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 	// ships upstream content (eng/, ui/, …) — regardless of the selected agent
 	// set, so projects start with all upstream knowledge baked in. Selected
 	// agents that have no upstream content still get an empty placeholder dir the
-	// team fills in. InstallUpdate leaves the whole tree untouched — team edits
-	// live there.
+	// team fills in.
+	//
+	// InstallUpdate walks the same tree with KeepExisting, which is the only way
+	// to satisfy both halves of the contract: a file the team edited is never
+	// touched, while a file added upstream after the project was scaffolded still
+	// arrives. Without the second half, an update ships skills that cite
+	// protocols the project does not have.
 	knowledgeDest := filepath.Join(dest, "knowledge")
-	if mode == InstallNew {
-		if knowledgeSrc := path.Join(srcRoot, "ai", "knowledge"); dirExistsInFS(agentsFS, knowledgeSrc) {
-			c, err := installFS(agentsFS, knowledgeSrc, knowledgeDest, data, InstallOptions{})
-			if err != nil {
-				return created, err
-			}
-			created = append(created, c...)
+	if knowledgeSrc := path.Join(srcRoot, "ai", "knowledge"); dirExistsInFS(agentsFS, knowledgeSrc) {
+		c, err := installFS(agentsFS, knowledgeSrc, knowledgeDest, data, InstallOptions{
+			KeepExisting: mode.refreshes(),
+			preserve:     p,
+		})
+		if err != nil {
+			return created, err
 		}
+		created = append(created, c...)
 	}
 	// shared/ always exists (empty if the source shipped none), and selected
 	// agents without upstream content get a placeholder dir.
@@ -353,10 +386,11 @@ var ErrNoInstitutionalSubdir = errors.New("institutional repo has no folder for 
 //	  sdk-docs/                    ← <sdkRoot>/sdk-docs/
 //	  knowledge/                   ← <sdkRoot>/knowledge/
 //
-// Every install/update wipes .claude/sdk/<language>/ and recreates it from
-// the source. Returns ErrNoSDKLayout when sdkRoot exists but contains none
+// The tree is filled in place rather than wiped: on InstallUpdate a file the
+// project tuned (design tokens, house rules) is kept and everything else is
+// refreshed. Returns ErrNoSDKLayout when sdkRoot exists but contains none
 // of the three expected subdirs — caller decides whether to warn or fall back.
-func InstallSDKContent(srcFS fs.FS, sdkRoot, projectRoot, language string) ([]string, error) {
+func InstallSDKContent(srcFS fs.FS, sdkRoot, projectRoot, language string, mode InstallMode) (created []string, err error) {
 	if language == "" {
 		return nil, errors.New("language is required")
 	}
@@ -377,20 +411,22 @@ func InstallSDKContent(srcFS fs.FS, sdkRoot, projectRoot, language string) ([]st
 	}
 
 	dest := filepath.Join(projectRoot, ".claude", "sdk", language)
-	if err := os.RemoveAll(dest); err != nil {
-		return nil, fmt.Errorf("clear %s: %w", dest, err)
-	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
 
-	var created []string
+	p := newPreserver(projectRoot, mode)
+	defer func() {
+		if saveErr := p.save(); saveErr != nil && err == nil {
+			err = fmt.Errorf("record installed files: %w", saveErr)
+		}
+	}()
 	for _, sub := range subdirs {
 		srcDir := path.Join(sdkRoot, sub)
 		if !dirExistsInFS(srcFS, srcDir) {
 			continue
 		}
-		c, err := installFS(srcFS, srcDir, filepath.Join(dest, sub), TemplateData{}, InstallOptions{})
+		c, err := installFS(srcFS, srcDir, filepath.Join(dest, sub), TemplateData{}, InstallOptions{preserve: p})
 		if err != nil {
 			return created, err
 		}
@@ -411,9 +447,10 @@ var ErrNoSDKLayout = errors.New("source does not contain a gofi SDK layout (boil
 // "mobile". The whole subtree is mirrored to .claude/sdk/<surface>/ so the
 // gofi-ui agent reads tokens, components, patterns and rules from there.
 //
-// No-op (nil, nil) when surfaceRoot is absent in srcFS. Wipes and recreates
-// the destination on every run so updates stay clean.
-func InstallUIContent(srcFS fs.FS, surfaceRoot, projectRoot, surface string) ([]string, error) {
+// No-op (nil, nil) when surfaceRoot is absent in srcFS. Like the SDK tree, the
+// destination is filled in place: the design tokens and rules a project adapts
+// to its own product survive an update.
+func InstallUIContent(srcFS fs.FS, surfaceRoot, projectRoot, surface string, mode InstallMode) (created []string, err error) {
 	if surface == "" {
 		return nil, errors.New("surface is required")
 	}
@@ -421,13 +458,16 @@ func InstallUIContent(srcFS fs.FS, surfaceRoot, projectRoot, surface string) ([]
 		return nil, nil
 	}
 	dest := filepath.Join(projectRoot, ".claude", "sdk", surface)
-	if err := os.RemoveAll(dest); err != nil {
-		return nil, fmt.Errorf("clear %s: %w", dest, err)
-	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
-	return installFS(srcFS, surfaceRoot, dest, TemplateData{}, InstallOptions{})
+	p := newPreserver(projectRoot, mode)
+	defer func() {
+		if saveErr := p.save(); saveErr != nil && err == nil {
+			err = fmt.Errorf("record installed files: %w", saveErr)
+		}
+	}()
+	return installFS(srcFS, surfaceRoot, dest, TemplateData{}, InstallOptions{preserve: p})
 }
 
 // CleanLegacySDKLayout removes the pre-v2.4 flat SDK directories from

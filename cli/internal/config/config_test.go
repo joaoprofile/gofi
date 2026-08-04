@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -410,4 +411,84 @@ hsec:
 	if loaded.Frontend == nil || *loaded.Frontend != want {
 		t.Errorf("frontend = %+v, want %+v", loaded.Frontend, want)
 	}
+}
+
+// backups are what makes every rewrite reversible: a repair the user did not
+// want is one copy away from being undone.
+func TestSaveKeepsTheFileItReplaces(t *testing.T) {
+	p := write(t, brandBlockConfig)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	kept := backupsIn(t, p)
+	if len(kept) != 1 {
+		t.Fatalf("backups = %v, want exactly one", kept)
+	}
+	body, err := os.ReadFile(kept[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != brandBlockConfig {
+		t.Errorf("the backup must be the file exactly as it was:\n%s", body)
+	}
+}
+
+// gofi init writes a config where there was none, so there is nothing to keep.
+func TestSaveOnAFreshProjectBacksUpNothing(t *testing.T) {
+	p := filepath.Join(t.TempDir(), FileName)
+	if err := Save(p, validConfig()); err != nil {
+		t.Fatal(err)
+	}
+	if kept := backupsIn(t, p); len(kept) != 0 {
+		t.Errorf("nothing was replaced, got %v", kept)
+	}
+}
+
+// A project that lives long enough must not turn the folder into a graveyard.
+func TestBackupsAreCapped(t *testing.T) {
+	p := write(t, brandBlockConfig)
+	dir := filepath.Join(filepath.Dir(p), BackupDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldest := FileName + ".20200101-000001.000"
+	for i := range keptBackups + 2 {
+		name := fmt.Sprintf("%s.20200101-0000%02d.000", FileName, i+1)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("old"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	kept := backupsIn(t, p)
+	if len(kept) != keptBackups {
+		t.Fatalf("kept %d backups, cap is %d: %v", len(kept), keptBackups, kept)
+	}
+	// The oldest go first, so a stale one must never outlive a fresh one.
+	for _, k := range kept {
+		if filepath.Base(k) == oldest {
+			t.Error("the oldest backup should have been pruned")
+		}
+	}
+}
+
+func backupsIn(t *testing.T, configPath string) []string {
+	t.Helper()
+	kept, err := filepath.Glob(filepath.Join(filepath.Dir(configPath), BackupDir, FileName+".*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return kept
 }

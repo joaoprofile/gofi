@@ -267,23 +267,22 @@ valores abaixo são só um **exemplo** de como uma marca preenche os papéis:
 
 ### Como o projeto escolhe (e o agente aplica)
 
-O projeto declara suas cores em `.gofi.yaml`; o agente as injeta no tema da lib —
-web via `<ThemeProvider>` (vars `--brand`/`--action`…); mobile via
-`makeTheme(brand, mode)`/`<ThemeProvider>`. **As libs aceitam cores arbitrárias.**
+O projeto declara sua marca em `.gofi.yaml` como **uma string** — um preset
+(`blue|violet|green`) ou a **cor-semente** (a superfície dominante). O agente deriva
+os demais papéis dela pela receita abaixo e injeta tudo no tema da lib — web via
+`<ThemeProvider>` (vars `--brand`/`--action`…); mobile via `makeTheme(brand, mode)`/
+`<ThemeProvider>`. **As libs aceitam cores arbitrárias.**
 
 ```yaml
 # .gofi.yaml (no projeto, não no harness)
 ui:
   framework: react
-  brand:
-    surface: "#AAD7FF"   # cor de marca do projeto (superfície dominante)
-    onBrand: "#0B2942"   # texto sobre a marca (validar AA sobre `surface`)
-    action:  "#1B72D8"   # affordance — validar ≥ 4.5:1 sobre branco
-    accent:  "#444CE7"   # cor de apoio (opcional)
+  brand: "#AAD7FF"   # preset ou cor-semente (superfície dominante)
 ```
 
-Sem o bloco `brand` → usa o padrão neutro deste arquivo. **As cores do projeto vivem
-no projeto** — nunca neste conhecimento neutro.
+`brand` é escalar: escrito como bloco (`surface:`/`onBrand:`/…) o config **não carrega**
+e nenhum comando gofi roda. Sem `brand` → usa o padrão neutro deste arquivo. **As cores
+do projeto vivem no projeto** — nunca neste conhecimento neutro.
 
 ### Escolher cores com segurança (a receita de contraste é o que importa)
 

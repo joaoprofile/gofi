@@ -73,6 +73,12 @@ type InstallOptions struct {
 	// Adoption of an existing codebase relies on this — the scaffold fills the
 	// gaps without overwriting code the user already wrote.
 	KeepExisting bool
+
+	// preserve arbitrates every write: it keeps files the project edited and
+	// records the hashes the next update compares against. Nil means "write
+	// whatever the source says", which is what the scaffolders of project code
+	// (Go, Node, backend layouts) want.
+	preserve *preserver
 }
 
 // installFS walks srcFS rooted at root, substitutes the ProjectMarker in
@@ -143,6 +149,17 @@ func installFS(srcFS fs.FS, root, dest string, data TemplateData, opts InstallOp
 			if _, statErr := os.Stat(target); statErr == nil {
 				return nil
 			}
+		}
+
+		if opts.preserve != nil {
+			written, err := opts.preserve.write(target, content)
+			if err != nil {
+				return fmt.Errorf("write %s: %w", target, err)
+			}
+			if written {
+				created = append(created, target)
+			}
+			return nil
 		}
 
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
