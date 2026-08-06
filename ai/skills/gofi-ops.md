@@ -1,3 +1,8 @@
+---
+name: gofi-ops
+description: Platform & Delivery Engineer — agente do projeto gofi, invocado por /gofi-ops.
+---
+
 # /gofi-ops — Platform & Delivery Engineer
 
 ## Identidade

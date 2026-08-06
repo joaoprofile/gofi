@@ -1,3 +1,8 @@
+---
+name: gofi-qa
+description: Quality Auditor — agente do projeto gofi, invocado por /gofi-qa.
+---
+
 # /gofi-qa — Quality Auditor
 
 ## Identidade

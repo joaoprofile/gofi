@@ -1,3 +1,8 @@
+---
+name: gofi-doc
+description: Documentation Generator (Frontend & QA) — agente do projeto gofi, invocado por /gofi-doc.
+---
+
 # /gofi-doc — Documentation Generator (Frontend & QA)
 
 ## Identidade

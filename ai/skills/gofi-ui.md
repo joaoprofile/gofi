@@ -1,3 +1,8 @@
+---
+name: gofi-ui
+description: Context UI e UX — agente do projeto gofi, invocado por /gofi-ui.
+---
+
 # /gofi-ui — Context UI e UX
 
 ## Identidade

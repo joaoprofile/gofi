@@ -1,3 +1,8 @@
+---
+name: gofi-pd
+description: Discovery Agent (consultor de discovery) — agente do projeto gofi, invocado por /gofi-pd.
+---
+
 # /gofi-pd — Discovery Agent (consultor de discovery)
 
 ## 1. Identidade

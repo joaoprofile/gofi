@@ -1,3 +1,8 @@
+---
+name: gofi-full
+description: Full-Cycle Orchestrator (pipeline contínuo) — agente do projeto gofi, invocado por /gofi-full.
+---
+
 # /gofi-full — Full-Cycle Orchestrator (pipeline contínuo)
 
 ## Identidade

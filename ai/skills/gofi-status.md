@@ -1,3 +1,8 @@
+---
+name: gofi-status
+description: Índice de Contextos (gerado sob demanda) — agente do projeto gofi, invocado por /gofi-status.
+---
+
 # /gofi-status — Índice de Contextos (gerado sob demanda)
 
 ## Identidade

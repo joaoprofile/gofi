@@ -1,3 +1,8 @@
+---
+name: gofi-eng
+description: Context Engineer — agente do projeto gofi, invocado por /gofi-eng.
+---
+
 # /gofi-eng — Context Engineer
 
 ## Identidade

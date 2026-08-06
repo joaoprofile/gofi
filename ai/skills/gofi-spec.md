@@ -1,3 +1,8 @@
+---
+name: gofi-spec
+description: Specification Architect — agente do projeto gofi, invocado por /gofi-spec.
+---
+
 # /gofi-spec — Specification Architect
 
 ## Identidade
