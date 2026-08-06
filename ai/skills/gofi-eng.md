@@ -53,7 +53,7 @@ Antes de qualquer linha de código:
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-spec
 5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` (descoberta por keywords) → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §seções relevantes (Modelo de Dados §3, Operações §4, Regras §5, ADRs §9). Nunca leia a spec inteira por reflexo. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
-5a. **Ler o grafo antes de varrer o código.** Se `.gofi/graph/` existir: `gofi_graph_index.json` (escopos e modo do scan) → `gofi_graph_report.md` do escopo (pacotes, pontos centrais, conexões inesperadas) → `gofi graph explain <símbolo>` só nos símbolos que a tarefa toca. **Nunca** abra `gofi_graph.json`. `grep -r` pelo módulo é fallback (linguagem sem extractor, alvo que não é símbolo). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
+5a. **Procurar código é `gofi graph`, não `grep -r`.** Se `.gofi/graph/` existir: `gofi_graph_index.json` (que escopos existem, **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/` — e **em que modo** cada um foi varrido) → o `gofi_graph_report.md` **daquele escopo** (pacotes, pontos centrais, conexões inesperadas) → `gofi graph explain <símbolo>` só nos símbolos que a tarefa toca. Não sabe o nome exato? `gofi graph explain <termo> <termo>` (≥2 palavras) busca por nome parcial dentro do grafo — é isso que substitui o `grep` por símbolo. Superfície declarada no `.gofi.yaml` **não** usa `--lang`: já é escopo do índice principal. **Nunca** abra `gofi_graph.json`. `grep -r` é fallback **declarado** (linguagem sem extractor, alvo que não é símbolo: string, chave de config, SQL). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
 7. Ler **knowledge per-agent**: `.claude/knowledge/eng/*.md` (user-treinado)
 8. Para `project.language` (a partir do `.gofi.yaml`):
@@ -68,7 +68,7 @@ Antes de qualquer linha de código:
    - Ler boilerplates por camada: `.claude/sdk/<lang>/boilerplates/*.md`
 9. Confirmar com o dev se há ambiguidades **antes** de escrever código
 10. **Perguntar onde está o código legado/base** sempre que a tarefa for refactor, migração de formato, reescrita ou reestruturação (mover camadas, trocar padrão, eng. reversa). O código existente é a **base de referência** do novo formato — peça o caminho (pasta/arquivo/binário legado) e leia antes de gerar. Não reescreva do zero quando há legado: o objetivo é preservar comportamento e migrar para o formato-alvo da spec.
-11. **Se a tarefa edita um contexto já implementado** (e não cria do zero), fazer **análise de impacto detalhada antes de fechar**: toda mudança em artefato compartilhado (struct de `model/`, enum/`kafka.Type*`, interface, coluna de migration, helper comum) tem contrato implícito com **todos** os consumidores. **Levante os consumidores pelo grafo, não varrendo o módulo:** `gofi graph explain <símbolo>` lista quem chama; `gofi graph explain <A> --to <B>` mostra o caminho. Como a conclusão aqui é "quebra / não quebra", exija um grafo **`deep`** (`gofi graph build --deep`) — no modo `fast` a chamada ambígua não vira aresta, e ausência de aresta **não** é prova de ausência de uso. Sem grafo da linguagem (ou para alvo que não é símbolo — SQL, string de config, registro por tabela), caia no `grep -r` e diga que caiu. Classifique cada consumidor (válido/ajuste/quebra), ajuste todos na mesma entrega, e `build`+`test` dos pacotes **consumidores** — não só o editado. Procedimento e casos de quebra silenciosa (scan posicional do `sqln`, coluna de `JOIN`, enum sem destino) em `.claude/knowledge/eng/impact-analysis-on-change.md`.
+11. **Se a tarefa edita um contexto já implementado** (e não cria do zero), fazer **análise de impacto detalhada antes de fechar**: toda mudança em artefato compartilhado (struct de `model/`, enum/`kafka.Type*`, interface, coluna de migration, helper comum) tem contrato implícito com **todos** os consumidores. **Levante os consumidores pelo grafo, não varrendo o módulo:** `gofi graph explain <símbolo>` lista quem chama; `gofi graph explain <A> --to <B>` mostra o caminho. Como a conclusão aqui é "quebra / não quebra", exija um grafo **`deep`** — no modo `fast` a chamada ambígua não vira aresta, e ausência de aresta **não** é prova de ausência de uso. **Confira o `mode` do escopo no `gofi_graph_index.json` antes**: os hooks de git reconstroem **sempre em `fast`**, e `update` no modo do `.gofi.yaml`, que por padrão também é `fast` — grafo recente não quer dizer grafo exato. Se vier `fast`, rode `gofi graph build --deep` você mesmo; os demais gatilhos de `deep` (e o limite de que ele não alcança TS/JS) estão em *Quando rodar `--deep`* do protocolo do grafo. Sem grafo da linguagem (ou para alvo que não é símbolo — SQL, string de config, registro por tabela), caia no `grep -r` e diga que caiu. Classifique cada consumidor (válido/ajuste/quebra), ajuste todos na mesma entrega, e `build`+`test` dos pacotes **consumidores** — não só o editado. Procedimento e casos de quebra silenciosa (scan posicional do `sqln`, coluna de `JOIN`, enum sem destino) em `.claude/knowledge/eng/impact-analysis-on-change.md`.
 
 > Se algo na spec for ambíguo ou contradizer um padrão do `sdk-knowledge`,
 > pare e pergunte. Nunca infira.
@@ -132,8 +132,9 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
   contexto, enum/`kafka.Type*`, interface, coluna de migration, helper comum)
   carrega contrato implícito com **todos** os consumidores. Levante os
   consumidores pelo grafo — `gofi graph explain <símbolo>` responde "quem chama"
-  sem varrer a árvore, e a conclusão só é confiável com grafo `--deep` (`grep -r`
-  é o fallback: linguagem sem extractor, ou alvo que não é símbolo).
+  sem varrer a árvore, e a conclusão só é confiável com o escopo em modo `deep`
+  (confira o `mode` no índice; `--update` e os hooks não forçam `deep`). `grep -r`
+  é o fallback declarado: linguagem sem extractor, ou alvo que não é símbolo.
   Classifique cada consumidor (válido/ajuste/quebra), ajuste todos na mesma
   entrega e rode `build`+`test` dos pacotes **consumidores**.
   Caso recorrente e mais perigoso: o **scan posicional do `sqln`** —
@@ -634,7 +635,7 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
 
 - **Factory de bridge cacheia 1 instância por key.** Sem cache, cada `Get()` cria HTTP client novo → N consumers × M workers = N×M clients independentes, cada um com seu rate limiter local, mas o serviço externo limita por token → estoura rate limit real. Padrão em `.claude/sdk/go/knowledge/bridge-factory-adapter-pattern.md` (sync.Map + LoadOrStore).
 
-- **Observabilidade via `gofi/obs` (OpenTelemetry).** Padrão completo (lazy init, classifier centralizado, decorator pra interfaces, ResetForTesting) em `.claude/sdk/go/knowledge/observability-otel.md`. Logs estruturados (slog) já fluem pra backend via otelslog bridge — não duplicar log shipping. **Onde o pacote mora: `domain/{ctx}/observability/` por padrão** — `attrs`/`outcomes`/nomes de métrica são vocabulário de domínio. Sobe para `common/observability/{ctx}/` **só** quando (a) algum pacote em `common/` precisa gravar nele (direção de dependência força — `common/` não importa `domain/`), ou (b) instrumenta capacidade de plataforma transversal a vários contextos. Heurística: grep os importadores — importador em `common/` → pacote em `common/`; só domínio+adapters+binários → fica no domínio. Regra em `observability-otel.md` §"Onde o pacote mora".
+- **Observabilidade via `gofi/obs` (OpenTelemetry).** Padrão completo (lazy init, classifier centralizado, decorator pra interfaces, ResetForTesting) em `.claude/sdk/go/knowledge/observability-otel.md`. Logs estruturados (slog) já fluem pra backend via otelslog bridge — não duplicar log shipping. **Onde o pacote mora: `domain/{ctx}/observability/` por padrão** — `attrs`/`outcomes`/nomes de métrica são vocabulário de domínio. Sobe para `common/observability/{ctx}/` **só** quando (a) algum pacote em `common/` precisa gravar nele (direção de dependência força — `common/` não importa `domain/`), ou (b) instrumenta capacidade de plataforma transversal a vários contextos. Heurística: `gofi graph explain <pacote>` lista quem depende dele — importador em `common/` → pacote em `common/`; só domínio+adapters+binários → fica no domínio. Regra em `observability-otel.md` §"Onde o pacote mora".
 
 - **Kafka consumer naming — passar SÓ o prefix.** Helpers `kafka.SyncConsumer(prefix)` / `kafka.LifecycleConsumer(prefix)` adicionam sufixo `-sync-cg` / `-lifecycle-cg` internamente. Duplicar sufixo no caller é bug latente (funciona, fica feio em prod). Convenção completa em `.claude/sdk/go/knowledge/kafka-consumer-naming.md`.
 
@@ -745,9 +746,12 @@ gofi graph build --update
 ```
 
 `--update` pula o scan quando nenhum fonte mudou, então rodar sempre é barato.
-Se a entrega mexeu em artefato compartilhado, use `--deep` — é o modo em que as
-arestas de chamada são exatas. Protocolo:
-`.claude/knowledge/shared/graph-retrieval-protocol.md`.
+Os hooks de git reconstroem **sempre em `fast`**, então o grafo que você
+encontra pronto é sintático mesmo num projeto que declarou `deep: true`. Se a
+entrega mexeu em artefato compartilhado, ou a análise de impacto vai afirmar que
+**nada mais** usa algo, rode `gofi graph build --deep` aqui — os gatilhos estão
+listados em *Quando rodar `--deep`* do protocolo
+(`.claude/knowledge/shared/graph-retrieval-protocol.md`).
 
 Depois, aplicar **todas** as três:
 

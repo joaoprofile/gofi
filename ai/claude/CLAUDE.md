@@ -78,7 +78,7 @@ vale neste projeto — nunca entra em skill).
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
 | Índice de retrieval de specs/PRDs (derivado do frontmatter) | `specs/INDEX.md`, `prd/INDEX.md` (regen: `.claude/scripts/gen-index.sh`) | Específico |
 | Protocolo de retrieval (ler os corpora gastando poucos tokens) | `.claude/knowledge/shared/rag-retrieval-protocol.md` | Portável |
-| Grafo de código (mapa derivado: quem chama quem, a que contexto pertence) | `.gofi/graph/` — `gofi_graph_index.json` + `gofi_graph_report.md`; consulta por `gofi graph explain`. Gerado por `gofi graph build`, **nunca** editado à mão | Específico (derivado) |
+| Grafo de código (mapa derivado: quem chama quem, a que contexto pertence) | `.gofi/graph/` — **um escopo por árvore**: `gofi_graph_index.json` na raiz lista todos (backend em `.`, cada superfície de UI em `{nome}/`, SDK em `sdk/`), e cada escopo tem o seu `gofi_graph_report.md`. Consulta por `gofi graph explain`. Gerado por `gofi graph build`, **nunca** editado à mão | Específico (derivado) |
 | Protocolo de consulta ao grafo | `.claude/knowledge/shared/graph-retrieval-protocol.md` | Portável |
 
 ## Convenção de leitura dos agents
@@ -102,13 +102,28 @@ e arquivos variam por agent); aqui fica o denominador comum:
 > - **Ler:** nunca leia um doc inteiro por reflexo. Descubra por `keywords` em `specs/INDEX.md`/`prd/INDEX.md` (ou `/gofi-status` p/ memória) → leia só o **frontmatter** do alvo → `grep -n '^## '` + `Read` apenas da §relevante.
 > - **Criar/editar:** emita **frontmatter + `keywords`** (base nos templates `.claude/templates/`), **zero proveniência** (sem `**Autor/Versão/Data:**`, sem `## Rastreabilidade`, sem nome de agent/pessoa, sem journal), Histórico de **1 linha**, e **regenere** o INDEX (`.claude/scripts/gen-index.sh`). Todo doc tem `versao: "1.0"` + `keywords`.
 
-> **O código também tem índice — o grafo.** Antes de varrer a árvore atrás de
-> "quem chama isso", suba a escada de 3 degraus: `gofi_graph_index.json` →
-> `gofi_graph_report.md` → `gofi graph explain <símbolo>`. **Nunca** leia
-> `gofi_graph.json`. Quem implementa roda **`gofi graph build --update` ao
-> fechar**, para que a fase seguinte leia um mapa atualizado. Todo pacote de um
-> contexto nasce com **`//gofi:context {contexto}`** — é o elo entre o símbolo e
-> `specs/{contexto}/`. Protocolo em `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+> **O código também tem índice — o grafo. Procurar código é `gofi graph`, não `grep -r`.**
+> Suba a escada de 3 degraus: `gofi_graph_index.json` (que escopos existem, em
+> que pasta, **em que modo**) → o `gofi_graph_report.md` **do escopo** →
+> `gofi graph explain <símbolo>`. Não sabe o nome exato? `gofi graph explain
+> <termo> <termo>` busca dentro do grafo. `grep -r` é **fallback declarado**:
+> linguagem sem extractor, ou alvo que não é símbolo (string, chave de config,
+> SQL). **Nunca** leia `gofi_graph.json`. Isto vale para **código**; navegar
+> spec/PRD por `grep -n '^## '` é o protocolo RAG de documento e continua valendo.
+>
+> **Valide o modo antes de concluir ausência.** Os hooks de git reconstroem
+> **sempre em `fast`**; `init` e `update`, no modo do `.gofi.yaml`
+> (`graph: deep:`), que **por padrão também é `fast`** — e em `fast` chamada
+> ambígua não vira aresta, então ausência de aresta não é prova de ausência de
+> uso. `deep` é sempre pedido explícito: precisa afirmar "isto não quebra nada",
+> "ninguém mais chama", "quem implementa esta interface"? Rode
+> `gofi graph build --deep` ou declare a limitação. Os gatilhos estão em
+> *Quando rodar `--deep`* do protocolo do grafo.
+>
+> Quem implementa roda **`gofi graph build --update` ao fechar**, para que a
+> fase seguinte leia um mapa atualizado. Todo pacote de um contexto nasce com
+> **`//gofi:context {contexto}`** — é o elo entre o símbolo e `specs/{contexto}/`.
+> Protocolo em `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 ## Persistência de estado
 

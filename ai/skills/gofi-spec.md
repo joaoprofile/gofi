@@ -500,10 +500,15 @@ você apenas lê e produz/atualiza a spec.
 4. Bump de versão e entrada no Histórico
 
 **Modo 2 — Criar spec do zero pelo código:**
-1. Ler **todos** os arquivos do pacote indicado
-2. Derivar manifesto, entidade, DTOs, contratos, endpoints, erros, regras de negócio
-3. Gerar spec completa seguindo o template
-4. Não invente nada que não esteja no código
+1. **Levantar o pacote pelo grafo antes de abrir arquivo** — `gofi graph explain
+   <pacote> --limit 40` lista os símbolos que ele contém e quem depende dele;
+   `gofi graph explain <Símbolo>` dá assinatura, doc e vizinhança de cada um.
+   Isso diz **quais** arquivos importam
+2. Ler os arquivos do pacote que o grafo apontou — aqui a leitura é integral,
+   porque tag de struct, status code e texto de erro só o arquivo tem
+3. Derivar manifesto, entidade, DTOs, contratos, endpoints, erros, regras de negócio
+4. Gerar spec completa seguindo o template
+5. Não invente nada que não esteja no código
 
 **Modo 3 — Mapa de contextos de um repositório adotado:**
 
@@ -514,7 +519,9 @@ símbolo pertence. Este modo produz **o mapa**; quem escreve a diretiva no códi
 é o `/gofi-eng` (nunca esta skill).
 
 1. **Levante os candidatos pelo grafo, não varrendo a árvore.**
-   `gofi_graph_index.json` → `gofi_graph_report.md`. As **comunidades** do
+   `gofi_graph_index.json` → o `gofi_graph_report.md` **de cada escopo** (o
+   índice diz a pasta: backend em `.`, cada superfície em `{nome}/`; o escopo
+   `sdk` fica de fora — é dependência, não contexto). As **comunidades** do
    relatório são o candidato natural a contexto (é um agrupamento por
    acoplamento real, não por pasta); os **pontos centrais** apontam o que é
    infraestrutura compartilhada e por isso **não** é contexto; as **conexões

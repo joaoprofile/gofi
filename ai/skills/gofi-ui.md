@@ -137,6 +137,22 @@ Antes de qualquer linha de código:
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (índice de contextos: `/gofi-status`)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — handoff do
    `gofi-spec` e do `gofi-eng` (contratos de API, rotas, DTOs)
+4b. **O front também tem grafo — consulte-o antes de varrer a árvore.** Cada
+   superfície declarada no `.gofi.yaml` é um **escopo** com grafo próprio, lido
+   pelo extractor TS/JS: `.gofi/graph/{nome-do-bloco}/` (`frontend`, `mobile`,
+   ou a chave em `surfaces:` — é o nome do bloco de config, não o `<surface>`
+   dos paths do DS). Escada: `.gofi/graph/gofi_graph_index.json` (quais escopos,
+   em que pasta, que framework, que modo) → o `gofi_graph_report.md` daquele
+   escopo (componentes centrais, comunidades, conexões inesperadas) →
+   `gofi graph explain <Componente>` para saber **quem usa** um componente antes
+   de alterá-lo, e `gofi graph explain <termo> <termo>` para achá-lo quando você
+   só tem a descrição. **Sem `--lang`** — a superfície já é escopo do índice
+   principal, e `--lang typescript` aponta para uma pasta que não existe.
+   **Nunca** abra `gofi_graph.json`; `grep -r` só para o que não é símbolo
+   (classe de CSS, chave de i18n, texto). Limites a declarar: o extractor TS/JS
+   **não** lê `//gofi:context` (o campo vem vazio — ali a ponte para a spec ainda
+   é o nome da pasta) e o escopo só existe se o `path` da superfície existir no
+   disco. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
 5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §relevantes (Operações §4, Modelo de Dados §3). Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — jornada do usuário e fluxos de UX devem ser PlantUML)
 7. Ler **knowledge per-agent UI** (todos):
@@ -325,7 +341,17 @@ quando existirem, em `.claude/sdk/<surface>/knowledge/absolute-rules.md`.
 
 ## Atualização de memória ao concluir
 
-Aplicar **todas** as três:
+**Primeiro, atualize o grafo** — a superfície é um escopo como qualquer outro, e
+quem vier depois (você mesmo na próxima tela, o `/gofi-qa`) lê o mapa. O hook de
+pre-commit só reconstrói no commit, que ainda não aconteceu:
+
+```sh
+gofi graph build --update
+```
+
+`--update` pula o scan quando nenhum fonte mudou, então rodar sempre é barato.
+
+Depois, aplicar **todas** as três:
 
 ### 1. `.claude/memory/contexts/{contexto}.md`
 

@@ -234,3 +234,24 @@ sonar:
 {{- if .Sonar.CoverageReport}}
     coverage_report: {{.Sonar.CoverageReport}}   # artefato produzido pela task `cover`
 {{- end}}
+
+# ───────────────────────────────────────────────────────────────────────────
+# GRAPH — mapa do código sob .gofi/graph/, lido pelos agents antes de abrir
+# arquivo. Um escopo por árvore: o backend na raiz, cada superfície de UI em
+# {nome}/, o SDK vendorizado em sdk/. `gofi_graph_index.json` lista todos.
+# ───────────────────────────────────────────────────────────────────────────
+graph:
+    enabled: {{.Graph.Enabled}}             # false desliga o grafo e, com ele, os hooks
+    hooks: {{.Graph.Hooks}}                 # hooks git (pre-commit/post-checkout/post-merge) que o mantêm em dia
+    # fast (false) lê só a sintaxe: rápido, roda em código que não compila, e
+    # não inventa aresta quando a chamada é ambígua — ela é contada, não ligada.
+    # deep (true) resolve pelo type-checker: chamada exata e implementação de
+    # interface visíveis, ao custo de o projeto precisar compilar.
+    # Só em deep a ausência de aresta prova ausência de uso.
+    # Vale para `gofi update` e `gofi graph build`. Os hooks de git reconstroem
+    # sempre em fast (--fast): o commit não espera o type-checker. Deep também
+    # só muda a varredura Go — superfície de UI é sintática de todo jeito.
+    # Com false, quem pede o deep é o agent, quando precisa provar ausência.
+    deep: {{.Graph.Deep}}
+    # exclude: pastas fora da varredura, além das ignoradas por padrão
+    #     - testdata

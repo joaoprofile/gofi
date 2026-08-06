@@ -59,6 +59,7 @@ Funcoes que se chamam em circulo (recursao mutua). Costumam ser o ponto mais dif
 
 ```sh
 gofi graph explain <no>          # tudo sobre um simbolo: origem, vizinhos, doc
+gofi graph explain <termo> <termo> # duas ou mais palavras = busca; substitui o grep -r
 gofi graph explain <A> --to <B>  # como A alcanca B, aresta por aresta
 gofi graph open                  # abre a visualizacao HTML do grafo
 ```

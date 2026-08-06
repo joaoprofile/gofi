@@ -65,9 +65,11 @@ antes de qualquer workflow.
    - `.claude/memory/project.md` — visão global do projeto
 
    Procedimento: **se o usuário souber o contexto, peça** ("Esse endpoint é
-   de qual contexto?"). Se ele não souber ou não responder, **faça a
-   busca** baseada na descrição: `grep -rli "{termo}" prd/ specs/` para
-   localizar o contexto.
+   de qual contexto?"). Se ele não souber ou não responder, busque **nesta
+   ordem**: (a) `gofi graph explain <termo> <termo>` — o símbolo que casar
+   imprime `contexto: {contexto}` já apontando para `specs/{contexto}/` e
+   `.claude/memory/contexts/{contexto}.md`; (b) `keywords` em `specs/INDEX.md`
+   / `prd/INDEX.md`. `grep -rli` pelos docs só se as duas falharem.
 
 ---
 
@@ -111,8 +113,11 @@ ordem:**
    anteriores — decisões de design (ADRs, presets, integrações) que afetam
    o contrato.
 4b. **O grafo (`.gofi/graph/`), quando existe** — é o caminho barato para a
-   topologia: `gofi_graph_index.json` diz os escopos; `gofi_graph_report.md`
-   dá pacotes e pontos centrais; `gofi graph explain {Handler}` mostra o que o
+   topologia: `gofi_graph_index.json` diz os escopos e **a pasta de cada um**
+   (backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/`); o
+   `gofi_graph_report.md` **daquele escopo** dá pacotes e pontos centrais;
+   `gofi graph explain <termo> <termo>` acha o símbolo quando você só tem a
+   descrição; `gofi graph explain {Handler}` mostra o que o
    handler chama (service/application, DTOs, erros) **sem abrir arquivo**, e
    `gofi graph explain {Handler} --to {Repo}` traça o caminho até a
    persistência. Use-o para **escolher o que abrir**, não para substituir a
@@ -188,10 +193,12 @@ Você não tem path. Procedimento — **pergunte ao humano antes de adivinhar**:
    `.claude/memory/contexts/` (ou `/gofi-status`).
 1. **Identifique o contexto candidato.** Cruze a descrição com a lista de
    contextos existentes (de `.claude/memory/contexts/` ou `/gofi-status`).
-   Use `ls services/domain/` ou `grep -rli "{termo}" prd/ specs/` se não
-   tiver certeza.
-2. **Liste handlers do contexto.** `ls services/domain/{contexto}/handler/*.go`
-   — em geral um handler por agregado.
+   Sem certeza, **pergunte ao grafo**: `gofi graph explain <termo> <termo>`
+   devolve os símbolos que casam e o `contexto:` de cada um. Só depois disso,
+   `keywords` nos INDEX de `specs/`/`prd/`.
+2. **Liste handlers do contexto.** `gofi graph explain {contexto}/handler --limit 40`
+   lista os símbolos do pacote sem abrir arquivo (`ls` na pasta é o fallback) —
+   em geral um handler por agregado.
 3. **Mapeie verbos + paths.** Para cada handler, abra `Handlers()` e liste
    todas as rotas. Confronte com a descrição: "criação" → `POST`;
    "configuração" → handler de config; "listar" → `GET` plural; "detalhe" →

@@ -126,6 +126,15 @@ loop:
 > commit**, e este loop não commita entre fases — sem `gofi graph build --update`
 > ao fim do `gofi-eng`, o `gofi-qa` auditaria um mapa sem a implementação recém
 > escrita. Se a fase anterior não rodou, rode você antes de invocar o QA.
+>
+> **O modo importa tanto quanto o frescor.** Os hooks de git reconstroem sempre
+> em `fast`, e `--update` no modo do `.gofi.yaml` (`graph: deep:`), que **por
+> padrão também é `fast`** — e em `fast` a ausência de aresta não prova ausência
+> de uso. Quando a entrega mexeu em artefato compartilhado (struct de `model/`,
+> interface, enum, coluna), ou quando o laudo vai afirmar uma ausência, o gate do
+> `gofi-eng` exige `gofi graph build --deep`, senão a análise de impacto e o
+> laudo do QA se apoiam numa negativa que o grafo não sustenta. Os gatilhos estão
+> listados em *Quando rodar `--deep`*.
 > Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 > **Minors/suggestions do QA:** o usuário pediu "sem nenhuma ressalva". Trate
