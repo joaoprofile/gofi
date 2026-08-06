@@ -63,6 +63,7 @@ var catalogPT = map[string]string{
 	"cmd.graph.explain.short":    "Descreve um símbolo pelo grafo, sem abrir arquivos",
 	"cmd.graph.open.short":       "Abre a visualização do grafo no navegador",
 	"cmd.graph.flag.deep":        "resolve as chamadas pelo type-checker: exato, mas o projeto precisa compilar",
+	"cmd.graph.flag.fast":        "força o modo sintático mesmo com `graph: deep: true` — é o que os hooks de git usam",
 	"cmd.graph.flag.update":      "só reconstrói se algum arquivo .go mudou (barato o bastante para um hook)",
 	"cmd.graph.flag.open":        "abre a visualização assim que a construção terminar",
 	"cmd.graph.flag.tests":       "inclui os arquivos _test.go no grafo",
@@ -98,7 +99,7 @@ var catalogPT = map[string]string{
 	"graph.hooks.list":             "hooks que carregam o bloco gofi:",
 	"graph.hooks.done":             "hooks do grafo: %s",
 	"graph.hooks.failed":           "hooks do grafo — %v; rode `gofi graph hooks --install`",
-	"graph.setup.done":             "grafo: %d nós, %d arestas em %s, em %s/",
+	"graph.setup.done":             "grafo: %d nós, %d arestas em %s, modo %s, em %s/",
 	"graph.setup.empty":            "grafo — nada pôde ser varrido; rode `gofi graph build` para ver por quê",
 	"graph.setup.failed":           "grafo — %v; rode `gofi graph build`",
 

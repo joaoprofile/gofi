@@ -19,12 +19,19 @@ import (
 // swallowed on purpose: a commit, a checkout or a merge must not break because
 // a derived file could not be rebuilt.
 //
+// --fast is what keeps this affordable. A hook runs on every commit, checkout
+// and merge, and the type-checker is the expensive half of the scan, so the
+// hooks stay syntactic even in a project that declares `graph: deep: true`:
+// exactness is worth waiting for, but not on every commit. Deep is then the
+// deliberate build — `gofi update`, or `gofi graph build --deep` run by whoever
+// is about to conclude something the fast graph cannot support.
+//
 // pre-commit stages what it rebuilt, so the graph travels in the same commit as
 // the code. The other two only rebuild: whatever they produce is a repair, and
 // staging it behind the developer's back during a merge would be worse than
 // leaving it for them to commit.
 func graphHookBodies() map[string]string {
-	const rebuild = `command -v gofi >/dev/null 2>&1 && gofi graph build --update >/dev/null 2>&1 || true`
+	const rebuild = `command -v gofi >/dev/null 2>&1 && gofi graph build --update --fast >/dev/null 2>&1 || true`
 	return map[string]string{
 		"pre-commit":    rebuild + "\ngit add -- " + graph.OutDir + " >/dev/null 2>&1 || true",
 		"post-checkout": rebuild,
@@ -107,7 +114,13 @@ func buildGraphQuietly(ctx context.Context, cfg *config.GofiConfig, root string)
 	if len(names) == 0 {
 		return i18n.T("graph.setup.empty")
 	}
+	// The mode is the one thing about a rebuilt graph nobody can see afterwards,
+	// and it decides what the agents may conclude from it: in fast an absent edge
+	// is not proof of an absent call. This path never forces deep — it rebuilds
+	// in whatever `graph: deep:` says — so leaving it unsaid let a project read
+	// syntactic guesses as certainty.
 	return i18n.T("graph.setup.done", nodes, edges, strings.Join(names, ", "),
+		(graph.BuildOptions{Deep: cfg.Graph.UseDeep()}).Mode(),
 		relativeTo(root, graph.Dir(root, backendLang(cfg))))
 }
 

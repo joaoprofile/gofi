@@ -20,7 +20,7 @@ func TestBackfillSeedsWhatAnOldCLINeverWrote(t *testing.T) {
 	cfg := oldProjectConfig()
 	seeded := Backfill(cfg)
 
-	for _, blk := range []string{"test", "hsec", "sonar", "ops", "ai.models"} {
+	for _, blk := range []string{"test", "hsec", "sonar", "ops", "graph", "ai.models"} {
 		if !slices.Contains(seeded, blk) {
 			t.Errorf("%s should have been seeded, got %v", blk, seeded)
 		}
@@ -33,6 +33,11 @@ func TestBackfillSeedsWhatAnOldCLINeverWrote(t *testing.T) {
 	}
 	if cfg.Ops == nil {
 		t.Error("the ops block should exist")
+	}
+	// Seeding it must not change what the project already had: the defaults it
+	// gets written with are the ones absence already meant.
+	if cfg.Graph == nil || !cfg.Graph.On() || !cfg.Graph.HooksOn() || cfg.Graph.UseDeep() {
+		t.Errorf("the graph block should be seeded with the defaults absence meant, got %+v", cfg.Graph)
 	}
 	if len(cfg.AI.Models) != 1 || cfg.AI.Models[0] != ModelOpus5 {
 		t.Errorf("ai.models should be seeded with the active model, got %v", cfg.AI.Models)

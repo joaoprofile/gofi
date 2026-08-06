@@ -41,6 +41,10 @@ in the file are kept; hand-written comments are not), the graph is rebuilt and
 its git hooks reinstalled. It then reports the drift it cannot fix on its own —
 document frontmatter and missing INDEXes belong to the agents.
 
+The graph is rebuilt in the mode graph.deep declares, never forced to deep, and
+the mode is printed: in fast an absent edge is not proof of an absent call, and
+that is what the agents read the graph under.
+
 With --audit, only that report runs and nothing is changed.
 With --force, edited managed files go back to upstream; the replaced content is
 copied to .gofi/backup/ first.

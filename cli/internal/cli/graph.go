@@ -164,7 +164,14 @@ Two modes. The default (fast) reads syntax only: it is quick, works on code that
 does not compile, and refuses to guess when a call is ambiguous — those are
 counted and reported rather than turned into a wrong edge. With --deep the Go
 type-checker resolves every call exactly and interface implementations become
-visible, at the cost of needing the project to build.
+visible, at the cost of needing the project to build. Only in deep does an
+absent edge prove an absent call, which is what makes it worth asking for
+before concluding that nothing else uses a symbol.
+
+The mode a project wants lives in .gofi.yaml (graph.deep). --deep asks for it on
+one run; --fast refuses it on one run, and is what the git hooks pass so a
+commit never waits for the type-checker. Deep only changes the Go scan: the
+TypeScript extractor is syntactic and records itself as fast either way.
 
 With --update the scan is skipped entirely when no .go file changed, which is
 what makes this safe to run on every commit.
@@ -186,6 +193,8 @@ gofi graph build ./backend --open`,
 	f.String("lang", "", i18n.T("cmd.graph.flag.lang"))
 	f.Duration("timeout", 10*time.Minute, i18n.T("cmd.graph.flag.timeout"))
 	f.Bool("deep", false, i18n.T("cmd.graph.flag.deep"))
+	f.Bool("fast", false, i18n.T("cmd.graph.flag.fast"))
+	cmd.MarkFlagsMutuallyExclusive("deep", "fast")
 	f.Bool("update", false, i18n.T("cmd.graph.flag.update"))
 	f.Bool("open", false, i18n.T("cmd.graph.flag.open"))
 	f.Bool("tests", false, i18n.T("cmd.graph.flag.tests"))
@@ -246,6 +255,7 @@ func runGraphBuild(cmd *cobra.Command, args []string) error {
 	f := cmd.Flags()
 	verbose, _ := f.GetBool("verbose")
 	deep, _ := f.GetBool("deep")
+	fast, _ := f.GetBool("fast")
 	update, _ := f.GetBool("update")
 	open, _ := f.GetBool("open")
 	tests, _ := f.GetBool("tests")
@@ -291,7 +301,10 @@ func runGraphBuild(cmd *cobra.Command, args []string) error {
 		if lang != "" && lang != opt.Language {
 			opt.Language, opt.SDKKey = lang, ""
 		}
-		opt.Deep = opt.Deep || deep
+		// opt.Deep arrives carrying what the project declared. --fast overrides
+		// it so the git hooks, which run on every commit, never pay for the
+		// type-checker in a project that asked for deep everywhere else.
+		opt.Deep = deep || (opt.Deep && !fast)
 		opt.WithTests = tests
 		opt.NoHTML = noHTML
 		opt.MaxFileKB = maxKB

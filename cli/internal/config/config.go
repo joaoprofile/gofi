@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -446,10 +447,55 @@ type Graph struct {
 	// (yaml absence) defaults to true.
 	Hooks *bool `yaml:"hooks,omitempty"`
 	// Deep resolves calls with the type-checker instead of the syntax tree:
-	// exact, at the cost of the project having to compile.
-	Deep bool `yaml:"deep,omitempty"`
+	// exact, at the cost of the project having to compile. Written even when
+	// false: it is the setting that decides whether the agents may read an
+	// absent edge as an absent call, and a key nobody sees is a key nobody
+	// weighs.
+	Deep bool `yaml:"deep"`
 	// Exclude are directory glob patterns left out of the scan.
 	Exclude []string `yaml:"exclude,omitempty"`
+}
+
+// MarshalYAML writes the block with the one comment a reader needs. Everything
+// else here is self-describing; `deep` is not, and it is the setting that
+// decides how much a laudo may conclude from the graph.
+func (g Graph) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{Kind: yaml.MappingNode}
+	// The comment goes on the key, not on the value: go-yaml renders a value's
+	// head comment below the line it belongs to.
+	add := func(key, comment string, val *yaml.Node) {
+		k := &yaml.Node{Kind: yaml.ScalarNode, Value: key, HeadComment: comment}
+		node.Content = append(node.Content, k, val)
+	}
+	boolean := func(b bool) *yaml.Node {
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(b)}
+	}
+
+	if g.Enabled != nil {
+		add("enabled", "false desliga o grafo e, com ele, os hooks que o mantêm em dia.", boolean(*g.Enabled))
+	}
+	if g.Hooks != nil {
+		add("hooks", "", boolean(*g.Hooks))
+	}
+	add("deep", "fast (false) lê só a sintaxe: rápido, roda em código que não compila, e\n"+
+		"não inventa aresta quando a chamada é ambígua — ela é contada, não ligada.\n"+
+		"deep (true) resolve pelo type-checker: chamada exata e implementação de\n"+
+		"interface visíveis, ao custo de o projeto precisar compilar.\n"+
+		"Só em deep a ausência de aresta prova ausência de uso.\n"+
+		"Vale para `gofi update` e `gofi graph build`. Os hooks de git reconstroem\n"+
+		"sempre em fast (--fast): o commit não espera o type-checker. Deep também\n"+
+		"só muda a varredura Go — superfície de UI é sintática de todo jeito.\n"+
+		"Com false, quem pede o deep é o agent, quando precisa provar ausência.",
+		boolean(g.Deep))
+
+	if len(g.Exclude) > 0 {
+		seq := &yaml.Node{Kind: yaml.SequenceNode}
+		for _, e := range g.Exclude {
+			seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: e})
+		}
+		add("exclude", "pastas fora da varredura, além das ignoradas por padrão.", seq)
+	}
+	return node, nil
 }
 
 // On reports whether the project keeps a graph.

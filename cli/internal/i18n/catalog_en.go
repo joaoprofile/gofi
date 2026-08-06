@@ -64,6 +64,7 @@ var catalogEN = map[string]string{
 	"cmd.graph.explain.short":    "Describe a symbol using the graph instead of opening files",
 	"cmd.graph.open.short":       "Open the graph visualization in the browser",
 	"cmd.graph.flag.deep":        "resolve calls with the type-checker: exact, but the project must compile",
+	"cmd.graph.flag.fast":        "force the syntactic mode even under `graph: deep: true` — what the git hooks use",
 	"cmd.graph.flag.update":      "rebuild only if some .go file changed (cheap enough for a git hook)",
 	"cmd.graph.flag.open":        "open the visualization once the build finishes",
 	"cmd.graph.flag.tests":       "include _test.go files in the graph",
@@ -99,7 +100,7 @@ var catalogEN = map[string]string{
 	"graph.hooks.list":             "hooks carrying the gofi block:",
 	"graph.hooks.done":             "graph hooks: %s",
 	"graph.hooks.failed":           "graph hooks — %v; run `gofi graph hooks --install`",
-	"graph.setup.done":             "graph: %d nodes, %d edges across %s, in %s/",
+	"graph.setup.done":             "graph: %d nodes, %d edges across %s, %s mode, in %s/",
 	"graph.setup.empty":            "graph — nothing could be scanned; run `gofi graph build` to see why",
 	"graph.setup.failed":           "graph — %v; run `gofi graph build`",
 

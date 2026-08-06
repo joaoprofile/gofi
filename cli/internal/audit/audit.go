@@ -191,6 +191,7 @@ var blockPurpose = map[string]string{
 	"sonar":     "SonarQube settings (gofi sonar)",
 	"test":      "test tasks (gofi test)",
 	"ops":       "platform/delivery settings (gofi-ops)",
+	"graph":     "code graph settings — chiefly the scan mode, which decides what the agents may conclude from the graph",
 	"ai.models": "the model list the panel's /model picker offers, which falls back to built-ins without it",
 }
 

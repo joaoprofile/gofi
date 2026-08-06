@@ -70,7 +70,7 @@ func TestGoldenGraphJSON(t *testing.T) {
 }
 
 func TestGoldenReportMarkdown(t *testing.T) {
-	checkGolden(t, "gofi_graph_report.md", []byte(report.Markdown(build(t))))
+	checkGolden(t, "gofi_graph_report.md", []byte(report.Markdown(build(t), "")))
 }
 
 // The graph is committed, so two developers scanning the same commit have to

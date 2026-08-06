@@ -78,13 +78,18 @@ func TestConfigOnOldSchema(t *testing.T) {
 	}
 }
 
-// A config the current CLI writes carries no graph: block — its absence already
-// means every default — so reporting it would flag a fresh project as drifted.
-func TestConfigWithoutGraphBlockIsSilent(t *testing.T) {
+// The block's absence still means every default, so nothing breaks without it —
+// but the default scan mode is fast, and a project that cannot see the setting
+// cannot weigh what its agents may conclude from the graph.
+func TestConfigWithoutGraphBlockIsReported(t *testing.T) {
 	cfg := strings.Replace(currentConfig, "graph:\n  enabled: true\n", "", 1)
 	root := project(t, map[string]string{".gofi.yaml": cfg})
-	if _, ok := find(Run(root, Options{}), "graph:"); ok {
-		t.Error("an absent graph block is a valid state, not drift")
+	f, ok := find(Run(root, Options{}), "graph:")
+	if !ok {
+		t.Fatal("an absent graph block should be reported")
+	}
+	if f.Severity != SeverityInfo {
+		t.Errorf("severity = %v, want info: the project still works without it", f.Severity)
 	}
 }
 

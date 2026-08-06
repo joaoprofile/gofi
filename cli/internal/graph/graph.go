@@ -55,6 +55,13 @@ type BuildOptions struct {
 	// Framework the project declared for this tree — react, react-native. It is
 	// recorded in the graph, not acted on: the extractor is chosen by language.
 	Framework string
+	// IndexLang is the language of the index this graph is filed under, which is
+	// not the language of the tree it describes. A front-end scope is written in
+	// TypeScript yet is listed by name in the project's own index, so it is
+	// queried with no --lang at all; only a language built into an index of its
+	// own (`gofi graph build --lang java`) needs the flag. Empty means the scan
+	// language answers for both, which is the standalone build.
+	IndexLang string
 	Deep      bool          // use go/types: exact calls and interface implementations
 	WithTests bool          // include the language's test files
 	Exclude   []string      // directory glob patterns to skip
@@ -91,6 +98,21 @@ func (o BuildOptions) ExtractorsRoot(scanRoot string) string {
 		return scanRoot
 	}
 	return o.ProjectRoot
+}
+
+// QueryLang is the --lang a reader has to pass to reach this graph, empty when
+// none is needed. It is what the report's suggested commands carry, and getting
+// it from the scan language would send a reader of a front-end scope to
+// .gofi/graph/typescript/ — a directory that scope does not live in.
+func (o BuildOptions) QueryLang() string {
+	lang := o.IndexLang
+	if lang == "" {
+		lang = o.Lang()
+	}
+	if lang == LangGo {
+		return ""
+	}
+	return lang
 }
 
 // Mode is the scan mode name recorded in the graph.
@@ -157,7 +179,7 @@ func Build(ctx context.Context, opt BuildOptions) (*Result, error) {
 		Diagnostics: ext.Diagnostics,
 		DiagCount:   ext.DiagCount,
 	}
-	if err := writeOutputs(g, out, opt.NoHTML, res); err != nil {
+	if err := writeOutputs(g, out, opt.NoHTML, opt.QueryLang(), res); err != nil {
 		return nil, err
 	}
 	log.Debug("graph written", "dir", out, "nodes", g.Stats.Nodes, "edges", g.Stats.Edges)
@@ -182,7 +204,7 @@ func outDir(root, out, lang string) string {
 	return out
 }
 
-func writeOutputs(g *model.Graph, dir string, noHTML bool, res *Result) error {
+func writeOutputs(g *model.Graph, dir string, noHTML bool, queryLang string, res *Result) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -197,7 +219,7 @@ func writeOutputs(g *model.Graph, dir string, noHTML bool, res *Result) error {
 	}
 	defer root.Close()
 
-	if err := root.WriteFile(ReportFile, []byte(report.Markdown(g)), 0o644); err != nil {
+	if err := root.WriteFile(ReportFile, []byte(report.Markdown(g, queryLang)), 0o644); err != nil {
 		return err
 	}
 	res.Outputs = append(res.Outputs, ReportFile)

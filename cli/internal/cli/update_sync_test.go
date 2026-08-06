@@ -101,7 +101,7 @@ func TestSyncConfigRewritesAnOldSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, block := range []string{"backend:", "hsec:", "sonar:", "test:", "ops:"} {
+	for _, block := range []string{"backend:", "hsec:", "sonar:", "test:", "ops:", "graph:"} {
 		if !strings.Contains(string(body), block) {
 			t.Errorf("%s missing from the rewritten config:\n%s", block, body)
 		}

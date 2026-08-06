@@ -556,6 +556,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 		Frontend: frontend,
 		Mobile:   mobile,
 		Ops:      config.DefaultOps(),
+		Graph:    config.DefaultGraph(),
 		AI:       config.AI{Host: r.AIHost, Model: r.AIModel, Models: []string{r.AIModel}},
 		Agents:   r.Agents,
 		Sources:  src,

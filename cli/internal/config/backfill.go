@@ -10,9 +10,11 @@ import (
 // memory and MissingBlocks reports which the file still lacks; keeping the names
 // in one place is what stops the repair and the report from disagreeing.
 //
-// `graph:` is not among them: its absence already means every default, so a
-// config written by the current CLI does not carry it either.
-var initBlocks = []string{"hsec", "sonar", "test", "ops"}
+// `graph:` is among them even though its absence already means every default:
+// the default scan mode is fast, and in fast an absent edge is not proof of an
+// absent call. A project that cannot see the setting cannot weigh it, so the
+// block is written out with the values it already had.
+var initBlocks = []string{"hsec", "sonar", "test", "ops", "graph"}
 
 // Backfill seeds the blocks a project scaffolded by an older CLI never got, and
 // reports which ones it seeded. Blocks already in the file are left exactly as
@@ -54,6 +56,10 @@ func Backfill(cfg *GofiConfig) []string {
 	if cfg.Ops == nil {
 		cfg.Ops = DefaultOps()
 		seeded = append(seeded, "ops")
+	}
+	if cfg.Graph == nil {
+		cfg.Graph = DefaultGraph()
+		seeded = append(seeded, "graph")
 	}
 	// The picker reads this list; leaving it empty makes the panel fall back to
 	// its built-ins. The active model is the one choice the project has already

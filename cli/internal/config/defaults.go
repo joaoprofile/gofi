@@ -292,3 +292,12 @@ func DefaultOps() *Ops {
 		Path:     DefaultOpsPath,
 	}
 }
+
+// DefaultGraph returns the graph block written into a .gofi.yaml. The values are
+// what an absent block already meant; what changes is that the project can now
+// see them. The scan mode in particular governs what the agents may conclude
+// from the graph, and a default nobody reads is a default nobody chose.
+func DefaultGraph() *Graph {
+	on := true
+	return &Graph{Enabled: &on, Hooks: &on, Deep: false}
+}

@@ -247,6 +247,9 @@ func buildScope(ctx context.Context, sc Scope, opt Options, prev *Index, log *sl
 		Out:         sc.Dir,
 		Language:    sc.Language,
 		Framework:   sc.Framework,
+		// Every scope here is listed by name in one index, so a reader reaches
+		// it through that index's language and not through its own.
+		IndexLang: (graph.BuildOptions{Language: opt.Language}).Lang(),
 		Deep:        opt.Deep,
 		WithTests:   opt.WithTests,
 		Exclude:     opt.Exclude,
