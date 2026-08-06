@@ -46,6 +46,23 @@ codificar.
    opcional, não delega ao QA, não fica pra depois. Escrever o teste **antes**
    do fix (ver vermelho→verde) é o caminho preferido; no mínimo, o teste
    acompanha o fix no mesmo passo.
+6. **O grafo é o primeiro movimento — nunca varra o repositório por reflexo
+   (LEI absoluta).** Procurar código é `gofi graph explain`; `grep -r`/`Glob`
+   deliberado atrás de código é violação. O gate **não** é *"isto é símbolo?"*
+   — essa pergunta se responde de cabeça, sem consultar nada, e é exatamente
+   por ela que a varredura volta; o gate é *"**eu já chamei o `explain`?**"*.
+   **Uma** chamada antes do primeiro `grep`, sempre, inclusive quando o alvo
+   parece fora do índice (`const`/`var`, diretiva em comentário, string) — aí o
+   movimento certo é `explain` no **símbolo concreto que o referencia** (o DTO,
+   o service, o tipo), não `grep` direto. E `explain` vazio **não autoriza
+   `grep` automaticamente**: vazio quase sempre é pergunta mal formulada. A
+   escada é (1) reformular no grafo — dois termos, ou o vizinho concreto; (2)
+   se a pergunta é de **ausência**, `build --deep` (varrer não substitui: o
+   `grep` acha texto, não resolve dispatch por interface); (3) escreveu código
+   nesta sessão? `build --update` e repita; (4) **só então** `grep`, **se for o
+   caso** — sem extractor para a linguagem, ou alvo comprovadamente textual — e
+   **sempre declarado** ("caí no grep porque X"). Protocolo:
+   `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 ---
 
@@ -58,7 +75,7 @@ Antes de qualquer linha de código:
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-spec
 5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` (descoberta por keywords) → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §seções relevantes (Modelo de Dados §3, Operações §4, Regras §5, ADRs §9). Nunca leia a spec inteira por reflexo. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
-5a. **Procurar código é `gofi graph`, não `grep -r`.** Se `.gofi/graph/` existir: `gofi_graph_index.json` (que escopos existem, **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/` — e **em que modo** cada um foi varrido) → o `gofi_graph_report.md` **daquele escopo** (pacotes, pontos centrais, conexões inesperadas) → `gofi graph explain <símbolo>` só nos símbolos que a tarefa toca. Não sabe o nome exato? `gofi graph explain <termo> <termo>` (≥2 palavras) busca por nome parcial dentro do grafo — é isso que substitui o `grep` por símbolo. Superfície declarada no `.gofi.yaml` **não** usa `--lang`: já é escopo do índice principal. **Nunca** abra `gofi_graph.json`. `grep -r` é fallback **declarado** (linguagem sem extractor, alvo que não é símbolo: string, chave de config, SQL). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
+5a. **Procurar código é `gofi graph`, não `grep -r`.** Se `.gofi/graph/` existir: `gofi_graph_index.json` (que escopos existem, **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/` — e **em que modo** cada um foi varrido) → o `gofi_graph_report.md` **daquele escopo** (pacotes, pontos centrais, conexões inesperadas) → `gofi graph explain <símbolo>` só nos símbolos que a tarefa toca. Não sabe o nome exato? `gofi graph explain <termo> <termo>` (≥2 palavras) busca por nome parcial dentro do grafo — é isso que substitui o `grep` por símbolo. Superfície declarada no `.gofi.yaml` **não** usa `--lang`: já é escopo do índice principal. **Nunca** abra `gofi_graph.json`. `grep -r` é fallback **declarado**, e o gate dele **não** é "isto é símbolo?" — essa pergunta você responde de cabeça, sem consultar nada, e é por ela que o reflexo de varrer o repositório volta. O gate é "**eu já chamei o `explain`?**": uma chamada antes do primeiro `grep`, sempre, mesmo quando o alvo parece `const`/`var`/comentário/string (nesses, o movimento melhor costuma ser `explain` no **símbolo concreto que os referencia** — o DTO, o service, o tipo). Motivos legítimos de fallback: linguagem sem extractor, `explain` voltou vazio, ou alvo que de fato não é nó (string, chave de config, SQL). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
 7. Ler **knowledge per-agent**: `.claude/knowledge/eng/*.md` (user-treinado)
 8. Para `project.language` (a partir do `.gofi.yaml`):

@@ -43,6 +43,24 @@ específicas — **nunca reescreve código**.
    melhoria: `## Histórico de Alterações` da spec + `## Estado atual`/`## Histórico
    de versões` da memória do contexto + o diff. Fix confirmado sem teste que o
    trave é reprovação.
+6. **Auditar é consultar o grafo — nunca varrer o código por reflexo (LEI
+   absoluta).** Todo achado nasce de `gofi graph explain`; `grep -r`/`Glob`
+   deliberado atrás de código é violação. O gate **não** é *"isto é símbolo?"*
+   — essa pergunta se responde de cabeça, sem consultar nada, e é exatamente
+   por ela que a auditoria volta a ser uma varredura de arquivos; o gate é
+   *"**eu já chamei o `explain`?**"*. **Uma** chamada antes do primeiro `grep`,
+   sempre, inclusive quando o alvo parece fora do índice (`const`/`var`,
+   diretiva em comentário, string) — aí o movimento certo é `explain` no
+   **símbolo concreto que o referencia** (o DTO, o service, o tipo). E
+   `explain` vazio **não autoriza `grep` automaticamente**: vazio quase sempre
+   é pergunta mal formulada. A escada é (1) reformular no grafo — dois termos,
+   ou o vizinho concreto; (2) se o achado é de **ausência** (§5b), `build
+   --deep` (varrer não substitui: o `grep` acha texto, não resolve dispatch por
+   interface); (3) grafo stale numa cadeia `eng → qa`? `build --update` e
+   repita; (4) **só então** `grep`, **se for o caso** — sem extractor para a
+   linguagem, ou alvo comprovadamente textual — e **o laudo declara** cada
+   queda ("verificado por grep porque X"). Protocolo:
+   `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 ---
 
@@ -53,7 +71,7 @@ específicas — **nunca reescreve código**.
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (índice de contextos: `/gofi-status`)
 4. Ler `.claude/memory/contexts/{contexto}.md` — frontmatter + handoff do gofi-eng (decisões, arquivos)
 5. Ler a spec — **fonte da verdade para conformidade**. Via RAG (poucos tokens): `specs/INDEX.md` → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` das §seções auditadas. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
-5a. **Auditar é consultar o grafo, não varrer o código com `grep`.** Rode `gofi graph build --update` **primeiro**: o hook de pre-commit só reconstrói o grafo no commit e, numa cadeia `eng → qa`, o commit ainda não aconteceu — sem isto você auditaria um mapa sem a implementação. Depois `gofi_graph_index.json` (que escopos existem e **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/`) → o `gofi_graph_report.md` **do escopo auditado** (as §"Ciclos de chamada" e §"Conexões inesperadas" são evidência direta de violação de camada) → `gofi graph explain <símbolo>` nos pontos auditados; quando não souber o nome exato, `gofi graph explain <termo> <termo>` busca por nome parcial dentro do grafo. **Nunca** abra `gofi_graph.json`. `grep` só como fallback declarado no laudo (alvo que não é símbolo: string, SQL, tag de struct). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
+5a. **Auditar é consultar o grafo, não varrer o código com `grep`.** Rode `gofi graph build --update` **primeiro**: o hook de pre-commit só reconstrói o grafo no commit e, numa cadeia `eng → qa`, o commit ainda não aconteceu — sem isto você auditaria um mapa sem a implementação. Depois `gofi_graph_index.json` (que escopos existem e **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/`) → o `gofi_graph_report.md` **do escopo auditado** (as §"Ciclos de chamada" e §"Conexões inesperadas" são evidência direta de violação de camada) → `gofi graph explain <símbolo>` nos pontos auditados; quando não souber o nome exato, `gofi graph explain <termo> <termo>` busca por nome parcial dentro do grafo. **Nunca** abra `gofi_graph.json`. **O gate do `grep` não é "isto é símbolo?", é "eu já chamei o `explain`?"** — a pergunta de classificação você responde de cabeça, sem consultar nada, e é por ela que a auditoria volta a ser uma varredura de arquivos. Uma chamada de `explain` (pelo alvo, ou por dois termos quando não souber o nome) **antes** do primeiro `grep`, mesmo quando você tem certeza de que o alvo é `const`/`var`/comentário/string. Caiu no `grep`? **Declare no laudo** que caiu e por quê. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
 
 5b. **Valide o modo do grafo antes de escrever "não há violação".** Todo item deste checklist que afirma **ausência** ("service NÃO importa X", "handler não acessa repository") é uma prova de negativa, e só o modo `deep` a sustenta: em `fast` a chamada ambígua não vira aresta. Leia o `mode` do escopo no `gofi_graph_index.json` (o `report.md` também o traz no cabeçalho e a contagem de ambíguas no §Resumo). Os hooks de git reconstroem **sempre em `fast`** e `gofi update` no modo do `.gofi.yaml` — **`fast` por padrão** —, então um grafo recém-reconstruído continua sendo `fast` na maioria dos projetos. Se vier `fast`: rode `gofi graph build --deep` antes de concluir, ou **registre no laudo** que a verificação foi sintática (e sugira `graph: deep: true` no `.gofi.yaml` se o projeto quiser exatidão nos builds deliberados). Numa superfície de UI o `deep` não existe — o extractor TS/JS é sintático e o escopo fica `fast` de todo jeito, então ali a limitação **sempre** se declara. Nunca apresente ausência de aresta em `fast` como prova. Gatilhos completos em *Quando rodar `--deep`* do protocolo do grafo.
 6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — auditar se diagramas da spec/laudo são PlantUML; Mermaid/ASCII/imagem é divergência; `application-vs-domain-service.md` — auditar separação de camadas: application não chama repository direto, service não importa bridge/factory/application, erros na camada correta, tests da application mockam service e não repository). Quando o contexto usa filtro dinâmico, ler também `.claude/sdk/<lang>/knowledge/lookup-endpoints.md` — shape v2 do `FieldMapping` (`SearchType: "embedded"` + `Content` vs `SearchType: "v1/<path>"`); rota dedicada `GET /{ctx}/status` foi descontinuada e em código novo é divergência

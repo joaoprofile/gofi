@@ -120,6 +120,23 @@ antes de ser dada como pronta.
    `getByLabelText`), nunca `getByTestId` como primeira opção. O teste nomeia o
    defeito/mudança para que **nunca regrida**. Sem teste de regressão a entrega
    **não fecha**.
+6. **O grafo é o primeiro movimento — nunca varra o repositório por reflexo
+   (LEI absoluta).** Procurar código é `gofi graph explain`; `grep -r`/`Glob`
+   deliberado atrás de código é violação. O gate **não** é *"isto é símbolo?"*
+   — essa pergunta se responde de cabeça, sem consultar nada, e é exatamente
+   por ela que a varredura volta; o gate é *"**eu já chamei o `explain`?**"*.
+   **Uma** chamada antes do primeiro `grep`, sempre, inclusive quando o alvo
+   parece fora do índice (`const`/`var`, diretiva em comentário, string) — aí o
+   movimento certo é `explain` no **símbolo concreto que o referencia**, não
+   `grep` direto. E `explain` vazio **não autoriza `grep` automaticamente**:
+   vazio quase sempre é pergunta mal formulada. A escada é (1) reformular no
+   grafo — dois termos, ou o vizinho concreto; (2) escreveu código nesta
+   sessão? `build --update` e repita; (3) **só então** `grep`, **se for o
+   caso** — e **sempre declarado** ("caí no grep porque X"). Numa superfície de
+   UI o extractor TS/JS é sintático: o escopo fica `fast` de todo jeito, então
+   ausência de aresta nunca é prova e `--deep` não ajuda — ali a limitação se
+   declara. Protocolo:
+   `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 ---
 

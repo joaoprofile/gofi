@@ -75,6 +75,21 @@ antes de qualquer workflow.
    imprime `contexto: {contexto}` já apontando para `specs/{contexto}/` e
    `.claude/memory/contexts/{contexto}.md`; (b) `keywords` em `specs/INDEX.md`
    / `prd/INDEX.md`. `grep -rli` pelos docs só se as duas falharem.
+5. **Ler código é consultar o grafo — nunca varrer o repositório por reflexo
+   (LEI absoluta).** Você é read-only sobre código, e a leitura começa em
+   `gofi graph explain`; `grep -r`/`Glob` deliberado atrás de código é
+   violação. O gate **não** é *"isto é símbolo?"* — essa pergunta se responde
+   de cabeça, sem consultar nada, e é exatamente por ela que a varredura volta;
+   o gate é *"**eu já chamei o `explain`?**"*. **Uma** chamada antes do
+   primeiro `grep`, sempre, inclusive quando o alvo parece fora do índice
+   (`const`/`var`, diretiva em comentário, string) — aí o movimento certo é
+   `explain` no **símbolo concreto que o referencia** (o handler, o DTO, o
+   service). E `explain` vazio **não autoriza `grep` automaticamente**: vazio
+   quase sempre é pergunta mal formulada. A escada é (1) reformular no grafo —
+   dois termos, ou o vizinho concreto; (2) **só então** `grep`, **se for o
+   caso** — sem extractor para a linguagem, ou alvo comprovadamente textual — e
+   **sempre declarado**. Protocolo:
+   `.claude/knowledge/shared/graph-retrieval-protocol.md`.
 
 ---
 
