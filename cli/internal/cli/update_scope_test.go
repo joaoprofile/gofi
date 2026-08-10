@@ -20,7 +20,7 @@ func TestUpdateScope_AnswersAllThreeQuestions(t *testing.T) {
 
 	out := s.String()
 	for _, want := range []string{
-		"On Yes:",
+		"This run:",
 		"WRITES        .claude/skills/  9 file(s): 2 new, 3 changed",
 		"KEEPS         1 file(s) you edited",
 		"LEAVES ALONE  .gofi.yaml, memory/",
@@ -28,6 +28,46 @@ func TestUpdateScope_AnswersAllThreeQuestions(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("block is missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// The rule the family runs on: naming the target IS the decision, so a prompt
+// is only earned by a run that can cost you something upstream cannot give
+// back. A prompt that always appears is a prompt nobody reads.
+func TestUpdateScope_AsksOnlyWhenSomethingIsAtRisk(t *testing.T) {
+	edited := []string{"a"}
+
+	cases := []struct {
+		name string
+		s    updateScope
+		want bool
+	}{
+		{"a plain refresh decides nothing for you", updateScope{Keeps: edited}, false},
+		{"--force with nothing of yours on disk destroys nothing", updateScope{Force: true}, false},
+		{"--force over your edits is the one flag that can lose work", updateScope{Force: true, Keeps: edited}, true},
+		{"a mirror wipes whatever is there", updateScope{Replaces: true}, true},
+		{"a derived rebuild risks nothing", updateScope{}, false},
+	}
+	for _, c := range cases {
+		if got := c.s.atRisk(); got != c.want {
+			t.Errorf("%s: atRisk() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// The header has to match whether a question follows, or the block promises a
+// prompt that never comes.
+func TestUpdateScope_HeaderMatchesWhetherItAsks(t *testing.T) {
+	safe := updateScope{Keeps: []string{"a"}}
+	safe.write(".claude/skills/", "")
+	if !strings.Contains(safe.String(), "This run:") {
+		t.Errorf("a run with no prompt must not say \"On Yes\":\n%s", safe)
+	}
+
+	risky := updateScope{Force: true, Keeps: []string{"a"}}
+	risky.write(".claude/skills/", "")
+	if !strings.Contains(risky.String(), "On Yes:") {
+		t.Errorf("a run that asks must say so:\n%s", risky)
 	}
 }
 

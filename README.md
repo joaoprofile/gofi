@@ -555,11 +555,10 @@ para cada coisa:
 uma decisão que alguém consiga revisar, "atualiza as skills" é. Sem alvo, o
 comando lista os alvos.
 
-**Todo alvo pergunta antes de escrever**, e a pergunta vem com o que acontece se
-você responder Sim:
+**Todo alvo diz o que vai fazer antes de fazer:**
 
 ```
-On Yes:
+This run:
 
   WRITES        .claude/skills/  9 file(s): 2 new, 3 changed
   KEEPS         2 file(s) you edited
@@ -568,8 +567,25 @@ On Yes:
 ```
 
 A linha `LEAVES ALONE` é a que importa: ela responde "o que mais isso vai
-mexer?" antes de mexer. `--yes` pula a pergunta mas continua imprimindo o bloco;
-`--force` troca `KEEPS` por `OVERWRITES`, guardando cópia em `.gofi/backup/`.
+mexer?" antes de mexer. O bloco sai **sempre** — inclusive com `--yes` e
+inclusive quando não há pergunta nenhuma depois.
+
+**Confirmação é para o que você pode perder, não para o que você pediu.** Nomear
+o alvo já foi a decisão; perguntar de novo seria cerimônia, e pergunta que
+aparece toda hora é pergunta que ninguém lê. Só dois casos pedem resposta:
+
+| Situação | Pergunta? |
+|---|---|
+| Refresh normal de `skills`, `sdk`, `ds` | não — o que você editou é preservado |
+| `graph` | não — é saída derivada; refazer custa segundos |
+| `--force` **sobre arquivos que você editou** | **sim** — é o único jeito de perder trabalho |
+| `--force` sem nenhum arquivo seu no caminho | não — não há o que destruir |
+| `institutional` | **sim** — é wipe + recópia, sempre |
+| Nada a mudar | não — perguntar se você quer fazer nada é o pior prompt que existe |
+
+Quando pergunta, o cabeçalho do bloco vira `On Yes:` e `--yes` responde por
+você. Com `--force`, o `KEEPS` vira `OVERWRITES`, guardando cópia em
+`.gofi/backup/`.
 
 O que ficou para trás e nenhum alvo repara aparece no `gofi update audit`, que
 só reporta — cada achado nomeia o comando que fecha ele, ou diz que nenhum fecha.

@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
@@ -140,5 +141,60 @@ func declareWebSurface(t *testing.T, root string) {
 	cfg.Frontend = &config.UISurface{Framework: "react", Path: "apps/web", DS: "shadcn"}
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("save: %v", err)
+	}
+}
+
+// Outside a TTY a prompt is an error, which makes this the honest way to prove
+// a run does not prompt: pass autoConfirm=false and expect it to go through.
+func TestUpdateTargets_DoNotPromptWhenNothingIsAtRisk(t *testing.T) {
+	root := setupProject(t)
+	declareWebSurface(t, root)
+	repo := os.Getenv("GOFI_AGENTS_LOCAL_DIR")
+
+	// A pending change in each target, and a file of ours in the way.
+	writeFile(t, filepath.Join(repo, "ai/skills/gofi-pd/SKILL.md"), "# /gofi-pd — v2")
+	writeFile(t, filepath.Join(repo, "ai/sdk/go/sdk-docs/overview.md"), "overview v2")
+	writeFile(t, filepath.Join(repo, "ai/sdk/web/knowledge/patterns.md"), "patterns v2")
+	writeFile(t, filepath.Join(root, ".claude/skills/gofi-eng/SKILL.md"), "edited by us")
+
+	if err := runSkillsUpdate(false, false); err != nil {
+		t.Errorf("a plain skills refresh must not prompt: %v", err)
+	}
+	if err := runSDKUpdate(false, false); err != nil {
+		t.Errorf("a plain sdk refresh must not prompt: %v", err)
+	}
+	if err := runDSUpdate(false, false); err != nil {
+		t.Errorf("a plain ds refresh must not prompt: %v", err)
+	}
+	// The edit survived, which is why there was nothing to ask about.
+	if got := readFile(t, filepath.Join(root, ".claude/skills/gofi-eng/SKILL.md")); got != "edited by us" {
+		t.Errorf("the kept file was overwritten: %q", got)
+	}
+}
+
+// And the reverse: --force over a file we edited is the one run that can lose
+// work, so it must insist on an answer.
+func TestSkillsUpdate_ForceOverOurEditsInsistsOnAnAnswer(t *testing.T) {
+	root := setupProject(t)
+	writeFile(t, filepath.Join(root, ".claude/skills/gofi-eng/SKILL.md"), "edited by us")
+
+	err := runSkillsUpdate(false, true)
+	if err == nil {
+		t.Fatal("--force over an edited skill must not proceed unasked")
+	}
+	if !strings.Contains(err.Error(), "--yes") {
+		t.Errorf("the error should point at the flag that answers it, got %v", err)
+	}
+	if got := readFile(t, filepath.Join(root, ".claude/skills/gofi-eng/SKILL.md")); got != "edited by us" {
+		t.Errorf("nothing may be written before the answer: %q", got)
+	}
+}
+
+// Nothing to change is the prompt nobody wants: it must be a no-op, not a
+// question, even when the target could otherwise ask.
+func TestSkillsUpdate_NothingToChangeIsANoOp(t *testing.T) {
+	setupProject(t)
+	if err := runSkillsUpdate(false, false); err != nil {
+		t.Fatalf("a current project must not prompt: %v", err)
 	}
 }
