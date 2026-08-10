@@ -333,8 +333,9 @@ Requisito → gofi-pd → gofi-spec → gofi-eng → gofi-qa
 ```
 
 Cada agente é invocado como **skill** (`/gofi-pd`, `/gofi-spec`, …). No repo o
-fonte é `ai/skills/<nome>.md`; instalado, vira `.claude/skills/<nome>/SKILL.md`
-— o único layout que o Claude Code descobre. Todos são **genéricos e
+fonte é `ai/skills/<nome>/SKILL.md`; instalado, vira
+`.claude/skills/<nome>/SKILL.md` — mesmo layout, o único que o Claude Code
+descobre. Todos são **genéricos e
 portáveis**: carregam apenas
 metodologia; o que é específico do projeto vive em `specs/`, `memory/` e
 `institutional/`.
@@ -522,7 +523,7 @@ Em v1 só Claude Code é suportado.
 
 | Origem                                 | Destino                            |
 |----------------------------------------|------------------------------------|
-| `skills/*.md` (todas)                  | `.claude/skills/<nome>/SKILL.md`   |
+| `ai/skills/<nome>/` (todas)            | `.claude/skills/<nome>/`           |
 | `ai/claude/CLAUDE.md`                  | `.claude/CLAUDE.md`                |
 | `specs-template/`                      | `.claude/specs-template/`          |
 | `prd-template/`                        | `.claude/prd-template/`            |
@@ -536,9 +537,49 @@ Em v1 só Claude Code é suportado.
 > `<surface>` é `go` (backend), `web` ou `mobile` — selecionada conforme
 > `project.language` e o bloco `ui` do `.gofi.yaml`.
 
-`gofi update` re-baixa o repo e refresca os mesmos paths **preservando**
-`knowledge/{shared,pd,spec,eng,qa}/` (train-managed) e `memory/`
-(project-state).
+Isso é o `gofi init`. **Depois que o projeto existe, nada disso se move
+sozinho** — os arquivos são do time, e alterá-los é manual no próprio
+repositório. Tudo que o projeto puxa do upstream mora numa família só, um alvo
+para cada coisa:
+
+| Comando | Escreve |
+|---------|---------|
+| `gofi update skills` | `.claude/skills/`, e nada mais |
+| `gofi update sdk` | `.gofi/gofi-sdk-<lang>/`, `.claude/sdk/<lang>/` e o `go.work` |
+| `gofi update ds` | `.claude/sdk/<surface>/` — o design system de cada frontend |
+| `gofi update graph` | `.gofi/graph/` e os hooks git |
+| `gofi update institutional` | `.claude/institutional/<projeto>/` — espelho, substitui inteiro |
+| `gofi update audit` | **nada** — só reporta o que ficou para trás |
+
+**Não existe `gofi update` sem alvo**, de propósito: "atualiza o projeto" não é
+uma decisão que alguém consiga revisar, "atualiza as skills" é. Sem alvo, o
+comando lista os alvos.
+
+**Todo alvo pergunta antes de escrever**, e a pergunta vem com o que acontece se
+você responder Sim:
+
+```
+On Yes:
+
+  WRITES        .claude/skills/  9 file(s): 2 new, 3 changed
+  KEEPS         2 file(s) you edited
+  LEAVES ALONE  .gofi.yaml, CLAUDE.md, templates/, scripts/, sdk/,
+                knowledge/, memory/, institutional/, go.work
+```
+
+A linha `LEAVES ALONE` é a que importa: ela responde "o que mais isso vai
+mexer?" antes de mexer. `--yes` pula a pergunta mas continua imprimindo o bloco;
+`--force` troca `KEEPS` por `OVERWRITES`, guardando cópia em `.gofi/backup/`.
+
+O que ficou para trás e nenhum alvo repara aparece no `gofi update audit`, que
+só reporta — cada achado nomeia o comando que fecha ele, ou diz que nenhum fecha.
+Você não precisa lembrar de rodar: todo alvo termina com uma linha de contagem
+quando há algo, e cala a boca quando não há.
+
+```
+Skills updated — .claude/skills/ now at a1b2c3d.
+3 structure finding(s), 1 needing attention — run `gofi update audit`.
+```
 
 ---
 

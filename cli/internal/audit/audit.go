@@ -1,14 +1,17 @@
 // Package audit reports where a project's on-disk structure lags behind the
 // conventions the current CLI writes.
 //
-// `gofi update` refreshes .claude/ from the pinned agents source, but three
-// things it can never touch drift silently: .gofi.yaml (written once by init),
-// specs/ and prd/ (authored by the agents), and .claude/knowledge/ (preserved
-// on purpose because teams edit it). A project scaffolded months ago therefore
-// keeps working while missing config blocks, document frontmatter and knowledge
-// files that everything newer assumes exist.
+// After `gofi init` the project belongs to the team, and the update family only
+// refreshes what it explicitly owns: the skills, the SDK layer, the graph and
+// the institutional mirror. Everything else drifts silently — .gofi.yaml
+// (written once by init), specs/ and prd/ (authored by the agents),
+// .claude/knowledge/ and the rest of the tree (edited by hand). A project
+// scaffolded months ago therefore keeps working while missing config blocks,
+// document frontmatter and knowledge files that everything newer assumes exist.
 //
-// Nothing here writes: the audit reports and hands the fix to the user.
+// Nothing here writes: the audit reports and hands the fix to the user. Every
+// hint names the command that closes the finding, or says plainly that no
+// command does.
 package audit
 
 import (
@@ -110,7 +113,7 @@ func checkConfig(root string) []Finding {
 		out = append(out, Finding{
 			Area: "config", Item: "version", Severity: SeverityWarn,
 			Detail: sprintVersion(v),
-			Hint:   "gofi config rewrites it in the current schema",
+			Hint:   "gofi config --wizard rewrites it in the current schema; no update touches this file",
 		})
 	}
 
@@ -123,7 +126,7 @@ func checkConfig(root string) []Finding {
 		out = append(out, Finding{
 			Area: "config", Item: key + ":", Severity: SeverityInfo,
 			Detail: "block absent — " + blockPurpose[key],
-			Hint:   "gofi update seeds it with the current defaults",
+			Hint:   "add it by hand, or gofi config --wizard rewrites the file with the current defaults",
 		})
 	}
 	out = append(out, checkUISurfaces(doc)...)
@@ -167,9 +170,9 @@ func scanSurface(where string, m map[string]any) []Finding {
 			continue
 		}
 		// brand is the one block form the old gofi-ui material documented, so
-		// the loader folds it to its `surface` value and update writes it back
-		// as a string. Any other field written as a block was never documented
-		// that way and still stops the config from loading.
+		// the loader folds it to its `surface` value and the config still loads.
+		// Any other field written as a block was never documented that way and
+		// stops the config from loading.
 		f := Finding{
 			Area: "config", Item: where + "." + k, Severity: SeverityWarn,
 			Detail: "written as a block; the schema reads it as a single string",
@@ -177,7 +180,7 @@ func scanSurface(where string, m map[string]any) []Finding {
 		}
 		if k == "brand" {
 			f.Severity = SeverityInfo
-			f.Hint = "gofi update rewrites it as the `surface` value; the other roles are derived from it"
+			f.Hint = "read as its `surface` value; write it as that single string — the other roles are derived from it"
 		}
 		out = append(out, f)
 	}
@@ -318,18 +321,18 @@ func hasKey(front, key string) bool {
 	return false
 }
 
-// checkClaude reports knowledge files that exist upstream but never reached the
-// project. `gofi update` preserves .claude/knowledge/ on purpose — teams edit it
-// — with the side effect that a file added upstream after the project was
-// scaffolded never arrives, while the skills shipped by the same update already
-// reference it.
+// checkClaude reports what .claude/ is missing or still carries from an older
+// layout. Only skills/ and sdk/ have a command that refreshes them; the rest of
+// the tree is installed once by `gofi init` and belongs to the team from then
+// on, so every finding here names what actually closes it rather than pointing
+// at an update that would not touch the file.
 func checkClaude(root string, opts Options) []Finding {
 	claude := filepath.Join(root, ".claude")
 	if _, err := os.Stat(claude); err != nil {
 		return []Finding{{
 			Area: "claude", Item: ".claude/", Severity: SeverityWarn,
 			Detail: "missing — the agents have nothing to read",
-			Hint:   "gofi update reinstalls it",
+			Hint:   "gofi update skills restores the skills; the rest of the tree comes from gofi init",
 		}}
 	}
 
@@ -338,11 +341,40 @@ func checkClaude(root string, opts Options) []Finding {
 		out = append(out, Finding{
 			Area: "claude", Item: ".claude/scripts/gen-index.sh", Severity: SeverityInfo,
 			Detail: "absent — INDEX regeneration is manual",
-			Hint:   "gofi update installs it",
+			Hint:   "copy it from ai/scripts/ in the gofi repo; no update installs it",
 		})
 	}
+	out = append(out, legacyLayout(claude)...)
 	out = append(out, missingShared(claude, opts)...)
 	return out
+}
+
+// legacyLayout reports the pre-v2.4 SDK directories: a flat .claude/boilerplates/
+// and sdk-knowledge/, and the .claude/gofi-sdk-<lang>/ that preceded
+// .claude/sdk/<lang>/. They are dead weight the agents may still read, which is
+// worse than absent — two copies of the same doc, one of them frozen.
+func legacyLayout(claude string) []Finding {
+	var stale []string
+	for _, name := range []string{"boilerplates", "sdk-knowledge"} {
+		if info, err := os.Stat(filepath.Join(claude, name)); err == nil && info.IsDir() {
+			stale = append(stale, ".claude/"+name+"/")
+		}
+	}
+	entries, _ := os.ReadDir(claude)
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "gofi-sdk-") {
+			stale = append(stale, ".claude/"+e.Name()+"/")
+		}
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	sort.Strings(stale)
+	return []Finding{{
+		Area: "claude", Item: ".claude/", Severity: SeverityWarn,
+		Detail: "pre-v2.4 SDK dir(s) beside the current tree: " + strings.Join(stale, ", "),
+		Hint:   "gofi update sdk removes them",
+	}}
 }
 
 func missingShared(claude string, opts Options) []Finding {
@@ -373,7 +405,7 @@ func missingShared(claude string, opts Options) []Finding {
 	return []Finding{{
 		Area: "claude", Item: ".claude/knowledge/shared/", Severity: SeverityWarn,
 		Detail: "missing upstream file(s): " + strings.Join(missing, ", "),
-		Hint:   "update preserves knowledge/; copy them from the source to get the protocols the skills cite",
+		Hint:   "no update writes knowledge/; copy them from ai/knowledge/shared/ to get the protocols the skills cite",
 	}}
 }
 

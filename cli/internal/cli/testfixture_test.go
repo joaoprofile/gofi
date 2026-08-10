@@ -12,10 +12,10 @@ import (
 // intentionally tiny so tests stay fast and the shape stays obvious;
 // production repos will have far richer content.
 var fixtureRepoFiles = map[string]string{
-	"ai/skills/gofi-pd.md":         "# /gofi-pd — fixture skill",
-	"ai/skills/gofi-spec.md":       "# /gofi-spec — fixture skill",
-	"ai/skills/gofi-eng.md":        "# /gofi-eng — fixture skill",
-	"ai/skills/gofi-qa.md":         "# /gofi-qa — fixture skill",
+	"ai/skills/gofi-pd/SKILL.md":   "# /gofi-pd — fixture skill",
+	"ai/skills/gofi-spec/SKILL.md": "# /gofi-spec — fixture skill",
+	"ai/skills/gofi-eng/SKILL.md":  "# /gofi-eng — fixture skill",
+	"ai/skills/gofi-qa/SKILL.md":   "# /gofi-qa — fixture skill",
 	"ai/claude/CLAUDE.md":          "# CLAUDE — fixture",
 	"ai/claude/README.md":          "# README — fixture",
 	"ai/templates/sdd-template.md": "# SDD — fixture",
