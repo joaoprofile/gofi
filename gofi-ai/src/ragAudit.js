@@ -355,7 +355,23 @@ function buildIndexPrompt(corpus) {
 	].join('\n');
 }
 
-module.exports = { review, scanCorpora, inspectDoc, CORPORA };
+/**
+ * Whether `gofi graph build` has already run here.
+ *
+ * The panel only tells an agent to prefer `gofi graph explain` over a Grep when
+ * there is a graph to explain from; in a project that never built one, the Grep
+ * was the right call and the advice would be noise. A single-scope build writes
+ * gofi_graph.json, a workspace build writes the index beside the scopes.
+ */
+function graphAvailable(root) {
+	if (!root) {
+		return false;
+	}
+	const dir = path.join(root, '.gofi', 'graph');
+	return fs.existsSync(path.join(dir, 'gofi_graph.json')) || fs.existsSync(path.join(dir, 'gofi_graph_index.json'));
+}
+
+module.exports = { review, scanCorpora, inspectDoc, graphAvailable, CORPORA };
 
 
 /**

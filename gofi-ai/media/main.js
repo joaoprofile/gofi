@@ -1083,6 +1083,91 @@
 	}
 
 	/**
+	 * The two characters from the working mark, both standing still: the
+	 * mascot with the whip hanging slack in its hand, the robot waiting beside
+	 * it. Same cast, same stage, but the whip is cold — this is the one moment
+	 * the engine itself said stop, and there is nothing left to strike with
+	 * until it says otherwise.
+	 *
+	 * Static on purpose, unlike `workingMark`. The mascot's face is doing the
+	 * telling: brows down, eyes half-closed, mouth turned — disappointed at
+	 * being unable to use the whip, not at the robot, which is why the robot's
+	 * own face stays as calm as the mascot's is not.
+	 */
+	function waitingMark() {
+		const mark = svgEl('svg', {
+			class: 'wait-mark',
+			viewBox: '0 0 104 44',
+			width: '104',
+			height: '44',
+			'aria-hidden': 'true',
+			focusable: 'false',
+		});
+
+		draw(mark, [['line', { class: 'floor', x1: '4', y1: '39.4', x2: '98', y2: '39.4' }]]);
+
+		// The mascot, built from the same parts as `workingMark`'s — the point is
+		// that it is recognisably the same character, just not mid-swing.
+		const mascot = svgEl('g', { class: 'mascot' });
+		draw(mascot, [
+			['circle', { class: 'fur', cx: '10.5', cy: '7.4', r: '2.9' }],
+			['circle', { class: 'fur', cx: '23.5', cy: '7.4', r: '2.9' }],
+			['rect', { class: 'armor', x: '9.6', y: '21.6', width: '14.8', height: '12.6', rx: '3.4' }],
+			['rect', { class: 'plate', x: '12.2', y: '24', width: '9.6', height: '7', rx: '1.6' }],
+			['text', { class: 'emblem', x: '17', y: '29.8', 'text-anchor': 'middle' }, 'G'],
+			['rect', { class: 'armor', x: '12', y: '33.4', width: '4', height: '5.6', rx: '1.6' }],
+			['rect', { class: 'armor', x: '18.2', y: '33.4', width: '4', height: '5.6', rx: '1.6' }],
+			// The off hand, idle at its side.
+			['line', { class: 'armor-limb', x1: '10.2', y1: '25.4', x2: '6.4', y2: '30.4' }],
+			['circle', { class: 'fur', cx: '17', cy: '13.5', r: '8.8' }],
+			['circle', { class: 'sclera', cx: '13.4', cy: '12', r: '3.1' }],
+			['circle', { class: 'sclera', cx: '20.6', cy: '12', r: '3.1' }],
+			// Pupils cast down rather than centred — looking at the whip, not ahead.
+			['circle', { class: 'pupil', cx: '13.4', cy: '13', r: '1.35' }],
+			['circle', { class: 'pupil', cx: '20.6', cy: '13', r: '1.35' }],
+			// Eyelids drawn over the top third of each eye: half-closed reads as
+			// tired/resigned in a way two full circles never could.
+			['ellipse', { class: 'eyelid', cx: '13.4', cy: '10.3', rx: '3.3', ry: '2.1' }],
+			['ellipse', { class: 'eyelid', cx: '20.6', cy: '10.3', rx: '3.3', ry: '2.1' }],
+			// Brows angled in and up — worried, not angry (angry tilts the other way).
+			['line', { class: 'brow', x1: '10.8', y1: '8.6', x2: '14.6', y2: '7.6' }],
+			['line', { class: 'brow', x1: '23.2', y1: '8.6', x2: '19.4', y2: '7.6' }],
+			// A frown, not the strike pose's bared teeth.
+			['path', { class: 'mouth-frown', d: 'M14.3 18.3 Q 17 16.4, 19.7 18.3' }],
+			['circle', { class: 'armor', cx: '25.2', cy: '23.4', r: '3.4' }],
+			// The whip arm, hanging rather than raised — the pose the whole drawing
+			// exists to show.
+			['line', { class: 'armor-limb', x1: '25.2', y1: '23.4', x2: '27.5', y2: '31' }],
+			// The lash itself, slack from hand to floor. No fire gradient here —
+			// that belongs to a whip in motion, and this one is not.
+			['path', { class: 'lash-idle', d: 'M27.5 31 C 30 34, 24 36, 27 39.2' }],
+		]);
+		mark.appendChild(mascot);
+
+		// The robot, waiting rather than typing: no keyboard, arms down, standing
+		// on its own feet instead of at a desk.
+		const robot = svgEl('g', { class: 'robot' });
+		draw(robot, [
+			['rect', { class: 'robot-body', x: '65', y: '18', width: '19', height: '15.5', rx: '4' }],
+			['rect', { class: 'robot-body', x: '70', y: '33.5', width: '3.5', height: '5.2', rx: '1.2' }],
+			['rect', { class: 'robot-body', x: '78.5', y: '33.5', width: '3.5', height: '5.2', rx: '1.2' }],
+			['rect', { class: 'robot-head', x: '68', y: '7', width: '13', height: '10', rx: '3' }],
+			['line', { class: 'wire', x1: '74.5', y1: '7', x2: '74.5', y2: '3.2' }],
+			['circle', { class: 'bulb', cx: '74.5', cy: '2.2', r: '1.5' }],
+			['circle', { class: 'eye', cx: '71.3', cy: '11.8', r: '1.4' }],
+			['circle', { class: 'eye', cx: '77.7', cy: '11.8', r: '1.4' }],
+			['line', { class: 'mouth', x1: '72.2', y1: '15', x2: '76.8', y2: '15' }],
+			['line', { class: 'wire', x1: '65', y1: '22', x2: '61.5', y2: '30' }],
+			['circle', { class: 'hand', cx: '61.5', cy: '30', r: '1.7' }],
+			['line', { class: 'wire', x1: '84', y1: '22', x2: '87.5', y2: '30' }],
+			['circle', { class: 'hand', cx: '87.5', cy: '30', r: '1.7' }],
+		]);
+		mark.appendChild(robot);
+
+		return mark;
+	}
+
+	/**
 	 * What the row says the agent is doing, by tool name.
 	 *
 	 * The verb is not decoration: "lendo" for two minutes and "executando" for
@@ -1384,6 +1469,11 @@
 		if (cacheRate !== null) {
 			parts.push(`${Math.round(cacheRate * 100)}% cache`);
 		}
+		// Graph queries earn a place on the closed bar: they are the searches the
+		// protocol asks for, and the count only moves when the agent honours it.
+		if (retrieval.graph > 0) {
+			parts.push(`${retrieval.graph} grafo`);
+		}
 		usageSummary.textContent = parts.join('  ·  ');
 
 		// The bar carries the headline so the user notices without opening
@@ -1428,6 +1518,7 @@
 
 		if (retrieval.inFlight.length > 0 || retrieval.rows.length > 0) {
 			usagePanel.appendChild(sectionTitle(`recuperação — ~${compact(retrieval.tokens)} tokens em ${retrieval.calls} buscas`));
+			usagePanel.appendChild(retrievalSplit(retrieval));
 			const list = document.createElement('div');
 			list.className = 'reads';
 			for (const row of retrieval.inFlight) {
@@ -1585,6 +1676,38 @@
 		return el;
 	}
 
+	/**
+	 * Where the session's searches went.
+	 *
+	 * The headline counts every retrieval; this line says how many of them asked
+	 * the graph instead of opening the tree, which is the number the project's
+	 * protocol is actually about.
+	 */
+	function retrievalSplit(retrieval) {
+		const el = document.createElement('p');
+		el.className = 'split';
+		const parts = [`${retrieval.graph || 0} pelo grafo`];
+		if (retrieval.code > 0) {
+			parts.push(`${retrieval.code} por grep/read no código`);
+		}
+		if (retrieval.docs > 0) {
+			parts.push(`${retrieval.docs} em docs`);
+		}
+		el.textContent = parts.join('  ·  ');
+		el.title = 'Grafo = `gofi graph explain`, ou leitura de .gofi/graph/.';
+
+		const avoided = retrieval.avoided;
+		if (avoided && avoided.files > 0) {
+			const saved = document.createElement('span');
+			saved.className = 'saved';
+			saved.textContent = `−~${compact(avoided.tokens)} tokens`;
+			saved.title = `As respostas do grafo citaram ${avoided.files} arquivos que a sessão não precisou abrir. O tamanho deles é o que um grep seguido de leitura teria trazido para o contexto.`;
+			el.appendChild(document.createTextNode('  ·  '));
+			el.appendChild(saved);
+		}
+		return el;
+	}
+
 	function readRow(row, inFlight) {
 		const el = document.createElement('div');
 		el.className = 'read';
@@ -1592,12 +1715,15 @@
 			el.classList.add('failed');
 		}
 
+		const graph = row.kind === 'graph';
 		const badge = document.createElement('span');
-		badge.className = row.scoped ? 'badge scoped' : 'badge full';
-		badge.textContent = row.scoped ? 'alvo' : 'inteiro';
-		badge.title = row.scoped
-			? 'A busca limitou o próprio escopo (offset/limit, ou um caminho).'
-			: 'A busca não limitou o escopo — trouxe o arquivo ou a árvore toda.';
+		badge.className = graph ? 'badge graph' : row.scoped ? 'badge scoped' : 'badge full';
+		badge.textContent = graph ? 'grafo' : row.scoped ? 'alvo' : 'inteiro';
+		badge.title = graph
+			? 'A busca passou pelo grafo, sem abrir arquivo.'
+			: row.scoped
+				? 'A busca limitou o próprio escopo (offset/limit, ou um caminho).'
+				: 'A busca não limitou o escopo — trouxe o arquivo ou a árvore toda.';
 		el.appendChild(badge);
 
 		const target = document.createElement('span');
@@ -2347,6 +2473,15 @@
 				endTurn();
 				break;
 
+			case 'rateLimited':
+				// The engine itself said stop — not a failure to explain, a pause
+				// to sit through. No whip-mark here: that animation says gofi is
+				// still driving the robot, which is the one thing not happening.
+				clearIndicator();
+				waitingNotice(message.message, message.reset);
+				endTurn();
+				break;
+
 			case 'notice':
 				// Informative aside from the host (a `/model` switch, for now).
 				// Not an error and not a turn — no indicator, no `endTurn`.
@@ -2370,9 +2505,16 @@
 
 		// Whatever just landed, the turn is still running and nobody is waiting
 		// on the user: the row goes back to the foot of the transcript, under the
-		// newest content. `done` and `error` are the two that end a turn, and
-		// they have already taken it down.
-		if (running && !replaying && awaitingApprovals === 0 && message.type !== 'done' && message.type !== 'error') {
+		// newest content. `done`, `error` and `rateLimited` are the ones that end
+		// a turn, and they have already taken it down.
+		if (
+			running &&
+			!replaying &&
+			awaitingApprovals === 0 &&
+			message.type !== 'done' &&
+			message.type !== 'error' &&
+			message.type !== 'rateLimited'
+		) {
 			showIndicator();
 		}
 	}
@@ -2410,6 +2552,29 @@
 			line.textContent = hint;
 			el.appendChild(line);
 		}
+		addToLog(el);
+	}
+
+	/**
+	 * The rate-limit banner, with the robot asking to wait instead of the plain
+	 * error box. This is the engine itself saying stop, not a bug — showing it
+	 * as a red failure invites exactly the retry that got the session capped.
+	 */
+	function waitingNotice(text, reset) {
+		clearEmptyState();
+		const el = document.createElement('div');
+		el.className = 'wait-notice';
+		el.appendChild(waitingMark());
+		const body = document.createElement('span');
+		body.className = 'text';
+		body.appendChild(document.createTextNode(text));
+		if (reset) {
+			const line = document.createElement('span');
+			line.className = 'hint';
+			line.textContent = `Reinicia às ${reset}.`;
+			body.appendChild(line);
+		}
+		el.appendChild(body);
 		addToLog(el);
 	}
 

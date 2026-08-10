@@ -9,12 +9,17 @@
  *     engine, split into new input, cache read, cache write and output, since
  *     those bill at wildly different rates and the split is the whole story.
  *
- *  2. Is the project's retrieval actually working? — every Read/Grep/Glob is
- *     recorded with how much text it dragged into the context. A gofi project
- *     has an explicit retrieval protocol (frontmatter first, then `grep '^## '`,
- *     then Read of just that section); an agent that opens a 900-line spec
- *     whole is burning context the protocol exists to save, and that shows up
- *     here as a finding rather than as a surprise on the invoice.
+ *  2. Is the project's retrieval actually working? — every Read/Grep/Glob and
+ *     every `gofi graph` query is recorded with how much text it dragged into
+ *     the context. A gofi project has an explicit retrieval protocol
+ *     (frontmatter first, then `grep '^## '`, then Read of just that section)
+ *     and, for code, the graph: `gofi graph explain` answers "where is it, who
+ *     calls it" in ~30 lines, which the same question costs many times over
+ *     when asked by grepping the tree and opening what matched. An agent that
+ *     opens a 900-line spec whole, or that hunts for a symbol with Grep while
+ *     the graph sits on disk, is burning context the protocol exists to save,
+ *     and that shows up here as a finding rather than as a surprise on the
+ *     invoice.
  *
  * Pure logic, no vscode imports — the numbers are testable on their own.
  */
@@ -41,11 +46,60 @@ const LOW_CACHE_RATE = 0.5;
  */
 const CACHE_WARMUP_TURNS = 3;
 
+/** Below this many code searches a session is too young to judge. */
+const MIN_CODE_SEARCHES = 3;
+
 /** Tools that pull text into the context — the ones retrieval efficiency is about. */
 const RETRIEVAL_TOOLS = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'NotebookRead']);
 
 /** Folders holding the project's RAG corpora, which the protocol governs. */
 const CORPUS_PREFIXES = ['specs/', 'prd/', '.claude/'];
+
+/** Where `gofi graph build` writes the map — a Read in here is a graph query. */
+const GRAPH_DIR = '.gofi/graph/';
+
+/**
+ * The `gofi graph` subcommands that answer a question about the code.
+ *
+ * `build`, `open`, `hooks` and `install` maintain the map rather than consult
+ * it, so counting them as searches would flatter every session that rebuilds.
+ * Matched anywhere in the command line because the agent chains and pipes.
+ */
+const GRAPH_QUERY = /\bgofi\s+graph\s+explain\b/;
+
+/** The shell command a Bash call ran, whatever key the engine used for it. */
+function bashCommand(input) {
+	if (!input || typeof input !== 'object') {
+		return '';
+	}
+	return typeof input.command === 'string' ? input.command : '';
+}
+
+/** The graph query inside a Bash call, shortened for display, or ''. */
+function graphQueryOf(input) {
+	const command = bashCommand(input);
+	if (!GRAPH_QUERY.test(command)) {
+		return '';
+	}
+	const match = /\bgofi\s+graph\s+(explain[^\n|;&]*)/.exec(command);
+	return match ? match[1].trim() : 'graph';
+}
+
+/**
+ * Which question a retrieval call was asking, which is what decides whether it
+ * should have gone through the graph.
+ *
+ * @returns {'graph'|'doc'|'code'|'web'}
+ */
+function kindOf(name, target) {
+	if (name === 'WebFetch') {
+		return 'web';
+	}
+	if (target.startsWith(GRAPH_DIR)) {
+		return 'graph';
+	}
+	return inCorpus(target) ? 'doc' : 'code';
+}
 
 function approxTokens(chars) {
 	return Math.round(chars / CHARS_PER_TOKEN);
@@ -102,6 +156,12 @@ class UsageLedger {
 	/** @param {string} root Workspace folder, used to shorten paths */
 	constructor(root) {
 		this.root = root || '';
+		/**
+		 * Whether the project has a built graph. Set by the host, which is the
+		 * side that can stat disk; without it there is nothing to prefer over a
+		 * Grep, and saying otherwise would be advice the project cannot follow.
+		 */
+		this.graphAvailable = false;
 		this.reset();
 	}
 
@@ -142,14 +202,23 @@ class UsageLedger {
 
 	/** Opens a retrieval row the moment the agent reaches for a file. */
 	noteToolUse(id, name, input) {
-		if (!RETRIEVAL_TOOLS.has(name)) {
+		// A graph query arrives as a shell command, not as a retrieval tool, and
+		// is the one search that is supposed to happen — so it is measured beside
+		// the reads it replaces instead of disappearing into the Bash calls.
+		const query = name === 'Bash' ? graphQueryOf(input) : '';
+		if (query === '' && !RETRIEVAL_TOOLS.has(name)) {
 			return;
 		}
+		const target = query !== '' ? query : relativise(targetOf(name, input), this.root);
 		this.pending.set(id, {
-			name,
-			target: relativise(targetOf(name, input), this.root),
-			scoped: isScoped(name, input),
+			id,
+			name: query !== '' ? 'gofi graph' : name,
+			target,
+			kind: query !== '' ? 'graph' : kindOf(name, target),
+			scoped: query !== '' ? true : isScoped(name, input),
 			tokens: null, // filled when the result arrives
+			/** Files a graph answer named, measured off disk by the host. */
+			cited: null,
 			failed: false,
 		});
 	}
@@ -166,6 +235,51 @@ class UsageLedger {
 		this.rows.push(row);
 	}
 
+	/** The row a tool call opened, still pending or already closed. */
+	rowById(id) {
+		return this.pending.get(id) || this.rows.find((row) => row.id === id) || null;
+	}
+
+	/**
+	 * Records the files a graph answer pointed at, sized off disk.
+	 *
+	 * Arrives after the row closed — the measurement is async on purpose — so it
+	 * is attached by id rather than to whatever is on top.
+	 */
+	noteAvoided(id, cited) {
+		const row = this.rowById(id);
+		if (row) {
+			row.cited = cited;
+		}
+	}
+
+	/**
+	 * What the graph answered without anything being opened.
+	 *
+	 * A file the session went on to read anyway was not avoided, so it does not
+	 * count; neither does the same file cited by two queries.
+	 */
+	avoided() {
+		const read = new Set();
+		for (const row of this.rows) {
+			if (row.name === 'Read' && row.target !== '') {
+				read.add(row.target);
+			}
+		}
+		const counted = new Set();
+		let tokens = 0;
+		for (const row of this.rows) {
+			for (const file of row.cited || []) {
+				if (read.has(file.path) || counted.has(file.path)) {
+					continue;
+				}
+				counted.add(file.path);
+				tokens += file.tokens;
+			}
+		}
+		return { tokens, files: counted.size };
+	}
+
 	/** Everything the panel renders, recomputed on demand. */
 	snapshot() {
 		const billedInput = this.tokens.input + this.tokens.cacheRead + this.tokens.cacheWrite;
@@ -176,6 +290,9 @@ class UsageLedger {
 		// it runs rather than appearing only once it lands.
 		const inFlight = [...this.pending.values()].map((row) => ({ ...row }));
 
+		const byKind = this.countByKind();
+		const avoided = this.avoided();
+
 		return {
 			tokens: { ...this.tokens },
 			billedInput,
@@ -185,11 +302,34 @@ class UsageLedger {
 			retrieval: {
 				tokens: retrievalTokens,
 				calls: this.rows.length,
+				graph: byKind.graph,
+				code: byKind.code,
+				docs: byKind.doc,
+				codeTokens: byKind.codeTokens,
+				graphTokens: byKind.graphTokens,
+				avoided,
 				rows: [...this.rows].reverse().slice(0, 40),
 				inFlight,
 			},
 			findings: this.findings(cacheRate, retrievalTokens),
 		};
+	}
+
+	/** How the session's searches split between the graph, the docs and the tree. */
+	countByKind() {
+		const out = { graph: 0, code: 0, doc: 0, graphTokens: 0, codeTokens: 0 };
+		for (const row of this.rows) {
+			if (row.kind === 'graph') {
+				out.graph += 1;
+				out.graphTokens += row.tokens || 0;
+			} else if (row.kind === 'code') {
+				out.code += 1;
+				out.codeTokens += row.tokens || 0;
+			} else if (row.kind === 'doc') {
+				out.doc += 1;
+			}
+		}
+		return out;
 	}
 
 	/**
@@ -266,8 +406,45 @@ class UsageLedger {
 			}
 		}
 
-		// 5. The positive signal, so the panel says what is working, not only
-		//    what isn't.
+		// 5. Code hunted through the tree while the graph was on disk. `gofi graph
+		//    explain` answers "where is it / who calls it" in about thirty lines;
+		//    the same question asked with Grep costs every file that matched, and
+		//    still cannot list the callers.
+		const kinds = this.countByKind();
+		if (this.graphAvailable && kinds.code >= MIN_CODE_SEARCHES) {
+			const searches = kinds.code + kinds.graph;
+			if (kinds.graph === 0) {
+				out.push({
+					level: 'warn',
+					text: `${kinds.code} buscas de código (~${kinds.codeTokens} tokens) foram por Grep/Glob/Read e nenhuma pelo grafo — \`gofi graph explain <termo>\` acha o símbolo e diz quem o chama sem abrir arquivo.`,
+				});
+			} else if (kinds.code > kinds.graph) {
+				out.push({
+					level: 'info',
+					text: `Só ${kinds.graph} de ${searches} buscas de código passaram pelo grafo; as outras ${kinds.code} custaram ~${kinds.codeTokens} tokens abrindo a árvore.`,
+				});
+			}
+		}
+
+		// 6. The positive signal, so the panel says what is working, not only
+		//    what isn't. When the cited files were measured, it says it in the
+		//    only currency that settles the argument.
+		const avoided = this.avoided();
+		if (avoided.files > 0) {
+			const files =
+				avoided.files === 1
+					? '1 arquivo que não precisou ser aberto'
+					: `${avoided.files} arquivos que não precisaram ser abertos`;
+			out.push({
+				level: 'good',
+				text: `O grafo apontou ${files}: ~${avoided.tokens} tokens que um grep seguido de leitura teria trazido, contra os ~${kinds.graphTokens} que as consultas ao grafo custaram.`,
+			});
+		} else if (kinds.graph > 0 && kinds.graph >= kinds.code) {
+			out.push({
+				level: 'good',
+				text: `${kinds.graph} de ${kinds.graph + kinds.code} buscas de código foram pelo grafo (~${kinds.graphTokens} tokens).`,
+			});
+		}
 		const scoped = this.rows.filter((row) => row.scoped).length;
 		if (this.rows.length > 0) {
 			if (scoped === this.rows.length) {

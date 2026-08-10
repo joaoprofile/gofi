@@ -7,6 +7,7 @@ const { resolveProvider } = require('./providers/index.js');
 const { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, PINNED_MODELS, SKILLS_DIR, SKILL_FILE } = require('./gofiConfig.js');
 const { UsageLedger } = require('./usage.js');
 const ragAudit = require('./ragAudit.js');
+const graphSavings = require('./graphSavings.js');
 const { ApprovalBridge, hookSettings } = require('./approvals.js');
 const { SessionStore, MAX_EVENTS } = require('./history.js');
 
@@ -86,7 +87,25 @@ const PERSISTED_EVENTS = new Set([
 	'approvalResolved',
 	'done',
 	'error',
+	'rateLimited',
 ]);
+
+/**
+ * The engine's own rate-limit banner ("You've hit your session limit · resets
+ * 4:50pm (America/Sao_Paulo)"), detected so the panel can say "wait" instead
+ * of failing red and inviting the very retry that got the session capped.
+ */
+const RATE_LIMIT_RE = /session limit/i;
+const RATE_LIMIT_RESET_RE = /resets?\s+(.+)$/i;
+
+/** @returns {{ reset: string | null } | null} */
+function parseRateLimit(text) {
+	if (typeof text !== 'string' || !RATE_LIMIT_RE.test(text)) {
+		return null;
+	}
+	const match = RATE_LIMIT_RESET_RE.exec(text.trim());
+	return { reset: match ? match[1].trim() : null };
+}
 
 /**
  * One conversation.
@@ -951,16 +970,34 @@ class Chat {
 				this.flushDeltas();
 				this.post({ type: 'toolResult', toolUseId: event.toolUseId, isError: event.isError, preview: event.preview });
 				this.ledger.noteToolResult(event.toolUseId, event.chars, event.isError);
+				this.measureGraphAnswer(event.toolUseId, event.text);
 				this.postUsage();
 				break;
 
-			case 'done':
+			case 'done': {
 				// Whatever the turn did, the audit is about to re-read disk; a
 				// finding that survived should be actionable again.
 				this.applying.clear();
 				this.flushDeltas();
 				this.ledger.noteCost(event.costUsd);
 				this.postUsage({ immediate: true });
+
+				// The engine's own rate-limit banner is a stop sign, not a bug to
+				// surface and move past: draining the queue here would fire the
+				// next message straight into the same limit, and the one after
+				// that, each redrawing the "working" mark for a turn that cannot
+				// run. Say so plainly instead, and drop what was queued — it was
+				// written assuming a session that had budget left.
+				const rateLimit = event.isError ? parseRateLimit(event.error) : null;
+				if (rateLimit) {
+					this.pending.length = 0;
+					this.running = false;
+					this.setRunning(false);
+					this.post({ type: 'rateLimited', message: event.error, reset: rateLimit.reset });
+					this.saveNow();
+					break;
+				}
+
 				this.post({ type: 'done', isError: event.isError, costUsd: event.costUsd, durationMs: event.durationMs, error: event.error });
 				if (this.pending.length > 0) {
 					// Chain into the next queued turn without dropping running:
@@ -975,8 +1012,9 @@ class Chat {
 				}
 				this.saveNow();
 				break;
+			}
 
-			case 'error':
+			case 'error': {
 				// A turn that died while resuming means the engine no longer has
 				// that conversation — expired, or from a checkout that has moved.
 				// The transcript is still ours to show, so the honest recovery is
@@ -1006,9 +1044,19 @@ class Chat {
 				this.running = false;
 				this.flushDeltas();
 				this.setRunning(false);
-				this.post({ type: 'error', message: event.message, hint: event.hint });
+				// A hard process error is not the usual shape of a rate limit
+				// (that comes back as a clean `done`, handled above), but a
+				// crash whose stderr happens to say the same thing deserves the
+				// same treatment rather than a red failure box.
+				const rateLimit = parseRateLimit(event.message);
+				if (rateLimit) {
+					this.post({ type: 'rateLimited', message: event.message, reset: rateLimit.reset });
+				} else {
+					this.post({ type: 'error', message: event.message, hint: event.hint });
+				}
 				this.saveNow();
 				break;
+			}
 
 			default:
 				break;
@@ -1311,6 +1359,34 @@ class Chat {
 	}
 
 	/**
+	 * Prices what a graph answer spared, without holding anything up.
+	 *
+	 * The answer names every file the symbol lives in and is called from — the
+	 * same files a grep would have sent the agent to open. Sizing them is a stat
+	 * per file, off the event loop and off any render path, so the figure lands
+	 * on a later panel update or not at all. Nothing here waits on it.
+	 */
+	measureGraphAnswer(id, text) {
+		const row = this.ledger.rowById(id);
+		// Only the command: a Read of the report cites the whole map, and calling
+		// all of it "avoided" would be flattery rather than measurement.
+		if (!row || row.name !== 'gofi graph' || !text || row.failed) {
+			return;
+		}
+		graphSavings
+			.measure(this.projectRoot || '', text)
+			.then((cited) => {
+				if (cited.length > 0) {
+					this.ledger.noteAvoided(id, cited);
+					this.postUsage();
+				}
+			})
+			.catch(() => {
+				// A stat that failed costs the panel one number, not the session.
+			});
+	}
+
+	/**
 	 * Pushes the live token/retrieval snapshot, enriched with indexing advice.
 	 *
 	 * The ledger measures; the audit explains and offers a fix. Running the
@@ -1338,8 +1414,12 @@ class Chat {
 		}
 		this.usageDueAt = Date.now() + USAGE_THROTTLE_MS;
 
-		const snapshot = this.ledger.snapshot();
 		const root = this.projectRoot || '';
+		// Re-checked here rather than at construction: a graph built mid-session
+		// should change the advice on the next event, not on the next chat.
+		this.ledger.graphAvailable = ragAudit.graphAvailable(root);
+
+		const snapshot = this.ledger.snapshot();
 		// Evidence first — a finding that can say "this just cost you 10k
 		// tokens" is worth more than the same problem stated in the abstract.
 		const advice = ragAudit.review(root, this.ledger.rows);

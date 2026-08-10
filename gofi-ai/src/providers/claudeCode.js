@@ -368,6 +368,11 @@ class ClaudeCodeSession {
 							isError: block.is_error === true,
 							preview: firstLine(text),
 							chars: text.length,
+							// The full answer stays inside the extension process: a
+							// graph query is audited by the files it names, and the
+							// text is already here. Only the preview reaches the
+							// webview.
+							text,
 						});
 					}
 				}

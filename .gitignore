@@ -15,6 +15,10 @@ gofi.json
 
 /.gofi.yaml
 /.claude
+# Exceção: permissões do Claude Code são política de time, não estado
+# gerado — versionadas para valer em qualquer terminal/VS Code de qualquer
+# dev, ao contrário do resto de .claude/ (gerado por `gofi update`, local).
+!/.claude/settings.json
 
 /cli/cmd/cmd
 /cli/internal/extensions/gen/gen

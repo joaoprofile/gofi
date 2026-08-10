@@ -125,10 +125,14 @@ class El {
 	}
 
 	matches(selector) {
+		// SVG marks go through `setAttribute('class', …)`, not the `className`
+		// setter, so `_classes` alone misses them — fold the raw attribute in too,
+		// same as a real DOM element keeps both in sync.
+		const classes = new Set([...this._classes, ...String(this.attrs.class || '').split(/\s+/).filter(Boolean)]);
 		return selector
 			.split(/(?=\.)/)
 			.filter(Boolean)
-			.every((part) => (part.startsWith('.') ? this._classes.has(part.slice(1)) : this.tagName === part));
+			.every((part) => (part.startsWith('.') ? classes.has(part.slice(1)) : this.tagName === part));
 	}
 
 	querySelector(selector) {
@@ -277,6 +281,23 @@ check('nunca foi reinserida durante o turno', insertions === 1, `inserções = $
 send({ type: 'done', isError: false, costUsd: 0.01, durationMs: 4200 });
 send({ type: 'running', running: false });
 check('sai quando o turno acaba', !working(), `último = ${tail()}`);
+
+// ── limite de sessão: o robô pede para aguardar, em vez de o chicote insistir ──
+send({ type: 'user', text: 'mais uma pergunta', images: 0, queued: false });
+send({ type: 'running', running: true });
+check('a linha de trabalho volta a entrar', Boolean(working()), `último = ${tail()}`);
+
+send({
+	type: 'rateLimited',
+	message: "You've hit your session limit · resets 4:50pm (America/Sao_Paulo)",
+	reset: '4:50pm (America/Sao_Paulo)',
+});
+send({ type: 'running', running: false });
+check('some o chicote ao esbarrar no limite', !working(), `último = ${tail()}`);
+const waitRow = log.children.find((c) => c._classes.has('wait-notice'));
+check('aparece o aviso de espera', Boolean(waitRow), `último = ${tail()}`);
+check('o robô aparece no aviso, não a marca de trabalho', Boolean(waitRow && waitRow.querySelector('.wait-mark')), 'faltou o ícone do robô');
+check('o horário de reinício aparece no aviso', Boolean(waitRow) && waitRow.textContent.includes('4:50pm'), waitRow && waitRow.textContent);
 
 // ── enquanto uma aprovação espera, quem está parado é o agente ──────────────
 send({ type: 'user', text: 'aplique', images: 0, queued: false });

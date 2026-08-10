@@ -9,18 +9,25 @@ Java service bootstrapped by `gofi init`.
 ├── pom.xml
 ├── .migrations/
 └── src/
-    ├── main/
-    │   ├── java/{{.PackagePath}}/
-    │   │   ├── Application.java
-    │   │   └── domain/       # one package per bounded context
-    │   └── resources/application.yaml
+    ├── main/java/{{.PackagePath}}/
+    │   ├── Application.java
+    │   └── domain/          # one package per bounded context
     └── test/java/{{.PackagePath}}/
 ```
+
+Requires JDK 25: `Application` uses an instance `main()` and `IO.println`.
 
 ## Build & run
 
 ```sh
-mvn -f {{.SourceRoot}}/pom.xml compile exec:java -Dexec.mainClass={{.Module}}.Application
+java {{.SourceRoot}}/src/main/java/{{.PackagePath}}/Application.java
+```
+
+Compiled:
+
+```sh
+mvn -q -f {{.SourceRoot}}/pom.xml compile
+java -cp {{.SourceRoot}}/target/classes {{.Module}}.Application
 ```
 
 ## Tests

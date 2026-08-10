@@ -2,6 +2,29 @@
 
 ## Não publicado
 
+- **Limite de sessão atingido não chicoteia mais o motor.** Quando o Claude Code
+  devolve o próprio aviso de limite ("You've hit your session limit · resets…"),
+  o painel parava de mostrar isso como um erro qualquer e, se havia mensagens
+  na fila, disparava a próxima direto contra o mesmo limite — cada uma
+  reacendendo a animação de "trabalhando" para um turno que não podia rodar.
+  Agora o painel reconhece o aviso, esvazia a fila em vez de insistir nela, e
+  troca a marca de trabalho pela mesma dupla do chicote — só que paradas: o
+  robô esperando, e o mascote com o chicote frouxo na mão e cara de decepção
+  por não poder usá-lo agora — junto com o horário de reinício, quando o
+  motor informa um.
+- **Buscas pelo grafo entram na conta.** `gofi graph explain` é uma busca como
+  outra qualquer, e até agora sumia entre os comandos de shell — o painel só
+  media `Read`/`Grep`/`Glob` e, por construção, nunca mostrava a alternativa
+  barata. Agora a barra separa quantas buscas passaram pelo grafo das que foram
+  abrir a árvore, cada linha traz o selo `grafo`, e quem procurou símbolo no
+  `grep` com o grafo já construído no disco vê o custo disso apontado.
+
+  Junto vem a economia, medida em vez de estimada: a resposta do grafo nomeia
+  `arquivo:linha` do símbolo e de cada chamador, que são os arquivos que um
+  `grep` mandaria abrir; o painel pesa esses arquivos em disco e desconta os que
+  a sessão leu assim mesmo. Tudo com `stat` assíncrono e cache sobre um texto
+  que já estava na memória da extensão — zero token e nada no caminho que
+  desenha o painel.
 - **Conversas salvas.** Cada conversa é gravada localmente e volta pelo botão de
   lista no cabeçalho — transcrição de volta na tela e contexto retomado no motor
   (`--resume`), então a próxima mensagem continua de onde parou.

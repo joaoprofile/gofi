@@ -120,7 +120,6 @@ func TestInstallBackend_EveryLanguage(t *testing.T) {
 			files: []string{
 				"backend/pom.xml",
 				"backend/src/main/java/com/acme/mysvc/Application.java",
-				"backend/src/main/resources/application.yaml",
 			},
 			dirs: []string{
 				"backend/src/main/java/com/acme/mysvc/domain",

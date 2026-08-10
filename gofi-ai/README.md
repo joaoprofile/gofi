@@ -36,10 +36,22 @@ A barra acima do chat mostra, **enquanto o agente trabalha**, quantos tokens a
 conversa consumiu (entrada nova, lida do cache, gravada no cache, saída), o
 custo, e um sinal do que está acontecendo com a recuperação. Abrindo a barra:
 
-- **cada busca** (`Read`, `Grep`, `Glob`, `WebFetch`) com o alvo e quanto texto
-  trouxe para o contexto, marcada `alvo` quando limitou o próprio escopo
-  (`offset`/`limit`, ou um caminho) e `inteiro` quando não limitou. As buscas em
-  andamento aparecem na hora, antes de terminarem;
+- **quantas buscas passaram pelo grafo** — `gofi graph explain` e as leituras de
+  `.gofi/graph/` — contra as que foram por `grep`/`read` na árvore. Procurar
+  símbolo é papel do grafo: ele responde onde está e **quem chama** em ~30
+  linhas, enquanto a mesma pergunta feita com `Grep` cobra cada arquivo que
+  casou. O número aparece já na barra fechada;
+- **quanto o grafo economizou**, medido e não estimado: a resposta do
+  `gofi graph explain` nomeia `arquivo:linha` de onde o símbolo vive e de cada
+  chamador — exatamente os arquivos que um `grep` mandaria abrir. O painel mede
+  o tamanho deles em disco (sem abrir nenhum) e desconta os que a sessão acabou
+  lendo assim mesmo. É um limite superior da alternativa, feito com `stat`
+  assíncrono e cache: nenhum token e nenhuma espera;
+- **cada busca** (`gofi graph`, `Read`, `Grep`, `Glob`, `WebFetch`) com o alvo e
+  quanto texto trouxe para o contexto, marcada `grafo` quando não abriu arquivo
+  nenhum, `alvo` quando limitou o próprio escopo (`offset`/`limit`, ou um
+  caminho) e `inteiro` quando não limitou. As buscas em andamento aparecem na
+  hora, antes de terminarem;
 - **o que dá para melhorar**, com o número que motivou cada apontamento.
 
 Quando o problema é de **indexação** — um spec sem frontmatter, um doc sem
