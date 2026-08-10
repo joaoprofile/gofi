@@ -42,11 +42,29 @@ func (s *updateScope) write(path, note string) {
 	s.Writes = append(s.Writes, scopeLine{Path: path, Note: note})
 }
 
-// String renders the block. It is shown before the prompt and also under --yes,
-// so a CI log records exactly what the run was allowed to touch.
+// atRisk reports whether this run can cost the user something upstream cannot
+// give back. That — not the mere fact of writing — is what earns a prompt.
+//
+// Two cases qualify. A mirror replaces wholesale, so whatever is there is gone.
+// And --force is the flag whose entire purpose is to overwrite the files you
+// edited: with none of those on disk it destroys nothing, so it does not ask
+// either. Everything else the user already decided by naming the target;
+// asking again is ceremony, and a prompt that always appears is a prompt nobody
+// reads.
+func (s updateScope) atRisk() bool {
+	return s.Replaces || (s.Force && len(s.Keeps) > 0)
+}
+
+// String renders the block. It is shown whether or not a prompt follows, and
+// also under --yes, so a CI log records exactly what the run was allowed to
+// touch.
 func (s updateScope) String() string {
 	var b strings.Builder
-	b.WriteString("\nOn Yes:\n\n")
+	header := "This run:"
+	if s.atRisk() {
+		header = "On Yes:"
+	}
+	b.WriteString("\n" + header + "\n\n")
 
 	width := 0
 	for _, w := range s.Writes {
@@ -80,12 +98,20 @@ func (s updateScope) String() string {
 	return b.String()
 }
 
-// confirm prints the scope and asks. autoConfirm answers yes without the
-// prompt, but never without the block: skipping the question is not the same as
-// hiding what happened.
+// confirmUpdate prints the scope and asks only when the run can destroy
+// something. Reports whether to proceed.
+//
+// The block prints every time — including under --yes and when no prompt
+// follows. Not asking is not the same as not saying: "what else will this
+// move?" deserves an answer whether or not there is a question after it.
 func confirmUpdate(title string, s updateScope, autoConfirm bool) (bool, error) {
 	fmt.Println(s)
-	if autoConfirm {
+	if len(s.Writes) == 0 {
+		// Nothing to do, and the block already said so. Asking whether to do
+		// nothing is the most annoying prompt there is.
+		return false, nil
+	}
+	if autoConfirm || !s.atRisk() {
 		return true, nil
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
