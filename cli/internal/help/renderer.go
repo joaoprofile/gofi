@@ -198,10 +198,13 @@ func renderFlags(cmd *cobra.Command, st styles) string {
 	return b.String()
 }
 
+// visibleCommands drops what the help must not advertise. A deprecated command
+// still runs — that is the whole point of deprecating instead of deleting — but
+// listing it would keep teaching the spelling we are moving away from.
 func visibleCommands(cmd *cobra.Command) []*cobra.Command {
 	var out []*cobra.Command
 	for _, c := range cmd.Commands() {
-		if c.Hidden || c.Name() == "help" {
+		if c.Hidden || c.Deprecated != "" || c.Name() == "help" {
 			continue
 		}
 		out = append(out, c)

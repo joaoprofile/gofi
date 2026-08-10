@@ -72,13 +72,28 @@ var managedTrees = []string{"CLAUDE.md", "skills", "templates", "scripts", "sdk"
 // team's, because guessing wrong deletes work the CLI cannot bring back.
 var tunedTrees = []string{"sdk"}
 
+// SkillsDir is the one managed entry `gofi update` refreshes; the rest of
+// .claude/ is installed at creation and maintained by hand from then on.
+// SDKDir is the tree `gofi sdk update` owns — the only other one a command
+// still refreshes on request.
+const (
+	SkillsDir = "skills"
+	SDKDir    = "sdk"
+)
+
 // PreservedFiles lists the managed files an update would keep instead of
 // overwriting, so the plan can say so before anything is written.
 func PreservedFiles(projectRoot string) []string {
+	return PreservedFilesIn(projectRoot, managedTrees)
+}
+
+// PreservedFilesIn narrows that report to the given .claude entries, so a
+// skills-only update does not warn about files it was never going to write.
+func PreservedFilesIn(projectRoot string, trees []string) []string {
 	baseline := LoadManifest(projectRoot)
 	claude := filepath.Join(projectRoot, ".claude")
 	var kept []string
-	for _, tree := range managedTrees {
+	for _, tree := range trees {
 		root := filepath.Join(claude, tree)
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {

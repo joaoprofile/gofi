@@ -66,7 +66,7 @@ func (m InstallMode) refreshes() bool { return m == InstallUpdate || m == Instal
 //
 // It installs:
 //   - ai/claude/CLAUDE.md       → .claude/CLAUDE.md
-//   - ai/skills/*.md            → .claude/skills/<name>/SKILL.md (all skills, always)
+//   - ai/skills/<name>/         → .claude/skills/<name>/ (all skills, always)
 //   - ai/templates/             → .claude/templates/
 //   - ai/scripts/               → .claude/scripts/ (RAG index tooling)
 //   - ai/memory/project.md.tmpl → .claude/memory/project.md (InstallNew only)
@@ -107,38 +107,10 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		return created, fmt.Errorf("read CLAUDE.md: %w", err)
 	}
 
-	// Skills — every .md file under ai/skills/ is installed, regardless of the
-	// selected agent set. The agent selection only scopes the per-agent
-	// knowledge dirs below; all skills (including any agent not in the canonical
-	// nine) are always available under .claude/skills/.
-	//
-	// Each lands as skills/<name>/SKILL.md with the frontmatter Claude Code
-	// needs — see skill.go. Anything else is silently ignored by the engine,
-	// which is what used to make every gofi slash command "unknown".
-	skills, err := listSkillNames(agentsFS, srcRoot)
+	c, err := installSkills(agentsFS, srcRoot, dest, p)
+	created = append(created, c...)
 	if err != nil {
-		return created, fmt.Errorf("list skills: %w", err)
-	}
-	for _, skill := range skills {
-		body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "skills", skill+".md"))
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return created, fmt.Errorf("read skill %s: %w", skill, err)
-		}
-		target := filepath.Join(dest, skillRelPath(skill))
-		written, err := p.write(target, renderSkill(skill, body))
-		if err != nil {
-			return created, err
-		}
-		// Drop the flat file an older gofi wrote for this same skill.
-		if err := pruneLegacySkillFile(dest, skill); err != nil {
-			return created, err
-		}
-		if written {
-			created = append(created, target)
-		}
+		return created, err
 	}
 
 	// templates/ (PRD + SDD templates)
@@ -241,6 +213,81 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		created = append(created, c...)
 	}
 
+	return created, nil
+}
+
+// InstallSkillsContent installs only ai/skills/<name>/ into
+// <projectRoot>/.claude/skills/. It is the whole of what `gofi update` writes:
+// once a project has been created, every other file under .claude/ — CLAUDE.md,
+// templates/, scripts/, sdk/, knowledge/, memory/, institutional/ — is the
+// team's to maintain by hand.
+//
+// The mode still decides how a skill the project edited is treated:
+// InstallUpdate keeps it, InstallReset (--force) puts upstream back after
+// copying the replaced content to .gofi/backup/.
+func InstallSkillsContent(agentsFS fs.FS, srcRoot, projectRoot string, mode InstallMode) (created []string, err error) {
+	dest := filepath.Join(projectRoot, ".claude")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
+	}
+	p := newPreserver(projectRoot, mode)
+	defer func() {
+		if saveErr := p.save(); saveErr != nil && err == nil {
+			err = fmt.Errorf("record installed files: %w", saveErr)
+		}
+	}()
+	return installSkills(agentsFS, srcRoot, dest, p)
+}
+
+// installSkills writes every .md under ai/skills/ into dest, regardless of the
+// selected agent set. The agent selection scopes something else: the per-agent
+// knowledge dirs. All skills (including any agent not in the canonical nine)
+// are always available under .claude/skills/.
+//
+// Each lands as skills/<name>/SKILL.md with the frontmatter Claude Code needs —
+// see skill.go. Anything else is silently ignored by the engine, which is what
+// used to make every gofi slash command "unknown".
+func installSkills(agentsFS fs.FS, srcRoot, dest string, p *preserver) ([]string, error) {
+	var created []string
+	skills, err := listSkillNames(agentsFS, srcRoot)
+	if err != nil {
+		return created, fmt.Errorf("list skills: %w", err)
+	}
+	for _, skill := range skills {
+		body, err := readSkillSource(agentsFS, srcRoot, skill)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return created, fmt.Errorf("read skill %s: %w", skill, err)
+		}
+		target := filepath.Join(dest, skillRelPath(skill))
+		written, err := p.write(target, renderSkill(skill, body))
+		if err != nil {
+			return created, err
+		}
+		// Drop the flat file an older gofi wrote for this same skill.
+		if err := pruneLegacySkillFile(dest, skill); err != nil {
+			return created, err
+		}
+		if written {
+			created = append(created, target)
+		}
+		err = walkSkillResources(agentsFS, srcRoot, skill, func(rel string, content []byte) error {
+			resource := filepath.Join(dest, skillsDirName, skill, filepath.FromSlash(rel))
+			written, err := p.write(resource, content)
+			if err != nil {
+				return err
+			}
+			if written {
+				created = append(created, resource)
+			}
+			return nil
+		})
+		if err != nil {
+			return created, fmt.Errorf("install resources of skill %s: %w", skill, err)
+		}
+	}
 	return created, nil
 }
 
@@ -497,10 +544,12 @@ func CleanLegacySDKLayout(projectRoot string) []string {
 	return removed
 }
 
-// listSkillNames returns the base names (without the .md extension) of every
-// skill file under <srcRoot>/ai/skills/ in agentsFS, sorted. Directories and
-// non-.md files are ignored. A missing ai/skills/ dir yields an empty slice,
-// not an error, so callers degrade gracefully on sources without skills.
+// listSkillNames returns the name of every skill under <srcRoot>/ai/skills/ in
+// agentsFS, sorted. A folder counts when it holds a SKILL.md — the shape the
+// tree carries; a flat <name>.md counts too, which is how older tarballs
+// shipped. Anything else under ai/skills/ is not a skill and is ignored. A
+// missing ai/skills/ dir yields an empty slice, not an error, so callers
+// degrade gracefully on sources without skills.
 func listSkillNames(agentsFS fs.FS, srcRoot string) ([]string, error) {
 	dir := path.Join(srcRoot, "ai", "skills")
 	entries, err := fs.ReadDir(agentsFS, dir)
@@ -510,12 +559,28 @@ func listSkillNames(agentsFS fs.FS, srcRoot string) ([]string, error) {
 		}
 		return nil, err
 	}
+	seen := map[string]bool{}
 	var names []string
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+		var name string
+		switch {
+		case e.IsDir():
+			if _, err := fs.Stat(agentsFS, path.Join(dir, e.Name(), skillFileName)); err != nil {
+				continue
+			}
+			name = e.Name()
+		case strings.HasSuffix(e.Name(), ".md"):
+			name = strings.TrimSuffix(e.Name(), ".md")
+		default:
 			continue
 		}
-		names = append(names, strings.TrimSuffix(e.Name(), ".md"))
+		// A tree mid-migration can carry both shapes for the same skill; the
+		// folder is the one that wins, and it must not be installed twice.
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
 	}
 	sort.Strings(names)
 	return names, nil

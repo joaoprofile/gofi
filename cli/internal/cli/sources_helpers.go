@@ -127,35 +127,97 @@ func installFromSource(projectRoot, language string, uiSurfaces []string, agents
 	if _, err := scaffold.InstallAgentsContent(fsys, ".", projectRoot, data, mode); err != nil {
 		return "", fmt.Errorf("install agents content: %w", err)
 	}
-
-	// Front-end design-system docs (gofi-ui / gofi-ui-native) for surfaces that
-	// use a DS. Installed from the monorepo tree; harmless for front-only.
-	for _, surface := range uiSurfaces {
-		if _, err := scaffold.InstallUIContent(fsys, "ai/sdk/"+surface, projectRoot, surface, mode); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not install %s design-system docs: %v\n", surface, err)
-		}
+	installDSLayer(fsys, projectRoot, uiSurfaces, mode)
+	if err := installSDKLayer(fsys, projectRoot, language, sdkRef, mode); err != nil {
+		return "", err
 	}
+	return resolved.Ref, nil
+}
 
+// installSDKLayer fills .claude/sdk/<language>/ with the language SDK docs,
+// taken from the configured override when it exposes them and from the monorepo
+// otherwise. The override's checkout under .gofi/gofi-sdk-<language>/ is
+// refreshed along the way, since the docs and the code the toolchain compiles
+// against have to describe the same SDK.
+//
+// agentsFS is the fetched gofi monorepo. Shared by `gofi init` and
+// `gofi update sdk`, which is why neither can install a different SDK than the
+// other. The front-end surfaces are a separate target — see installDSLayer.
+func installSDKLayer(agentsFS fs.FS, projectRoot, language, sdkRef string, mode scaffold.InstallMode) error {
 	if language == "" {
-		return resolved.Ref, nil
+		return nil
 	}
-
 	docsInstalled := false
 	if sdkRef != "" {
 		ok, err := tryInstallSDKOverride(projectRoot, language, sdkRef, mode)
 		if err != nil {
-			return "", err
+			return err
 		}
 		docsInstalled = ok
 	}
 	if !docsInstalled {
-		if _, err := scaffold.InstallSDKContent(fsys, "ai/sdk/"+language, projectRoot, language, mode); err != nil {
+		if _, err := scaffold.InstallSDKContent(agentsFS, "ai/sdk/"+language, projectRoot, language, mode); err != nil {
 			if errors.Is(err, scaffold.ErrNoSDKLayout) {
 				fmt.Fprintf(os.Stderr, "warning: gofi/ai/sdk/%s/ has no SDK layout (boilerplates/, sdk-docs/, knowledge/); skipping docs install\n", language)
-				return resolved.Ref, nil
+				return nil
 			}
-			return "", fmt.Errorf("install sdk content: %w", err)
+			return fmt.Errorf("install sdk content: %w", err)
 		}
+	}
+	return nil
+}
+
+// installDSLayer fills .claude/sdk/<surface>/ with each front-end surface's
+// design-system docs (tokens, components, patterns, rules) from the monorepo.
+// A surface that fails is warned about rather than fatal: one broken surface
+// must not cost the others their docs.
+func installDSLayer(agentsFS fs.FS, projectRoot string, uiSurfaces []string, mode scaffold.InstallMode) {
+	for _, surface := range uiSurfaces {
+		if _, err := scaffold.InstallUIContent(agentsFS, "ai/sdk/"+surface, projectRoot, surface, mode); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not install %s design-system docs: %v\n", surface, err)
+		}
+	}
+}
+
+// installSDKFromSource is `gofi update sdk`: it fetches the monorepo only to
+// reach the SDK layer, leaving skills, the design system and everything else
+// the project owns alone.
+func installSDKFromSource(projectRoot, language, agentsRef, sdkRef string, mode scaffold.InstallMode) error {
+	dir, _, err := fetchSource(projectRoot, agentsRef)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", agentsRef, err)
+	}
+	return installSDKLayer(os.DirFS(dir), projectRoot, language, sdkRef, mode)
+}
+
+// installDSFromSource is `gofi update ds`.
+func installDSFromSource(projectRoot string, uiSurfaces []string, agentsRef string, mode scaffold.InstallMode) error {
+	dir, _, err := fetchSource(projectRoot, agentsRef)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", agentsRef, err)
+	}
+	installDSLayer(os.DirFS(dir), projectRoot, uiSurfaces, mode)
+	return nil
+}
+
+// installSkillsFromSource downloads the gofi-agents repo and installs only its
+// skills into <projectRoot>/.claude/skills/. It is what `gofi update` runs: the
+// rest of .claude/ is seeded once by `gofi init` and configured by hand from
+// then on, so an update never reaches for the SDK checkout or the design-system
+// docs either.
+//
+// Returns the resolved SHA of the agents repo on success.
+func installSkillsFromSource(projectRoot, agentsRef string, mode scaffold.InstallMode) (string, error) {
+	dir, resolved, err := fetchSource(projectRoot, agentsRef)
+	if err != nil {
+		return "", fmt.Errorf("fetch %s: %w", agentsRef, err)
+	}
+	fsys := os.DirFS(dir)
+	if !dirExists(fsys, "ai/skills") {
+		return "", errors.New("repo does not contain ai/skills/ — verify the URL is a gofi monorepo")
+	}
+	if _, err := scaffold.InstallSkillsContent(fsys, ".", projectRoot, mode); err != nil {
+		return "", fmt.Errorf("install skills: %w", err)
 	}
 	return resolved.Ref, nil
 }

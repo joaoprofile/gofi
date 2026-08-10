@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/joaoprofile/gofi-cli/internal/audit"
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
 )
@@ -82,172 +84,44 @@ git:
   remote: origin
 `
 
-func TestSyncConfigRewritesAnOldSchema(t *testing.T) {
+// The rule the whole update rests on: once `gofi init` has run, the project's
+// own files are the team's. An update that quietly rewrote .gofi.yaml — even
+// to repair it — would be editing a file nobody asked it to touch. The schema
+// drift is reported by the audit instead, naming the command that fixes it.
+func TestUpdateLeavesTheConfigAlone(t *testing.T) {
 	root := writeProjectConfig(t, v1Config)
-	cfg, err := config.Load(filepath.Join(root, config.FileName))
+	path := filepath.Join(root, config.FileName)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
-	note := syncConfig(cfg)
+	syncGraph(context.Background(), cfg)
 
-	if note == "" {
-		t.Fatal("rewriting an old config should be reported to the user")
-	}
-	if got := config.FileVersion(filepath.Join(root, config.FileName)); got != config.CurrentVersion {
-		t.Errorf("on-disk version = %d, want %d", got, config.CurrentVersion)
-	}
-	body, err := os.ReadFile(filepath.Join(root, config.FileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, block := range []string{"backend:", "hsec:", "sonar:", "test:", "ops:", "graph:"} {
-		if !strings.Contains(string(body), block) {
-			t.Errorf("%s missing from the rewritten config:\n%s", block, body)
-		}
-	}
-}
-
-// The rewrite must be a repair, not a reset: a project already on the current
-// schema with every block written is left alone, so `gofi update` does not
-// churn .gofi.yaml on every run.
-func TestSyncConfigIsSilentOnACurrentProject(t *testing.T) {
-	root := writeProjectConfig(t, v1Config)
-	cfg, err := config.Load(filepath.Join(root, config.FileName))
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	syncConfig(cfg)
-
-	reloaded, err := config.Load(filepath.Join(root, config.FileName))
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	before, err := os.ReadFile(filepath.Join(root, config.FileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if note := syncConfig(reloaded); note != "" {
-		t.Errorf("a second run should change nothing, got %q", note)
-	}
-
-	after, err := os.ReadFile(filepath.Join(root, config.FileName))
+	after, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(before) != string(after) {
-		t.Error("the file was rewritten with nothing to repair")
+		t.Errorf(".gofi.yaml was rewritten by the update:\n%s", after)
 	}
-}
-
-// Seeding fills gaps. A team that disabled a block finds it disabled after the
-// update — otherwise the repair would silently re-enable a scan they turned off.
-func TestSyncConfigKeepsATeamsChoice(t *testing.T) {
-	root := writeProjectConfig(t, v1Config+`hsec:
-  enabled: false
-  severity_threshold: LOW
-  output_format: text
-`)
-	cfg, err := config.Load(filepath.Join(root, config.FileName))
-	if err != nil {
-		t.Fatalf("load: %v", err)
+	if got := config.FileVersion(path); got != 1 {
+		t.Errorf("on-disk version = %d, want the v1 the project had", got)
 	}
 
-	syncConfig(cfg)
-
-	reloaded, err := config.Load(filepath.Join(root, config.FileName))
-	if err != nil {
-		t.Fatalf("reload: %v", err)
+	// And the drift is still visible, or leaving the file alone would just be
+	// silence.
+	var reported bool
+	for _, f := range audit.Run(root, audit.Options{GraphEnabled: true}) {
+		if f.Area == "config" && f.Item == "version" {
+			reported = true
+		}
 	}
-	if reloaded.Hsec.Enabled || reloaded.Hsec.SeverityThreshold != "LOW" {
-		t.Errorf("hsec was overwritten: %+v", reloaded.Hsec)
-	}
-}
-
-// The v1 shape the old gofi-ui material produced: two web surfaces under `ui:`,
-// each with brand as a token block. The current schema has one web block, so a
-// straight rewrite would delete the second surface.
-const v1TwoSurfaces = `version: 1
-project:
-  name: svc
-  root: {{ROOT}}
-  language: go
-  path: src
-ui:
-  web:
-    framework: react
-    path: frontend/web
-    brand:
-      surface: "#dcebfb"
-      action: "#025cb2"
-  backoffice:
-    framework: react
-    path: frontend/backoffice
-ai:
-  host: claude-vscode
-  model: claude-opus-5
-agents: [gofi-eng]
-sources:
-  agents: github.com/joaoprofile/gofi-agents@main
-`
-
-func TestSyncConfigFoldsABrandBlock(t *testing.T) {
-	body := strings.Replace(v1TwoSurfaces,
-		"  backoffice:\n    framework: react\n    path: frontend/backoffice\n", "", 1)
-	root := writeProjectConfig(t, body)
-	path := filepath.Join(root, config.FileName)
-
-	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	note := syncConfig(cfg)
-
-	if !strings.Contains(note, "ui.web.brand") {
-		t.Errorf("the fold must be named to the user, note = %q", note)
-	}
-	out, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Quoted either way — a bare #rrggbb would read back as a comment.
-	if !strings.Contains(string(out), `brand: '#dcebfb'`) && !strings.Contains(string(out), `brand: "#dcebfb"`) {
-		t.Errorf("brand should be rewritten as the quoted seed:\n%s", out)
-	}
-	if strings.Contains(string(out), "onBrand") || strings.Contains(string(out), "\nui:") {
-		t.Errorf("the legacy shape should be gone:\n%s", out)
-	}
-}
-
-// The whole point of the rewrite: an old project comes out on the current
-// schema with nothing dropped. The third surface has no named block, so it
-// keeps its own name under surfaces: rather than being deleted.
-func TestSyncConfigKeepsASurfaceTheSchemaCannotName(t *testing.T) {
-	root := writeProjectConfig(t, v1TwoSurfaces)
-	path := filepath.Join(root, config.FileName)
-
-	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	note := syncConfig(cfg)
-	if !strings.Contains(note, "surfaces.backoffice") {
-		t.Errorf("the move must be named to the user, note = %q", note)
-	}
-
-	reloaded, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	s := reloaded.Surfaces["backoffice"]
-	if s == nil {
-		t.Fatalf("the surface was dropped: %+v", reloaded.Surfaces)
-	}
-	if s.Path != "frontend/backoffice" || s.Framework != "react" {
-		t.Errorf("the surface must arrive whole, got %+v", s)
-	}
-	if reloaded.Frontend == nil || reloaded.Frontend.Path != "frontend/web" {
-		t.Errorf("web still belongs in frontend:, got %+v", reloaded.Frontend)
+	if !reported {
+		t.Error("the stale schema must show up in the audit")
 	}
 }

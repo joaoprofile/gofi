@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -27,6 +29,56 @@ const (
 // `skills/gofi-eng/SKILL.md`.
 func skillRelPath(name string) string {
 	return filepath.Join(skillsDirName, name, skillFileName)
+}
+
+// A skill in the gofi monorepo is a folder too — ai/skills/<name>/SKILL.md,
+// plus whatever resources sit beside it — so the source mirrors the layout it
+// is installed as. Older tarballs shipped a flat ai/skills/<name>.md and an
+// update pinned to one of those refs still has to install, so both shapes are
+// read; only the folder one can carry resources.
+func skillSourceDir(srcRoot, name string) string {
+	return path.Join(srcRoot, "ai", skillsDirName, name)
+}
+
+// readSkillSource returns the raw body of a skill from the source tree,
+// preferring the folder shape and falling back to the flat file.
+func readSkillSource(agentsFS fs.FS, srcRoot, name string) ([]byte, error) {
+	body, err := fs.ReadFile(agentsFS, path.Join(skillSourceDir(srcRoot, name), skillFileName))
+	if err == nil {
+		return body, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	return fs.ReadFile(agentsFS, skillSourceDir(srcRoot, name)+".md")
+}
+
+// walkSkillResources invokes fn for every file the skill's folder holds beside
+// SKILL.md, with rel relative to that folder. A skill bundling references or
+// scripts is the whole reason the source is a folder; installing only the
+// manifest would drop them without a word. No-op for the flat shape.
+func walkSkillResources(agentsFS fs.FS, srcRoot, name string, fn func(rel string, content []byte) error) error {
+	dir := skillSourceDir(srcRoot, name)
+	if !dirExistsInFS(agentsFS, dir) {
+		return nil
+	}
+	return fs.WalkDir(agentsFS, dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel := strings.TrimPrefix(p, dir+"/")
+		if rel == skillFileName || filepath.Base(rel) == GitkeepName {
+			return nil
+		}
+		content, err := fs.ReadFile(agentsFS, p)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", p, err)
+		}
+		return fn(rel, content)
+	})
 }
 
 // skillHeading matches the title the gofi skills open with, e.g.

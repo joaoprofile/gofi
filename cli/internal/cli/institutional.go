@@ -6,19 +6,56 @@ import (
 	"os"
 	"time"
 
-	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
 	"github.com/joaoprofile/gofi-cli/internal/i18n"
 	"github.com/joaoprofile/gofi-cli/internal/scaffold"
 )
 
-func newInstitutionalCmd() *cobra.Command {
+// newUpdateInstitutionalCmd is the target inside the update family. The old
+// `gofi institutional update` still works (see newInstitutionalCmd) so nothing
+// scripted against it breaks, but this is the one that shows in help.
+func newUpdateInstitutionalCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "institutional",
-		Short: i18n.T("cmd.institutional.short"),
+		Short: i18n.T("cmd.update.inst.short"),
+		Long: `Fetch the institutional repo pinned at 'sources.institutional' in .gofi.yaml
+and REPLACE .claude/institutional/<project.name>/ with its <project.name>/
+folder.
+
+The institutional base holds business knowledge — domain, actors, rules,
+glossary, roadmap — and is the one target that keeps nothing: it is an
+authoritative mirror, wiped and recopied every run, so local edits do not
+survive. Business changes belong in the institutional repo, not in the project.
+
+prd/, specs/ and memory/contexts/ are never touched — they belong to the
+project's own git.
+
+Errors when no institutional repo is configured; in that case the folder is
+maintained by hand in this project.`,
+		Example: `gofi update institutional
+gofi update institutional --yes
+gofi update institutional --ref github.com/org/institutional@v1.2.0`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			yes, _ := cmd.Flags().GetBool("yes")
+			ref, _ := cmd.Flags().GetString("ref")
+			return runInstitutionalUpdate(yes, ref)
+		},
+	}
+	cmd.Flags().BoolP("yes", "y", false, "skip the confirmation prompt")
+	cmd.Flags().String("ref", "", "override the configured source ref for this run")
+	return cmd
+}
+
+// newInstitutionalCmd is the pre-update-family spelling, kept working and
+// hidden from help. Deprecated commands still run, which is the point: a script
+// pinned to the old path keeps going and says so once.
+func newInstitutionalCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:        "institutional",
+		Short:      i18n.T("cmd.institutional.short"),
+		Deprecated: "use `gofi update institutional`.",
 		Long: `The institutional base holds business/product knowledge (domain, actors,
 rules, glossary, roadmap) under .claude/institutional/<project>/.
 
@@ -38,6 +75,9 @@ func newInstitutionalUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: i18n.T("cmd.institutional.up.short"),
+		// The leaf carries the notice too: cobra announces the deprecation of
+		// the command actually executed, and this is the one people type.
+		Deprecated: "use `gofi update institutional`.",
 		Long: `Fetch the institutional repo pinned at 'sources.institutional' in .gofi.yaml
 and REPLACE .claude/institutional/<project.name>/ with its <project.name>/ folder.
 
@@ -101,28 +141,22 @@ func runInstitutionalUpdate(autoConfirm bool, refOverride string) error {
 		fmt.Printf("Update available: %s → %s\n", short(current), short(resolved.Ref))
 	}
 
-	fmt.Println()
-	fmt.Printf("This REPLACES .claude/institutional/%s/ with %s/ from the repo (full wipe + recopy).\n", name, name)
-	fmt.Println("Local edits in that folder will be lost. prd/, specs/, memory/contexts/ are untouched.")
-	fmt.Println()
+	scope := updateScope{
+		Replaces: true,
+		LeavesAlone: []string{
+			"prd/", "specs/", "memory/contexts/", ".claude/skills/",
+			".claude/sdk/", ".gofi.yaml", "the graph",
+		},
+	}
+	scope.write(".claude/institutional/"+name+"/", "full wipe + recopy of "+name+"/ from the repo")
 
-	if !autoConfirm {
-		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return errors.New("institutional update requires --yes when stdin is not a TTY")
-		}
-		ok := false
-		if err := huh.NewConfirm().
-			Title("Replace the institutional folder?").
-			Description(fmt.Sprintf("Full mirror of %s/ from %s into .claude/institutional/%s/.", name, ref, name)).
-			Affirmative("Replace").
-			Negative("Cancel").
-			Value(&ok).Run(); err != nil {
-			return err
-		}
-		if !ok {
-			fmt.Println("institutional update cancelled.")
-			return nil
-		}
+	ok, err := confirmUpdate("Replace the institutional folder?", scope, autoConfirm)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("institutional update cancelled.")
+		return nil
 	}
 
 	data := scaffold.TemplateData{
@@ -147,5 +181,6 @@ func runInstitutionalUpdate(autoConfirm bool, refOverride string) error {
 	fmt.Printf("\nInstitutional base updated — %d file(s) in .claude/institutional/%s/ (now at %s).\n",
 		len(created), name, short(resolved.Ref))
 	fmt.Println("Review and commit the changes to your project git.")
+	noteDrift(cfg)
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 )
 
@@ -23,18 +22,18 @@ func AllAgents() []string {
 	return append([]string(nil), allAgents...)
 }
 
-// InstallAgentFromFS reads ai/skills/<name>.md from the given gofi monorepo
-// tree (rooted at agentsRoot inside srcFS) and writes it to
+// InstallAgentFromFS reads ai/skills/<name>/SKILL.md from the given gofi
+// monorepo tree (rooted at agentsRoot inside srcFS) and writes it to
 // <projectRoot>/.claude/skills/<name>/SKILL.md — the layout Claude Code
-// discovers. Also creates the per-agent knowledge directory.
+// discovers — along with any resource the skill folder bundles. Also creates
+// the per-agent knowledge directory.
 func InstallAgentFromFS(srcFS fs.FS, agentsRoot, projectRoot, agentName string) error {
 	if !IsValidAgent(agentName) {
 		return fmt.Errorf("unknown agent %q", agentName)
 	}
-	src := path.Join(agentsRoot, "ai", "skills", agentName+".md")
-	body, err := fs.ReadFile(srcFS, src)
+	body, err := readSkillSource(srcFS, agentsRoot, agentName)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", src, err)
+		return fmt.Errorf("read skill %s: %w", agentName, err)
 	}
 	claudeDir := filepath.Join(projectRoot, ".claude")
 	dst := filepath.Join(claudeDir, skillRelPath(agentName))
@@ -43,6 +42,16 @@ func InstallAgentFromFS(srcFS fs.FS, agentsRoot, projectRoot, agentName string) 
 	}
 	if err := os.WriteFile(dst, renderSkill(agentName, body), 0o644); err != nil {
 		return err
+	}
+	err = walkSkillResources(srcFS, agentsRoot, agentName, func(rel string, content []byte) error {
+		resource := filepath.Join(claudeDir, skillsDirName, agentName, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(resource), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(resource, content, 0o644)
+	})
+	if err != nil {
+		return fmt.Errorf("install resources of skill %s: %w", agentName, err)
 	}
 	if err := pruneLegacySkillFile(claudeDir, agentName); err != nil {
 		return err

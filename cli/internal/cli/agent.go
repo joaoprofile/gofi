@@ -3,8 +3,8 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -210,19 +210,19 @@ func runAgentList() error {
 }
 
 // installSingleAgentFromSource fetches the gofi monorepo and installs a
-// single agent's skill file from ai/skills/. There is no embedded fallback —
-// fetch errors propagate.
+// single agent's skill from ai/skills/. There is no embedded fallback — fetch
+// errors propagate. Which shape the skill has upstream (folder or the legacy
+// flat file) is the scaffold's to know, so an absent skill is recognised by
+// the error rather than by looking for a path here.
 func installSingleAgentFromSource(projectRoot, agentName, ref string) (string, error) {
 	dir, resolved, err := fetchSource(projectRoot, ref)
 	if err != nil {
 		return "", fmt.Errorf("fetch %s: %w", ref, err)
 	}
-	fsys := os.DirFS(dir)
-	agentPath := filepath.Join(dir, "ai", "skills", agentName+".md")
-	if _, err := os.Stat(agentPath); err != nil {
-		return "", fmt.Errorf("agent %s not found in %s: %w", agentName, ref, err)
-	}
-	if err := scaffold.InstallAgentFromFS(fsys, ".", projectRoot, agentName); err != nil {
+	if err := scaffold.InstallAgentFromFS(os.DirFS(dir), ".", projectRoot, agentName); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("agent %s not found in %s", agentName, ref)
+		}
 		return "", err
 	}
 	return resolved.Ref, nil

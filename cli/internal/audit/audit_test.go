@@ -336,3 +336,40 @@ frontend:
 		t.Error("a frontend field written as a block must be named")
 	}
 }
+
+// The pre-v2.4 dirs are not harmless leftovers: the agents may read them as if
+// they were the live tree, so the audit has to name them and point at the one
+// command that clears them.
+func TestLegacySDKLayoutIsReported(t *testing.T) {
+	root := project(t, map[string]string{
+		".gofi.yaml":                          currentConfig,
+		".claude/scripts/gen-index.sh":        "x\n",
+		".claude/boilerplates/model.md":       "old\n",
+		".claude/gofi-sdk-go/sdk-docs/x.md":   "old\n",
+		".claude/sdk/go/sdk-docs/overview.md": "current\n",
+	})
+
+	f, ok := find(Run(root, Options{}), ".claude/")
+	if !ok {
+		t.Fatal("a project still carrying the pre-v2.4 dirs must be told")
+	}
+	for _, want := range []string{".claude/boilerplates/", ".claude/gofi-sdk-go/"} {
+		if !strings.Contains(f.Detail, want) {
+			t.Errorf("detail should name %s, got %q", want, f.Detail)
+		}
+	}
+	if !strings.Contains(f.Hint, "gofi update sdk") {
+		t.Errorf("the hint must name the command that removes them, got %q", f.Hint)
+	}
+}
+
+func TestCurrentSDKLayoutIsSilent(t *testing.T) {
+	root := project(t, map[string]string{
+		".gofi.yaml":                          currentConfig,
+		".claude/scripts/gen-index.sh":        "x\n",
+		".claude/sdk/go/sdk-docs/overview.md": "current\n",
+	})
+	if f, ok := find(Run(root, Options{}), ".claude/"); ok {
+		t.Errorf("a project on the current layout should raise nothing, got %q", f.Detail)
+	}
+}

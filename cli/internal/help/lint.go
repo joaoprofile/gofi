@@ -11,7 +11,9 @@ import (
 func Lint(root *cobra.Command) []error {
 	var errs []error
 	walk(root, func(cmd *cobra.Command) {
-		if cmd == root || cmd.Hidden || cmd.Name() == "help" {
+		// A deprecated command is on its way out and is not advertised, so
+		// holding it to the help contract would only block the deprecation.
+		if cmd == root || cmd.Hidden || cmd.Deprecated != "" || cmd.Name() == "help" {
 			return
 		}
 		if cmd.Short == "" {
