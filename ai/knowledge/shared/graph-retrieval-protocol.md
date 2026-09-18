@@ -85,13 +85,58 @@ central e lista os demais candidatos.
 
 Só então abra os arquivos — **apenas** os que os passos 1–3 apontaram.
 
-> **Regra de ouro:** procurar símbolo é `gofi graph explain`, não `grep -r`.
-> O `grep` é o **fallback**, não o primeiro movimento, e quando você cai nele
-> **diga que caiu**. Ele é o certo em três casos, todos declaráveis: não há
-> grafo para aquela linguagem; o alvo não é símbolo (string literal, chave de
-> config, SQL, tag de struct, nome de rota montado em runtime); ou o grafo está
-> em `fast` e a resposta precisa ser exata — e nesse último caso a saída
-> melhor é reconstruir com `--deep`, não varrer a árvore.
+> **Regra de ouro — o `grep` começa depois de um `explain` que não respondeu.**
+> O gate **não** é "isto é símbolo?"; é "**eu já chamei o `explain`?**". A
+> pergunta de classificação parece equivalente e não é: ela se responde de
+> cabeça, antes de qualquer consulta, e é por ela que o reflexo de varrer o
+> repositório volta — você decide sozinho que o alvo "não era símbolo" e o grafo
+> nunca chega a ser consultado. O `explain` é barato (~370 ms, ~30 linhas) e
+> erra para menos, não para mais: quando ele não tem o alvo, responde vazio em
+> uma chamada e aí sim o `grep` é o movimento certo.
+>
+> Na prática: **uma** chamada de `explain` (pelo alvo, ou por dois termos se
+> você não sabe o nome) antes do primeiro `grep`. Caiu no `grep` mesmo assim?
+> **Diga que caiu e por quê.**
+
+### A escada do fallback — `grep` é o último degrau, e só se for o caso
+
+`explain` vazio **não autoriza `grep` automaticamente**. Vazio quase sempre
+significa *pergunta mal formulada*, não *alvo ausente*. Antes de varrer, suba
+os degraus na ordem — e pare no primeiro que responder:
+
+1. **Reformule a busca no próprio grafo.** Nome exato errado? `explain <termo>
+   <termo>` (≥2 palavras) casa por nome parcial. Alvo que não é nó
+   (`const`/`var`, diretiva, import)? `explain` no **vizinho concreto que o
+   referencia** — o DTO, o service, o tipo.
+2. **A pergunta é de ausência?** ("ninguém mais chama", "esta camada não alcança
+   aquela", "quem implementa esta interface"). Então o problema não é o `grep`
+   ser necessário — é o modo. `gofi graph build --deep`. Varrer a árvore **não**
+   substitui isso: `grep` acha o texto, não resolve dispatch por interface.
+3. **O grafo está stale?** Você escreveu código nesta sessão e não commitou —
+   `gofi graph build --update` (~0,5 s) e repita o passo 1.
+4. **Só então `grep`**, e apenas nos casos legítimos: não há extractor para
+   aquela linguagem; ou o alvo é comprovadamente texto e não declaração (string
+   literal, SQL, chave de config, tag de struct, rota montada em runtime).
+   **Sempre declarado** — "caí no grep porque X".
+
+## O que o grafo não indexa como nó — pergunte pelo vizinho concreto
+
+O grafo é feito de **declarações**: tipos, funções, métodos, interfaces,
+structs. Não é feito de todo texto que existe no arquivo. Ficam de fora, e o
+`explain` responde vazio para eles:
+
+| Alvo | Por que não é nó | O movimento certo |
+|------|------------------|-------------------|
+| `const` / `var` (inclusive erros sentinela e instâncias de pacote) | o extractor indexa a declaração de tipo e função, não a de valor | `explain` no **símbolo que o referencia** — o tipo ou a função onde ele é usado — e leia o `arquivo:linha` |
+| diretiva em comentário (`//gofi:context`) | comentário não é declaração; é lido como **atributo** de um nó, não como nó | pergunte pelo pacote/símbolo e leia o campo `contexto` da resposta |
+| import, string literal, SQL, tag de struct, chave de config, rota montada em runtime | é texto dentro do corpo, não declaração | `grep` — **declarando** que é fallback |
+
+O erro a evitar aqui não é usar `grep` nesses casos: é **pular para o `grep`
+direto**. Quase sempre existe um vizinho concreto que *é* nó e que devolve o
+`arquivo:linha` que você queria, mais a vizinhança de brinde. Exemplos do mesmo
+movimento: *onde mora o validator que este DTO usa?* → `explain <DTO>` (não
+`grep` pela `var`); *quem consome esta constante de erro?* → `explain` no service
+que a retorna; *este pacote é de que contexto?* → `explain` num símbolo dele.
 
 ## O modo do scan — valide antes de concluir
 
@@ -239,6 +284,13 @@ entra `--deep` — ver *Quando rodar `--deep`*.
 - ❌ Começar por `grep -r` no módulo quando a pergunta é *"quem chama X"* e
   existe grafo da linguagem. Nem para **achar** o símbolo: `gofi graph explain
   <termo> <termo>` busca por nome parcial dentro do próprio grafo.
+- ❌ **Classificar o alvo de cabeça para pular o `explain`** — decidir sozinho
+  que "isto é `var`, o grafo não tem" e ir direto ao `grep`. Mesmo quando a
+  conclusão está certa, o caminho está errado: é assim que o reflexo de varrer
+  o repositório volta, e a chamada que você economizou custava ~370 ms. Uma
+  chamada de `explain` primeiro, sempre.
+- ❌ Cair no `grep` **sem dizer que caiu**. Fallback silencioso vira, na leitura
+  de quem revisa, uma busca que parece ter sido feita no grafo.
 - ❌ Concluir de um scan `fast` que **nada** quebra — ausência de aresta ali não
   é prova de ausência de uso. Sem checar o `mode`, você não sabe em que modo
   está o grafo que acabou de ler.
