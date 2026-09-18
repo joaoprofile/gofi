@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -145,6 +147,89 @@ func (c *GofiConfig) Validate() error {
 	}
 	if err := c.Sonar.validate(); err != nil {
 		return err
+	}
+	if err := c.Hsec.validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+var (
+	// CVE/GHSA/Go vuln ids (Trivy, Nancy) and numeric npm/yarn advisory ids.
+	dependencyAdvisoryRe = regexp.MustCompile(`(?i)^(CVE-\d{4}-\d+|GHSA(-[0-9a-z]{4}){3}|GO-\d{4}-\d+|\d+)$`)
+	gitDirPatternRe      = regexp.MustCompile(`(^|/)\.git(/|$)`)
+	hsecSeverities       = []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+	hsecOutputFormats    = []string{"text", "json", "sarif"}
+)
+
+// A dependency advisory is never a false positive — the vulnerable code is
+// really there. It can be a risk accept (e.g. the vulnerable package of the
+// module is not imported), which keeps it visible as accepted risk.
+func validateSuppressions(key string, rules []HsecSuppression, allowAdvisory bool) error {
+	for i, r := range rules {
+		if strings.TrimSpace(r.Rule) == "" {
+			return fmt.Errorf("%s[%d].rule: required (horusec rule_id, e.g. HS-LEAKS-25)", key, i)
+		}
+		if !allowAdvisory && dependencyAdvisoryRe.MatchString(strings.TrimSpace(r.Rule)) {
+			return fmt.Errorf("%s[%d].rule: %q is a dependency advisory — update the dependency, or register it under hsec.risk_accepts if it does not apply", key, i, r.Rule)
+		}
+		if strings.TrimSpace(r.Reason) == "" {
+			return fmt.Errorf("%s[%d].reason: required — say why %s is not blocking here", key, i, r.Rule)
+		}
+	}
+	return nil
+}
+
+// validate checks the hsec block. A disabled block is always valid. Empty
+// severity/output fall back to defaults at render time, so only a non-empty
+// unknown value is rejected here — at edit time instead of scan time.
+func (h *HsecConfig) validate() error {
+	if !h.Enabled {
+		return nil
+	}
+	if th := strings.ToUpper(strings.TrimSpace(h.SeverityThreshold)); th != "" && !slices.Contains(hsecSeverities, th) {
+		return fmt.Errorf("hsec.severity_threshold: %q is not one of %s", h.SeverityThreshold, strings.Join(hsecSeverities, ", "))
+	}
+	if f := strings.TrimSpace(h.OutputFormat); f != "" && !slices.Contains(hsecOutputFormats, f) {
+		return fmt.Errorf("hsec.output_format: %q is not one of %s", h.OutputFormat, strings.Join(hsecOutputFormats, ", "))
+	}
+	if h.TimeoutSeconds < 0 {
+		return fmt.Errorf("hsec.timeout_seconds: must not be negative")
+	}
+	if h.EnableGitHistory {
+		for _, p := range h.IgnorePaths {
+			if gitDirPatternRe.MatchString(p) {
+				return fmt.Errorf("hsec.enable_git_history: needs .git, but hsec.ignore_paths excludes it (%q) — GitLeaks would fail silently; disable one of the two", p)
+			}
+		}
+	}
+	switch h.DockerRuntime {
+	case "", HsecDockerRuntimeHost:
+	case HsecDockerRuntimeIsolated:
+		if !h.UseDocker {
+			return fmt.Errorf("hsec.docker_runtime: %q requires hsec.use_docker: true", h.DockerRuntime)
+		}
+	default:
+		return fmt.Errorf("hsec.docker_runtime: %q is not one of %s, %s", h.DockerRuntime, HsecDockerRuntimeHost, HsecDockerRuntimeIsolated)
+	}
+	if err := validateSuppressions("hsec.false_positives", h.FalsePositives, false); err != nil {
+		return err
+	}
+	if err := validateSuppressions("hsec.risk_accepts", h.RiskAccepts, true); err != nil {
+		return err
+	}
+	if h.Manager == nil {
+		return nil
+	}
+	u, err := url.Parse(strings.TrimSpace(h.Manager.URL))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("hsec.manager.url: must be an absolute http(s) URL, got %q", h.Manager.URL)
+	}
+	if strings.TrimSpace(h.Manager.RepositoryName) == "" {
+		return fmt.Errorf("hsec.manager.repository_name: required when hsec.manager is set")
+	}
+	if h.Manager.TimeoutSeconds < 0 {
+		return fmt.Errorf("hsec.manager.timeout_seconds: must not be negative")
 	}
 	return nil
 }

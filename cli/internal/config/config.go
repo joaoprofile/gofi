@@ -298,14 +298,58 @@ func (o Ops) MarshalYAML() (interface{}, error) {
 // HsecConfig drives the `gofi hsec` command (Horusec SAST). gofi renders this
 // into a horusec-config.json under <project>/.gofi/ at install time and
 // invokes the horusec binary against it.
+//
+// UseDocker is off by default: without Docker horusec only runs its native
+// engine, so Go/npm/dependency tools (GoSec, Semgrep, GitLeaks, NpmAudit,
+// OWASP Dependency Check, Trivy) are skipped. Manager is optional; the
+// repository token that authorises publishing is never stored here — it is
+// read from HORUSEC_REPOSITORY_AUTHORIZATION when `gofi hsec start --publish`
+// runs.
 type HsecConfig struct {
-	Enabled              bool     `yaml:"enabled"`
-	IgnorePaths          []string `yaml:"ignore_paths,omitempty"`
-	SeverityThreshold    string   `yaml:"severity_threshold"` // CRITICAL | HIGH | MEDIUM | LOW
-	ReturnErrorOnFinding bool     `yaml:"return_error_on_finding"`
-	OutputFormat         string   `yaml:"output_format"` // text | json | sarif
-	OutputFile           string   `yaml:"output_file,omitempty"`
-	TimeoutSeconds       int      `yaml:"timeout_seconds,omitempty"`
+	Enabled                    bool               `yaml:"enabled"`
+	IgnorePaths                []string           `yaml:"ignore_paths,omitempty"`
+	SeverityThreshold          string             `yaml:"severity_threshold"` // CRITICAL | HIGH | MEDIUM | LOW
+	ReturnErrorOnFinding       bool               `yaml:"return_error_on_finding"`
+	OutputFormat               string             `yaml:"output_format"` // text | json | sarif
+	OutputFile                 string             `yaml:"output_file,omitempty"`
+	TimeoutSeconds             int                `yaml:"timeout_seconds,omitempty"`
+	UseDocker                  bool               `yaml:"use_docker,omitempty"`
+	DockerRuntime              string             `yaml:"docker_runtime,omitempty"` // host | isolated
+	EnableGitHistory           bool               `yaml:"enable_git_history,omitempty"`
+	EnableCommitAuthor         bool               `yaml:"enable_commit_author,omitempty"`
+	EnableOwaspDependencyCheck bool               `yaml:"enable_owasp_dependency_check,omitempty"`
+	FalsePositives             []HsecSuppression  `yaml:"false_positives,omitempty"`
+	RiskAccepts                []HsecSuppression  `yaml:"risk_accepts,omitempty"`
+	Manager                    *HsecManagerConfig `yaml:"manager,omitempty"`
+}
+
+// Docker runtimes for hsec. Isolated runs the official horusec image against a
+// pinned Docker daemon in a container, for hosts whose Docker version horusec
+// v2 cannot parse.
+const (
+	HsecDockerRuntimeHost     = "host"
+	HsecDockerRuntimeIsolated = "isolated"
+)
+
+// HsecSuppression takes a finding out of the verdict: as a false positive (not
+// a vulnerability) or a risk accept (real, tolerated on purpose). It matches by
+// rule, not by horusec's hash — the hash includes the line number and changes
+// whenever code above it moves.
+// Path is a glob (** allowed) relative to the project root; Code is a
+// substring of the flagged snippet. Reason is mandatory.
+type HsecSuppression struct {
+	Rule   string `yaml:"rule"`
+	Path   string `yaml:"path,omitempty"`
+	Code   string `yaml:"code,omitempty"`
+	Reason string `yaml:"reason"`
+}
+
+// HsecManagerConfig points at the Horusec Manager that receives published
+// analyses. URL is the server base (horusec appends /api/analysis itself).
+type HsecManagerConfig struct {
+	URL            string `yaml:"url"`
+	RepositoryName string `yaml:"repository_name"`
+	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty"`
 }
 
 // SonarConfig drives the `gofi sonar` command (SonarQube / SonarCloud static

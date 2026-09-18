@@ -139,6 +139,7 @@ func DefaultHsec() HsecConfig {
 	return HsecConfig{
 		Enabled: true,
 		IgnorePaths: []string{
+			"**/.env*",
 			"**/.gofi/**",
 			"**/.claude/**",
 			"**/vendor/**",
