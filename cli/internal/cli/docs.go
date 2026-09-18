@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -51,9 +53,15 @@ run from a git hook.
 
 --with-code additionally links each entity to the source files that mention it,
 which costs a pass over the tracked files. Without it the build only reads the
-documents, which is the fast path the hooks use.`,
+documents.
+
+--staged is the pre-commit mode: it indexes only what the commit stages. With
+no staged document it touches nothing; otherwise it rewrites only the INDEX.md
+of the staged folders and only their contexts' rows in the router, writes a
+file only when its content changes, and stages exactly what it rewrote.`,
 		Example: `gofi docs build
-gofi docs build --with-code`,
+gofi docs build --with-code
+gofi docs build --staged --with-code`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := findProjectRoot()
@@ -72,11 +80,28 @@ gofi docs build --with-code`,
 				fmt.Fprintf(cmd.ErrOrStderr(), "  aviso: %v\n  seguindo sem a linguagem do backend\n", cfgErr)
 			}
 			b := &docs.Builder{Root: root, WithCode: withCode, Language: backendLanguage(cfg)}
+			staged, _ := cmd.Flags().GetBool("staged")
+			if staged {
+				paths, err := stagedPaths(root)
+				if err != nil {
+					return err
+				}
+				b.Scope = docs.StagedScope(paths)
+			}
 			idx, g, drift, err := b.Build()
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			if staged {
+				if err := stageFiles(root, b.Written); err != nil {
+					return err
+				}
+				if idx == nil {
+					fmt.Fprintln(out, "  nada no stage para indexar")
+					return nil
+				}
+			}
 			sections := 0
 			for _, d := range idx.Docs {
 				sections += len(d.Sections)
@@ -90,7 +115,51 @@ gofi docs build --with-code`,
 		},
 	}
 	cmd.Flags().Bool("with-code", false, i18n.T("cmd.docs.flag.withcode"))
+	cmd.Flags().Bool("staged", false, "index only what the commit stages, and stage what it rewrote (pre-commit mode)")
 	return cmd
+}
+
+// stagedPaths lists the paths the next commit stages, relative to root.
+// --no-renames reports a move as a deletion plus an addition, so the folder a
+// document left is re-indexed as well as the one it entered.
+func stagedPaths(root string) ([]string, error) {
+	cmd := exec.Command("git", "diff", "--cached", "--name-only", "--no-renames", "--relative", "-z")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list staged files: %w", err)
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
+// stageFiles adds (or records the removal of) exactly the Markdown indexes a
+// scoped build rewrote, so they ship in the commit that made them change. The
+// JSON under docs.OutDir is left to the hook's own `git add`: forcing it here
+// would start tracking it in a project that chose to ignore it.
+func stageFiles(root string, files []string) error {
+	out := filepath.Join(root, docs.OutDir) + string(filepath.Separator)
+	var md []string
+	for _, f := range files {
+		if !strings.HasPrefix(f, out) {
+			md = append(md, f)
+		}
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	args := append([]string{"add", "-A", "--"}, md...)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("stage rebuilt indexes: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func newDocsValidateCmd() *cobra.Command {
@@ -282,8 +351,10 @@ graph and the document index — because they go stale on the same edits and
 splitting them across two blocks would have each installer delete the other's.
 
 The files are tracked, so pre-commit rebuilds and stages them: the map ships in
-the same commit as the documents it describes. post-checkout and post-merge are
-the repair pass, for when a merge resolved a generated file line by line.
+the same commit as the documents it describes. The document pass is scoped to
+what the commit stages (docs build --staged), so a commit never rewrites the
+index of a context it did not touch. post-checkout and post-merge rebuild only
+the code graph and leave the tracked indexes alone.
 
 Without the hooks the index depends on somebody remembering, and a stale index
 is worse than none: without one an agent knows it does not know, with a stale

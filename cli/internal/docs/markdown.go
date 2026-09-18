@@ -33,6 +33,13 @@ type Drift string
 // sibling. Directory is physical organisation, context is the concept, and
 // submodulo is the link between them; the router carries that mapping.
 func WriteIndexes(root, corpus string) ([]Drift, error) {
+	return writeIndexes(root, corpus, nil, nil)
+}
+
+// writeIndexes writes the router and the shards of one corpus. With a scope it
+// rewrites only the shards of the staged folders and only the router rows of
+// the contexts they belong to; every other line stays byte for byte.
+func writeIndexes(root, corpus string, scope *Scope, out *[]string) ([]Drift, error) {
 	if st, err := os.Stat(filepath.Join(root, corpus)); err != nil || !st.IsDir() {
 		return nil, nil
 	}
@@ -100,18 +107,38 @@ func WriteIndexes(root, corpus string) ([]Drift, error) {
 	}
 	sort.Strings(dirs)
 	for _, dir := range dirs {
-		if d := writeShard(root, dir, corpus, byDir[dir]); d != "" {
+		shardPath := filepath.Join(root, filepath.FromSlash(dir), IndexMarkdown)
+		written[shardPath] = true
+		if scope != nil && !scope.Dirs[dir] {
+			continue
+		}
+		content, d := renderShard(dir, corpus, byDir[dir])
+		if d != "" {
 			drift = append(drift, d)
 		}
-		written[filepath.Join(root, filepath.FromSlash(dir), IndexMarkdown)] = true
+		if err := writeIfChanged(shardPath, []byte(content), out); err != nil {
+			return drift, err
+		}
 	}
 
 	path := filepath.Join(root, corpus, IndexMarkdown)
 	written[path] = true
-	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+	router := b.String()
+	if scope != nil {
+		current, err := os.ReadFile(path)
+		if err == nil {
+			affected := affectedContexts(string(current), byContext, scope)
+			if len(affected) == 0 {
+				router = string(current)
+			} else if merged, err := mergeRootIndex(string(current), router, affected); err == nil {
+				router = merged
+			}
+		}
+	}
+	if err := writeIfChanged(path, []byte(router), out); err != nil {
 		return drift, err
 	}
-	return append(drift, sweepShards(root, corpus, written)...), nil
+	return append(drift, sweepShards(root, corpus, written, scope, out)...), nil
 }
 
 type indexEntry struct {
@@ -141,7 +168,7 @@ func groupByContext(root, corpus string) (map[string][]indexEntry, error) {
 	return out, err
 }
 
-func writeShard(root, dir, corpus string, group []indexEntry) Drift {
+func renderShard(dir, corpus string, group []indexEntry) (string, Drift) {
 	sort.Slice(group, func(i, j int) bool {
 		if group[i].sub != group[j].sub {
 			return group[i].sub < group[j].sub
@@ -176,22 +203,20 @@ func writeShard(root, dir, corpus string, group []indexEntry) Drift {
 		if entities == "" {
 			entities = "—"
 		}
-		subject := append(append(append([]string{}, e.operations...), e.keywords...), e.marketplaces...)
+		subject := uniq(append(append(append([]string{}, e.operations...), e.keywords...), e.marketplaces...))
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | `%s` |\n",
 			e.sub, e.version, e.status, entities, strings.Join(subject, ", "), e.rel)
 	}
-	_ = os.WriteFile(filepath.Join(root, filepath.FromSlash(dir), IndexMarkdown),
-		[]byte(b.String()), 0o644)
 
 	// A folder named after the context, or after the context and one of its
 	// submodules, is deliberate layout — a context that grew submodules spreads
 	// across folders and that is the point. Anything else is a typo, the kind
 	// that makes a path unguessable, and only that is worth reporting.
 	if len(nomes) == 1 && !folderExplained(dir, corpus, nomes[0], group) {
-		return Drift(fmt.Sprintf("pasta %q serve só o contexto %q e o nome não corresponde "+
+		return b.String(), Drift(fmt.Sprintf("pasta %q serve só o contexto %q e o nome não corresponde "+
 			"nem ao contexto nem a um submódulo dela", dir, nomes[0]))
 	}
-	return ""
+	return b.String(), ""
 }
 
 // folderExplained reports whether the folder name is accounted for by the
@@ -297,6 +322,10 @@ var core = map[string]bool{
 // context being worked on. The manifest exists so an agent can load the core
 // and then only the modules the task actually calls for.
 func WriteKnowledgeIndex(root, language string) error {
+	return writeKnowledgeIndex(root, language, nil)
+}
+
+func writeKnowledgeIndex(root, language string, out *[]string) error {
 	areas := []knowledgeArea{
 		{".claude/knowledge/shared", "Cross-agent — princípios e protocolos universais"},
 	}
@@ -363,17 +392,22 @@ func WriteKnowledgeIndex(root, language string) error {
 `, totalLines, totalBytes/3600, coreLines, coreBytes/3600,
 		coreLines+600, (coreBytes+21000)/3600)
 
-	path := filepath.Join(root, filepath.FromSlash(KnowledgeIndex))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	return writeIfChanged(filepath.Join(root, filepath.FromSlash(KnowledgeIndex)), []byte(b.String()), out)
 }
 
 // firstProse is the first sentence that is not a heading, quote, table, list or
 // fence — enough to tell an agent whether the file is worth opening.
 func firstProse(content string) string {
-	for _, line := range strings.Split(content, "\n") {
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		for i := 1; i < len(lines); i++ {
+			if strings.TrimSpace(lines[i]) == "---" {
+				lines = lines[i+1:]
+				break
+			}
+		}
+	}
+	for _, line := range lines {
 		t := strings.TrimSpace(line)
 		if t == "" {
 			continue
@@ -401,11 +435,14 @@ const generatedMark = "Derivado — não edite à mão"
 // still announcing a context the corpus no longer has. That is the failure this
 // whole index exists to avoid: an index nobody rebuilt is not merely unhelpful,
 // it answers confidently and wrongly.
-func sweepShards(root, corpus string, written map[string]bool) []Drift {
+func sweepShards(root, corpus string, written map[string]bool, scope *Scope, out *[]string) []Drift {
 	var removed []Drift
 	base := filepath.Join(root, corpus)
 	_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Name() != IndexMarkdown || written[path] {
+			return nil
+		}
+		if scope != nil && !scope.Dirs[filepath.ToSlash(filepath.Dir(relPath(root, path)))] {
 			return nil
 		}
 		raw, err := os.ReadFile(path)
@@ -413,6 +450,9 @@ func sweepShards(root, corpus string, written map[string]bool) []Drift {
 			return nil // not ours
 		}
 		if os.Remove(path) == nil {
+			if out != nil {
+				*out = append(*out, path)
+			}
 			removed = append(removed, Drift(fmt.Sprintf(
 				"removido índice órfão %s — o contexto que ele descrevia não existe mais",
 				relPath(root, path))))
