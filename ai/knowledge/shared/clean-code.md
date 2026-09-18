@@ -21,6 +21,10 @@ falar por si — e nesse caso, comentário explica **WHY**, nunca **WHAT**.
 - ❌ Comentário "TODO: melhorar isso" sem ação concreta
 - ❌ Comentário "// removed legacy X" — código removido vive no git history
 - ❌ Marcação de seções com banners (`// --- helpers ---`) em arquivos curtos
+- ❌ **Comentário em campo de struct** — anotar atributo por atributo polui o
+  tipo e some com a forma dele. O nome do campo carrega o significado; se um
+  campo específico esconde um constraint real, o comentário vai **acima do
+  tipo**, em uma linha, e nomeia só esse campo.
 
 ### Quando comentar (exceção)
 
@@ -32,7 +36,27 @@ Comentário tem que justificar sua existência. Use quando:
 - ✅ TODO com **ação concreta** + condição clara (ex.: `// TODO(rbac-fino): trocar para RBACMiddleware quando user roles ficarem fine-grained`)
 - ✅ Invariante de segurança/correção (ex.: "ctx deve ter *sql.Tx — falha silenciosa se chamado fora de tx")
 
-Quando comentar, **lidere com WHY**, não com WHAT.
+Quando comentar, **lidere com WHY**, não com WHAT — e seja **sucinto**: uma
+linha resolve quase sempre, duas é o teto. Comentário que vira parágrafo é
+sinal de que a explicação pertence à spec ou à memória do contexto, não ao
+código; deixe no código a frase curta e o resto onde ele é procurado.
+
+### Idioma do comentário segue a camada, não o autor
+
+O código do **projeto** comenta no idioma do projeto — o que o repositório já
+usa é a regra, e alternar idioma no meio do mesmo pacote é o defeito.
+
+O código do **SDK** (`.gofi/gofi-sdk-<lang>/`) comenta **sempre em inglês**,
+mesmo quando o projeto que o consome escreve em outro idioma. O SDK é
+compartilhado entre projetos e times: um comentário no idioma de um consumidor
+vira ruído para todos os outros. Vale para doc comment, comentário inline,
+nome de teste e mensagem de assert.
+
+A fronteira é o **arquivo**, não a tarefa. Uma entrega que corrige um gap do
+SDK e cabeia o resultado no projeto escreve **nos dois idiomas** — inglês no
+que está sob `.gofi/gofi-sdk-<lang>/`, idioma do projeto no resto. Antes de
+fechar, reler o diff do lado do SDK procurando o idioma errado; é o ponto em
+que o deslize acontece, porque a cabeça ainda está no contexto do projeto.
 
 ## Regras de código
 
