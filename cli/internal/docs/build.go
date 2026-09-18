@@ -34,6 +34,11 @@ type Builder struct {
 	// out to git grep once per entity, so it is the slow half of a build; the
 	// git hook path turns it off.
 	WithCode bool
+	// Scope, when set, limits the build to what one commit touched (see
+	// StagedScope). Nil is a full build.
+	Scope *Scope
+	// Written lists the files the last Build actually changed or removed.
+	Written []string
 }
 
 // Build writes every derived artifact: the JSON the tool reads, and the
@@ -43,7 +48,13 @@ type Builder struct {
 // commands means three of them are forgotten — leaving an index that lies,
 // which is worse than no index at all: without one an agent knows it does not
 // know, with a stale one it points confidently at the wrong place.
+//
+// A scoped build that has nothing to index returns nils and touches nothing.
 func (b *Builder) Build() (*Index, *Graph, []Drift, error) {
+	b.Written = nil
+	if b.Scope != nil && b.Scope.idle(b.WithCode) {
+		return nil, nil, nil, nil
+	}
 	docs, bodies, err := b.scan()
 	if err != nil {
 		return nil, nil, nil, err
@@ -55,23 +66,31 @@ func (b *Builder) Build() (*Index, *Graph, []Drift, error) {
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return nil, nil, nil, err
 	}
-	if err := writeJSON(filepath.Join(out, IndexFile), idx); err != nil {
-		return nil, nil, nil, err
-	}
-	if err := writeJSON(filepath.Join(out, GraphFile), g); err != nil {
-		return nil, nil, nil, err
+	s := b.Scope
+	if s == nil || s.Documents || (b.WithCode && s.Anything) {
+		if err := b.writeJSON(filepath.Join(out, IndexFile), idx); err != nil {
+			return nil, nil, nil, err
+		}
+		if err := b.writeJSON(filepath.Join(out, GraphFile), g); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	var drift []Drift
 	for _, corpus := range []string{"specs", "prd"} {
-		d, err := WriteIndexes(b.Root, corpus)
+		if s != nil && !s.touchesCorpus(corpus) {
+			continue
+		}
+		d, err := writeIndexes(b.Root, corpus, s, &b.Written)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		drift = append(drift, d...)
 	}
-	if err := WriteKnowledgeIndex(b.Root, b.Language); err != nil {
-		return nil, nil, nil, err
+	if s == nil || s.Knowledge {
+		if err := writeKnowledgeIndex(b.Root, b.Language, &b.Written); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	return idx, g, drift, nil
 }
@@ -546,12 +565,12 @@ func uniq(in []string) []string {
 	return out
 }
 
-func writeJSON(path string, v any) error {
-	b, err := json.Marshal(v)
+func (b *Builder) writeJSON(path string, v any) error {
+	data, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	return writeIfChanged(path, data, &b.Written)
 }
 
 // Load reads the index and graph written by a previous build.

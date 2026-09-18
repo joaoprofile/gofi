@@ -34,18 +34,21 @@ import (
 // is about to conclude something the fast graph cannot support.
 //
 // pre-commit stages what it rebuilt, so the graph travels in the same commit as
-// the code. The other two only rebuild: whatever they produce is a repair, and
-// staging it behind the developer's back during a merge would be worse than
-// leaving it for them to commit.
+// the code. Its document pass is scoped to what the commit stages: rebuilding
+// every INDEX.md rewrote contexts nobody touched and left them dirty in every
+// developer's tree. post-checkout and post-merge rebuild only the graph — the
+// document indexes are tracked Markdown, and rewriting them after a checkout
+// or a pull is exactly the dirt a developer did not cause.
 func gofiHookBodies() map[string]string {
-	const rebuild = `command -v gofi >/dev/null 2>&1 || exit 0
-gofi graph build --update --fast >/dev/null 2>&1 || true
-gofi docs build --with-code >/dev/null 2>&1 || true`
-	stage := "\ngit add -- " + graph.OutDir + " " + docs.OutDir + " >/dev/null 2>&1 || true"
+	const guard = `command -v gofi >/dev/null 2>&1 || exit 0
+gofi graph build --update --fast >/dev/null 2>&1 || true`
+	preCommit := guard + `
+gofi docs build --staged --with-code >/dev/null 2>&1 || true
+git add -- ` + graph.OutDir + " " + docs.OutDir + " >/dev/null 2>&1 || true"
 	return map[string]string{
-		"pre-commit":    rebuild + stage,
-		"post-checkout": rebuild,
-		"post-merge":    rebuild,
+		"pre-commit":    preCommit,
+		"post-checkout": guard,
+		"post-merge":    guard,
 	}
 }
 
