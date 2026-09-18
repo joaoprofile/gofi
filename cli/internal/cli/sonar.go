@@ -178,7 +178,10 @@ func warnSonarEnv(w io.Writer, hostURLFromConfig string) {
 // backendLanguage returns the project's backend language, or "" for a
 // front-only project. Used to pick the sonar coverage report property.
 func backendLanguage(cfg *config.GofiConfig) string {
-	if cfg.Backend == nil {
+	// A nil config is not just "no backend": it is what loadProjectConfig
+	// returns when .gofi.yaml fails to validate, and every caller that shrugs
+	// off that error lands here.
+	if cfg == nil || cfg.Backend == nil {
 		return ""
 	}
 	return cfg.Backend.Language
