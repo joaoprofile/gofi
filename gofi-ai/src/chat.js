@@ -322,6 +322,11 @@ class Chat {
 			case 'openSessionInTerminal':
 				this.openTerminalSession(String(message.engineId || ''));
 				break;
+			case 'openGraph':
+				// Routed through the command so the chat does not need to own
+				// the panel: one graph per window, whoever asked for it.
+				vscode.commands.executeCommand('gofi-ai.graph');
+				break;
 			default:
 				break;
 		}
@@ -1601,6 +1606,14 @@ class Chat {
   <span id="title">GOFI AI</span>
   <span id="writeBadge" hidden></span>
   <span id="subtitle"></span>
+  <button id="graphBtn" class="icon" type="button" title="Grafo do projeto — contextos, specs, PRDs e versões" aria-label="Grafo do projeto">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+      <path d="M8 4.2 4.3 11M8 4.2 11.7 11M4.3 11h7.4" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
+      <circle cx="8" cy="3.4" r="1.9" fill="currentColor"></circle>
+      <circle cx="3.7" cy="11.8" r="1.9" fill="currentColor"></circle>
+      <circle cx="12.3" cy="11.8" r="1.9" fill="currentColor"></circle>
+    </svg>
+  </button>
   <button id="historyBtn" class="icon" type="button" title="Conversas salvas neste projeto" aria-label="Conversas salvas" aria-expanded="false" aria-controls="history">
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
       <rect x="2" y="3" width="12" height="1.6" rx="0.8" fill="currentColor"></rect>

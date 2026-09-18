@@ -2025,6 +2025,7 @@
 	let historyOpen = false;
 
 	historyBtn.addEventListener('click', () => toggleHistory(!historyOpen));
+	el('graphBtn').addEventListener('click', () => vscode.postMessage({ type: 'openGraph' }));
 	historyNew.addEventListener('click', () => {
 		vscode.postMessage({ type: 'new' });
 		toggleHistory(false);

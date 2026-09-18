@@ -163,7 +163,7 @@ class El {
 
 const ids = [
 	'log', 'chips', 'picker', 'input', 'submit', 'cancel', 'subtitle', 'usageBar', 'usageSummary',
-	'usageFlag', 'usagePanel', 'activeFile', 'attachments', 'writeBadge', 'historyBtn', 'history',
+	'usageFlag', 'usagePanel', 'activeFile', 'attachments', 'writeBadge', 'historyBtn', 'graphBtn', 'history',
 	'historyNew', 'historySearch', 'historyList', 'title', 'working', 'attachBtn', 'attachMenu',
 	'attachUpload', 'attachProject', 'fileInput',
 ];

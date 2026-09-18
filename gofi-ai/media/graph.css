@@ -1,0 +1,426 @@
+/* The graph panel. Like the chat, it borrows the editor's theme tokens for
+   every surface — the only fixed colours are the ones that carry meaning in
+   the drawing itself, where a node's kind has to be readable at a glance and
+   stay the same colour in light and dark. */
+
+:root {
+  --gofi-cyan: #22d3ee;
+  /* Hue carries the kind; saturation carries the weight. The documents are
+     what the panel is about, so they keep the vivid tones; packages are
+     context for them, and a wall of 24 grey dots must not out-shout three
+     specs. */
+  --node-context: #22d3ee;
+  --node-spec: #60a5fa;
+  --node-prd: #a78bfa;
+  --node-memory: #fbbf24;
+  --node-entity: #34d399;
+  --node-package: #64748b;
+  --label-dim: #94a3b8;
+  --bar-height: 38px;
+}
+
+body.vscode-light {
+  --node-context: #0891b2;
+  --node-spec: #2563eb;
+  --node-prd: #7c3aed;
+  --node-memory: #b45309;
+  --node-entity: #059669;
+  --node-package: #94a3b8;
+  --label-dim: #64748b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+}
+
+#app {
+  display: flex;
+  height: 100%;
+}
+
+/* ── tree pane ───────────────────────────────────────────────────────── */
+
+/* The tree and the graph answer different questions about the same data:
+   one is exact and enumerable, the other is shape. Side by side, clicking
+   either one moves the other. */
+#tree {
+  width: 260px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+  overflow: hidden;
+}
+
+#treeHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--bar-height);
+  padding: 0 12px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
+}
+
+#treeCount {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+#treeBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 12px;
+}
+
+#main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 2px 10px 2px 0;
+  border: none;
+  background: none;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 0.92em;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.row-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.row-item .twist {
+  flex: 0 0 12px;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+.row-item .dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.row-item .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-item .meta {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.88em;
+}
+
+.row-item.selected .meta {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.group {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── top bar ─────────────────────────────────────────────────────────── */
+
+#bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--bar-height);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+  flex: 0 0 auto;
+  /* Everything on one line. The bar has a fixed height, and a chip that wraps
+     grows past it instead of eliding. */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#scope {
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+#counts {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grow {
+  flex: 1;
+}
+
+.chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  line-height: 1.7;
+  font-family: inherit;
+  font-size: 0.9em;
+  color: var(--vscode-foreground);
+  background: var(--vscode-badge-background);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.chip:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.toggle input {
+  margin: 0;
+}
+
+#search {
+  width: 160px;
+  font-family: inherit;
+  font-size: 0.9em;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+#search:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* ── stage ───────────────────────────────────────────────────────────── */
+
+#stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+#canvas.dragging {
+  cursor: grabbing;
+}
+
+/* Laid along the bottom rather than stacked in a corner: a tall box there
+   covers the drawing, and this is a key, not a panel. */
+#legend {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  max-width: calc(100% - 24px);
+  padding: 5px 12px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  background: var(--vscode-editorWidget-background);
+  font-size: 0.82em;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+#legend .row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#legend .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+#legend .count {
+  color: var(--vscode-descriptionForeground);
+}
+
+#empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+  color: var(--vscode-descriptionForeground);
+}
+
+#empty p {
+  max-width: 46ch;
+  white-space: pre-line;
+}
+
+#empty code {
+  font-family: var(--vscode-editor-font-family);
+  background: var(--vscode-textCodeBlock-background);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ── details ─────────────────────────────────────────────────────────── */
+
+#details {
+  position: absolute;
+  top: var(--bar-height);
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  overflow-y: auto;
+  padding: 14px 16px 20px;
+  border-left: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editorWidget-background);
+}
+
+#details h2 {
+  margin: 0 20px 4px 0;
+  font-size: 1.05em;
+  word-break: break-word;
+}
+
+#details h3 {
+  margin: 16px 0 6px;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
+}
+
+#detailsMeta {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+#details ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+#details li {
+  margin: 2px 0;
+  word-break: break-word;
+}
+
+#details .action {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  text-align: center;
+}
+
+#details .tag {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.85em;
+}
+
+#details .link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#details .link:hover {
+  text-decoration: underline;
+}
+
+#details .empty {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.icon:hover {
+  opacity: 1;
+}
