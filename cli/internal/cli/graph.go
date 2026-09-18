@@ -96,7 +96,7 @@ func runGraphHooks(cmd *cobra.Command) error {
 	}
 
 	if install, _ := cmd.Flags().GetBool("install"); install {
-		results, err := githooks.Install(root, graphHookBodies())
+		results, err := githooks.Install(root, gofiHookBodies())
 		if err != nil {
 			return err
 		}

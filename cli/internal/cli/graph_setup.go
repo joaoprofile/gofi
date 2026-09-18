@@ -8,13 +8,20 @@ import (
 	"strings"
 
 	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/joaoprofile/gofi-cli/internal/docs"
 	"github.com/joaoprofile/gofi-cli/internal/githooks"
 	"github.com/joaoprofile/gofi-cli/internal/graph"
 	"github.com/joaoprofile/gofi-cli/internal/graph/workspace"
 	"github.com/joaoprofile/gofi-cli/internal/i18n"
 )
 
-// graphHookBodies is what the managed git hooks run. --update turns each of
+// gofiHookBodies is what the managed git hooks run.
+//
+// One block, every derived artifact — the code graph and the document index.
+// githooks.Install replaces the whole marked block, so two installers writing
+// their own body would silently delete each other's: installing the document
+// hooks would take the code graph out of the very hook that keeps it fresh.
+// Both 'gofi graph hooks' and 'gofi docs hooks' install this same block. --update turns each of
 // them into a hash comparison when nothing changed, and every failure is
 // swallowed on purpose: a commit, a checkout or a merge must not break because
 // a derived file could not be rebuilt.
@@ -30,10 +37,13 @@ import (
 // the code. The other two only rebuild: whatever they produce is a repair, and
 // staging it behind the developer's back during a merge would be worse than
 // leaving it for them to commit.
-func graphHookBodies() map[string]string {
-	const rebuild = `command -v gofi >/dev/null 2>&1 && gofi graph build --update --fast >/dev/null 2>&1 || true`
+func gofiHookBodies() map[string]string {
+	const rebuild = `command -v gofi >/dev/null 2>&1 || exit 0
+gofi graph build --update --fast >/dev/null 2>&1 || true
+gofi docs build --with-code >/dev/null 2>&1 || true`
+	stage := "\ngit add -- " + graph.OutDir + " " + docs.OutDir + " >/dev/null 2>&1 || true"
 	return map[string]string{
-		"pre-commit":    rebuild + "\ngit add -- " + graph.OutDir + " >/dev/null 2>&1 || true",
+		"pre-commit":    rebuild + stage,
 		"post-checkout": rebuild,
 		"post-merge":    rebuild,
 	}
@@ -132,7 +142,7 @@ func installGraphHooksQuietly(cfg *config.GofiConfig, root string) string {
 	if !graphEnabled(cfg) || !cfg.Graph.HooksOn() {
 		return ""
 	}
-	results, err := githooks.Install(root, graphHookBodies())
+	results, err := githooks.Install(root, gofiHookBodies())
 	if err != nil {
 		return i18n.T("graph.hooks.failed", err)
 	}
