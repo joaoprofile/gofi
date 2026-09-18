@@ -137,6 +137,32 @@ antes de ser dada como pronta.
    ausência de aresta nunca é prova e `--deep` não ajuda — ali a limitação se
    declara. Protocolo:
    `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+7. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
+   atualizando o que é derivado, na ordem: **memória do contexto** →
+   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
+   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
+   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
+   descobrir três fases depois.
+
+   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
+   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
+   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
+   build, ela não o encontra. E **índice desatualizado é pior que índice
+   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
+   confiança para o lugar errado.
+
+8. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ---
 
@@ -175,8 +201,8 @@ Antes de qualquer linha de código:
    **não** lê `//gofi:context` (o campo vem vazio — ali a ponte para a spec ainda
    é o nome da pasta) e o escopo só existe se o `path` da superfície existir no
    disco. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
-5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §relevantes (Operações §4, Modelo de Dados §3). Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
-6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — jornada do usuário e fluxos de UX devem ser PlantUML)
+5. Ler a spec — **fonte da verdade**. **Procurar documento é `gofi find`:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
+6. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui `diagram-conventions.md` — jornada do usuário e fluxos de UX devem ser PlantUML)
 7. Ler **knowledge per-agent UI** (todos):
    `.claude/knowledge/ui/*.md` — princípios universais de UX
 8. **Tokens (sempre):** ler `.claude/knowledge/ui/design-tokens.md` — estrutura de
@@ -459,7 +485,7 @@ Sequência:
 2. Atualize o arquivo **mais específico** primeiro:
    - Princípio de UX universal → `.claude/knowledge/ui/*.md` (genérico)
    - **Token de design** (cor/escala/raio/motion) → `.claude/knowledge/ui/design-tokens.md` (fonte única)
-   - Regra da superfície → `.claude/sdk/<surface>/knowledge/*.md` (genérico)
+   - Regra da superfície → os módulos de `sdk/<surface>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar (genérico)
    - Padrão de componente/pattern → `.claude/sdk/<surface>/<ds>/{components,patterns}/*.md` (genérico)
    - Boilerplate → `.claude/sdk/<surface>/boilerplates/*.md` (genérico)
 3. Generalize qualquer trecho domínio-específico antes de salvar em knowledge (placeholders, exemplos neutros)

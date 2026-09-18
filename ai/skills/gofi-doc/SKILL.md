@@ -64,7 +64,10 @@ antes de qualquer workflow.
    produto), procure **primeiro** em:
    - `prd/{contexto}/prd-{contexto}.md` — visão de produto, regras,
      motivação, glossário
-   - `specs/{contexto}/sdd-{contexto}.md` — spec técnica, ADRs, contrato
+   - a spec técnica, ADRs e contrato — ache pela busca, não pelo caminho adivinhado:
+     `gofi find "<endpoint ou entidade>"` devolve o documento, a §seção e a faixa de
+     linhas. Um contexto pode ter várias specs, e `sdd-{contexto}.md` nem sempre é a
+     que descreve o endpoint que você está documentando.
      formal
    - `.claude/memory/contexts/{contexto}.md` — handoffs entre fases
    - `.claude/memory/project.md` — visão global do projeto
@@ -144,7 +147,7 @@ ordem:**
    leitura do handler — assinatura de rota, status code e tag de struct só o
    arquivo tem. **Nunca** abra `gofi_graph.json`. Protocolo:
    `.claude/knowledge/shared/graph-retrieval-protocol.md`.
-5. **`.claude/knowledge/shared/*.md`** e **`.claude/sdk/{lang}/knowledge/*.md`**
+5. **`.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede)** e **os módulos de `sdk/{lang}/knowledge/` que o `.claude/knowledge/INDEX.md` indicar**
    — **convenções reais do projeto**: naming de campo, casing de enum,
    envelope de paginação, formato de código de erro, shape do filtro
    dinâmico, formato de datas. **Tire as convenções daqui — não hardcode

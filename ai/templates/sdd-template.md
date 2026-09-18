@@ -1,14 +1,26 @@
 ---
 tipo: spec
+formato: 2                        # versão do formato do corpus — não invente outro valor
 contexto: {contexto}
 submodulo: {sub}                  # ou n/a se for a spec única do contexto (sdd-{contexto}.md)
 versao: "1.0"
 status: aprovado                  # ou proposto | em_revisao se ainda não implementado
 prd: prd/{contexto}/prd-{...}.md  # ou n/a
-keywords: [{8-14 termos kebab-case de busca do domínio}]
+entidades: [{tabelas do schema que esta spec DEFINE ou usa}]
+operacoes: [{processos do léxico — .claude/lexicon/operacoes.md}]
+marketplaces: [{canais citados, se houver}]
+keywords: [{até 12 termos que ainda não couberam nas facetas acima}]
 atualizado: {YYYY-MM-DD}
 ---
 # SDD — {contexto}/{submodulo}
+
+> **As facetas são vocabulário controlado, não tags livres.** `entidades` vem do
+> schema, `operacoes` e `marketplaces` do `.claude/lexicon/`. Termo novo entra no
+> léxico **antes** de entrar aqui — é o que impede o índice de voltar a ser uma
+> nuvem de tags onde cada termo aparece uma vez e não discrimina nada.
+> `gofi docs validate` reprova termo fora do léxico.
+>
+> **`keywords` é o resto**, com teto de 12: o que não coube nas facetas.
 
 > **Escopo:** {1–2 frases do que a spec cobre — sem versão/autor/data (isso vive no frontmatter e no git)}
 
