@@ -3,11 +3,14 @@
 const vscode = require('vscode');
 const { ChatManager, VIEW_ID } = require('./src/chatManager.js');
 const { resolveProvider } = require('./src/providers/index.js');
-const { readGofiProject } = require('./src/gofiConfig.js');
+const { readGofiProject, findProjectRoot } = require('./src/gofiConfig.js');
+const { hasGraph } = require('./src/docGraph.js');
+const { GraphPanel } = require('./src/graphView.js');
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
 	const chats = new ChatManager(context);
+	const graph = new GraphPanel(context);
 
 	context.subscriptions.push(
 		// `retainContextWhenHidden` keeps the transcript alive when the user
@@ -34,8 +37,25 @@ function activate(context) {
 		vscode.commands.registerCommand('gofi-ai.stop', () => chats.stop()),
 		vscode.commands.registerCommand('gofi-ai.openTerminal', () => openEngineTerminal()),
 		vscode.commands.registerCommand('gofi-ai.doctor', () => runDoctor()),
+		vscode.commands.registerCommand('gofi-ai.graph', (name) => graph.open(name)),
+		vscode.commands.registerCommand('gofi-ai.docsBuild', () => graph.build()),
 		{ dispose: () => chats.dispose() },
+		{ dispose: () => graph.dispose() },
 	);
+
+	// A project that already has a graph opens showing it. The panel is a
+	// reading surface, not a tool to go fetch — and the one thing that kept it
+	// from being used was having to know it existed. Off by setting for anyone
+	// who disagrees.
+	if (vscode.workspace.getConfiguration('gofiAI').get('graph.openOnStartup') !== false) {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		if (folder) {
+			const root = findProjectRoot(folder.uri.fsPath);
+			if (root && hasGraph(root)) {
+				graph.open();
+			}
+		}
+	}
 }
 
 /**
