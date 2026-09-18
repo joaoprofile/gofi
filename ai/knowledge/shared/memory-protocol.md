@@ -30,11 +30,13 @@ markdown. **Toda fase atualiza o frontmatter** (`status`, `versao_*`,
 contexto: {contexto}
 servicos: [{servico}, ...]        # binários/pacotes que hospedam o contexto
 status: prd | spec | em_implementacao | implementado | aprovado | reprovado
+versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
 versao_prd: "{X.Y}"               # ou n/a
 versao_spec: "{X.Y}"              # ou n/a (contexto sem spec / eng-reverse)
 prd: prd/{contexto}/prd-{contexto}.md      # ou n/a
 spec: specs/{contexto}/sdd-{contexto}.md   # ou n/a
 diretorio: services/domain/{contexto}/
+keywords: [{8-14 termos kebab-case de busca — sinal de descoberta RAG}]
 atualizado: {YYYY-MM-DD}
 ---
 
@@ -54,12 +56,78 @@ Padrões: {CQRS | Saga | Strategy | Factory | idempotência | nenhum}
 Variáveis de ambiente adicionais: {lista ou "padrão"}
 Integrações externas: {lista ou "nenhuma"}
 
-## Histórico de agentes  (uma linha por evento, cronológico)
-- gofi-pd:   {data} — prd criado em {prd-path}
-- gofi-spec: {data} — spec v{X.Y} criada em {spec-path}
-- gofi-eng:  {data} — implementação concluída ({resumo})
-- gofi-qa:   {data} — auditoria concluída ({score})
+## Histórico de versões  (uma linha por versão do contexto, a partir da v1)
+| Versão | Data | Mudança |
+|--------|------|---------|
+| v1.0 | {data} | Baseline consolidada — funcionalidade em produção. |
 ```
+
+> **Não** registre passo-a-passo de fase (`## gofi-eng: {data} — …`). A cada
+> mudança, **reescreva o Estado atual** e adicione **uma linha** ao Histórico de
+> versões (ver "Modelo de memória — baseline consolidada" abaixo). O detalhe de
+> proveniência mora no git (specs/PRDs, ADRs, commits), não na memória.
+
+## Modelo de memória — baseline consolidada + versão-forward (RAG)
+
+> **Doutrina (a partir da v1).** A memória de um contexto **não** é um jornal
+> cronológico de como se chegou ao estado atual. É a **verdade consolidada de
+> hoje** (o as-built em produção) + um **changelog de versões** enxuto. Nada de
+> `## gofi-eng: {data} — fix X`, nada de "melhoria Y", nada de "supersede a
+> decisão da manhã". O **porquê** histórico vive no git (specs/PRDs versionados,
+> ADRs, commits) — não na memória de trabalho dos agents, que paga token a cada
+> leitura.
+
+**Anatomia da cabeça `contexts/{contexto}.md`:**
+
+```markdown
+---
+contexto: {contexto}
+servicos: [...]
+status: {prd|spec|em_implementacao|implementado|aprovado|reprovado}
+versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
+versao_prd: "{X.Y}" | n/a         # ponteiro p/ o doc PRD (versão própria dele)
+versao_spec: "{X.Y}" | n/a        # ponteiro p/ o doc SDD (versão própria dele)
+prd: {path} | n/a
+spec: {path} | n/a
+diretorio: {path}
+keywords: [{8-14 termos kebab-case de busca — sinal de descoberta RAG}]
+atualizado: {YYYY-MM-DD}
+---
+# Contexto: {contexto}
+
+## Estado atual
+{A VERDADE DE HOJE, consolidada e evergreen — arquitetura vigente, modelo de
+dados, invariantes, comportamento, acoplamentos cross-context com ponteiros
+[[nome]], e só as pendências GENUINAMENTE abertas. SEM datas de proveniência
+("nos fixes de jun/18"), SEM narrativa de evolução, SEM "1ª geração/superado".
+É **reescrito** quando o contexto muda — nunca apendado. Denso, ~50–120 linhas.}
+
+## Histórico de versões
+| Versão | Data | Mudança |
+|--------|------|---------|
+| v1.0 | {data} | Baseline consolidada — funcionalidade em produção. |
+```
+
+> **A memória do contexto tem regra própria de versão.** Ela não é contrato com
+> consumidor: é o rastreador de estado do contexto, e o `versao` dela acompanha a
+> evolução do contexto (fase concluída, spec criada, código implementado). Os
+> **documentos** — PRD e spec — seguem `document-versioning.md`, onde a versão
+> conta estados de produção e não edições. `versao_prd`/`versao_spec` no
+> frontmatter são **ponteiros** para a versão própria de cada documento.
+
+**Regra de escrita (a partir da v1) — mudança nova no contexto:**
+1. **Reescreva o `## Estado atual`** refletindo a nova verdade (substitui o que
+   mudou; não vira changelog nem cresce sem limite).
+2. **Adicione uma linha** ao `## Histórico de versões` (bump `versao`: 1.0 → 1.1
+   p/ melhoria, → 2.0 p/ mudança estrutural). Uma linha por versão, curta.
+3. Atualize o **frontmatter** (`versao`, `status`, `versao_*`, `atualizado`).
+
+**Transbordo para chunks (só quando o changelog crescer — ≳ 400 linhas na cabeça):**
+o `## Histórico de versões` antigo migra para `contexts/{contexto}/history.md`
+(sub-pasta; **não** varrida pelo `/gofi-status` — glob `*.md` não-recursivo — e
+**sem** frontmatter), deixando na cabeça só as versões recentes + um ponteiro.
+O `## Estado atual` **nunca** transborda: é sempre a cabeça. A subpasta preserva
+o invariante "1 dono por contexto = zero conflito de git".
 
 **Valores válidos de `status`** (refletem a fase mais recente concluída):
 
@@ -111,7 +179,11 @@ compartilhado e não há conflito de git entre devs em contextos diferentes.
 (`status`, `versao_*`, `atualizado`) **e acrescentar a entrada no histórico do
 mesmo arquivo.** Nunca registrar estado de contexto em `memory/project.md`.
 
-**Antes de agir**, ler `memory/project.md` (global) + o `memory/contexts/{contexto}.md`
-do contexto-alvo. Para o panorama geral, rodar `/gofi-status`.
+**Antes de agir**, ler `memory/project.md` (global) + a **cabeça** de
+`memory/contexts/{contexto}.md` do contexto-alvo (frontmatter + Estado atual +
+Histórico de versões). O Estado atual é a verdade consolidada — normalmente
+basta. Só abra `contexts/{contexto}/history.md` (se existir) quando precisar de
+uma versão antiga que já transbordou da cabeça. Para o panorama geral, rodar
+`/gofi-status`.
 
 A memória é o canal de handoff entre agents. Falha em atualizar quebra a continuidade.

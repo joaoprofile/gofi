@@ -45,6 +45,7 @@ conteúdo de cada skill — enunciada **uma vez aqui**; as "Leis" no topo de cad
 | `/gofi-ops` | Platform & Delivery — DevOps especialista (Terraform, OCI, Go build, CI/CD Azure DevOps/GitHub Actions); provisiona IaC + pipelines a partir da spec de infra |
 | `/gofi-qa` | Quality Auditor — audita implementação contra spec e padrões |
 | `/gofi-doc` | Documentation Generator (Frontend & QA) — gera doc de contrato a partir de handlers Go |
+| `/gofi-migrate` | Corpus Migration — traz specs, PRDs e memória de um formato antigo para o atual (facetas, índice em dois níveis, grafo); orquestra `gofi docs migrate` |
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
 | `/gofi-full` | Full-Cycle Orchestrator — encadeia `gofi-pd → gofi-spec → gofi-eng → gofi-qa` em fluxo contínuo, volta à fase anterior quando reprova e segue até o QA aprovar sem ressalvas |
 
@@ -65,8 +66,9 @@ vale neste projeto — nunca entra em skill).
 | Skills (slash) | `.claude/skills/<name>/SKILL.md` — pasta por skill, com `name` e `description` no frontmatter; é o único layout que o Claude Code descobre | Portável |
 | Documentação do SDK por linguagem | `.claude/sdk/<lang>/sdk-docs/*.md` | Portável |
 | Boilerplates por camada | `.claude/sdk/<lang>/boilerplates/*.md` | Portável |
-| Knowledge específico da linguagem | `.claude/sdk/<lang>/knowledge/*.md` | Portável |
-| Knowledge cross-agent (universal) | `.claude/knowledge/shared/*.md` | Portável |
+| Knowledge específico da linguagem | `.claude/sdk/<lang>/knowledge/` — **carregue pelo `knowledge/INDEX.md`**, nunca por glob | Portável |
+| **Manifesto do conhecimento portável (carregue por aqui)** | `.claude/knowledge/INDEX.md` — núcleo ⬤ + sob demanda. Derivado: `gofi docs build` | Portável (derivado) |
+| Knowledge cross-agent (universal) | `.claude/knowledge/shared/` — idem: pelo `INDEX.md` | Portável |
 | Knowledge per-agent (`gofi train`) | `.claude/knowledge/{agent}/*.md` (criado sob demanda; hoje `eng/`, `ui/`) | Portável |
 | Conhecimento institucional (negócio específico do produto/empresa) | `.claude/institutional/{project.name}/` — RAG: `INDEX.md` (sempre) + chunks sob demanda. **Espelho pull-only** do repo `sources.institutional` quando configurado (atualizado por `gofi institutional update`, que **substitui a pasta por completo**); **sem repo**, mantido à mão no git do projeto | Específico |
 | Templates SDD/PRD | `.claude/templates/` (`sdd-template.md`, `prd-template.md`) | Portável |
@@ -76,7 +78,10 @@ vale neste projeto — nunca entra em skill).
 | Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |
 | Specs do projeto | `specs/{contexto}/sdd-{contexto}.md` | Específico |
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
-| Índice de retrieval de specs/PRDs (derivado do frontmatter) | `specs/INDEX.md`, `prd/INDEX.md` (regen: `.claude/scripts/gen-index.sh`) | Específico |
+| Índice de retrieval de specs/PRDs (2 níveis) | `specs/INDEX.md` (roteador de contextos) + `specs/{contexto}/INDEX.md` (shard); idem `prd/`. Derivado: `gofi docs build` | Específico (derivado) |
+| **Busca e navegação no corpus** | `gofi find` — pergunta e devolve doc/§/linhas; `--entity`, `--context`, `--links`, `--orphans`, `--hubs` | Específico (derivado) |
+| Grafo de documentos | `.gofi/docs/graph.json` — `declara`/`cita`/`wikilink`/`toca`/`pertence`/`implementa`. Derivado: `gofi docs build` | Específico (derivado) |
+| Léxico controlado das facetas | `.claude/lexicon/*.md` — `entidades` (do schema), `operacoes`, `marketplaces`, `sinonimos` (ponte entre a língua da pergunta e a do identificador) | Específico |
 | Protocolo de retrieval (ler os corpora gastando poucos tokens) | `.claude/knowledge/shared/rag-retrieval-protocol.md` | Portável |
 | Grafo de código (mapa derivado: quem chama quem, a que contexto pertence) | `.gofi/graph/` — **um escopo por árvore**: `gofi_graph_index.json` na raiz lista todos (backend em `.`, cada superfície de UI em `{nome}/`, SDK em `sdk/`), e cada escopo tem o seu `gofi_graph_report.md`. Consulta por `gofi graph explain`. Gerado por `gofi graph build`, **nunca** editado à mão | Específico (derivado) |
 | Protocolo de consulta ao grafo | `.claude/knowledge/shared/graph-retrieval-protocol.md` | Portável |
@@ -90,17 +95,30 @@ e arquivos variam por agent); aqui fica o denominador comum:
 2. Ler `.claude/CLAUDE.md` (este arquivo) — mapa de paths físicos + doutrina das skills.
 3. Ler `.claude/memory/project.md` para visão global (serviços + convenções). Para o índice de contextos existentes, rodar `/gofi-status`.
 4. Ler `.claude/memory/contexts/{contexto}.md` se já houver — frontmatter (estado) + handoff de fases anteriores.
-5. Ler **`.claude/knowledge/shared/*.md`** — princípios universais cross-agent (DDD, protocolo de memória, **protocolo de retrieval RAG**, **protocolo de consulta ao grafo**, protocolo de aprendizado).
+5. Ler **`.claude/knowledge/INDEX.md`** — manifesto das camadas portáveis. Carregar o **núcleo ⬤** (curto, universal) e **só os módulos que a tarefa pede**. **Nunca** carregar `knowledge/shared/*.md` nem `sdk/<lang>/knowledge/*.md` por glob: é o maior custo fixo do harness, maior que a spec do contexto.
 6. Ler **`.claude/knowledge/{agent}/*.md`** — knowledge user-treinado para esse agent (criado sob demanda por `gofi train`).
 7. **Contexto institucional (RAG)** — quando precisar de negócio além da spec, ler `.claude/institutional/{project.name}/INDEX.md` e **só os chunks relevantes**; nunca a pasta inteira.
-8. Para a linguagem-alvo, ler conteúdo language-specific:
-   - `.claude/sdk/<lang>/knowledge/*.md` — regras, naming, estrutura, layers, armadilhas
-   - `.claude/sdk/<lang>/sdk-docs/*.md` — API do SDK (apenas módulos relevantes)
-   - `.claude/sdk/<lang>/boilerplates/*.md` — esqueletos antes de implementar (gofi-eng/qa)
+8. Para a linguagem-alvo, carregar **pelo mesmo `.claude/knowledge/INDEX.md`** (ele
+   já cobre `sdk/<lang>/`), nunca por glob:
+   - `sdk/<lang>/knowledge/` — regras, naming, estrutura, layers, armadilhas
+   - `sdk/<lang>/sdk-docs/` — API do SDK (só os módulos relevantes)
+   - `sdk/<lang>/boilerplates/` — esqueletos, antes de implementar (gofi-eng/qa)
 
+> **Procurar documento é `gofi find`, não carregar índice.** O corpus tem camada
+> de consulta, simétrica ao `gofi graph explain` do código: pergunte, não carregue.
+> `gofi find "<pergunta>"` devolve doc, §seção e **faixa de linhas** — leia com
+> `Read(offset, limit)`. Vazio quase sempre é vocabulário, não documento faltando:
+> tente o termo técnico e **registre o par que faltou** em
+> `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um
+> contexto, não para **achar** um assunto; `grep -r` é fallback declarado.
+>
+> `gofi find --entity <tabela>` responde *quem documenta* e *quem implementa* de
+> uma vez — a tabela é o único símbolo que existe nos dois mundos.
+> `gofi find --links <doc>` é a análise de impacto barata **antes** de editar.
+>
 > **Specs/PRDs/contextos são RAG — gaste poucos tokens.** Regras de **leitura e criação** em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
-> - **Ler:** nunca leia um doc inteiro por reflexo. Descubra por `keywords` em `specs/INDEX.md`/`prd/INDEX.md` (ou `/gofi-status` p/ memória) → leia só o **frontmatter** do alvo → `grep -n '^## '` + `Read` apenas da §relevante.
-> - **Criar/editar:** emita **frontmatter + `keywords`** (base nos templates `.claude/templates/`), **zero proveniência** (sem `**Autor/Versão/Data:**`, sem `## Rastreabilidade`, sem nome de agent/pessoa, sem journal), Histórico de **1 linha**, e **regenere** o INDEX (`.claude/scripts/gen-index.sh`). Todo doc tem `versao: "1.0"` + `keywords`.
+> - **Ler:** nunca leia um doc inteiro por reflexo. `gofi find "<pergunta>"` devolve doc, §seção e faixa de linhas — leia com `Read(offset, limit)`.
+> - **Criar/editar:** base nos templates `.claude/templates/` — `formato:` + as facetas (`entidades` do schema, `operacoes`/`marketplaces` do `.claude/lexicon/`) + `keywords` com o que sobrou (teto 12). **Zero proveniência** (sem `**Autor/Versão/Data:**`, sem `## Rastreabilidade`, sem nome de agent/pessoa, sem journal), Histórico de **1 linha**. Ao fechar: `gofi docs build` e `gofi docs validate` — termo de faceta fora do léxico reprova, e é isso que impede o vocabulário de voltar a ser nuvem de tags.
 
 > **O código também tem índice — o grafo. Procurar código é `gofi graph`, não `grep -r`.**
 > Suba a escada de 3 degraus: `gofi_graph_index.json` (que escopos existem, em

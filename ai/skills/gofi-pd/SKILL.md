@@ -91,6 +91,24 @@ registrá-lo como nota para o `/gofi-spec` consumir depois.
    clientes é a pasta institucional resolvida por `project.name`.
 
 ---
+5. **Fechar é reconstruir o índice (LEI absoluta).** Ao gravar o PRD, rode
+   **`gofi docs build`** e **`gofi docs validate`**. Os hooks de git só fazem
+   isso no commit, e entre o seu fim e o commit está o `/gofi-spec`, que vai
+   procurar o PRD com `gofi find`. **Um PRD que não entrou no índice é um PRD
+   que a próxima fase não encontra.**
+
+6. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ## 2. Entradas e Saídas
 
@@ -116,7 +134,7 @@ Antes de iniciar a descoberta, **sempre**:
    (índice de contextos existentes: `/gofi-status`).
 4. Leia `.claude/memory/contexts/{contexto}.md` se existir — frontmatter +
    iteração anterior.
-5. Leia **knowledge cross-agent**: `.claude/knowledge/shared/*.md`
+5. Leia **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede)
    (especialmente `ddd-principles.md` quando o discovery é de software).
 6. Leia **knowledge per-agent**: `.claude/knowledge/pd/*.md` (user-treinado para
    discovery).
@@ -131,7 +149,8 @@ Antes de iniciar a descoberta, **sempre**:
      metodologia genérica deste arquivo) e **ofereça bootstrapar** a pasta
      institucional ao final (criar `INDEX.md` + chunks), registrando o que
      descobriu em `.claude/institutional/{project.name}/`.
-8. **Leia `.claude/templates/prd-template.md`** — layout obrigatório do PRD (já no formato RAG: frontmatter + `keywords`, **sem** `**Autor/Data:**`/Rastreabilidade/Histórico). Ao gerar o PRD, siga a seção *Escrita* de `.claude/knowledge/shared/rag-retrieval-protocol.md`: frontmatter + `keywords` (8–14 termos de busca), **zero proveniência/rastro de agent/nome de pessoa**, e **regenere** `prd/INDEX.md` (`bash .claude/scripts/gen-index.sh prd`) ao criar/renomear. Para descobrir PRDs existentes, consulte `prd/INDEX.md` — não varra a pasta.
+8. **Leia `.claude/templates/prd-template.md`** — layout obrigatório do PRD (já no formato RAG: frontmatter + `keywords`, **sem** `**Autor/Data:**`/Rastreabilidade/Histórico). Ao gerar o PRD, siga a seção *Escrita* de `.claude/knowledge/shared/rag-retrieval-protocol.md`: frontmatter + `keywords` (8–14 termos de busca), **zero proveniência/rastro de agent/nome de pessoa**, e **regenere** `prd/INDEX.md` (`gofi docs build`) ao criar/renomear. Para descobrir PRDs existentes, consulte `prd/INDEX.md` — não varra a pasta.
+9. **Ao gravar o PRD, rode `gofi docs build` (reconstrói índice, grafo de documentos e os `INDEX.md`) e `gofi docs validate` (faceta fora do léxico reprova). Artefato derivado que não se reconstrói envelhece, e **índice desatualizado é pior que índice nenhum**: sem índice o agente sabe que não sabe, com um velho ele aponta com confiança para o lugar errado. Um PRD que não entrou no índice é um PRD que a próxima skill não encontra.
 9. Verifique se o diretório de PRDs existe (ex.: `prd/`) — crie se necessário.
 10. Se já existir PRD para o contexto, confirme se é refinamento ou novo PRD.
 
@@ -417,16 +436,23 @@ Schema/tipo concreto → spec.
 cases de uso, mudança de contrato com fonte externa). Risco puramente técnico →
 spec.
 
-### 9.1.2 Versionamento — só quando tem consumidor downstream
+### 9.1.2 Versionamento — a versão conta estados de produção
 
-PRD em **draft puro** (sem spec gerada) é documento vivo: edita livre, sem bump de
-versão, sem entrada no histórico. Versão/histórico só existem para rastrear
-mudanças que afetam consumidores reais.
+Política completa em `.claude/knowledge/shared/document-versioning.md` — **leia
+antes de tocar o frontmatter**. O essencial:
 
-- Spec gerada existe → bump da versão + entrada curta no histórico + sinalizar
-  revisão da spec.
-- Código já rodando (`/gofi-eng` executado) → bump obrigatório + análise de impacto.
-- Ajuste em draft (nenhuma spec gerada) → atualizar só a seção afetada.
+- Todo PRD **nasce em `1.0` e permanece em `1.0`** enquanto a solução descrita
+  não estiver em produção. Refinar, reescrever, inverter escopo, corrigir
+  premissa: nada disso bumpa, e nada disso entra no histórico.
+- A versão sobe **uma vez por estado de produção**: a solução já está em
+  produção **e** o PRD passa a descrever um comportamento diferente **que irá**
+  para produção.
+- **Teste:** *esta edição vai fazer alguém mudar código que já está rodando em
+  produção?* Não → não bumpa.
+- Reformulação profunda vira **PRD novo** (sufixo `-v2`), que nasce em 1.0. O
+  antigo não bumpa por ganhar nota de superseded.
+- `atualizado` muda **sempre**; `status` diz a fase. São eles que respondem
+  "está fresco?" e "onde isto está?" — não a versão.
 
 ### 9.2 Seções do template
 

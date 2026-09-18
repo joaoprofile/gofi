@@ -59,6 +59,32 @@ responsável pela causa-raiz e continua.
    fix, passa com ele). Entrega sem esse teste **não** avança para o `gofi-qa` —
    volta ao `gofi-eng` para completá-la. É responsabilidade da fase de
    implementação, não do QA.
+7. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
+   atualizando o que é derivado, na ordem: **memória do contexto** →
+   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
+   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
+   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
+   descobrir três fases depois.
+
+   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
+   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
+   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
+   build, ela não o encontra. E **índice desatualizado é pior que índice
+   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
+   confiança para o lugar errado.
+
+8. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ---
 
@@ -127,6 +153,13 @@ loop:
 | `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes), **todo bug fix/melhoria vem com teste de regressão** e o **grafo foi reconstruído** (`gofi graph build --update`); `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
 | `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** | qualquer blocker/major, **⚠️ com ressalvas**, ou ❌ reprovado |
 
+> **Índice de documentos entre fases.** Cada fase escreve documento que a
+> seguinte precisa achar: o PRD do `gofi-pd`, a spec do `gofi-spec`. Como este
+> loop não commita entre fases, o hook não roda — sem `gofi docs build` ao fim de
+> cada fase, o `gofi find` da fase seguinte não enxerga o que acabou de ser
+> escrito. Rode também `gofi docs validate`: faceta fora do léxico é barata de
+> corrigir na hora e cara de descobrir três fases depois.
+>
 > **Grafo entre fases.** O hook de pre-commit só reconstrói o grafo **no
 > commit**, e este loop não commita entre fases — sem `gofi graph build --update`
 > ao fim do `gofi-eng`, o `gofi-qa` auditaria um mapa sem a implementação recém

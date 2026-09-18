@@ -6,6 +6,47 @@
 > Objetivo único: **descobrir o mínimo, ler o mínimo, escrever o mínimo** — o
 > corpus cresce sem que o custo de token por leitura cresça junto.
 
+
+## Procurar documento é `gofi find`, não carregar índice
+
+O corpus tem uma camada de consulta, simétrica ao `gofi graph explain` do
+código. **Pergunte; não carregue.**
+
+```bash
+gofi find "ordem de delete chave estrangeira"
+gofi find --entity core_company     # quem documenta + quem implementa
+gofi find --links sdd-churn.md      # backlinks e saídas
+gofi find --context pricing         # a árvore do contexto
+```
+
+Devolve candidatos já com **contexto, §seção e faixa de linhas** — leia direto
+com `Read(offset, limit)`, não o arquivo inteiro.
+
+**A escada, em ordem:**
+
+1. `gofi find` — sempre o primeiro movimento.
+2. Vazio? Reformule com o **termo técnico** (o corpus costuma nomear em inglês:
+   `retry`, `logout`, `buybox`, `purge`). Se o par que faltou é entre a língua da
+   pergunta e a do identificador, **registre-o** em
+   `.claude/lexicon/sinonimos.md` — é assim que a busca melhora com uso em vez
+   de apodrecer.
+3. Só então os `INDEX.md`: o roteador de contextos e o shard. Use quando quer
+   **navegar** um contexto, não quando quer **achar** um assunto.
+4. `grep -r` é fallback declarado, como no grafo de código.
+
+**O corpus é um grafo, não uma pasta.** A entidade é a dobradiça: a tabela do
+schema é o único símbolo que existe nos documentos **e** no código, então *"quem
+documenta isto?"* e *"quem implementa isto?"* são a mesma pergunta. Um pacote
+marcado `//gofi:context {contexto}` fecha o mesmo elo pelo lado do código, e é o
+único caminho para um contexto que não possui tabela própria.
+
+Antes de editar um documento, `gofi find --links <doc>` mostra quem depende
+dele — é a análise de impacto barata.
+
+Os artefatos são **derivados**: `gofi docs build` após mexer em frontmatter, e
+`gofi docs validate` antes de commitar. `gofi docs eval` mede se uma mudança no
+corpus melhorou ou piorou a busca — sem isso é mudança torcendo para dar certo.
+
 ## Princípio
 
 Cada corpus é um **RAG**: um `INDEX.md` (manifesto sempre carregável, derivado
@@ -49,12 +90,18 @@ Ao **criar ou editar** um doc de qualquer corpus:
   (`.claude/templates/`). `keywords` = **8–14 termos kebab-case de busca do
   domínio** — são eles que o INDEX expõe e o próximo leitor casa. Escolha
   termos que alguém buscaria, não sinônimos genéricos.
-- **Todo doc tem `versao: "1.0"` + `status` + `keywords`.**
+- **Todo doc nasce `versao: "1.0"` e fica em `1.0`** enquanto a solução descrita
+  não estiver em produção. A versão conta **estados de produção**, não edições:
+  refinar, reescrever, trocar decisão, corrigir erro, pôr nota de superseded —
+  nada disso bumpa. `atualizado` muda sempre; `status` diz a fase. Política em
+  `document-versioning.md`.
 - **Zero proveniência.** **Sem** `**Autor:**`/`**Data:**`/`**Versão:**` no
   corpo, **sem** `## Rastreabilidade`, **sem** nome de agent/pessoa, **sem**
   journal datado. Quem/quando vive no **git**; a versão vive no **frontmatter**.
-- **Histórico de 1 linha.** Uma linha por versão do doc (baseline consolidada),
-  não um changelog multi-versão.
+- **Histórico de 1 linha.** Uma linha por **versão** do doc (baseline
+  consolidada), não um changelog multi-versão. Edição que não bumpa **não**
+  acrescenta linha — doc em `1.0` tem uma linha só, por mais que tenha sido
+  reescrito no caminho.
 - **Um fato = um lugar.** Não duplique entre docs/chunks; cruze com link
   relativo.
 - **Regenere o INDEX** ao criar, renomear ou mudar frontmatter:

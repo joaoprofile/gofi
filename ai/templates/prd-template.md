@@ -1,14 +1,26 @@
 ---
 tipo: prd
+formato: 2                          # versão do formato do corpus — não invente outro valor
 contexto: {contexto}
 submodulo: {sub}                    # ou n/a
 versao: "1.0"
 status: aprovado                    # ou draft | discovery se ainda não implementado
 spec: specs/{contexto}/sdd-{...}.md # ou n/a
-keywords: [{8-14 termos kebab-case de busca do domínio}]
+entidades: [{tabelas do schema que este PRD toca, se já houver}]
+operacoes: [{processos do léxico — .claude/lexicon/operacoes.md}]
+marketplaces: [{canais citados, se houver}]
+keywords: [{até 12 termos que ainda não couberam nas facetas acima}]
 atualizado: {YYYY-MM-DD}
 ---
 # PRD — {contexto}/{submodulo} — {Nome do Requisito}
+
+> **As facetas são vocabulário controlado, não tags livres.** `entidades` vem do
+> schema, `operacoes` e `marketplaces` do `.claude/lexicon/`. Termo novo entra no
+> léxico **antes** de entrar aqui — é o que impede o índice de voltar a ser uma
+> nuvem de tags onde cada termo aparece uma vez e não discrimina nada.
+> `gofi docs validate` reprova termo fora do léxico.
+>
+> **`keywords` é o resto**, com teto de 12: o que não coube nas facetas.
 
 ## 1. Informações Gerais
 

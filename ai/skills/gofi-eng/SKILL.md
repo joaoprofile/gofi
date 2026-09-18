@@ -63,6 +63,32 @@ codificar.
    caso** — sem extractor para a linguagem, ou alvo comprovadamente textual — e
    **sempre declarado** ("caí no grep porque X"). Protocolo:
    `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+7. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
+   atualizando o que é derivado, na ordem: **memória do contexto** →
+   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
+   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
+   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
+   descobrir três fases depois.
+
+   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
+   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
+   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
+   build, ela não o encontra. E **índice desatualizado é pior que índice
+   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
+   confiança para o lugar errado.
+
+8. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ---
 
@@ -74,13 +100,13 @@ Antes de qualquer linha de código:
 2. Ler `.claude/CLAUDE.md` — mapa de paths físicos do projeto
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-spec
-5. Ler a spec — **fonte da verdade**. Via RAG (poucos tokens): `specs/INDEX.md` (descoberta por keywords) → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` só das §seções relevantes (Modelo de Dados §3, Operações §4, Regras §5, ADRs §9). Nunca leia a spec inteira por reflexo. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
+5. Ler a spec — **fonte da verdade**. **Procurar documento é `gofi find`, não carregar índice:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Para o contexto inteiro de uma vez, `gofi find --context {contexto}` mostra spec, PRD, memória, tabelas, pacotes de código e as lacunas da corrente. Nunca leia a spec inteira por reflexo. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
 5a. **Procurar código é `gofi graph`, não `grep -r`.** Se `.gofi/graph/` existir: `gofi_graph_index.json` (que escopos existem, **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/` — e **em que modo** cada um foi varrido) → o `gofi_graph_report.md` **daquele escopo** (pacotes, pontos centrais, conexões inesperadas) → `gofi graph explain <símbolo>` só nos símbolos que a tarefa toca. Não sabe o nome exato? `gofi graph explain <termo> <termo>` (≥2 palavras) busca por nome parcial dentro do grafo — é isso que substitui o `grep` por símbolo. Superfície declarada no `.gofi.yaml` **não** usa `--lang`: já é escopo do índice principal. **Nunca** abra `gofi_graph.json`. `grep -r` é fallback **declarado**, e o gate dele **não** é "isto é símbolo?" — essa pergunta você responde de cabeça, sem consultar nada, e é por ela que o reflexo de varrer o repositório volta. O gate é "**eu já chamei o `explain`?**": uma chamada antes do primeiro `grep`, sempre, mesmo quando o alvo parece `const`/`var`/comentário/string (nesses, o movimento melhor costuma ser `explain` no **símbolo concreto que os referencia** — o DTO, o service, o tipo). Motivos legítimos de fallback: linguagem sem extractor, `explain` voltou vazio, ou alvo que de fato não é nó (string, chave de config, SQL). Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
-6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
+6. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui `diagram-conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
 7. Ler **knowledge per-agent**: `.claude/knowledge/eng/*.md` (user-treinado)
 8. Para `project.language` (a partir do `.gofi.yaml`):
    - Ler **regras absolutas** e **estrutura**: `.claude/sdk/<lang>/knowledge/{absolute-rules,structure,layers,naming}.md`
-   - Ler armadilhas relevantes: `.claude/sdk/<lang>/knowledge/*.md` (inclui
+   - Ler armadilhas relevantes: os módulos de `sdk/<lang>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar (inclui
      `lookup-endpoints.md` se o contexto declarar campos `search-multiple`
      no `{Ctx}QueryMapping` — define `SearchType` + endpoint `getStatus`;
      inclui `bridge-factory-adapter-pattern.md` se o contexto integra com
@@ -121,7 +147,7 @@ Antes de qualquer linha de código:
     - service/{contexto}_service_test.go com mock de repository handcraft
     - handler/{contexto}_handler_test.go com stub de service handcraft
 12. **Sincronizar `.env` na raiz do projeto** — adicionar variáveis ausentes com placeholders e avisar o dev nos "Próximos passos" (regra completa em `.claude/knowledge/eng/env-file-management.md`)
-13. Atualizar o grafo (`gofi graph build --update`), memória e spec (ver §"Atualização de memória ao concluir")
+13. Atualizar os grafos e os índices: `gofi graph build --update` (código) e `gofi docs build` (reconstrói índice, grafo de documentos e os `INDEX.md`) e `gofi docs validate` (faceta fora do léxico reprova). Artefato derivado que não se reconstrói envelhece, e **índice desatualizado é pior que índice nenhum**: sem índice o agente sabe que não sabe, com um velho ele aponta com confiança para o lugar errado. Depois memória e spec (ver §"Atualização de memória ao concluir")
 ```
 
 A ordem é guia, não rígida — ajuste se a spec exigir.
@@ -585,7 +611,11 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
   comentário: renomeie a variável, extraia uma função, mova a lógica.
   Quando comentar for inevitável: **uma linha**, lidera com WHY (constraint
   não-óbvio, workaround documentado, decisão de negócio que o código não
-  carrega, invariante de segurança). **Nunca** narre o WHAT (`// loads
+  carrega, invariante de segurança) — **sucinto, uma linha; duas é o teto**.
+  Comentário que vira parágrafo pertence à spec ou à memória, não ao código.
+  **Nunca** comente campo de struct (anotar atributo por atributo polui o tipo
+  e some com a forma dele — se um campo esconde constraint real, uma linha
+  acima do tipo nomeando esse campo). **Nunca** narre o WHAT (`// loads
   user`), nunca documente o óbvio (`// Pool struct represents a pool`),
   nunca deixe TODO sem ação concreta + condição clara
   (`// TODO(rbac-fino): trocar quando user roles forem fine-grained`),
@@ -792,7 +822,8 @@ Atualizar o frontmatter para refletir a implementação concluída (sem tocar `p
 
 ```yaml
 status: implementado      # em_implementacao enquanto não concluiu
-versao_spec: "{X.Y}"      # bump se a spec mudou na implementação
+versao_spec: "{X.Y}"      # ponteiro p/ a versão do doc; spec só bumpa quando muda
+                          # comportamento JÁ em produção (document-versioning.md)
 atualizado: {data}
 ```
 

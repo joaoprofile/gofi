@@ -80,6 +80,32 @@ workflows) — sempre finos, chamando scripts versionados em `ops/`.
    secret) → spec/memória/institucional. **Teste:** *serviria, sem mudar uma
    palavra, a outro projeto em outro cloud com outra ferramenta de IaC? → skill;
    só vale aqui? → spec/memória.* (detalhe no §"Protocolo de aprendizado contínuo".)
+5. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
+   atualizando o que é derivado, na ordem: **memória do contexto** →
+   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
+   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
+   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
+   descobrir três fases depois.
+
+   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
+   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
+   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
+   build, ela não o encontra. E **índice desatualizado é pior que índice
+   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
+   confiança para o lugar errado.
+
+6. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ---
 
@@ -104,20 +130,22 @@ Antes de qualquer recurso:
 3. Ler `.claude/memory/project.md` — **inventário de serviços/binários**
    (o que precisa ser empacotado e deployado) + convenções. Índice de
    contextos via `/gofi-status`.
-4. Ler a **spec de infra/plataforma** (`specs/{infra|platform}/sdd-*.md`)
+4. Ler a **spec de infra/plataforma**. Ache por busca, não por glob de caminho:
+   `gofi find "<tópico de infra>"` ou `gofi find --context infra` — o nome do
+   contexto de infra varia por projeto, e adivinhar o caminho falha em silêncio
    — **fonte da verdade da topologia**: recursos a provisionar, sizing,
    rede/sub-redes, ambientes (dev/staging/prod), política de secrets,
    domínios/DNS, estratégia de migração do que já existe. Se a spec **não
    existir**, **pare**: topologia é decisão de spec, não se infere. Ofereça
    rodar `/gofi-spec` para a infra (ou elicitar e escrever a spec primeiro).
-5. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui
+5. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui
    `diagram-conventions.md` — diagramas de arquitetura/topologia em
    ADR/README devem ser PlantUML).
 6. Ler **knowledge per-agent**: `.claude/knowledge/ops/*.md` (user-treinado,
    se existir).
 7. Para a stack do bloco `ops:` (`iac` + `cloud` + `target` + `cicd`), ler o
    conteúdo tool/cloud-specific **se existir**:
-   - `.claude/sdk/<iac>/knowledge/*.md` — regras, estrutura de módulos,
+   - os módulos de `sdk/<iac>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar — regras, estrutura de módulos,
      naming, state, armadilhas da ferramenta de IaC
    - `.claude/sdk/<iac>/boilerplates/*.md` — esqueletos de módulo/root/pipeline
    - Se o conteúdo não existir ainda, é **gap de curadoria**: gere com base
@@ -383,7 +411,7 @@ Sequência:
 1. Identifique o escopo (cross-AI? cross-cloud? tool-specific? esse agent?)
 2. Atualize o arquivo **mais específico** primeiro:
    - Princípio universal de IaC/delivery → `.claude/knowledge/ops/*.md` (genérico)
-   - Regra da ferramenta de IaC → `.claude/sdk/<iac>/knowledge/*.md` (genérico)
+   - Regra da ferramenta de IaC → os módulos de `sdk/<iac>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar (genérico)
    - Boilerplate de módulo/pipeline → `.claude/sdk/<iac>/boilerplates/*.md` (genérico)
 3. Generalize qualquer trecho cloud/domínio-específico antes de salvar
    (placeholders, exemplos neutros)

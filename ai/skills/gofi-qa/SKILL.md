@@ -61,6 +61,32 @@ específicas — **nunca reescreve código**.
    linguagem, ou alvo comprovadamente textual — e **o laudo declara** cada
    queda ("verificado por grep porque X"). Protocolo:
    `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+7. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
+   atualizando o que é derivado, na ordem: **memória do contexto** →
+   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
+   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
+   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
+   descobrir três fases depois.
+
+   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
+   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
+   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
+   build, ela não o encontra. E **índice desatualizado é pior que índice
+   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
+   confiança para o lugar errado.
+
+8. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ---
 
@@ -70,16 +96,18 @@ específicas — **nunca reescreve código**.
 2. Ler `.claude/CLAUDE.md` — mapa de paths físicos
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (índice de contextos: `/gofi-status`)
 4. Ler `.claude/memory/contexts/{contexto}.md` — frontmatter + handoff do gofi-eng (decisões, arquivos)
-5. Ler a spec — **fonte da verdade para conformidade**. Via RAG (poucos tokens): `specs/INDEX.md` → frontmatter de `specs/{contexto}/sdd-{contexto}.md` → `grep -n '^## '` + `Read` das §seções auditadas. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
-5a. **Auditar é consultar o grafo, não varrer o código com `grep`.** Rode `gofi graph build --update` **primeiro**: o hook de pre-commit só reconstrói o grafo no commit e, numa cadeia `eng → qa`, o commit ainda não aconteceu — sem isto você auditaria um mapa sem a implementação. Depois `gofi_graph_index.json` (que escopos existem e **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/`) → o `gofi_graph_report.md` **do escopo auditado** (as §"Ciclos de chamada" e §"Conexões inesperadas" são evidência direta de violação de camada) → `gofi graph explain <símbolo>` nos pontos auditados; quando não souber o nome exato, `gofi graph explain <termo> <termo>` busca por nome parcial dentro do grafo. **Nunca** abra `gofi_graph.json`. **O gate do `grep` não é "isto é símbolo?", é "eu já chamei o `explain`?"** — a pergunta de classificação você responde de cabeça, sem consultar nada, e é por ela que a auditoria volta a ser uma varredura de arquivos. Uma chamada de `explain` (pelo alvo, ou por dois termos quando não souber o nome) **antes** do primeiro `grep`, mesmo quando você tem certeza de que o alvo é `const`/`var`/comentário/string. Caiu no `grep`? **Declare no laudo** que caiu e por quê. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
+5. Ler a spec — **fonte da verdade para conformidade**. **Procurar documento é `gofi find`:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Antes de apontar divergência entre documentos, `gofi find --links <doc>` mostra quem depende do que você vai questionar. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
+5a. **Auditar a corrente do contexto.** `gofi find --context {contexto}` mostra spec, PRD, memória, tabelas, pacotes de código e as **lacunas** — PRD sem spec, spec que ninguém referencia, contexto sem pacote marcado `//gofi:context`. Lacuna é achado de auditoria, não ruído; um PRD em discovery legitimamente ainda não tem spec, então reporte com o julgamento, não como falha automática.
+
+5b. **Auditar é consultar o grafo, não varrer o código com `grep`.** Rode `gofi graph build --update` **primeiro**: o hook de pre-commit só reconstrói o grafo no commit e, numa cadeia `eng → qa`, o commit ainda não aconteceu — sem isto você auditaria um mapa sem a implementação. Depois `gofi_graph_index.json` (que escopos existem e **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/`) → o `gofi_graph_report.md` **do escopo auditado** (as §"Ciclos de chamada" e §"Conexões inesperadas" são evidência direta de violação de camada) → `gofi graph explain <símbolo>` nos pontos auditados; quando não souber o nome exato, `gofi graph explain <termo> <termo>` busca por nome parcial dentro do grafo. **Nunca** abra `gofi_graph.json`. **O gate do `grep` não é "isto é símbolo?", é "eu já chamei o `explain`?"** — a pergunta de classificação você responde de cabeça, sem consultar nada, e é por ela que a auditoria volta a ser uma varredura de arquivos. Uma chamada de `explain` (pelo alvo, ou por dois termos quando não souber o nome) **antes** do primeiro `grep`, mesmo quando você tem certeza de que o alvo é `const`/`var`/comentário/string. Caiu no `grep`? **Declare no laudo** que caiu e por quê. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
 
 5b. **Valide o modo do grafo antes de escrever "não há violação".** Todo item deste checklist que afirma **ausência** ("service NÃO importa X", "handler não acessa repository") é uma prova de negativa, e só o modo `deep` a sustenta: em `fast` a chamada ambígua não vira aresta. Leia o `mode` do escopo no `gofi_graph_index.json` (o `report.md` também o traz no cabeçalho e a contagem de ambíguas no §Resumo). Os hooks de git reconstroem **sempre em `fast`** e `gofi update` no modo do `.gofi.yaml` — **`fast` por padrão** —, então um grafo recém-reconstruído continua sendo `fast` na maioria dos projetos. Se vier `fast`: rode `gofi graph build --deep` antes de concluir, ou **registre no laudo** que a verificação foi sintática (e sugira `graph: deep: true` no `.gofi.yaml` se o projeto quiser exatidão nos builds deliberados). Numa superfície de UI o `deep` não existe — o extractor TS/JS é sintático e o escopo fica `fast` de todo jeito, então ali a limitação **sempre** se declara. Nunca apresente ausência de aresta em `fast` como prova. Gatilhos completos em *Quando rodar `--deep`* do protocolo do grafo.
-6. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (inclui `diagram-conventions.md` — auditar se diagramas da spec/laudo são PlantUML; Mermaid/ASCII/imagem é divergência; `application-vs-domain-service.md` — auditar separação de camadas: application não chama repository direto, service não importa bridge/factory/application, erros na camada correta, tests da application mockam service e não repository). Quando o contexto usa filtro dinâmico, ler também `.claude/sdk/<lang>/knowledge/lookup-endpoints.md` — shape v2 do `FieldMapping` (`SearchType: "embedded"` + `Content` vs `SearchType: "v1/<path>"`); rota dedicada `GET /{ctx}/status` foi descontinuada e em código novo é divergência
+6. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui `diagram-conventions.md` — auditar se diagramas da spec/laudo são PlantUML; Mermaid/ASCII/imagem é divergência; `application-vs-domain-service.md` — auditar separação de camadas: application não chama repository direto, service não importa bridge/factory/application, erros na camada correta, tests da application mockam service e não repository). Quando o contexto usa filtro dinâmico, ler também `.claude/sdk/<lang>/knowledge/lookup-endpoints.md` — shape v2 do `FieldMapping` (`SearchType: "embedded"` + `Content` vs `SearchType: "v1/<path>"`); rota dedicada `GET /{ctx}/status` foi descontinuada e em código novo é divergência
 7. Ler **knowledge per-agent**: `.claude/knowledge/qa/*.md` (user-treinado)
 8. Para `project.language`:
    - Ler **checklist completo**: `.claude/sdk/<lang>/knowledge/qa-checklist.md`
    - Ler **regras absolutas**: `.claude/sdk/<lang>/knowledge/absolute-rules.md`
-   - Ler `.claude/sdk/<lang>/knowledge/*.md` para padrões consolidados (cache, value-objects, repository-primitive-return, etc.)
+   - Ler os módulos de `sdk/<lang>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar para padrões consolidados (cache, value-objects, repository-primitive-return, etc.)
    - Ler módulos do SDK em `.claude/sdk/<lang>/sdk-docs/` que o contexto utiliza
    - Ler `.claude/sdk/<lang>/boilerplates/*.md` — referência de código correto
 
@@ -192,19 +220,23 @@ Protocolo em `.claude/knowledge/shared/memory-protocol.md`.
 
 ### 2. `specs/{contexto}/sdd-{contexto}.md`
 
-**Cabeçalho:** bumpar versão e atualizar status:
-```markdown
-**Versão:** {N+1}
-**Status:** Aprovado — QA concluído | Reprovado — blockers pendentes
-**QA:** gofi-qa
+**Frontmatter:** atualizar `status` e `atualizado`. **Não bumpar `versao`** —
+aprovar não muda comportamento, e correção exigida pelo QA sobre código que
+ainda não foi a produção continua sendo o primeiro estado de produção. Política
+em `.claude/knowledge/shared/document-versioning.md`.
+
+```yaml
+status: aprovado          # ou em_revisao quando há blocker pendente
+atualizado: {data}
 ```
 
 **Rastreabilidade §10:** marcar Auditoria QA como ✅ com data.
 
-**Histórico de Alterações:** entrada nova:
-```markdown
-| {versão} | {data} | gofi-qa | {resumo do que foi corrigido ou aprovado} |
-```
+**Histórico de versões:** **não** acrescentar linha por auditoria. O histórico
+tem uma linha por versão, e auditoria não cria versão. Se a auditoria levou a
+uma mudança de comportamento em código **já em produção**, aí sim há bump — e
+a linha descreve a mudança, sem citar agent nem pessoa (proveniência vive no
+git; ver `rag-retrieval-protocol.md`).
 
 **Contratos §0.1:** se a auditoria revelou drift entre spec e implementação,
 corrigir a spec (a spec é a verdade pós-QA).

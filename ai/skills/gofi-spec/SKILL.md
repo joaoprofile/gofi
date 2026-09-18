@@ -51,6 +51,32 @@ Você **não escreve código** — sua saída é o documento de especificação.
    **só então** `grep`, **se for o caso** — sem extractor para a linguagem, ou
    alvo comprovadamente textual — e **sempre declarado**. Protocolo:
    `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+6. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
+   atualizando o que é derivado, na ordem: **memória do contexto** →
+   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
+   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
+   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
+   descobrir três fases depois.
+
+   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
+   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
+   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
+   build, ela não o encontra. E **índice desatualizado é pior que índice
+   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
+   confiança para o lugar errado.
+
+7. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
+   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
+   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
+   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
+   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
+   produção** e o documento passa a descrever comportamento diferente **que irá**
+   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
+   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
+   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
+   em `1.0`. Política completa em
+   `.claude/knowledge/shared/document-versioning.md`.
 
 ---
 
@@ -60,9 +86,9 @@ Você **não escreve código** — sua saída é o documento de especificação.
 2. Ler `.claude/CLAUDE.md` — mapa de paths físicos
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-pd
-4b. **RAG (poucos tokens):** ler o PRD de origem via `prd/INDEX.md` (descoberta por `keywords`) → frontmatter → `grep -n '^## '` + `Read` só das §relevantes (§8 Regras, §17 Considerações Técnicas). Ao **gerar a spec**, seguir a seção *Escrita* de `.claude/knowledge/shared/rag-retrieval-protocol.md` (base no `sdd-template.md`: frontmatter + `keywords`, **sem** Rastreabilidade/`**Autor:**`/journal) e **regenerar** `specs/INDEX.md` (`bash .claude/scripts/gen-index.sh specs`).
+4b. **Procurar documento é `gofi find`, não carregar índice:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Para ver o que o contexto já tem — e onde a corrente PRD → spec → código arrebenta — `gofi find --context {contexto}`. Ao **gerar a spec**, seguir a seção *Escrita* de `.claude/knowledge/shared/rag-retrieval-protocol.md` (base no `sdd-template.md`: frontmatter + `keywords`, **sem** Rastreabilidade/`**Autor:**`/journal) e **regenerar** `specs/INDEX.md` (`gofi docs build`).
 4c. **Se o contexto evolui ou integra código já existente**, consultar o grafo antes de propor estrutura: `gofi_graph_index.json` → `gofi_graph_report.md` (os pacotes e os pontos centrais mostram o que **já existe** e o que já é reusado por muita coisa) → `gofi graph explain <símbolo>` no que a spec vai referenciar. É o que impede a spec de mandar criar o que já está lá, ou de mudar um ponto central sem declarar o impacto. **Nunca** abra `gofi_graph.json`. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`. Ao declarar a §8 (Estrutura), lembrar que **todo pacote do contexto nasce com `//gofi:context {contexto}`** — mesmo nome da pasta em `specs/{contexto}/`.
-5. Ler **knowledge cross-agent**: `.claude/knowledge/shared/*.md` (especialmente `ddd-principles.md` e `diagram-conventions.md` — PlantUML obrigatório em §2 e qualquer fluxo na spec; `application-vs-domain-service.md` — declarar em §3.1 quais operações são use case `application/` e quais são `service/` direto; `event-driven-executor-pattern.md` — declarar em §4 quando o contexto usa split decider/executor com tópico de eventos entre eles, tabela `{ctx}_execution` com `decision_id` UNIQUE, materialização atomic da junction local, **DUAS bridges separadas** quando há split decider/executor — `DecisionBridge` puro sem `ctx`/`error` para o decider + `ExecutionBridge` com `ctx`/retry para o executor (cada adapter implementa as duas em arquivos separados — `decision_bridge.go` + `execution_bridge.go`); e **Processor scheduler-driven mora no domínio** — declarar em §8 a subpasta `services/domain/{ctx}/scheduler/{processor,repository,model}/`, binário cron do projeto é **só wiring**, sem `*_processor.go` próprio)
+5. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (especialmente `ddd-principles.md` e `diagram-conventions.md` — PlantUML obrigatório em §2 e qualquer fluxo na spec; `application-vs-domain-service.md` — declarar em §3.1 quais operações são use case `application/` e quais são `service/` direto; `event-driven-executor-pattern.md` — declarar em §4 quando o contexto usa split decider/executor com tópico de eventos entre eles, tabela `{ctx}_execution` com `decision_id` UNIQUE, materialização atomic da junction local, **DUAS bridges separadas** quando há split decider/executor — `DecisionBridge` puro sem `ctx`/`error` para o decider + `ExecutionBridge` com `ctx`/retry para o executor (cada adapter implementa as duas em arquivos separados — `decision_bridge.go` + `execution_bridge.go`); e **Processor scheduler-driven mora no domínio** — declarar em §8 a subpasta `services/domain/{ctx}/scheduler/{processor,repository,model}/`, binário cron do projeto é **só wiring**, sem `*_processor.go` próprio)
 6. Ler **knowledge per-agent**: `.claude/knowledge/spec/*.md` (user-treinado)
 7. Ler `.claude/templates/sdd-template.md` — formato obrigatório de saída
 8. Para `project.language`:
@@ -568,33 +594,37 @@ símbolo pertence. Este modo produz **o mapa**; quem escreve a diretiva no códi
 5. **Frontmatter do contexto adotado:** `status: implementado`,
    `versao_spec: n/a` enquanto não houver spec — o código existe e é essa a
    verdade que o índice deve mostrar.
-6. **Regenerar os índices** (`bash .claude/scripts/gen-index.sh specs`) e
+6. **Regenerar os índices** (`gofi docs build`) e
    devolver, nos "Próximos passos", que falta o `/gofi-eng` gravar as
    diretivas.
 
 ---
 
-## Versionamento — só quando tem consumidor downstream
+## Versionamento — a versão conta estados de produção
 
-Spec em **draft puro** (sem código implementado pelo `/gofi-eng` no contexto) é documento vivo. Editar a seção afetada **sem bump de versão na §0**, sem entrada no "Histórico" da spec, sem entrada nova em `memory/contexts/{contexto}.md` (a não ser que a decisão seja não-óbvia o suficiente pra valer a memória de produto).
+Política completa em `.claude/knowledge/shared/document-versioning.md` — **leia
+antes de tocar o frontmatter**. O essencial:
 
-**Quando bumpar / criar trace:**
-- `gofi-eng` já implementou o contexto (código existe em `services/.../{contexto}/`) → bump obrigatório + entrada no Histórico da spec + entrada no `memory/contexts/{contexto}.md`.
-- `gofi-qa` já auditou → bump obrigatório, qualquer mudança vira candidata a regressão.
-- Cross-spec impact em spec **com código** → bump dos dois lados.
-
-**Quando NÃO bumpar:**
-- Ajuste/refinamento da spec ainda em draft (nenhum código rodando): edita livre na seção afetada, mantém v1.0 da §0, não adiciona entrada no Histórico, não polui o contexto da memória com "ajuste menor".
-
-**Sinal "tem consumidor downstream?"** — checar em ordem:
-1. Existe código em `services/.../{contexto}/`? Se não, spec está em draft puro.
-2. `gofi-qa` já rodou? Se sim, qualquer mudança vira regressão.
+- Toda spec **nasce em `1.0` e permanece em `1.0`** enquanto a solução descrita
+  não estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
+  acrescentar ADR, corrigir erro factual: nada disso bumpa, e nada disso entra
+  no histórico. Código mergeado mas não deployado **ainda é 1.0**.
+- A versão sobe **uma vez por estado de produção**: a solução já está em
+  produção **e** a spec passa a descrever um comportamento diferente **que irá**
+  para produção.
+- **Teste:** *esta edição vai fazer alguém mudar código que já está rodando em
+  produção?* Não → não bumpa.
+- Reformulação profunda vira **spec nova** (sufixo `-v2`), que nasce em 1.0. A
+  antiga não bumpa por ganhar nota de superseded, e continua sendo o **as-built**
+  até a nova entrar em produção.
+- Cross-spec: bumpa só o lado cujo comportamento **em produção** muda.
+- `atualizado` muda **sempre**; `status` diz a fase.
 
 ## Atualização de memória — **OBRIGATÓRIA ao final de toda spec gerada ou bumpada (com consumidor downstream)**
 
-> **Regra:** sempre que uma spec for **criada** ou **bumpada com código rodando**, atualize **dois** arquivos no mesmo turno. Não tratar isso como passo opcional. Status da spec deve sempre estar presente e refletir a versão mais recente.
+> **Regra:** sempre que uma spec for **criada** ou **alterada**, atualize a memória do contexto no mesmo turno — independentemente de ter havido bump de versão. Não tratar isso como passo opcional. Status da spec deve sempre estar presente e refletir a versão mais recente.
 > Idem para bumps cross-spec: se a spec do contexto X foi bumpada por decisão tomada no contexto Y, **ambos** os `contexts/{X}.md` e `contexts/{Y}.md` precisam ser atualizados.
-> **Exceção:** ajustes em spec em draft (sem código rodando) não exigem este protocolo — ver "Versionamento" acima.
+> **Exceção:** ajustes em spec cuja solução ainda não está em produção não exigem bump — ver "Versionamento" acima. A **memória do contexto** segue regra própria (`memory-protocol.md`) e continua sendo atualizada em toda fase.
 
 ### 1. `.claude/memory/contexts/{contexto}.md` — frontmatter (estado por-contexto)
 
