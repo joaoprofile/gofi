@@ -39,8 +39,8 @@ It is three things that work together:
    missing, which roles run, at which tier. The expensive model receives closed
    work: an assembled request or an approved spec.
 
-All of it stands on the **gofi SDKs** — [gofi-sdk-go](https://github.com/gofi-labs/gofi-sdk-go)
-and [gofi-sdk-rust](https://github.com/gofi-labs/gofi-sdk-rust) — which fix the
+All of it stands on the **gofi SDKs** — [gofi-sdk-go](https://github.com/joaoprofile/gofi-sdk-go)
+and [gofi-sdk-rust](https://github.com/joaoprofile/gofi-sdk-rust) — which fix the
 engineering structure and practices the agents build with (see
 [The SDKs](#the-sdks--the-deterministic-foundation)).
 
@@ -115,9 +115,9 @@ serve any agent (Codex, Copilot, Cursor) through `AGENTS.md` and MCP.
 
 ```sh
 # 1. Install the CLI (Linux / macOS)
-curl -fsSL https://raw.githubusercontent.com/gofi-labs/gofi/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
 #    Windows (PowerShell)
-#    iwr -useb https://raw.githubusercontent.com/gofi-labs/gofi/main/install.ps1 | iex
+#    iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 
 # 2. Create a project (or adopt an existing repository) — an interactive wizard
 gofi init my-project
@@ -137,11 +137,11 @@ Run `gofi h` for help on any command.
 
 ```sh
 # A specific version
-GOFI_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/gofi-labs/gofi/main/install.sh | sh
-$env:GOFI_VERSION = "v0.2.0"; iwr -useb https://raw.githubusercontent.com/gofi-labs/gofi/main/install.ps1 | iex
+GOFI_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
+$env:GOFI_VERSION = "v0.2.0"; iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 
 # A custom install directory (Linux / macOS)
-curl -fsSL https://raw.githubusercontent.com/gofi-labs/gofi/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
+curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
 ```
 
 | OS | Default location | Notes |
@@ -196,8 +196,8 @@ good practices once — and the agents compose from it instead of inventing:
 
 | SDK | Language | |
 |---|---|---|
-| [**gofi-sdk-go**](https://github.com/gofi-labs/gofi-sdk-go) | Go | the reference SDK, used by the CLI and the agents today |
-| [**gofi-sdk-rust**](https://github.com/gofi-labs/gofi-sdk-rust) | Rust | the same engineering model, for Rust services |
+| [**gofi-sdk-go**](https://github.com/joaoprofile/gofi-sdk-go) | Go | the reference SDK, used by the CLI and the agents today |
+| [**gofi-sdk-rust**](https://github.com/joaoprofile/gofi-sdk-rust) | Rust | the same engineering model, for Rust services |
 
 An SDK gives the harness:
 
@@ -687,9 +687,9 @@ A versioned local build:
 ```sh
 cd cli
 go build -ldflags "
-  -X github.com/gofi-labs/gofi/cli/internal/cli.Version=v0.0.0-dev
-  -X github.com/gofi-labs/gofi/cli/internal/cli.Commit=$(git rev-parse --short HEAD)
-  -X github.com/gofi-labs/gofi/cli/internal/cli.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  -X github.com/joaoprofile/gofi/cli/internal/cli.Version=v0.0.0-dev
+  -X github.com/joaoprofile/gofi/cli/internal/cli.Commit=$(git rev-parse --short HEAD)
+  -X github.com/joaoprofile/gofi/cli/internal/cli.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 " -o bin/gofi ./cmd/gofi
 ```
 

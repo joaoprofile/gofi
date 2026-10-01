@@ -12,14 +12,14 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
-	"github.com/gofi-labs/gofi/cli/internal/engine/claude"
-	"github.com/gofi-labs/gofi/cli/internal/guard"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/intake"
-	"github.com/gofi-labs/gofi/cli/internal/runs"
-	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/engine/claude"
+	"github.com/joaoprofile/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/runs"
+	"github.com/joaoprofile/gofi/cli/internal/tui/flow"
 )
 
 // exitQuestions is the exit code of an ask that stopped on open questions, so

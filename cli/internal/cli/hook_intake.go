@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
 )
 
 // EnvConducting is set by gofi chat and gofi ask for the Claude Code they

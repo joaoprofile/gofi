@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // Resolve finds nodes from a free-form term. It accepts a full ID, the short

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 )
 
 // baseLexicon is the Portuguese ↔ English bridge every project starts with.

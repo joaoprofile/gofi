@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 // parsedFile is a file already turned into an AST, with its import map ready.

@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/settings"
-	palette "github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/settings"
+	palette "github.com/joaoprofile/gofi/cli/internal/tui/styles"
 )
 
 const (

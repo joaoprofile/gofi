@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/role"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 // Model is a cheap, lean model the intake asks one closed question: a system

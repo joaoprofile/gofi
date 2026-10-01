@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
 func TestTranslate(t *testing.T) {

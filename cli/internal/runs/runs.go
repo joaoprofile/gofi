@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
 )
 
 // Schema names the shape of a run file.

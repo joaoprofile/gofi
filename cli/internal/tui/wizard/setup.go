@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/settings"
-	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/settings"
+	"github.com/joaoprofile/gofi/cli/internal/tui/flow"
 )
 
 // ErrSetupCancelled is returned when the user quits or declines the final

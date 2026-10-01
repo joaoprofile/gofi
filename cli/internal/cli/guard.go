@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/guard"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
 )
 
 func newGuardCmd() *cobra.Command {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/audit"
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/scaffold"
+	"github.com/joaoprofile/gofi/cli/internal/audit"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/scaffold"
 )
 
 // The regression this guard exists for: a project that adapted its design-system
@@ -23,7 +23,7 @@ func TestUpdateKeepsTunedSurfaceDocs(t *testing.T) {
 
 	root := t.TempDir()
 	data := scaffold.TemplateData{ProjectName: "svc", Language: "go"}
-	ref := "github.com/gofi-labs/gofi@main"
+	ref := "github.com/joaoprofile/gofi@main"
 	if _, err := installFromSource(root, "go", []string{"web"}, ref, "", data, scaffold.InstallNew); err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -79,7 +79,7 @@ ai:
   model: claude-opus-5
 agents: [gofi-eng]
 sources:
-  agents: github.com/gofi-labs/gofi@main
+  agents: github.com/joaoprofile/gofi@main
 git:
   remote: origin
 `

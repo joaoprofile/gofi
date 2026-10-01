@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 )
 
 // A pack with two rules, and a team correction of one of them that shares no

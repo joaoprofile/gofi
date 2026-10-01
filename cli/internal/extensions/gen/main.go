@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gofi-labs/gofi/cli/internal/vsix"
+	"github.com/joaoprofile/gofi/cli/internal/vsix"
 )
 
 func main() {

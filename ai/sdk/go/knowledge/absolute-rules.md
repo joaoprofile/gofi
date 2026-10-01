@@ -10,7 +10,7 @@ keywords: [regras absolutas, logging, sqln, errs.AppError, repository, adapter, 
 Regras invioláveis. Cada uma é Go-specific e nasceu de erro repetido em
 review. **Auditadas pelo gofi-qa em todo contexto.**
 
-1. **Nunca** `fmt.Println`/`log.Printf` em produção — sempre `logging.*` de `github.com/gofi-labs/gofi-sdk-go/obs/logging` (exceção: `main()` reportando o erro de `run()`).
+1. **Nunca** `fmt.Println`/`log.Printf` em produção — sempre `logging.*` de `github.com/joaoprofile/gofi-sdk-go/obs/logging` (exceção: `main()` reportando o erro de `run()`).
 2. **Nunca** `*sql.DB` fora do `sqln` — nada de `sql.Open`, `db.DB()` ou `connection.DB()` em repository/service. Handle `*sql.DB` só no `main`/componente (`database.FromDB`, `metrics.ObserveDBStats`). Ver `database-connection.md`.
 3. **Nunca** retornar `error` puro do service — sempre `errs.AppError`.
 4. **Nunca** mock de banco em testes — use mock de repository (handcraft).

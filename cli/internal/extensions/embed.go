@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/gofi-labs/gofi/cli/internal/vsix"
+	"github.com/joaoprofile/gofi/cli/internal/vsix"
 )
 
 // embeddedFS carries the packaged GOFI AI extension. Regenerate with

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph"
-	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract/external"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 // project lays out a temporary project with its own code under src/ and a

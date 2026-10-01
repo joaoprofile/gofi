@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 )
 
 // Portuguese and English inflections of one root meet at the same stem, which

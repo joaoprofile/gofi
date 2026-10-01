@@ -22,10 +22,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/gofi-labs/gofi-sdk-go/base/errs"
-	"github.com/gofi-labs/gofi-sdk-go/iam/provider/rbac/roles"
-	"github.com/gofi-labs/gofi-sdk-go/iam/types"
-	"github.com/gofi-labs/gofi-sdk-go/sqln"
+	"github.com/joaoprofile/gofi-sdk-go/base/errs"
+	"github.com/joaoprofile/gofi-sdk-go/iam/provider/rbac/roles"
+	"github.com/joaoprofile/gofi-sdk-go/iam/types"
+	"github.com/joaoprofile/gofi-sdk-go/sqln"
 
 	authhandler "<module>/domain/{contexto-auth}/handler"
 	"<module>/domain/{contexto}/model"

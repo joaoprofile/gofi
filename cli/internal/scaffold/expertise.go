@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/expertise"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/expertise"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // expertiseDir is the name of the packs' tree, both in the source (ai/) and

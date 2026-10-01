@@ -3,8 +3,8 @@ package cli
 import (
 	"context"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
 )
 
 // The init pipeline and `gofi install` install the GOFI AI extension into

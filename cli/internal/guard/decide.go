@@ -3,7 +3,7 @@ package guard
 import (
 	"encoding/json"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 // Decide applies one hook event to the session's state and returns what the

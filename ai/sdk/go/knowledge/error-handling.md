@@ -7,7 +7,7 @@ keywords: [errs, AppError, RegisterNotFound, RegisterValidation, RegisterForbidd
 
 # Conhecimento — Tratamento de Erros (`base/errs` + `netx`)
 
-Import: `github.com/gofi-labs/gofi-sdk-go/base/errs`. Referência completa:
+Import: `github.com/joaoprofile/gofi-sdk-go/base/errs`. Referência completa:
 `.claude/sdk/go/api/base-errs.md`.
 
 ## Fluxo de erro completo

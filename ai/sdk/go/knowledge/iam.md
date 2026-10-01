@@ -29,9 +29,9 @@ social: `iam-social-login.md`. Ports sobre storage existente: `iam-adapter-patte
 
 ```go
 import (
-    iamc "github.com/gofi-labs/gofi-sdk-go/gofi/component/iam"
-    iamconfig "github.com/gofi-labs/gofi-sdk-go/iam/config"
-    "github.com/gofi-labs/gofi-sdk-go/iam/provider/rbac/roles"
+    iamc "github.com/joaoprofile/gofi-sdk-go/gofi/component/iam"
+    iamconfig "github.com/joaoprofile/gofi-sdk-go/iam/config"
+    "github.com/joaoprofile/gofi-sdk-go/iam/provider/rbac/roles"
 )
 
 identity := iamc.New(iamc.Config{

@@ -13,7 +13,7 @@ func validConfig() *GofiConfig {
 		Project: Project{Name: "my-service", Root: "/abs/path/my-service"},
 		Backend: &Backend{Language: LanguageGo, Path: "src"},
 		AI:      AI{Host: AIHostClaudeVSCode, Model: ModelOpus47},
-		Sources: Sources{Agents: "github.com/gofi-labs/gofi@v0.1.0"},
+		Sources: Sources{Agents: "github.com/joaoprofile/gofi@v0.1.0"},
 		Test: TestSection{
 			Default: "unit",
 			Tasks: map[string]TestTask{
@@ -198,7 +198,7 @@ ai:
   model: claude-opus-4-7
 agents: [gofi-pd, gofi-spec, gofi-eng, gofi-qa]
 sources:
-  agents: github.com/gofi-labs/gofi@v0.1.0
+  agents: github.com/joaoprofile/gofi@v0.1.0
 git:
   remote: ""
 test:
@@ -253,7 +253,7 @@ ai:
   model: claude-opus-4-8
 agents: [gofi-eng, gofi-ui, gofi-full]
 sources:
-  agents: github.com/gofi-labs/gofi@main
+  agents: github.com/joaoprofile/gofi@main
 git:
   remote: ""
 test:
@@ -359,7 +359,7 @@ ai:
   model: claude-opus-4-8
 agents: [gofi-ui]
 sources:
-  agents: github.com/gofi-labs/gofi@main
+  agents: github.com/joaoprofile/gofi@main
 git:
   remote: ""
 test:

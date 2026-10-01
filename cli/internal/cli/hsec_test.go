@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/hsec"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/hsec"
 )
 
 // hsecProject writes a loadable .gofi.yaml into a temp dir, chdirs into it
@@ -27,7 +27,7 @@ func hsecProject(t *testing.T, h config.HsecConfig) string {
 		Project: config.Project{Name: "my-service", Root: root},
 		Backend: &config.Backend{Language: config.LanguageGo, Path: "src"},
 		AI:      config.AI{Host: config.AIHostClaudeVSCode, Model: config.ModelOpus47},
-		Sources: config.Sources{Agents: "github.com/gofi-labs/gofi@v0.1.0"},
+		Sources: config.Sources{Agents: "github.com/joaoprofile/gofi@v0.1.0"},
 		Test: config.TestSection{
 			Default: "unit",
 			Tasks:   map[string]config.TestTask{"unit": {Desc: "unit tests", Run: "go test ./..."}},

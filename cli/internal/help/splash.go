@@ -3,7 +3,7 @@ package help
 import (
 	"os"
 
-	"github.com/gofi-labs/gofi/cli/internal/tui/banner"
+	"github.com/joaoprofile/gofi/cli/internal/tui/banner"
 )
 
 // RenderSplash returns the banner that opens `gofi` and `gofi help`: the same

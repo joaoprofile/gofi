@@ -27,9 +27,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/gofi-labs/gofi"
+    "url": "https://github.com/joaoprofile/gofi"
   },
-  "homepage": "https://github.com/gofi-labs/gofi",
+  "homepage": "https://github.com/joaoprofile/gofi",
   "main": "./extension.js",
   "activationEvents": [
     "onStartupFinished"

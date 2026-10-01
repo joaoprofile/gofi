@@ -1,6 +1,6 @@
 # gofi/component/messaging
 
-`import "github.com/gofi-labs/gofi-sdk-go/gofi/component/messaging"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/messaging"` · SDK v0.8.2
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -59,7 +59,7 @@ Three calling patterns, in order of ergonomics:
 Patterns 1 and 2 need the provider package imported, which keeps unused
 broker SDKs out of the binary:
 
-	import _ "github.com/gofi-labs/gofi-sdk-go/msq/provider/kafka"
+	import _ "github.com/joaoprofile/gofi-sdk-go/msq/provider/kafka"
 
 If the broker implements port.BrokerSetup, Setup is called during Build so
 that exchanges, topics or queues are declared before the first producer or

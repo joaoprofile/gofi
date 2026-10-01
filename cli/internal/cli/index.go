@@ -9,17 +9,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/expertise"
-	"github.com/gofi-labs/gofi/cli/internal/githooks"
-	"github.com/gofi-labs/gofi/cli/internal/graph"
-	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
-	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/retrieval"
-	"github.com/gofi-labs/gofi/cli/internal/sdkdoc"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/expertise"
+	"github.com/joaoprofile/gofi/cli/internal/githooks"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract/external"
+	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/retrieval"
+	"github.com/joaoprofile/gofi/cli/internal/sdkdoc"
 	"os"
 )
 

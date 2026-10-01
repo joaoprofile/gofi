@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/retrieval"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/retrieval"
 )
 
 // Context is the context a request is about, and what it already has.

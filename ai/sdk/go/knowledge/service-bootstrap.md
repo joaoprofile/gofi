@@ -89,7 +89,7 @@ Gatilho do split: providers de auth/OAuth, adapters de SDK, workers, ou
 
 ## IAM no bootstrap
 
-O componente `iam` (`github.com/gofi-labs/gofi-sdk-go/gofi/component/iam`)
+O componente `iam` (`github.com/joaoprofile/gofi-sdk-go/gofi/component/iam`)
 lê `JWT_*`, `*_TOKEN_TTL`, `OAUTH_GOOGLE_*` e sessões Redis (`CACHE_TYPE=redis`)
 e falha o `Build` sem `JWT_SECRET`. O projeto só fornece o que o ambiente não
 tem: `User`, `Tenant`, `RBAC`, `OnEvent`.

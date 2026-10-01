@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/settings"
+	"github.com/joaoprofile/gofi/cli/internal/settings"
 )
 
 // Palette. Accent is the cyan of the gofi logo.

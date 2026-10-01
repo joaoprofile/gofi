@@ -7,7 +7,7 @@ keywords: [validator, ValidateStruct, Validate, DTO, required, oneof, gtfield, V
 
 # Conhecimento — Validação de DTOs (`base/validator`)
 
-Import: `github.com/gofi-labs/gofi-sdk-go/base/validator` (tags do
+Import: `github.com/joaoprofile/gofi-sdk-go/base/validator` (tags do
 `go-playground/validator/v10`). Referência: `.claude/sdk/go/api/base-validator.md`.
 
 ## Singleton de pacote

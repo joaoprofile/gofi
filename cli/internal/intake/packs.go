@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/expertise"
+	"github.com/joaoprofile/gofi/cli/internal/expertise"
 )
 
 // PackChoice is an expertise pack the request needs, and the signal that

@@ -78,7 +78,7 @@ func TestEnsureGoWorkSDK_AddsRootModuleWhenSinglePresent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.25\n\nuse ./src\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi-sdk-go")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi-sdk-go")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("ensure: %v", err)
@@ -98,10 +98,10 @@ func TestEnsureGoWorkSDK_AddsAllSubmodulesForMultiModuleSDK(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.25\n\nuse ./src\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi")
-	writeGoMod(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/gofi-labs/gofi/sqln")
-	writeGoMod(t, root, ".gofi/gofi-sdk-go/iam", "github.com/gofi-labs/gofi/iam")
-	writeGoMod(t, root, ".gofi/gofi-sdk-go/netx", "github.com/gofi-labs/gofi/netx")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/joaoprofile/gofi/sqln")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go/iam", "github.com/joaoprofile/gofi/iam")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go/netx", "github.com/joaoprofile/gofi/netx")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("ensure: %v", err)
@@ -150,8 +150,8 @@ func TestEnsureGoWorkSDK_ResyncsWhenSubmoduleSetChanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi")
-	writeGoMod(t, root, ".gofi/gofi-sdk-go/iam", "github.com/gofi-labs/gofi/iam")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go/iam", "github.com/joaoprofile/gofi/iam")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("ensure: %v", err)
@@ -171,8 +171,8 @@ func TestEnsureGoWorkSDK_Idempotent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.25\n\nuse ./src\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi")
-	writeGoMod(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/gofi-labs/gofi/sqln")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi")
+	writeGoMod(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/joaoprofile/gofi/sqln")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("first: %v", err)
@@ -192,8 +192,8 @@ func TestEnsureGoWorkSDK_BumpsGoDirectiveToMatchSDK(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.25\n\nuse ./src\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi", "1.25.0")
-	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/gofi-labs/gofi/sqln", "1.25.0")
+	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi", "1.25.0")
+	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/joaoprofile/gofi/sqln", "1.25.0")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("ensure: %v", err)
@@ -210,7 +210,7 @@ func TestEnsureGoWorkSDK_DoesNotDowngradeGoDirective(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.25.5\n\nuse ./src\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi", "1.25.0")
+	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi", "1.25.0")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("ensure: %v", err)
@@ -230,9 +230,9 @@ func TestEnsureGoWorkSDK_PicksMaxAcrossSubmodules(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.24\n\nuse ./src\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go", "github.com/gofi-labs/gofi", "1.24.5")
-	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/gofi-labs/gofi/sqln", "1.25.3")
-	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go/iam", "github.com/gofi-labs/gofi/iam", "1.24.0")
+	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go", "github.com/joaoprofile/gofi", "1.24.5")
+	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go/sqln", "github.com/joaoprofile/gofi/sqln", "1.25.3")
+	writeGoModWithVersion(t, root, ".gofi/gofi-sdk-go/iam", "github.com/joaoprofile/gofi/iam", "1.24.0")
 
 	if err := EnsureGoWorkSDK(root, "go"); err != nil {
 		t.Fatalf("ensure: %v", err)

@@ -3,7 +3,7 @@ package docs
 import (
 	"sort"
 
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // Neighbors is the local view of one node: what points at it, what it points

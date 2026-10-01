@@ -20,13 +20,13 @@ import (
 	"errors"
 	"log"
 
-	"github.com/gofi-labs/gofi-sdk-go/base/environment"
-	"github.com/gofi-labs/gofi-sdk-go/gofi"
-	"github.com/gofi-labs/gofi-sdk-go/gofi/component/database"
-	"github.com/gofi-labs/gofi-sdk-go/gofi/component/httpserver"
-	"github.com/gofi-labs/gofi-sdk-go/gofi/component/observability"
-	"github.com/gofi-labs/gofi-sdk-go/netx"
-	_ "github.com/gofi-labs/gofi-sdk-go/sqln/driver/postgres" // DATABASE_DRIVER=postgres
+	"github.com/joaoprofile/gofi-sdk-go/base/environment"
+	"github.com/joaoprofile/gofi-sdk-go/gofi"
+	"github.com/joaoprofile/gofi-sdk-go/gofi/component/database"
+	"github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver"
+	"github.com/joaoprofile/gofi-sdk-go/gofi/component/observability"
+	"github.com/joaoprofile/gofi-sdk-go/netx"
+	_ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres" // DATABASE_DRIVER=postgres
 )
 
 const serviceName = "{servico}"
@@ -82,8 +82,8 @@ import (
 	entityrepo "<module>/domain/{contexto}/repository"
 	entitysvc "<module>/domain/{contexto}/service"
 	authhandler "<module>/domain/{contexto-auth}/handler"
-	"github.com/gofi-labs/gofi-sdk-go/gofi/component/httpserver"
-	"github.com/gofi-labs/gofi-sdk-go/gofi/component/iam"
+	"github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver"
+	"github.com/joaoprofile/gofi-sdk-go/gofi/component/iam"
 )
 
 func wire(identity *iam.Component, server *httpserver.Component) error {
@@ -138,7 +138,7 @@ func run() error {
 ## Variante — mensageria (producer + consumer)
 
 ```go
-import _ "github.com/gofi-labs/gofi-sdk-go/msq/provider/kafka" // MESSAGING_PROVIDER=kafka
+import _ "github.com/joaoprofile/gofi-sdk-go/msq/provider/kafka" // MESSAGING_PROVIDER=kafka
 
 mq := messaging.New()
 

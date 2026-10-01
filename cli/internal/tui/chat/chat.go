@@ -24,14 +24,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/gofi-labs/gofi/cli/internal/approval"
-	"github.com/gofi-labs/gofi/cli/internal/engine"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/intake"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/tui/banner"
-	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/joaoprofile/gofi/cli/internal/approval"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/tui/banner"
+	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
 )
 
 // Options configure a chat.

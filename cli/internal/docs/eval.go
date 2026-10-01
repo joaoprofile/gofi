@@ -1,7 +1,7 @@
 package docs
 
 import (
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"os"
 	"path/filepath"
 	"strings"

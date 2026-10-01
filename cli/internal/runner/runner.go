@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 // Runner executes test tasks against a TestSection.

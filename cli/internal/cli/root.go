@@ -9,16 +9,16 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/dotenv"
-	"github.com/gofi-labs/gofi/cli/internal/help"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/scaffold"
-	"github.com/gofi-labs/gofi/cli/internal/settings"
-	"github.com/gofi-labs/gofi/cli/internal/sources"
-	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
-	"github.com/gofi-labs/gofi/cli/internal/tui/spinner"
+	"github.com/joaoprofile/gofi/cli/internal/dotenv"
+	"github.com/joaoprofile/gofi/cli/internal/help"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/scaffold"
+	"github.com/joaoprofile/gofi/cli/internal/settings"
+	"github.com/joaoprofile/gofi/cli/internal/sources"
+	"github.com/joaoprofile/gofi/cli/internal/tui/flow"
+	"github.com/joaoprofile/gofi/cli/internal/tui/spinner"
 )
 
 var (

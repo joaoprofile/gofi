@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
 )
 
 // isolate points the settings file at a temp dir for the duration of a test.

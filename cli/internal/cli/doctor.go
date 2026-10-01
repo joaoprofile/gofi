@@ -11,16 +11,16 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/doctor"
-	"github.com/gofi-labs/gofi/cli/internal/githooks"
-	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/scaffold"
-	"github.com/gofi-labs/gofi/cli/internal/toolchain"
-	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/doctor"
+	"github.com/joaoprofile/gofi/cli/internal/githooks"
+	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/scaffold"
+	"github.com/joaoprofile/gofi/cli/internal/toolchain"
+	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
 )
 
 func newDoctorCmd() *cobra.Command {

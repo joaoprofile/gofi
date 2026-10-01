@@ -1,6 +1,6 @@
 # netx
 
-`import "github.com/gofi-labs/gofi-sdk-go/netx"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/netx"` · SDK v0.8.2
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 

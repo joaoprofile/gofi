@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // targetPlan is one update target, computed and not yet applied: what it

@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/gofi-labs/gofi/cli/internal/approval"
+	"github.com/joaoprofile/gofi/cli/internal/approval"
 )
 
 // newHookCmd holds the commands the engine runs as hooks. They are gofi's side

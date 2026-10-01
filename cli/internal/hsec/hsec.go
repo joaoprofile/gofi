@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 // ConfigFileName is the path (relative to projectRoot) where gofi writes the

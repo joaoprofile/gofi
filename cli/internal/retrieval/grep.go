@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 )
 
 // TextQuery is a search for exact text rather than for meaning: an error

@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // ExtractorsDir is where `gofi index install` puts extractors, relative to the

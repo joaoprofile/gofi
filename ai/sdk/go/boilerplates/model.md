@@ -62,7 +62,7 @@ armadilhas em `.claude/sdk/go/knowledge/value-objects.md`.
 ```go
 package model
 
-import "github.com/gofi-labs/gofi-sdk-go/base/validator"
+import "github.com/joaoprofile/gofi-sdk-go/base/validator"
 
 var v = validator.New()
 
@@ -100,7 +100,7 @@ Arquivo separado de `dto.go`, criado **apenas** quando o contexto expõe
 package model
 
 import (
-	"github.com/gofi-labs/gofi-sdk-go/sqln"
+	"github.com/joaoprofile/gofi-sdk-go/sqln"
 
 	"<module>/common/enums"
 )

@@ -1,6 +1,6 @@
 # gofi/component/database
 
-`import "github.com/gofi-labs/gofi-sdk-go/gofi/component/database"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/database"` · SDK v0.8.2
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -9,7 +9,7 @@ Package database is the gofi component for the SQL database (sqln).
 It links no SQL driver: blank-import the driver package for DATABASE_DRIVER
 (postgres by default) in main, or Build fails naming the missing import:
 
-	import _ "github.com/gofi-labs/gofi-sdk-go/sqln/driver/postgres"
+	import _ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"
 
 ## Funções
 

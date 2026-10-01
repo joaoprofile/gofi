@@ -9,11 +9,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/detect"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/tui/editor"
-	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/detect"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/tui/editor"
+	"github.com/joaoprofile/gofi/cli/internal/tui/wizard"
 )
 
 func newConfigCmd() *cobra.Command {

@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph"
-	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract/external"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 // Scope names.

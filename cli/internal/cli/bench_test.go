@@ -29,12 +29,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/retrieval"
-	"github.com/gofi-labs/gofi/cli/internal/scaffold"
-	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/retrieval"
+	"github.com/joaoprofile/gofi/cli/internal/scaffold"
+	"github.com/joaoprofile/gofi/cli/internal/tui/wizard"
 )
 
 // benchReport is what one run measured. Its JSON sits next to the markdown so

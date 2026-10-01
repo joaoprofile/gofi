@@ -1,6 +1,6 @@
 # sqln/driver/oracle
 
-`import "github.com/gofi-labs/gofi-sdk-go/sqln/driver/oracle"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/oracle"` · SDK v0.8.2
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -12,7 +12,7 @@ type Driver struct{}
 
 Oracle driver. To enable it, blank-import this package:
 
-	import _ "github.com/gofi-labs/gofi-sdk-go/sqln/driver/oracle"
+	import _ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/oracle"
 
 Requires godror or go-oci8 in go.mod.
 

@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
 // SetModel implements engine.ModelSwitcher. An idle process is ended, so the

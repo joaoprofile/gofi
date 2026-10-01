@@ -69,7 +69,7 @@ arquivo cobre **métricas de negócio** e spans próprios.
    `bridge-factory-adapter-pattern.md` § Decorators).
 6. **`ResetForTesting` exposto** — troca de `MeterProvider` entre testes.
 
-Instrumentos vêm de `github.com/gofi-labs/gofi-sdk-go/obs/metrics`
+Instrumentos vêm de `github.com/joaoprofile/gofi-sdk-go/obs/metrics`
 (`metrics.NewInt64Counter`, `metrics.NewFloat64Histogram`,
 `metrics.NewInt64UpDownCounter`, `metrics.NewInt64Gauge`… ou
 `metrics.Meter()` para opções extras). Os wrappers `obs.New*` / `obs.Meter`
@@ -119,8 +119,8 @@ import (
     "log/slog"
     "sync"
 
-    "github.com/gofi-labs/gofi-sdk-go/obs/logging"
-    "github.com/gofi-labs/gofi-sdk-go/obs/metrics"
+    "github.com/joaoprofile/gofi-sdk-go/obs/logging"
+    "github.com/joaoprofile/gofi-sdk-go/obs/metrics"
     "go.opentelemetry.io/otel/metric"
 )
 
@@ -225,7 +225,7 @@ import (
     "errors"
     "net"
 
-    "github.com/gofi-labs/gofi-sdk-go/base/errs"
+    "github.com/joaoprofile/gofi-sdk-go/base/errs"
 )
 
 // ClassifyHTTPError maps an AppError to a closed status_class.

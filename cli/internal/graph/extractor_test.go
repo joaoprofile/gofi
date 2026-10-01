@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 type stubExtractor struct{ lang string }
