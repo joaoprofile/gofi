@@ -1,0 +1,21 @@
+# Pré-execução obrigatória — detalhe dos passos
+
+## Pré-execução obrigatória
+
+1. Ler `.gofi.yaml` (raiz) — extrair `project.language`, `project.name`, **`project.path`** (este último define `pathService` — raiz do módulo da linguagem-alvo; `main.go` vai **direto** nele, sem subdiretório `{projectName}/`), demais configurações
+2. O `AGENTS.md` da raiz (já carregado) — mapa de paths físicos
+3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (sem estado por-contexto; rode `/gofi-status` para o índice de contextos)
+4. Ler `.claude/memory/contexts/{contexto}.md` se existir — frontmatter + handoff do gofi-pd
+4b. **Procurar documento é `gofi find`, não carregar índice:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Para ver o que o contexto já tem — e onde a corrente PRD → spec → código arrebenta — `gofi show ctx:{contexto}`. Ao **gerar a spec**, seguir a seção *Escrita* de `.claude/expertise/harness-protocols/rag-retrieval.md` (base no `sdd-template.md`: frontmatter + `keywords`, **sem** Rastreabilidade/`**Autor:**`/journal) e **regenerar** `specs/INDEX.md` (`gofi index docs`).
+4c. **Se o contexto evolui ou integra código já existente**, consultar o grafo antes de propor estrutura: `gofi_graph_index.json` → `gofi_graph_report.md` (os pacotes e os pontos centrais mostram o que **já existe** e o que já é reusado por muita coisa) → `gofi show <símbolo>` no que a spec vai referenciar. É o que impede a spec de mandar criar o que já está lá, ou de mudar um ponto central sem declarar o impacto. **Nunca** abra `gofi_graph.json`. Protocolo: `.claude/expertise/harness-protocols/graph-retrieval.md`. Ao declarar a §8 (Estrutura), lembrar que **todo pacote do contexto nasce com `//gofi:context {contexto}`** — mesmo nome da pasta em `specs/{contexto}/`.
+5. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (especialmente `ddd-principles.md` e `expertise/diagramming/conventions.md` — PlantUML obrigatório em §2 e qualquer fluxo na spec; `application-vs-domain-service.md` — declarar em §3.1 quais operações são use case `application/` e quais são `service/` direto; `event-driven-executor-pattern.md` — declarar em §4 quando o contexto usa split decider/executor com tópico de eventos entre eles, tabela `{ctx}_execution` com `decision_id` UNIQUE, materialização atomic da junction local, **DUAS bridges separadas** quando há split decider/executor — `DecisionBridge` puro sem `ctx`/`error` para o decider + `ExecutionBridge` com `ctx`/retry para o executor (cada adapter implementa as duas em arquivos separados — `decision_bridge.go` + `execution_bridge.go`); e **Processor scheduler-driven mora no domínio** — declarar em §8 a subpasta `services/domain/{ctx}/scheduler/{processor,repository,model}/`, binário cron do projeto é **só wiring**, sem `*_processor.go` próprio)
+6. Ler **knowledge per-agent**: `.claude/knowledge/spec/*.md` (user-treinado)
+7. Ler `.claude/templates/sdd-template.md` — formato obrigatório de saída
+8. Para `project.language`:
+   - Ler `.claude/sdk/<lang>/knowledge/structure.md` — onde a spec posiciona arquivos
+   - Ler `.claude/sdk/<lang>/knowledge/env-vars-standard.md` — variáveis de ambiente do SDK
+   - Ler `.claude/sdk/<lang>/knowledge/dynamic-filter.md` se o contexto pode usar filtro dinâmico
+   - Ler `.claude/sdk/<lang>/knowledge/migrations.md` (Go: convenção `golang-migrate` — par `.up.sql`/`.down.sql`; obrigatório nas seções §3.4 e §8 da spec)
+   - Ler `.claude/sdk/<lang>/knowledge/absolute-rules.md` — regras invioláveis que a spec deve respeitar (e.g. regra #13 sobre migrations)
+   - Ler `.claude/sdk/<lang>/api/INDEX.md` — descobrir os pacotes do SDK disponíveis (cache, mensageria, IAM, etc.); abrir só o arquivo do pacote pertinente, ou `gofi find --in sdk "<símbolo>"`
+9. Verificar se já existe spec em `specs/{contexto}/` — **nunca sobrescrever sem confirmar**

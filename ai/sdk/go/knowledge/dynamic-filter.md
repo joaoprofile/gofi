@@ -1,315 +1,187 @@
-# Filtro Dinâmico — Go
+---
+name: dynamic-filter
+description: Filtro dinâmico em Go — allowlist sqln.FilterMapping, BuildQuery, NewPageRequestFilter, tenant como argumento, envelope sqln.Filters
+sdk: v0.8.2
+keywords: [dynamic-filter, FilterMapping, BuildQuery, FindWithFilter, NewPageRequestFilter, ErrInvalidFilter, Filters, tenant]
+---
 
-Aplicado quando o contexto precisa de filtros arbitrários montados pelo cliente
-(em vez de query params fixos).
+# Filtro dinâmico — Go
+
+Quando o cliente escolhe os filtros (em vez de query params fixos). API:
+`.claude/sdk/go/api/sqln-filter.md` e `sqln.md` (`FilterMapping`,
+`BuildQuery`, `NewPageRequestFilter`, `FindWithFilter`, `ErrInvalidFilter`).
+Exemplo executável completo: `examples/sqln/filter-api`
+(`product/repository.go` + `product/handler.go`).
 
 ## Endpoints
-- `POST /{ctx}s/schemas` — retorna `QueryMapping` (campos filtráveis, ordenáveis, operadores, lógicos)
-- `POST /{ctx}s/query` — recebe `sqln.Filters` no body, valida contra o mapping, retorna `sqln.Page[{Ctx}Query]`
 
-## Envelope JSON do request — `sqln.Filters`
+- `POST /{ctx}s/schemas` — devolve o `sqln.FilterMapping` do contexto (o que
+  pode ser filtrado/ordenado e como o front monta a tela).
+- `POST /{ctx}s/query` — recebe `sqln.Filters` no body e devolve
+  `*sqln.Page[{Ctx}Query]`.
 
-Forma canônica do body de `POST /{ctx}s/query` (definida em
-`gofi/sqln/filter/dynamic_filter.go` — `Filters` + `FilterParams` + `Filter`):
+## A allowlist — `sqln.FilterMapping`
+
+```go
+// model/query_dto.go
+var {Ctx}FilterMapping = sqln.FilterMapping{
+    "name":    {Column: "e.name", Ops: sqln.Text, Sortable: true, Label: "NAME", FilterType: "text"},
+    "status":  {Column: "e.status", Ops: sqln.Equality, Label: "STATUS",
+        FilterType: "search-multiple", SearchType: "embedded", Content: enums.{Resource}StatusMap},
+    "created": {Column: "e.created_at", Ops: sqln.Range, Sortable: true, Label: "CREATED_AT"},
+}
+```
+
+- **Chave = nome de API** que o cliente envia; `Column` = expressão SQL
+  (`json:"-"`, nunca vai ao cliente). Campo, operador ou sort fora do mapping
+  → a requisição inteira é rejeitada. Não existe mais validação separada no
+  handler: quem valida é `BuildQuery` / `NewPageRequestFilter`.
+- `Ops`: `sqln.Text` (texto), `sqln.Equality` (enum, id, flag), `sqln.Range`
+  (número, data). Vazio aceita todos — evite.
+- `Sortable: true` só no que pode ordenar (e que tenha índice que sirva).
+- `Label`, `FilterType`, `SearchType`, `Content` são metadados de UI,
+  repassados intactos — regras em `lookup-endpoints.md`.
+- **Nunca** coloque no mapping coluna que não é devolvida ao cliente (hash,
+  segredo, flag interna): a allowlist existe para impedir sondagem do tipo
+  `password_hash LIKE 'a%'`.
+- `sqln.AllowColumns("e.a", "e.b")` mapeia coluna→ela mesma, todos os
+  operadores e sort: só para migrar contrato legado que já envia colunas.
+
+## Envelope do request — `sqln.Filters`
 
 ```json
 {
-  "params": {
-    "page": 0,
-    "limit": 15,
-    "sortField": "<column-or-alias>",
-    "sortDirection": "ASC"
-  },
+  "params":  {"page": 0, "limit": 15, "sortField": "created", "sortDirection": "DESC"},
   "filters": [
-    { "field": "<table>.<column>", "condition": "=", "value": "<scalar>" },
-    { "logicalOperator": "AND" },
-    { "field": "<table>.<column>", "condition": "IN", "value": [1, 2, 3] }
+    {"field": "status", "condition": "IN", "value": ["ACTIVE", "PAUSED"]},
+    {"logicalOperator": "AND"},
+    {"field": "name", "condition": "LIKE", "value": "abc"}
   ]
 }
 ```
 
-Regras invioláveis do envelope:
+- Paginação só em `params`: `page` (0-indexed), `limit` (0 → 15), `sortField`
+  (**nome de API** Sortable), `sortDirection` (`ASC`/`DESC`). Nunca `size`,
+  `sortingFields[]` ou `page` na raiz.
+- `filters` é lista plana; conectores são elementos próprios
+  (`{"logicalOperator": "AND"|"OR"}`), nunca no início, no fim ou dois
+  seguidos. Sem conector entre dois filtros = `AND`.
+- `condition` é o operador literal: `=` `!=` `<` `<=` `>` `>=` `IN` `NOT IN`
+  `LIKE` `NOT LIKE` `BETWEEN` `IS NULL` `IS NOT NULL` (constantes `sqln.Eq`,
+  `sqln.In`, `sqln.Contains`, …). Alias (`"eq"`, `"contains"`) é rejeitado.
+- `LIKE`/`NOT LIKE` = contém, **case-insensitive** (`ILIKE` no PostgreSQL); o
+  SDK envolve o valor em `%…%` — o cliente manda só o termo.
+- `BETWEEN` de datas: `"inicioRFC3339|fimRFC3339"`. Lista em `IN`/`NOT IN`.
+  `value` nulo = `IS NULL`.
 
-- **Paginação fica em `params`** — não no topo. Campos: `page` (uint16, default `0`),
-  `limit` (uint16, default `15`), `sortField` (string), `sortDirection` (`"ASC"`/`"DESC"`,
-  default `"ASC"`). **Nunca** `size`, **nunca** `sortingFields[]`, **nunca** `page`/`limit`
-  no nível raiz.
-- **Filtros são uma lista plana** com separadores lógicos como elementos próprios
-  (`{ "logicalOperator": "AND" }`) — **não** estrutura aninhada.
-- **`tenant` nunca vem do body** — handler injeta a partir do JWT.
-- Operadores no campo `condition` são **strings SQL literais** (ver §"Convenção de
-  operadores" abaixo).
-
-Anti-padrões comuns (rejeitar em PR):
-
-```json
-{ "page": 0, "size": 15, "sortingFields": [...] }   // sem params, nomes errados
-{ "params": { "size": 15 } }                          // size em vez de limit
-{ "filters": [{ "operator": "eq", ... }] }            // alias em vez de SQL literal
-```
-
-## Convenção de operadores
-**Strings SQL literais** — nunca aliases:
-- `sqln.Eq = "="`
-- `sqln.Contains = "LIKE"`
-- `sqln.And = "AND"` / `sqln.Or = "OR"`
-
-O cliente envia esses valores **exatos** no campo `condition` do filtro.
-Testes que usam `"operator":"eq"` ou `"contains"` estão **errados**.
-
-## Model — `query_dto.go`
-- Arquivo **separado** de `dto.go` — não misturar
-- `{Ctx}QueryMapping()` retorna `*sqln.QueryMapping` com `AllowedFields`, `AllowedSortingFields`, `Operators`, `LogicalOperators`
-- `{Ctx}Query` struct usa tags `db:""` (read model — separado da entidade de escrita)
-- `{Ctx}QueryResponse` é alias para `*sqln.Page[{Ctx}Query]`
-
-### `FieldMapping` — shape canônico
+## Handler — parse, tenant do auth, delega
 
 ```go
-type FieldMapping struct {
-    Key        string `json:"key"`
-    Label      string `json:"label"`
-    FilterType string `json:"filterType"`
-    SearchType string `json:"searchType"`
-    Content    any    `json:"Content"`
+func (h *{Ctx}Handler) getSchema(w http.ResponseWriter, _ *http.Request) {
+    netx.Response(w, http.StatusOK, model.{Ctx}FilterMapping)
 }
-```
 
-- **`FilterType`**: `text` | `number` | `boolean` | `search-multiple` | `search-single`
-- **`SearchType`** (só para `search-multiple`/`search-single`):
-  - `"embedded"` — valores inline via `Content` (enum estático); front consome direto sem round-trip
-  - `"v1/<path>"` — path relativo da API (sem `/` inicial) que retorna os valores dinamicamente
-- **`Content`** (só quando `SearchType == "embedded"`): a constante referenciada (`map[string]string` canônico, ou shape estável)
-
-Campos `text` / `number` / `boolean` deixam `SearchType` e `Content` zero.
-Detalhes, decisão `search-multiple` vs `search-single`, anti-padrões e
-checklist em [`lookup-endpoints.md`](lookup-endpoints.md).
-
-> **Não existe mais endpoint dedicado `/status`** — o front lê
-> `allowedFields[i].content` direto da resposta de `getSchema`. Handler
-> `getStatus` em código novo é divergência.
-
-## Handler
-- `getSchema` retorna o mapping como JSON
-- `getDynamicQuery` chama `queryMapping.Validate(filters)` **antes** de chamar o service — validação é responsabilidade do handler, nunca do service
-- `filters.Tenant` é injetado pelo handler a partir do JWT — **nunca** vem do body, **nunca** aparece em `AllowedFields`, **nunca** é prependido em `filters.Filters` (ver §"Tenant não vai em `filters.Filters`" abaixo)
-- Filtro default (`filters.Add(...)`) aplica no **handler** quando `len(filters.Filters) == 0` — depois do `Validate`, antes de chamar o service
-- Erro de `Validate(filters)` retorna `netx.Error(w, http.StatusBadRequest, err)` — não `RespondError`
-
-### Esqueleto canônico do `getDynamicQuery`
-
-```go
-func (h *XxxHandler) getDynamicQuery(w http.ResponseWriter, r *http.Request) {
-    tenantID, ok := tenantFromCtx(r)             // extrai do JWT (pode ser companyID, accountID, etc.)
+func (h *{Ctx}Handler) getDynamicQuery(w http.ResponseWriter, r *http.Request) {
+    tenantID, ok := tenantFromCtx(r) // do token, nunca do body
     if !ok {
-        netx.Error(w, http.StatusUnauthorized, errors.New("unauthorized"))
+        netx.Error(w, http.StatusUnauthorized, errUnauthorized)
         return
     }
-    filters := &sqln.Filters{}
-    if err := netx.ParseRequestBody(w, r, filters); err != nil {
+    var filters sqln.Filters
+    if err := netx.ParseRequestBody(w, r, &filters); err != nil {
         netx.Error(w, http.StatusBadRequest, err)
         return
     }
-    if err := model.XxxQueryMapping().Validate(filters); err != nil {
-        netx.Error(w, http.StatusBadRequest, err)
+    if len(filters.Filters) == 0 { // default só quando o cliente não filtrou
+        filters.Add(sqln.NewFilter("status", sqln.Eq, enums.{Resource}StatusActive))
+    }
+    page, appErr := h.svc.GetByDynamicQuery(r.Context(), tenantID, &filters)
+    if appErr.Exists() {
+        netx.RespondError(w, r, appErr)
         return
     }
-
-    filters.Tenant = tenantID                     // (1) tenancy via campo Tenant; repository materializa na base query
-    if len(filters.Filters) == 0 {                // (2) default só quando cliente não filtrou nada
-        filters.Add(sqln.NewFilter("p.<status_col>", sqln.Eq, sharedConst.StatusActive))
-    }
-
-    page, appErr := h.svc.GetByDynamicQuery(r.Context(), filters)
-    if appErr.Exists() { netx.RespondError(w, appErr); return }
     netx.Response(w, http.StatusOK, page)
 }
 ```
 
-### Tenant não vai em `filters.Filters` — vai na base query (security)
+- Filtro default usa **nome de API** do mapping, com constante do enum
+  (`lookup-endpoints.md` §"Origem dos valores").
+- **`filters.Tenant` não é lido pelo SDK** e não tem tag `json` — o body
+  consegue preenchê-lo. Nunca leia tenant de `Filters`; ele vai como argumento
+  explícito do service/repository.
 
-**Regra inviolável:** o predicate de tenancy (`p.tenant_col = X`) é injetado
-como **literal int** na string da base query do repository, **nunca** como
-elemento de `filters.Filters`. Setar `filters.Tenant` no handler é
-**obrigatório** (campo dedicado, lido pelo repo); prependar `NewFilter("p.tenant_col", ...)`
-em `filters.Filters` é **anti-padrão de segurança**.
-
-**Por quê.** O `sqln.NewQueryBuild` envolve **toda** a lista de filtros do
-cliente em **um único parêntese externo** (`fmt.Sprintf("%s AND ( %s )", base, clause)`).
-Se o tenant for prependido como Filter junto dos filtros do cliente, e o cliente
-mandar um `OR` no body (legítimo pelo envelope), o SQL fica:
-
-```sql
-WHERE 1=1 AND ( p.tenant_col = $1 AND p.name LIKE $2 OR p.sku = $3 )
-```
-
-Pela precedência SQL (`AND` > `OR`), isso é avaliado como
-`( (tenant AND name) OR sku )` — linhas com `sku = 'BAR'` de **outro tenant**
-são retornadas. **Vazamento cross-tenant.**
-
-**Como fazer certo.** Tenant entra na base query do repository como literal:
+## Service — repassa e traduz o erro de filtro
 
 ```go
-// repository
-const xxxDynamicQueryBase = `SELECT ` + xxxQuerySelectFields + `
-FROM xxx p
-WHERE p.tenant_col = %d`              // %d para int / %s para UUID já validado
-
-func (r *xxxRepository) FindByDynamicQuery(ctx context.Context, f *sqln.Filters) (...) {
-    base := fmt.Sprintf(xxxDynamicQueryBase, f.Tenant)   // f.Tenant vem do JWT, tipo numérico — sem injection
-    return sqln.FindWithFilter[model.XxxQuery](ctx,
-        sqln.NewQueryBuild(base, f),
-    ).WithPage(sqln.NewPageRequestFilter(f)).PagedList()
-}
-```
-
-Resultado: `WHERE p.tenant_col = 123 AND ( <filtros do cliente, OR seguro entre eles> )`
-— o parêntese do SDK isola o `OR` do cliente sem afetar o predicate de tenancy.
-
-**Tenant UUID (string).** Se `Tenant` for UUID, **não** use `%s` cru — o valor
-veio do JWT mas a categoria de risco é a mesma; valide com `uuid.Parse` antes
-e formate com aspas: `fmt.Sprintf("WHERE p.tenant_col = '%s'", parsed.String())`.
-Tipo numérico (`int32`/`int64`) dispensa validação extra.
-
-**Anti-padrões a rejeitar em PR:**
-- `filters.Filters = append([]*sqln.Filter{NewFilter("p.tenant_col", Eq, tenantID)}, filters.Filters...)`
-- Restringir `LogicalOperators` a só `AND` no mapping para "consertar" o problema — reduz expressividade do filtro dinâmico e o buraco volta na primeira mudança de mapping
-- Confiar no parêntese externo do SDK para isolar tenant — ele isola **o conjunto**, não o tenant individualmente
-
-### Filtro default com enum compartilhado
-
-Quando o default precisa de uma constante de domínio (ex.: status "ativo"
-enquanto outros estados só aparecem se o cliente pedir explicitamente), a
-constante **não vai inline** no handler nem isolada no `model/` do contexto.
-Vai num pacote compartilhado em `{pathService}/common/{contexto}/{contexto}.go`
-(canônico do SDK — pacote per-contexto sob `common/` quando o enum é
-referenciado cross-context):
-
-```go
-package {contexto}
-
-const (
-    StatusActive    = "ACTIVE"   // usado no filtro default da listagem
-    StatusArchived  = "ARCHIVED"
-    StatusPaused    = "PAUSED"
-)
-
-var Statuses = []string{StatusActive, StatusArchived, StatusPaused}
-
-func IsValid(s string) bool {
-    switch s {
-    case StatusActive, StatusArchived, StatusPaused:
-        return true
+func (s *{ctx}Service) GetByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.{Ctx}Query], errs.AppError) {
+    page, err := s.repo.FindByDynamicQuery(ctx, tenantID, f)
+    if errors.Is(err, sqln.ErrInvalidFilter) {
+        return nil, Err{Ctx}InvalidFilter.Wrap(err) // errs.RegisterValidation → 400
     }
-    return false
+    if err != nil {
+        return nil, Err{Ctx}Query.Wrap(err)
+    }
+    return page, errs.AppError{}
 }
 ```
 
-Quando criar esse pacote (gatilhos):
-- O **handler** precisa do valor para o filtro default (ex.: `StatusActive`)
-  **e** o domínio também precisa (entidade, repository, service test).
-  Inline em só um lugar = duplicação garantida quando o segundo consumidor surgir.
-- O enum tem >2 valores e qualquer um deles é referenciado em mais de um arquivo Go.
-- Outro contexto futuro vai consumir o mesmo enum (ex.: agent que valida transição
-  de status antes de publicar evento).
+## Repository — base com tenant em `$1`, BuildQuery, página
 
-Quando **não** criar (mantém local no `model/`):
-- Enum interno do contexto que nunca cruza fronteira (`BatchOperationStatus*` típico).
-- Apenas o handler precisa, em um único `if`. Não vale o pacote ainda.
-
-**Caminho físico canônico:** `{pathService}/common/{contexto}/{contexto}.go`
-(arquivo único; sem subdiretórios). Em Go: `import "{module}/common/{contexto}"`.
-
-## Service
-- `GetByDynamicQuery(ctx, *sqln.Filters)` na interface
-- Implementação **passa `*sqln.Filters` direto ao repository** — sem validar, sem transformar
-- Usa `ErrXxxQuery` existente (mesmo do `GetByFilter`) — não cria novo erro
-- Import `"github.com/joaoprofile/gofi/sqln"` necessário
-
-## Cache em listagem paginada (`PagedList` + `.WithCache`)
-
-- **`PagedList()` honra `.WithCache`** — `ExecutePagedQuery` faz get na entrada
-  e set no sucesso, cacheando a `*sqln.Page[T]` inteira. Encadeie inline (mesmo
-  padrão (a) single-query de `cache-layer.md`):
-  ```go
-  return sqln.FindWithFilter[model.{Ctx}Query](ctx, sqln.NewQueryBuild(base, f)).
-      WithCache(sqln.NewCache[model.{Ctx}Query](key, ttl)).
-      WithPage(sqln.NewPageRequestFilter(f)).
-      PagedList()
-  ```
-  O tipo do `NewCache` é o **row type** (`model.{Ctx}Query`), **não**
-  `sqln.Page[...]` — o SDK hidrata a `Page` internamente (`cache.Get(ctx, &page)`).
-- **A chave (`name` do `NewCache`) deve codificar tudo que muda o resultado** —
-  tenant + filtros + page + sort —, porque o cache do SDK chaveia só pelo
-  `name`. Monte com hash determinístico:
-  `fmt.Sprintf("{ctx}:query:%s:%x", tenant, sha256.Sum256(json.Marshal(f)))`
-  (`json.Marshal(f)` já inclui `f.Params` → page/limit/sort + `f.Filters`).
-  Sem isso, combos de filtro/página diferentes colidem. TTL curto (filtros
-  arbitrários = baixa taxa de hit; staleness aceitável se o dado é eventual).
-  Invalidação por TTL — sem `Del` explícito (consistência eventual).
-- **`NewPageRequestFilter` faz default de `sortField` vazio para `"id"` cru
-  (não qualificado).** Se a base query tem `JOIN` e a tabela juntada também
-  tem coluna `id`, `ORDER BY id` é **ambíguo → erro SQL**. Quando há JOIN,
-  o handler **deve** setar um `sortField` qualificado default (`"p.id"`) +
-  direção, **depois** do `Validate` (e incluir `p.id` em `AllowedSortingFields`).
-
-## Repository
-- `FindByDynamicQuery` usa `sqln.FindWithFilter[{Ctx}Query]` — **nunca** `FindFromCriteria`
-- Query base com `sqln.NewQueryBuild(query, f)` (PostgreSQL) ou `NewQueryBuildWithDialect` para outros bancos
-- Paginação com `sqln.NewPageRequestFilter(f)` — extrai de `f.Params`, **nunca** `NewPageRequest(page, limit, sorts)`
-- Query base **deve terminar com um predicate** (`WHERE p.tenant_col = %d` quando há tenancy, ou `WHERE 1=1` quando não há) — `NewQueryBuild` anexa `AND (...)`, nunca `WHERE`. Ver §"Tenant não vai em `filters.Filters`" no Handler para a regra de segurança que define qual usar
-- **Nenhum** `*sql.Stmt` no construtor para a query dinâmica — construída em runtime
-- Query base declarada como **constante de pacote** no topo do arquivo:
-  ```go
-  // Com tenancy (padrão):
-  const personDynamicQueryBase = `SELECT ` + personQuerySelectFields + ` FROM person p WHERE p.tenant_col = %d`
-  // E no método: baseQuery := fmt.Sprintf(personDynamicQueryBase, filters.Tenant)
-
-  // Sem tenancy (raro — só quando o recurso é genuinamente global):
-  const personDynamicQuery = `SELECT ` + personQuerySelectFields + ` FROM person p WHERE 1=1`
-  ```
-  Nunca inline no método.
-- Constante `{ctx}QuerySelectFields` separada de `{ctx}SelectFields` quando o read model difere da entidade
-
-## Spec — campos obrigatórios
-
-`§0.1 Decisões de Arquitetura`:
-```
-| Filtro dinâmico | sim — POST /{ctx}s/schemas + POST /{ctx}s/query |
-```
-
-`§0.1 Contratos de Camada`:
 ```go
-// Repository
-FindByDynamicQuery(ctx context.Context, filters *sqln.Filters) (model.{Ctx}QueryResponse, error)
+const {ctx}DynamicQueryBase = `SELECT ` + {ctx}QuerySelectFields + `
+FROM {tabela} e
+WHERE e.tenant_id = $1`
 
-// Service
-GetByDynamicQuery(ctx context.Context, filters *sqln.Filters) (model.{Ctx}QueryResponse, errs.AppError)
+func (r *{ctx}Repository) FindByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.{Ctx}Query], error) {
+    if f.Params == nil {
+        f.Params = &sqln.FilterParams{}
+    }
+    if f.Params.SortField == "" { // default qualificado pelo mapping
+        f.Params.SortField, f.Params.SortDirection = "created", string(sqln.DESC)
+    }
+    q, err := sqln.BuildQuery({ctx}DynamicQueryBase, []any{tenantID}, f, model.{Ctx}FilterMapping, nil)
+    if err != nil {
+        return nil, err
+    }
+    page, err := sqln.NewPageRequestFilter(f, model.{Ctx}FilterMapping)
+    if err != nil {
+        return nil, err
+    }
+    return sqln.FindWithFilter[model.{Ctx}Query](ctx, q).WithPage(page).PagedList()
+}
 ```
 
-`§4` deve ter seções dedicadas para `/schemas` e `/query` documentando:
-- Campos filtráveis (Label, Key SQL, FilterType)
-- Campos ordenáveis
-- Filtro default
+- A base termina **dentro do `WHERE`** — o SDK anexa `AND ( <filtros> )`,
+  com os filtros do cliente num parêntese próprio. Tenant é **argumento
+  ligado** (`$1`); os placeholders dos filtros continuam depois dos `args`.
+  Um `OR` do cliente nunca escapa do predicado de tenancy. Sem tenancy
+  (recurso genuinamente global): base termina em `WHERE TRUE` e `args` `nil`.
+- `dialect` `nil` = dialeto da conexão ativa.
+- **Sort default no repositório** (normalização é do repo): sem `sortField`,
+  o SDK ordena por `id` sem qualificador, que fica ambíguo quando a projeção
+  junta tabelas com `id`. Defina um default Sortable do mapping.
+- Base query e `{ctx}QuerySelectFields` são **constantes de pacote**, nunca
+  inline no método. Read model `{Ctx}Query` separado da entidade quando a
+  projeção difere.
+- Cache opcional: `.WithCache(sqln.NewCache[model.{Ctx}Query]("{ctx}:query:"+tenantID, ttl))`
+  antes do `PagedList` — o SDK já separa as entradas por SQL + args + página
+  (`cache-layer.md`).
+- Export do mesmo filtro: `report-export.md`.
 
-`§8 Estrutura de Arquivos`:
-```
-│   └── query_dto.go      # {Ctx}QueryMapping(), {Ctx}QueryResponse, {Ctx}Query
-│   └── {ctx}_repository.go   # ...
-│       #   {ctx}DynamicQuery = constante de pacote — nunca inline
-```
+## Spec — o que declarar
+
+- §0.1 Decisões: `Filtro dinâmico | sim — POST /{ctx}s/schemas + POST /{ctx}s/query`.
+- §0.1 Contratos:
+  ```go
+  FindByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.{Ctx}Query], error)      // repository
+  GetByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.{Ctx}Query], errs.AppError) // service
+  ```
+- §4: tabela do mapping (nome de API, coluna, `Ops`, `Sortable`, `Label`,
+  `FilterType`, `SearchType`, `Content`), sort default e filtro default.
 
 ## Testes de handler
 
-`validQueryBody` deve usar o envelope completo (`params` + `filters`) com operadores
-**SQL literais**:
-
-```json
-{
-  "params": { "page": 0, "limit": 15, "sortField": "<col>", "sortDirection": "ASC" },
-  "filters": [{ "field": "<table>.<col>", "condition": "=", "value": "<v>" }]
-}
-```
-
-Não use `"operator":"eq"` (seria silenciosamente ignorado pelo predicate builder).
-Não envie `page`/`limit` no nível raiz — o handler **só** lê de `params`.
+Body com envelope completo e operadores literais:
+`{"params": {"page": 0, "limit": 15, "sortField": "name", "sortDirection": "ASC"},
+"filters": [{"field": "name", "condition": "=", "value": "x"}]}`. Cubra o
+400: campo fora do mapping, operador fora de `Ops`, `sortField` não Sortable.

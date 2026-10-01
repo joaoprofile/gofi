@@ -1,23 +1,31 @@
+---
+name: handler-test-pattern
+description: Teste de handler netx — stub de service com campos de resultado, httptest, só status code; claims injetadas pelo helper do middleware de auth
+sdk: v0.8.2
+keywords: [handler test, httptest, stub, SetPathValue, status code, WithClaims, RespondError]
+---
+
 # Handler Test — Padrão Simples
 
 ## Regra
 
-Todo handler deve ter `{contexto}_handler_test.go` cobrindo o óbvio de cada endpoint.
+Todo handler tem `{contexto}_handler_test.go` cobrindo o óbvio de cada endpoint.
+Esqueleto completo: `.claude/sdk/go/boilerplates/handler-test.md`.
 
 ## Stub vs Mock
 
-Handler tests usam **stub** (campos de resultado fixos), não mock com funções como no service test.
+Handler test usa **stub** (campos de resultado fixos), não mock com funções
+como no service test.
 
 ```go
-// Stub — simples, campos de resultado
-type stubPersonService struct {
-    createErr      errs.AppError
-    getByIDResult  *model.Person
-    getByIDErr     errs.AppError
+type stubEntityService struct {
+    createErr     errs.AppError
+    getByIDResult *model.Entity
+    getByIDErr    errs.AppError
     // um campo por retorno de cada método
 }
 
-func (s *stubPersonService) Create(_ context.Context, _ model.CreatePersonRequest) errs.AppError {
+func (s *stubEntityService) Create(_ context.Context, _ string, _ model.CreateEntityRequest) errs.AppError {
     return s.createErr
 }
 // ... demais métodos da interface
@@ -26,36 +34,52 @@ func (s *stubPersonService) Create(_ context.Context, _ model.CreatePersonReques
 ## O que cobrir por endpoint
 
 | Tipo de endpoint | Casos obrigatórios |
-|-----------------|-------------------|
-| POST/PUT com body | happy path, body inválido (400), service error mapeado |
-| GET com path param int64 | happy path, ID inválido (400), not found (404) |
-| GET com query params | happy path, service error (500) |
+|---|---|
+| POST/PUT com body | happy path, body inválido (400), erro do service mapeado |
+| GET com path param | happy path, param inválido (400) se o handler converte, not found (404) |
+| GET com query params | happy path, erro do service (500) |
+| Rota com gate de permissão | sem claims (401), permissão negada (403) |
 
 **Happy path → verificar apenas o status code.** Não testar corpo da resposta.
 
 ## Infraestrutura do teste
 
+Chame o método do handler direto — sem servidor, sem roteador:
+
 ```go
-// Path params: req.SetPathValue("id", "1")  — Go 1.22+ net/http, compatível com netx.GetPathParam
-req := httptest.NewRequest(http.MethodGet, "/api/v1/persons/1", nil)
-req.SetPathValue("id", "1")
+req := httptest.NewRequest(http.MethodGet, "/v1/entities/1", nil)
+req.SetPathValue("id", "1") // netx.GetPathParam lê r.PathValue
 rr := httptest.NewRecorder()
 
 h.getByID(rr, req)
 assert.Equal(t, http.StatusOK, rr.Code)
 ```
 
+- `netx.RespondError(w, r, appErr)` precisa do `*http.Request` — passe o `req`
+  do teste (nunca `nil` no código de produção).
+- Chamar o método direto **não** passa pelo middleware de auth (`UseAuth` só
+  embrulha rotas `netx.PrivateRoutes` no servidor). Handler que lê claims
+  recebe-as pelo helper do middleware de auth:
+  `req = req.WithContext(authhandler.WithClaims(req.Context(), &types.Claims{...}))`
+  — ver `http-auth-middleware.md` §"Claims no contexto".
+- O contrato de autenticação (401 sem token, token revogado) é testado **uma
+  vez** no pacote do middleware, não em cada handler.
+
 ## Mapeamento de status esperado
 
-| AppError kind | Status HTTP |
-|--------------|-------------|
+| AppError (kind) | Status HTTP |
+|---|---|
+| `ErrXxxValidation.New()` | 400 |
+| `ErrXxxUnauthorized.New()` | 401 |
+| `ErrXxxForbidden.New()` | 403 |
 | `ErrXxxNotFound.New()` | 404 |
 | `ErrXxxConflict.New()` | 409 |
-| `ErrXxxValidation.New()` | 400 |
-| `ErrXxxCreate/Update/Query.New()` | 500 |
+| `ErrXxxExternal.New()` | 502 |
+| `ErrXxxCreate/Update/Query.New()` (operation) | 500 |
 
 ## O que NÃO testar no handler
 
 - Corpo da resposta JSON (responsabilidade do service test)
 - Regras de negócio (idem)
 - Integração com banco (sem banco nos testes de handler)
+- Validação de assinatura/sessão do token (é do middleware)

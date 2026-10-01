@@ -10,7 +10,7 @@ import (
 
 func TestInstallInstitutionalMirrorFullReplace(t *testing.T) {
 	root := t.TempDir()
-	dest := filepath.Join(root, ".claude", "institutional", "winnerbox")
+	dest := filepath.Join(root, ".claude", "institutional", "acme")
 
 	// Pre-existing local content that must NOT survive a full-replace mirror.
 	if err := os.MkdirAll(dest, 0o755); err != nil {
@@ -21,14 +21,14 @@ func TestInstallInstitutionalMirrorFullReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Multi-product repo: this product's folder lives under winnerbox/.
+	// Multi-product repo: this product's folder lives under acme/.
 	repo := fstest.MapFS{
-		"winnerbox/INDEX.md":  {Data: []byte("# INDEX winnerbox")},
-		"winnerbox/domain.md": {Data: []byte("# domain")},
+		"acme/INDEX.md":  {Data: []byte("# INDEX acme")},
+		"acme/domain.md": {Data: []byte("# domain")},
 		"otherprod/INDEX.md":  {Data: []byte("# other")},
 	}
 
-	created, err := InstallInstitutionalMirror(repo, "winnerbox", root, "winnerbox", TemplateData{ProjectName: "winnerbox"})
+	created, err := InstallInstitutionalMirror(repo, "acme", root, "acme", TemplateData{ProjectName: "acme"})
 	if err != nil {
 		t.Fatalf("mirror: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestInstallInstitutionalMirrorFullReplace(t *testing.T) {
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Error("stale local file survived the full-replace mirror")
 	}
-	if b, _ := os.ReadFile(filepath.Join(dest, "INDEX.md")); string(b) != "# INDEX winnerbox" {
+	if b, _ := os.ReadFile(filepath.Join(dest, "INDEX.md")); string(b) != "# INDEX acme" {
 		t.Errorf("INDEX.md not mirrored: %q", b)
 	}
 	// The other product's folder must not leak in.
@@ -49,7 +49,7 @@ func TestInstallInstitutionalMirrorFullReplace(t *testing.T) {
 
 func TestInstallInstitutionalMirrorMissingSubdir(t *testing.T) {
 	repo := fstest.MapFS{"otherprod/INDEX.md": {Data: []byte("x")}}
-	_, err := InstallInstitutionalMirror(repo, "winnerbox", t.TempDir(), "winnerbox", TemplateData{})
+	_, err := InstallInstitutionalMirror(repo, "acme", t.TempDir(), "acme", TemplateData{})
 	if !errors.Is(err, ErrNoInstitutionalSubdir) {
 		t.Errorf("expected ErrNoInstitutionalSubdir, got %v", err)
 	}

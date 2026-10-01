@@ -22,7 +22,7 @@ func TestSeedCorpusIndex(t *testing.T) {
 		if !strings.Contains(body, "manifesto de retrieval (RAG)") {
 			t.Errorf("%s INDEX missing RAG header:\n%s", corpus, body)
 		}
-		if !strings.Contains(body, "gen-index.sh "+corpus) {
+		if !strings.Contains(body, "gofi index docs") {
 			t.Errorf("%s INDEX missing regen command", corpus)
 		}
 	}

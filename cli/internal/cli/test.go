@@ -10,9 +10,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/runner"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/runner"
+	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
 )
 
 func newTestCmd() *cobra.Command {
@@ -87,9 +88,9 @@ func runTestList() error {
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
 
 	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(int(os.Stdout.Fd()))
-	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	defaultMarker := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.Dim)
+	defaultMarker := lipgloss.NewStyle().Foreground(styles.Good)
 
 	width := 0
 	for _, t := range infos {

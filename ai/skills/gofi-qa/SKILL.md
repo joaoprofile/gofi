@@ -14,184 +14,46 @@ específicas — **nunca reescreve código**.
 
 ---
 
-## Leis (regras básicas — aplicam antes de tudo)
+## Leis
 
-1. **Especialista genérica e portável.** Esta skill carrega só metodologia de
-   auditoria e expertise técnica **transferível** — **nada** específico de
-   produto, empresa ou instituição (nomes de entidade, roles, module paths,
-   endpoints, valores de negócio). Trocar de projeto **não** muda a skill.
-2. **Conhecimento específico mora FORA da skill.** O que é do projeto vive em
-   `specs/{contexto}/`, `.claude/memory/contexts/{contexto}.md` e no contexto
-   institucional `.claude/institutional/{project.name}/` (negócio/domínio).
-   Padrão técnico genérico vive em `.claude/knowledge/` e `.claude/sdk/<lang>/`,
-   sempre **domínio-neutro** (placeholders `{contexto}`, `<module>`, `RoleA`,
-   `entity`).
-3. **Institucional é RAG.** Quando precisar de contexto de negócio além da spec,
-   carregue só o `INDEX.md` e depois os **chunks relevantes** — nunca a pasta
-   inteira (performance/menos tokens).
-4. **A skill nunca acumula fato de negócio em si mesma.** Técnica transferível →
-   skill/knowledge (domínio-neutro); fato específico do projeto →
-   spec/memória/institucional. **Teste:** *serviria, sem mudar uma palavra, a
-   outro projeto com o mesmo SDK? → skill; só vale aqui? →
-   spec/memória/institucional.* (detalhe no §"Protocolo de aprendizado contínuo".)
-5. **Bug fix ou melhoria sem teste de regressão → MAJOR (LEI absoluta).**
-   Toda correção de bug e toda melhoria de comportamento na entrega **tem que**
-   vir acompanhada de um teste que **ancora o cenário corrigido** (input que
-   reproduzia o defeito → assert do comportamento correto), no lugar certo da
-   pirâmide (service/handler/repository/adapter). Ausência é **MAJOR** — o QA
-   audita isso explicitamente (ver §"Testabilidade"). Descobrir o que é fix/
-   melhoria: `## Histórico de Alterações` da spec + `## Estado atual`/`## Histórico
-   de versões` da memória do contexto + o diff. Fix confirmado sem teste que o
-   trave é reprovação.
-6. **Auditar é consultar o grafo — nunca varrer o código por reflexo (LEI
-   absoluta).** Todo achado nasce de `gofi graph explain`; `grep -r`/`Glob`
-   deliberado atrás de código é violação. O gate **não** é *"isto é símbolo?"*
-   — essa pergunta se responde de cabeça, sem consultar nada, e é exatamente
-   por ela que a auditoria volta a ser uma varredura de arquivos; o gate é
-   *"**eu já chamei o `explain`?**"*. **Uma** chamada antes do primeiro `grep`,
-   sempre, inclusive quando o alvo parece fora do índice (`const`/`var`,
-   diretiva em comentário, string) — aí o movimento certo é `explain` no
-   **símbolo concreto que o referencia** (o DTO, o service, o tipo). E
-   `explain` vazio **não autoriza `grep` automaticamente**: vazio quase sempre
-   é pergunta mal formulada. A escada é (1) reformular no grafo — dois termos,
-   ou o vizinho concreto; (2) se o achado é de **ausência** (§5b), `build
-   --deep` (varrer não substitui: o `grep` acha texto, não resolve dispatch por
-   interface); (3) grafo stale numa cadeia `eng → qa`? `build --update` e
-   repita; (4) **só então** `grep`, **se for o caso** — sem extractor para a
-   linguagem, ou alvo comprovadamente textual — e **o laudo declara** cada
-   queda ("verificado por grep porque X"). Protocolo:
-   `.claude/knowledge/shared/graph-retrieval-protocol.md`.
-7. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
-   atualizando o que é derivado, na ordem: **memória do contexto** →
-   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
-   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
-   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
-   descobrir três fases depois.
+**Leis comuns** (AGENTS.md §Leis comuns): 1 portável · 2 índice primeiro · 3 fechar reindexa · 4 versão = produção · 7 só o combinado.
 
-   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
-   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
-   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
-   build, ela não o encontra. E **índice desatualizado é pior que índice
-   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
-   confiança para o lugar errado.
-
-8. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
-   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
-   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
-   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
-   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
-   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
-   produção** e o documento passa a descrever comportamento diferente **que irá**
-   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
-   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
-   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
-   em `1.0`. Política completa em
-   `.claude/knowledge/shared/document-versioning.md`.
+1. **Bug fix ou melhoria sem teste de regressão → MAJOR (LEI absoluta).** O QA
+   audita isso explicitamente; fix confirmado sem teste que o trave é
+   reprovação. → `.claude/expertise/code-review/checklist-cross-language.md` §Lei do teste de regressão (MAJOR)
+2. **Auditar é consultar o grafo (LEI absoluta).** Todo achado nasce de `gofi find --in code`/`gofi show`;
+   o gate da busca literal é *"eu já consultei o grafo?"*, e **o laudo declara** cada
+   queda. → `reference/graph-audit.md` §Lei: auditar é consultar o grafo
+3. **Ausência só se prova em `deep`.** Nunca apresente ausência de aresta em
+   `fast` como prova. → `reference/graph-audit.md` §Validar o modo do grafo
 
 ---
 
 ## Pré-execução obrigatória
 
+Segue a *Convenção de leitura dos agents* do AGENTS.md, com estes pontos do QA:
+
 1. Ler `.gofi.yaml` (raiz) — extrair `project.language`, `project.name`
-2. Ler `.claude/CLAUDE.md` — mapa de paths físicos
+2. O `AGENTS.md` da raiz (já carregado) — mapa de paths físicos
 3. Ler `.claude/memory/project.md` — visão global, serviços e convenções (índice de contextos: `/gofi-status`)
 4. Ler `.claude/memory/contexts/{contexto}.md` — frontmatter + handoff do gofi-eng (decisões, arquivos)
-5. Ler a spec — **fonte da verdade para conformidade**. **Procurar documento é `gofi find`:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Antes de apontar divergência entre documentos, `gofi find --links <doc>` mostra quem depende do que você vai questionar. Protocolo: `.claude/knowledge/shared/rag-retrieval-protocol.md`
-5a. **Auditar a corrente do contexto.** `gofi find --context {contexto}` mostra spec, PRD, memória, tabelas, pacotes de código e as **lacunas** — PRD sem spec, spec que ninguém referencia, contexto sem pacote marcado `//gofi:context`. Lacuna é achado de auditoria, não ruído; um PRD em discovery legitimamente ainda não tem spec, então reporte com o julgamento, não como falha automática.
-
-5b. **Auditar é consultar o grafo, não varrer o código com `grep`.** Rode `gofi graph build --update` **primeiro**: o hook de pre-commit só reconstrói o grafo no commit e, numa cadeia `eng → qa`, o commit ainda não aconteceu — sem isto você auditaria um mapa sem a implementação. Depois `gofi_graph_index.json` (que escopos existem e **em que pasta** — backend em `.`, cada superfície em `{nome}/`, SDK em `sdk/`) → o `gofi_graph_report.md` **do escopo auditado** (as §"Ciclos de chamada" e §"Conexões inesperadas" são evidência direta de violação de camada) → `gofi graph explain <símbolo>` nos pontos auditados; quando não souber o nome exato, `gofi graph explain <termo> <termo>` busca por nome parcial dentro do grafo. **Nunca** abra `gofi_graph.json`. **O gate do `grep` não é "isto é símbolo?", é "eu já chamei o `explain`?"** — a pergunta de classificação você responde de cabeça, sem consultar nada, e é por ela que a auditoria volta a ser uma varredura de arquivos. Uma chamada de `explain` (pelo alvo, ou por dois termos quando não souber o nome) **antes** do primeiro `grep`, mesmo quando você tem certeza de que o alvo é `const`/`var`/comentário/string. Caiu no `grep`? **Declare no laudo** que caiu e por quê. Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`
-
-5b. **Valide o modo do grafo antes de escrever "não há violação".** Todo item deste checklist que afirma **ausência** ("service NÃO importa X", "handler não acessa repository") é uma prova de negativa, e só o modo `deep` a sustenta: em `fast` a chamada ambígua não vira aresta. Leia o `mode` do escopo no `gofi_graph_index.json` (o `report.md` também o traz no cabeçalho e a contagem de ambíguas no §Resumo). Os hooks de git reconstroem **sempre em `fast`** e `gofi update` no modo do `.gofi.yaml` — **`fast` por padrão** —, então um grafo recém-reconstruído continua sendo `fast` na maioria dos projetos. Se vier `fast`: rode `gofi graph build --deep` antes de concluir, ou **registre no laudo** que a verificação foi sintática (e sugira `graph: deep: true` no `.gofi.yaml` se o projeto quiser exatidão nos builds deliberados). Numa superfície de UI o `deep` não existe — o extractor TS/JS é sintático e o escopo fica `fast` de todo jeito, então ali a limitação **sempre** se declara. Nunca apresente ausência de aresta em `fast` como prova. Gatilhos completos em *Quando rodar `--deep`* do protocolo do grafo.
-6. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui `diagram-conventions.md` — auditar se diagramas da spec/laudo são PlantUML; Mermaid/ASCII/imagem é divergência; `application-vs-domain-service.md` — auditar separação de camadas: application não chama repository direto, service não importa bridge/factory/application, erros na camada correta, tests da application mockam service e não repository). Quando o contexto usa filtro dinâmico, ler também `.claude/sdk/<lang>/knowledge/lookup-endpoints.md` — shape v2 do `FieldMapping` (`SearchType: "embedded"` + `Content` vs `SearchType: "v1/<path>"`); rota dedicada `GET /{ctx}/status` foi descontinuada e em código novo é divergência
+5. Ler a spec — **fonte da verdade para conformidade**, por `gofi find` e `Read(offset, limit)`. → `reference/pre-execution.md` §Ler a spec (passo 5)
+6. Knowledge cross-agent pelo `.claude/knowledge/INDEX.md` (núcleo ⬤ + módulos da tarefa; diagramas, camadas, lookup). → `reference/pre-execution.md` §Knowledge cross-agent (passo 6)
 7. Ler **knowledge per-agent**: `.claude/knowledge/qa/*.md` (user-treinado)
-8. Para `project.language`:
-   - Ler **checklist completo**: `.claude/sdk/<lang>/knowledge/qa-checklist.md`
-   - Ler **regras absolutas**: `.claude/sdk/<lang>/knowledge/absolute-rules.md`
-   - Ler os módulos de `sdk/<lang>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar para padrões consolidados (cache, value-objects, repository-primitive-return, etc.)
-   - Ler módulos do SDK em `.claude/sdk/<lang>/sdk-docs/` que o contexto utiliza
-   - Ler `.claude/sdk/<lang>/boilerplates/*.md` — referência de código correto
+8. Para `project.language`: `qa-checklist.md`, `absolute-rules.md`, módulos indicados, referência gerada do SDK (`api/INDEX.md` → pacotes usados) e boilerplates. → `reference/pre-execution.md` §Linguagem-alvo (passo 8)
 
 ---
 
-## Escopo de auditoria
+## Workflow
 
-A lista exata de itens a verificar para a linguagem-alvo está em
-**`.claude/sdk/<lang>/knowledge/qa-checklist.md`**. Aplique todos os
-itens relevantes ao contexto.
-
-Em todo contexto, você verifica também:
-
-### Conformidade com a spec (cross-language)
-- [ ] Todos os campos da entidade estão implementados
-- [ ] Todas as operações listadas existem e funcionam
-- [ ] Todas as RN-* estão implementadas
-- [ ] HTTP status codes correspondem ao mapeado na spec
-- [ ] Filtros de listagem se comportam como especificado
-- [ ] Ciclo de vida de status segue o documentado
-
-### Separação de camadas (cross-language, ver `sdk/<lang>/knowledge/layers.md`)
-- [ ] Handler não acessa repository diretamente
-- [ ] Service não conhece tipos de transporte (HTTP)
-- [ ] Repository não conhece DTOs
-- [ ] Handler não contém lógica de negócio
-
-### Testabilidade (cross-language)
-- [ ] Service recebe interface de repository
-- [ ] Handler recebe interface de service
-- [ ] Service test cobre: sucesso, validação inválida, not-found, erro de repo
-- [ ] Handler test cobre: sucesso, decode error, service error
-- [ ] Mocks são handcraft (sem frameworks externos)
-- [ ] Mock implementa todos os métodos da interface (incluindo cleanup)
-- [ ] **Todo bug fix / melhoria de comportamento na entrega tem teste de regressão** ancorado no cenário corrigido (reproduz o defeito → assert do comportamento correto), na camada onde o defeito mora. Cruzar `## Histórico de Alterações` da spec + memória do contexto + diff contra os `_test.go` tocados. Fix/melhoria sem teste que o trave é **MAJOR** — o objetivo do teste é impedir regressão futura, não só cobrir a linha nova
-
-### Repository aggregate pattern (Go-specific, ver `.claude/sdk/go/knowledge/repository-aggregate-pattern.md`)
-- [ ] Contexto com mutação multi-tabela atômica tem **struct `{Aggregate}Aggregate`** declarada em `model/`. Ausente quando o service salva N entidades relacionadas em sequência é **MAJOR**
-- [ ] Repository injeta `tx sqln.Transaction` no struct via constructor (`sqln.NewTransaction(...)`). Aggregate methods (`CreateAggregate`/`UpdateAggregate`/`DeleteAggregate`) envolvem todas as ops em `r.tx.Execute(ctx, fn)`. Ausente quando há mutação multi-tabela atômica é **MAJOR**
-- [ ] **Service NÃO importa `sqln.NewTransaction`** — `gofi graph explain sqln.NewTransaction` lista quem chama; qualquer chamador em `service/` é **MAJOR** (transação deve viver no repo). Como é prova de ausência, vale a §5b: em escopo `fast`, confirme com `--deep` ou declare a limitação
-- [ ] **Service NÃO injeta `txRunner`** (função `func(ctx, fn) error` que esconde tx). Padrão `noopTx` em test ou campo `runTx` no service é **MAJOR** — refatorar movendo tx pro repo
-- [ ] Test do service mocka `CreateAggregate` / `UpdateAggregate` retornando `error` direto. Test que precisa simular tx (via `noopTx`/`txRunner`) é sinal de que tx vazou pro service — **MAJOR**
-- [ ] **Isolation level default = `sql.LevelReadCommitted`** no constructor. Uso de `sql.LevelSerializable` ou `sql.LevelRepeatableRead` **sem RN/ADR explícita** justificando invariante cross-row é **MAJOR** (gera `40001 serialization_failure` flaky sob concorrência)
-- [ ] Se a spec declara consumer de bulk (importação de planilha, sincronização batch): existe `CreateAggregatesBulk(ctx, []*Aggregate) error` que abre **uma só** transação + reutiliza `tx.PrepareContext` por SQL distinto. Ausente é **MAJOR**. Bulk method criado **sem** consumer declarado na spec é **MINOR** (YAGNI)
-- [ ] **Helpers de persistência são MÉTODOS do receiver** — `gofi graph explain {pathContext}repository --limit 40` lista os símbolos do pacote (o `--limit` padrão é 12 e corta pacote grande): método aparece como `repository.{Contexto}Repository.Metodo`, função solta como `repository.helper`. Nenhuma função solta pode receber `ctx`/executar SQL — toda função do arquivo do repo que o faça é `func (r *{contexto}Repository) ...`. Helper solto no pacote sem receiver (ex.: `func insertConfig(ctx, e) error`) é **MAJOR** — perde acesso aos stmts do struct, borra encapsulamento do repo. Exceção: funções **puras** sem `ctx`/I/O (ex.: `configArgs(e *Config) []any`) podem ficar como funções de pacote
-- [ ] **Prepared stmts no constructor pra TODO SQL estático de mutation** — campos `stmInsertX`/`stmUpdateX`/`stmDeleteX` no struct, preparados em `New{Contexto}Repository(ctx)`. `sqln.NewStatement().Execute(ctx, sql, args...)` inline em método de mutation (prepara + executa + descarta a cada chamada) é **MAJOR** — quebra cache de prepare. Exceção: SQL dinâmico de filtro dinâmico não pode ser preparado
-- [ ] **Dentro de `r.tx.Execute(...)`, helpers fazem rebind via `ctx.Value(connection.SqlTxContextKey).(*sql.Tx).Stmt(r.stmXxx)`** antes de `ExecContext`. Chamar `r.stmXxx.ExecContext(ctx, ...)` direto dentro da tx é **BLOCKER** — pega outra conexão do pool, a mutação não participa da transação, atomicidade quebra silenciosamente
-- [ ] `Close()` do repo fecha todos os prepared stmts armazenados no struct (campos `stm*`)
-
-### Segurança geral
-- [ ] Sem SQL concatenado (parâmetros posicionais sempre)
-- [ ] Sem dados sensíveis em log (senha, token, CPF completo)
-- [ ] Sem erros internos vazando em respostas HTTP
-- [ ] IDs validados antes de uso
-- [ ] **`tenant.id` e `user.id` são UUID** no schema (`UUID PRIMARY KEY` **sem `DEFAULT`** — geração é responsabilidade da aplicação); **toda FK** que aponte para eles (`*.tenant_id`, `*.created_by_user_id`, `*.author_user_id`, etc.) também é UUID. **Migration NÃO declara `CREATE EXTENSION IF NOT EXISTS "pgcrypto"` para gerar UUID** — apontar como **MAJOR** se schema tiver `DEFAULT gen_random_uuid()`/`NEWID()`/`SYS_GUID()`. **Service gera o `id` como UUIDv7** (Go: `uuid.NewV7()` do `github.com/google/uuid` ≥ v1.6.0) antes de chamar `repo.Save(...)`; uso de `uuid.NewString()` / `uuid.New()` (que retornam v4) para PK nova é **MAJOR** — perde ordenação temporal e fragmenta índice B-tree. Validators de DTO usam `validate:"uuid"` (qualquer versão) — `validate:"uuid4"`/`validate:"uuid7"` é **MINOR** (lock em versão quebra evolução do produtor). Repo NÃO usa `INSERT ... RETURNING id` (apontar como MAJOR se usar — `Save` deve devolver apenas `error`). Em Go, modelados como `string` em entidade/DTO/contratos. Path params validam formato UUID antes do service. Regra completa em `.claude/knowledge/shared/id-types.md` — apontar como divergência se a implementação usa `BIGINT`/`int64` para esses IDs sem ADR explícita justificando exceção
-
-### Índices e perfil de acesso ao banco (PostgreSQL, ver `.claude/sdk/go/knowledge/postgres-index-strategy.md`)
-- [ ] Cada tabela do contexto tem **perfil de acesso declarado** na spec (`cold` / `hot UPDATE` / `hot DELETE+INSERT` / `append-only`). Ausente = **MAJOR** (a migration não tem como decidir índice corretamente)
-- [ ] Tabela multi-tenant: todo índice tem **leading column = tenant** (composite `(tenant, x)` ou partial `WHERE tenant = ...`). Single-column em coluna não-tenant é **MAJOR** (atravessa tenants)
-- [ ] Filtro `text` com `LIKE '%x%'` / `ILIKE` / regex: índice **GIN com `gin_trgm_ops`** (extensão `pg_trgm`). Btree single-column nessa coluna é **MAJOR** (não é usado pelo planner)
-- [ ] Hot UPDATE: número de índices em **colunas voláteis** (`status`, `position`, contadores) minimizado. Cada índice em coluna que muda quebra HOT update e gera bloat
-- [ ] Hot UPDATE com colunas indexadas estáveis: `fillfactor=70-80` aplicado. Ausente é **SUGGESTION**; presente em cold table é **MINOR** (desperdício)
-- [ ] Hot UPDATE / Hot DELETE+INSERT: **autovacuum tunado** (`vacuum_scale_factor=0.01` e similares). Default do Postgres deixa bloat acumular nessas tabelas
-- [ ] Worker cross-cutting (purge, archive, replicação seletiva) declarado no projeto: **toda tabela** onde a coluna do worker existe tem índice nela. Junction sem a coluna naturalmente: coluna desnormalizada + índice OU subquery via parente justificada em ADR
-- [ ] Append-only: tabela **particionada** quando volume cresce indefinidamente. Índices declarados no parent (propagam pra partições)
-- [ ] Tabela com `BOOLEAN` indexado sem partial é **MINOR** (geralmente baixa cardinalidade — partial pelo valor minoritário, ou nenhum índice)
-- [ ] Drop+recreate de índice em migration de produção usa `CONCURRENTLY` (sem bloquear escrita)
-
-### Bootstrap do `main.go` (Go-specific, ver `.claude/sdk/go/knowledge/main-bootstrap.md`)
-- [ ] Quando o serviço carrega providers (JWT, Redis session, OAuth) ou adapters de SDK externo (IAM tenant/RBAC), o bootstrap está dividido em `config.go` / `iam.go` / `wire.go` / `pool_stub.go` / `config_test.go` — todos `package main` em `pathCmd`. **MAJOR** se ausente
-- [ ] `os.Getenv` aparece em **um arquivo só** (`config.go`); duplicação (e.g. `JWT_SECRET` lido em dois lugares) é **MAJOR**
-- [ ] `LoadConfig` retorna `(Config, error)` — não chama `logging.Fatal` (intestável de outra forma); `main()` é quem fataliza
-- [ ] `config_test.go` cobre env obrigatório ausente, defaults e valores populados
-- [ ] Stubs/placeholders cross-context (e.g. `noopPoolChecker`) ficam em arquivo próprio com comentário de dívida — não inline em `main.go`
-
-### Valores monetários, moeda e país (ver `services/common/money`)
-- [ ] Parse de valor monetário usa `services/common/money` — `money.ParseLoose` (moeda desconhecida no parse, ex.: import multi-país) ou `Currency.Parse` (moeda conhecida). `strconv.ParseFloat`/`ParseFloatLoose` cru em string de dinheiro é **MAJOR** — quebra em formato não-BR (`1,234.56` de MXN/PEN vira lixo)
-- [ ] Arredondamento de valor por moeda via `Currency.Round`/`Currency.Truncate` — `math.Round` com casas fixas hardcoded é **MAJOR** (CLP/PYG têm 0 casas, ignorar gera centavo fantasma)
-- [ ] Resolução país→moeda via `money.ByCountry`/`money.CodeForCountry` — mapa local país→moeda redeclarado no contexto é **MAJOR** (catálogo é único e cobre todo LatAm)
-- [ ] Símbolo/casas decimais/separador de moeda **nunca** hardcoded — vêm do `money.Currency` do catálogo
-- [ ] Código novo importa `services/common/money` direto; `integration.Currency` é alias de compat (uso só em legado não-migrado) — uso em código novo é **MINOR**
-
-### Aderência ao knowledge user-treinado
-- [ ] Padrões registrados em `.claude/knowledge/qa/*.md` foram respeitados pelo gofi-eng
+1. **Reindexar e ler o grafo.** `gofi index code` primeiro; depois `gofi_graph_index.json` → `gofi_graph_report.md` do escopo → `gofi show <símbolo>`. → `reference/graph-audit.md` §Auditar é consultar o grafo, não varrer o código
+2. **Auditar a corrente do contexto** com `gofi show ctx:{contexto}` — lacuna é achado, julgada. → `reference/graph-audit.md` §Auditar a corrente do contexto
+3. **Validar o modo do grafo** antes de qualquer "não há violação". → `reference/graph-audit.md` §Validar o modo do grafo antes de escrever "não há violação"
+4. **Aplicar o checklist da linguagem** (`.claude/sdk/<lang>/knowledge/qa-checklist.md`), todos os itens relevantes.
+5. **Itens cross-language** (conformidade, camadas, testabilidade + regressão, segurança, knowledge user-treinado). → `.claude/expertise/code-review/checklist-cross-language.md`
+6. **Itens Go/PostgreSQL/dinheiro** quando o contexto os toca (escrita/statements, repository aggregate e transação, driver, índices, `services/common/money`). → `.claude/sdk/<lang>/knowledge/qa-checklist-postgres.md` (bootstrap do `main.go` fica em `qa-checklist.md`)
+7. **Classificar** cada achado pela tabela de severidade abaixo e emitir o laudo no formato de *Output esperado*.
+8. **Fechar**: memória do contexto, spec, reindexação (Lei comum 3). → `reference/memory-and-spec-update.md`
 
 ---
 
@@ -206,63 +68,18 @@ Em todo contexto, você verifica também:
 
 ---
 
-## Atualização de memória e spec
+## Saída e memória
 
-Após a auditoria:
+- **Memória do contexto:** refresh do `## Estado atual` + 1 linha no `## Histórico de versões`; `status: aprovado | reprovado` e `atualizado` no frontmatter (sem tocar `project.md`).
+- **Spec:** drift corrigido em §0.1, §8 atualizada — e só. **Não toque em
+  `status` da spec:** ele é da aprovação da pessoa; o resultado da auditoria
+  vive na memória do contexto. **A versão sobe aqui, e só aqui:** ao aprovar um
+  fluxo que mudou comportamento que já roda em produção, suba a versão da spec
+  (e do PRD, se mudou) uma vez e escreva a linha do Histórico (lei comum 4).
+- Padrão novo → `.claude/sdk/<lang>/knowledge/<topico>.md`, para o `gofi-eng` evitar reincidência.
+- Detalhe completo → `reference/memory-and-spec-update.md`; aprendizado → `.claude/expertise/harness-protocols/learning.md`.
 
-### 1. `.claude/memory/contexts/{contexto}.md`
-
-Pós-baseline v1.0, a auditoria **não** apende entrada datada. Ao concluir:
-1. **Refresh do `## Estado atual`** — reflita o veredicto e as pendências abertas/fechadas (o score vira estado, não changelog).
-2. **Adicione uma linha** ao `## Histórico de versões` + atualize `atualizado` no frontmatter: `| v{X.Y} | {data} | QA {aprovado/reprovado} — {resumo} |`.
-
-Protocolo em `.claude/knowledge/shared/memory-protocol.md`.
-
-### 2. `specs/{contexto}/sdd-{contexto}.md`
-
-**Frontmatter:** atualizar `status` e `atualizado`. **Não bumpar `versao`** —
-aprovar não muda comportamento, e correção exigida pelo QA sobre código que
-ainda não foi a produção continua sendo o primeiro estado de produção. Política
-em `.claude/knowledge/shared/document-versioning.md`.
-
-```yaml
-status: aprovado          # ou em_revisao quando há blocker pendente
-atualizado: {data}
-```
-
-**Rastreabilidade §10:** marcar Auditoria QA como ✅ com data.
-
-**Histórico de versões:** **não** acrescentar linha por auditoria. O histórico
-tem uma linha por versão, e auditoria não cria versão. Se a auditoria levou a
-uma mudança de comportamento em código **já em produção**, aí sim há bump — e
-a linha descreve a mudança, sem citar agent nem pessoa (proveniência vive no
-git; ver `rag-retrieval-protocol.md`).
-
-**Contratos §0.1:** se a auditoria revelou drift entre spec e implementação,
-corrigir a spec (a spec é a verdade pós-QA).
-
-**Estrutura §8:** se arquivos foram adicionados durante a implementação
-(ex: `_test.go`), atualizar.
-
-### 3. `.claude/memory/contexts/{contexto}.md` — frontmatter
-
-Atualizar o `status` no frontmatter (sem tocar `project.md`):
-
-```yaml
-status: aprovado    # ou: reprovado
-atualizado: {data}
-```
-
-> O índice global (panorama de todos os contextos) é gerado por `/gofi-status`
-> lendo esse frontmatter. Nenhuma tabela por-contexto no `project.md`.
-
-Se a auditoria revelou um padrão novo digno de ser preservado, registre em
-`.claude/sdk/<lang>/knowledge/<topico>.md` e propague para `gofi-eng` evitar
-reincidência.
-
----
-
-## Output esperado
+### Output esperado
 
 ```
 ## Auditoria — {Contexto}
@@ -296,25 +113,15 @@ reincidência.
 
 ---
 
-## Protocolo de aprendizado contínuo
+## Referências
 
-Ver `.claude/knowledge/shared/learning-protocol.md`.
+Abra uma referência com `gofi show .claude/skills/gofi-qa/reference/<arquivo>.md` (lista as seções com as linhas) e leia só a seção que o passo pede; ou busque com `gofi find --in skills "<tema>"`.
 
-> **Regra absoluta — knowledge é domínio-neutro.** Arquivos sob
-> `.claude/knowledge/` e `.claude/sdk/<lang>/` descrevem **padrão técnico**
-> (como auditar, regras absolutas, anti-padrões). **Nunca** cite nomes
-> de entidades do produto, roles concretos, module paths reais, endpoints
-> do produto, ou refs a versões de spec específicas. Use placeholders
-> (`{contexto}`, `<module>`, `RoleA`, `entity`). Conteúdo de domínio
-> (a matriz de qual role acessa qual endpoint deste produto, RNs, etc.)
-> vive em `specs/` e `.claude/memory/`, **nunca** em knowledge. Teste
-> antes de escrever: *"este texto serviria, sem alteração, a um projeto
-> totalmente diferente que use o mesmo SDK?"* — se não serviria, é spec
-> ou memória.
-
-Em particular:
-- Item de checklist incorreto → corrija nesta skill imediatamente
-- Nova dimensão de auditoria → adicione em `.claude/sdk/<lang>/knowledge/qa-checklist.md` (genérica, sem domínio)
-- Lição aprendida → registre em `.claude/sdk/<lang>/knowledge/<topico>.md` para o gofi-eng evitar reincidência (genérica, sem domínio)
-- Padrão validado pelo usuário → documente em forma genérica para preservar
-- Generalize qualquer trecho domínio-específico antes de salvar em knowledge
+| Arquivo | O que tem | Quando abrir |
+|---------|-----------|--------------|
+| `reference/pre-execution.md` | Detalhe dos passos 5, 6 e 8 da pré-execução | Ao ler spec, knowledge e SDK |
+| `reference/graph-audit.md` | Lei do grafo completa, corrente do contexto, reindexação, modo `fast`/`deep` | Workflow 1–3; antes de toda busca literal ou prova de ausência |
+| `.claude/expertise/code-review/checklist-cross-language.md` | Conformidade, camadas, testabilidade, segurança, knowledge user-treinado, lei do teste de regressão | Workflow 5, em todo contexto |
+| `reference/memory-and-spec-update.md` | Atualização da memória, da spec e do frontmatter após a auditoria | Workflow 8, ao fechar |
+| `.claude/expertise/harness-protocols/learning.md` | Aprendizado contínuo e a regra de knowledge domínio-neutro | Quando o usuário corrigir ou validar algo |
+| `.claude/sdk/<lang>/knowledge/qa-checklist-postgres.md` | Escrita via `Statement.Execute` (construtor sem tocar o banco), repository aggregate e transação, driver PostgreSQL, índices, valores monetários | Workflow 6, quando o contexto toca esses temas |

@@ -1,8 +1,20 @@
+---
+name: boilerplate-repository
+description: Esqueleto do repository Go com sqln v0.8.2 — statement, criteria, paginação, filtro dinâmico, cache, conflito UNIQUE
+sdk: v0.8.2
+keywords: [boilerplate, repository, sqln, statement, criteria, FindFromCriteria, BuildQuery, cache]
+---
+
 # Boilerplate — Repository
 
 > **`//gofi:context {contexto}`** abre a cláusula `package` (basta em um arquivo
 > do pacote) — é o elo entre o símbolo no grafo e `specs/{contexto}/`. Ver
 > `.claude/sdk/go/boilerplates/model.md`.
+
+Regras: `.claude/sdk/go/knowledge/persistence-rules.md`. API:
+`.claude/sdk/go/api/sqln.md`, `sqln-criteria.md`, `sqln-statement.md`.
+Exemplos executáveis: `examples/sqln/search/product/repository.go` e
+`examples/sqln/filter-api/product/repository.go`.
 
 ```go
 //gofi:context {contexto}
@@ -10,244 +22,166 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"log/slog"
 
-	"github.com/joaoprofile/examples/api/src/person/model"
-	"github.com/joaoprofile/gofi/obs/logging"
-	"github.com/joaoprofile/gofi/sqln"
-	"github.com/joaoprofile/gofi/sqln/criteria"
+	"github.com/gofi-labs/gofi-sdk-go/sqln"
+	"github.com/gofi-labs/gofi-sdk-go/sqln/connection"
+	"github.com/gofi-labs/gofi-sdk-go/sqln/criteria"
+
+	"<module>/domain/{contexto}/model"
 )
 
-// ErrNoRowsAffected is kept for compatibility but Update methods no longer return it.
-// Service-layer not-found is handled by pre-checking FindByID before calling Update.
+// ErrDuplicateEntity is returned when the natural key already exists.
+var ErrDuplicateEntity = errors.New("entity already exists")
 
 const (
-	personSelectFields = "p.id, p.name, p.email, p.cpf, p.age, p.created_at"
+	entitySelectFields = "e.id, e.name, e.email, e.status, e.created_at"
 
-	personInsertQuery = `INSERT INTO persons (name, email, cpf, age) VALUES ($1, $2, $3, $4)`
-	personUpdateQuery = `UPDATE persons SET name=$1, email=$2, cpf=$3, age=$4 WHERE id=$5`
-	personDeleteQuery = `DELETE FROM persons WHERE id = $1`
+	entityInsertQuery = `INSERT INTO entities (id, tenant_id, name, email, status) VALUES ($1, $2, $3, $4, $5)`
+	entityUpdateQuery = `UPDATE entities SET name = $1, email = $2, status = $3 WHERE id = $4`
+	entityDeleteQuery = `DELETE FROM entities WHERE id = $1`
+
+	uqEntityEmail = "uq_entities_tenant_email"
 )
 
-type PersonRepository interface {
-	Save(ctx context.Context, person model.Person) error
-	Update(ctx context.Context, id string, req model.UpdatePersonRequest) error
+type EntityRepository interface {
+	Save(ctx context.Context, e model.Entity) error
+	Update(ctx context.Context, id string, req model.UpdateEntityRequest) error
 	Delete(ctx context.Context, id string) error
-	FindByFilter(ctx context.Context, filter model.PersonFilter) (model.PersonResponse, error)
-	FindByID(ctx context.Context, id string) (*model.Person, error)
-	Close() error
+	FindByFilter(ctx context.Context, f model.EntityFilter) (*sqln.Page[model.Entity], error)
+	FindByID(ctx context.Context, id string) (*model.Entity, error)
 }
 
-type personRepository struct {
-	stmCreate *sql.Stmt
-	stmUpdate *sql.Stmt
-	stmDelete *sql.Stmt
+type entityRepository struct {
+	stm sqln.Statement
 }
 
-func NewPersonRepository(ctx context.Context) PersonRepository {
-	stmCreate, err := sqln.NewStatement().Prepare(ctx, personInsertQuery)
-	if err != nil {
-		logging.Fatal("error on NewPersonRepository: stmCreate", slog.Any("error", err))
-	}
-	stmUpdate, err := sqln.NewStatement().Prepare(ctx, personUpdateQuery)
-	if err != nil {
-		logging.Fatal("error on NewPersonRepository: stmUpdate", slog.Any("error", err))
-	}
-	stmDelete, err := sqln.NewStatement().Prepare(ctx, personDeleteQuery)
-	if err != nil {
-		logging.Fatal("error on NewPersonRepository: stmDelete", slog.Any("error", err))
-	}
-	return &personRepository{
-		stmCreate: stmCreate,
-		stmUpdate: stmUpdate,
-		stmDelete: stmDelete,
-	}
+// NewEntityRepository does not touch the database: the global connection
+// only exists after gofi's Build.
+func NewEntityRepository() EntityRepository {
+	return &entityRepository{stm: sqln.NewStatement()}
 }
 
-func (r *personRepository) Save(ctx context.Context, person model.Person) error {
-	_, err := r.stmCreate.ExecContext(ctx, person.Name, person.Email, person.CPF, person.Age)
+func (r *entityRepository) Save(ctx context.Context, e model.Entity) error {
+	_, err := r.stm.Execute(ctx, entityInsertQuery, e.ID, e.TenantID, e.Name, e.Email, e.Status)
+	if pgErr, ok := connection.AsPgError(err); ok && pgErr.Code == "23505" && pgErr.Constraint == uqEntityEmail {
+		return ErrDuplicateEntity
+	}
 	return err
 }
 
-func (r *personRepository) Update(ctx context.Context, id string, req model.UpdatePersonRequest) error {
-	_, err := r.stmUpdate.ExecContext(ctx, req.Name, req.Email, req.CPF, req.Age, id)
+func (r *entityRepository) Update(ctx context.Context, id string, req model.UpdateEntityRequest) error {
+	_, err := r.stm.Execute(ctx, entityUpdateQuery, req.Name, req.Email, req.Status, id)
 	return err
 }
 
-func (r *personRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.stmDelete.ExecContext(ctx, id)
+func (r *entityRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.stm.Execute(ctx, entityDeleteQuery, id)
 	return err
 }
 
-func (r *personRepository) FindByFilter(ctx context.Context, f model.PersonFilter) (model.PersonResponse, error) {
-	q := criteria.From("persons", "p").Select(personSelectFields)
-
-	switch {
-	case f.CPF != "":
-		q = q.Where(criteria.Eq("p.cpf", f.CPF))
-	case f.Name != "":
-		q = q.Where(criteria.Contains("p.name", "%"+f.Name+"%"))
+func (r *entityRepository) FindByFilter(ctx context.Context, f model.EntityFilter) (*sqln.Page[model.Entity], error) {
+	where := []criteria.Predicate{criteria.Eq("e.tenant_id", f.TenantID)}
+	if f.Name != "" {
+		where = append(where, criteria.Contains("e.name", "%"+f.Name+"%"))
 	}
+	if len(f.Statuses) > 0 {
+		where = append(where, criteria.In("e.status", f.Statuses))
+	}
+	q := criteria.From("entities", "e").Select(entitySelectFields).Where(where...)
 
-	page := sqln.NewPageRequest(f.Page, f.Limit, []sqln.Sort{
-		sqln.NewSort("p.created_at", sqln.DESC),
+	page := sqln.NewPageRequest(f.Page, min(f.Limit, maxLimit), []sqln.Sort{
+		sqln.NewSort("e.created_at", sqln.DESC),
 	})
-
-	return sqln.FindFromCriteria[model.Person](ctx, q).WithPage(page).PagedList()
+	return sqln.FindFromCriteria[model.Entity](ctx, q).WithPage(page).PagedList()
 }
 
-func (r *personRepository) FindByID(ctx context.Context, id string) (*model.Person, error) {
-	return sqln.FindFromCriteria[model.Person](ctx,
-		criteria.From("persons", "p").
-			Select(personSelectFields).
-			Where(criteria.Eq("p.id", id)),
-	).Execute()
-}
+const maxLimit = 200
 
-func (r *personRepository) Close() error {
-	if err := r.stmCreate.Close(); err != nil {
-		return err
+func (r *entityRepository) FindByID(ctx context.Context, id string) (*model.Entity, error) {
+	return sqln.FindFromCriteria[model.Entity](ctx,
+		criteria.From("entities", "e").
+			Select(entitySelectFields).
+			Where(criteria.Eq("e.id", id)),
+	).UniqueResult()
+}
+```
+
+- Sem `*sql.Stmt` em campo e sem `Close()` — `repository-close.md`.
+- `UniqueResult()`: `nil, nil` = não encontrado (o service responde 404);
+  `nil, err` = erro de banco.
+- Mutação multi-tabela: campo `tx transaction.Transaction` +
+  `r.tx.Execute(ctx, fn)` — `repository-aggregate-pattern.md`.
+- Presença de primitivo (`Exists*`) → `(*bool, error)` —
+  `repository-primitive-return.md`.
+
+## Filtro dinâmico — `FindByDynamicQuery`
+
+Só quando o contexto tem filtro dinâmico (`dynamic-filter.md`):
+
+```go
+const entityDynamicQueryBase = `SELECT ` + entitySelectFields + `
+FROM entities e
+WHERE e.tenant_id = $1`
+
+func (r *entityRepository) FindByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.Entity], error) {
+	if f.Params == nil {
+		f.Params = &sqln.FilterParams{}
 	}
-	if err := r.stmUpdate.Close(); err != nil {
-		return err
+	if f.Params.SortField == "" {
+		f.Params.SortField, f.Params.SortDirection = "created", string(sqln.DESC)
 	}
-	return r.stmDelete.Close()
+	q, err := sqln.BuildQuery(entityDynamicQueryBase, []any{tenantID}, f, model.EntityFilterMapping, nil)
+	if err != nil {
+		return nil, err // wraps sqln.ErrInvalidFilter
+	}
+	page, err := sqln.NewPageRequestFilter(f, model.EntityFilterMapping)
+	if err != nil {
+		return nil, err
+	}
+	return sqln.FindWithFilter[model.Entity](ctx, q).WithPage(page).PagedList()
 }
 ```
 
-## Filtro Dinâmico — FindByDynamicQuery
+- Base termina dentro do `WHERE`; o SDK anexa `AND ( <filtros> )` com
+  placeholders depois de `$1`. Tenant nunca é filtro nem `fmt.Sprintf`.
+- Erro com `sqln.ErrInvalidFilter` vira validação (400) no service.
 
-Adicionado à interface e implementação quando o contexto usa filtro dinâmico. **Não usa statements preparados** — não há `stmDynamicQuery` no construtor.
+## Cache — `WithCache` + invalidação
+
+Só quando a spec pede cache (`cache-layer.md`):
 
 ```go
-// Na interface
-FindByDynamicQuery(ctx context.Context, filters *sqln.Filters) (model.PersonQueryResponse, error)
+const entityListCacheTTL = 5 * time.Minute
 
-// Constante separada para o read model de query (pode ter campos diferentes da entidade)
-const personQuerySelectFields = "p.id, p.name, p.email, p.cpf, p.age, p.created_at"
+func entityListCache(tenantID string) *sqln.Cache[model.Entity] {
+	return sqln.NewCache[model.Entity]("entity:list:"+tenantID, entityListCacheTTL)
+}
 
-// Na implementação
-func (r *personRepository) FindByDynamicQuery(ctx context.Context, f *sqln.Filters) (model.PersonQueryResponse, error) {
-    // WHERE 1=1 obrigatório — NewQueryBuild anexa AND (...), nunca WHERE
-    query := "SELECT " + personQuerySelectFields + " FROM person WHERE 1=1"
+// in FindByFilter:
+return sqln.FindFromCriteria[model.Entity](ctx, q).
+	WithCache(entityListCache(f.TenantID)).
+	WithPage(page).
+	PagedList()
 
-    return sqln.FindWithFilter[model.PersonQuery](ctx,
-        sqln.NewQueryBuild(query, f),
-    ).WithPage(
-        sqln.NewPageRequestFilter(f),
-    ).PagedList()
+// in the interface: InvalidateListCache(ctx context.Context, tenantID string) error
+func (r *entityRepository) InvalidateListCache(ctx context.Context, tenantID string) error {
+	return entityListCache(tenantID).Del(ctx)
 }
 ```
 
-**Regras:**
-- `FindWithFilter` — não `FindFromCriteria` (aceita `*QueryParam`, não `*criteria.Query`)
-- `NewQueryBuild(query, f)` — PostgreSQL por default. Para outros bancos: `NewQueryBuildWithDialect(query, f, dialect)`
-- `NewPageRequestFilter(f)` — extrai page/limit/sort de `f.Params` (defaults: page=0, limit=15, sort="id ASC")
-- A query base **deve terminar com `WHERE 1=1`** (ou condição real) — `NewQueryBuild` anexa `AND ( conditions )`, nunca `WHERE`
-- Usar `personQuerySelectFields` (constante separada) quando read model tem campos diferentes da entidade
-- **Não** criar `*sql.Stmt` para query dinâmica — ela é construída em tempo de execução
+O service chama `InvalidateListCache` depois de `Save`/`Update`/`Delete`;
+nunca acessa Redis.
 
-## Cache — Padrão com WithCache
+## Padrões obrigatórios
 
-Quando o contexto usa Redis, cache de listas fica no repository. Inclua `cacheTTL`, `WithCache` em `FindByFilter` e `InvalidateListCache` na interface:
-
-```go
-const cacheTTL = 10 * time.Minute
-
-type PersonRepository interface {
-    // ...
-    InvalidateListCache(ctx context.Context, tenantID string)
-    Close() error
-}
-
-func (r *personRepository) FindByFilter(ctx context.Context, f model.PersonFilter) (model.PersonResponse, error) {
-    q := criteria.From("persons", "p").Select(personSelectFields)
-    // ... where clauses ...
-
-    page := sqln.NewPageRequest(f.Page, f.Limit, []sqln.Sort{
-        sqln.NewSort("p.created_at", sqln.DESC),
-    })
-
-    cacheKey := fmt.Sprintf("person:%s:list:%s:%d:%d", f.TenantID, f.Name, f.Page, f.Limit)
-    cache := sqln.NewCache[model.Person](cacheKey, cacheTTL)
-
-    return sqln.FindFromCriteria[model.Person](ctx, q).
-        WithCache(cache).
-        WithPage(page).PagedList()
-}
-
-func (r *personRepository) InvalidateListCache(ctx context.Context, tenantID string) {
-    pattern := fmt.Sprintf("*person:%s:list:*", tenantID)
-    keys, err := sqln.InstanceRedis().Keys(ctx, pattern).Result()
-    if err != nil || len(keys) == 0 {
-        return
-    }
-    sqln.InstanceRedis().Del(ctx, keys...)
-}
-```
-
-O service chama `repo.InvalidateListCache(ctx, tenantID)` após Save e Update. **Nunca** gerencia cache ou acessa Redis diretamente no service.
-
-## Padrões Obrigatórios
-
-- `Update` retorna apenas erros estruturais do banco — nunca checa `RowsAffected`. Not-found é detectado pelo `FindByID` que o service chama antes de `Update`
-- **Statements preparados no construtor — nunca inline por chamada.** `*sql.Stmt` em campo do struct (`stmCreate`, `stmUpdate`, `stmDelete`), preparado **uma única vez** em `New{Contexto}Repository(ctx)`. `sqln.NewStatement().Execute(ctx, sql, args...)` inline em mutation (prepara + executa + descarta a cada chamada) é **MAJOR**. Exceção: SQL dinâmico montado em runtime (filtro dinâmico) não pode ser preparado.
-- **Helpers de persistência são métodos do receiver.** Nenhuma função no arquivo do repo com assinatura `func xxx(ctx context.Context, ...) error` executando SQL — todas são `func (r *{contexto}Repository) ...`. Helper solto no pacote (sem receiver) é **MAJOR** — perde acesso aos stmts preparados, borra a fronteira de encapsulamento e convida outros pacotes a importarem.
-- **Exceção pra função de pacote**: transformações **puras** sem `ctx`/I/O (ex.: `configArgs(e *Config) []any`, `groupArgs(e *Group) []any`) podem ficar como funções privadas no pacote — não tocam banco, não precisam de `r`, ajudam a não duplicar listas longas de campos.
-- `logging.Fatal` quando prepare falha — aplicação não deve iniciar com statement inválido
-- Queries como constantes de pacote — nunca magic strings inline
-- `criteria.From(table, alias).Select(fields)` para queries dinâmicas
-- `sqln.NewStatement().Prepare(ctx, query)` para writes (INSERT/UPDATE/DELETE)
-- Parâmetros posicionais `$1, $2, ...` — nunca concatenação de string
-- `Close() error` **obrigatório** na interface e implementação — fecha todos os `*sql.Stmt` em sequência, retornando o primeiro erro encontrado
-- **Aggregate com tx**: quando o repo tem mutação multi-tabela atômica, helpers dentro de `r.tx.Execute(...)` fazem rebind do stmt à conexão da tx via `ctx.Value(connection.SqlTxContextKey).(*sql.Tx).Stmt(r.stmXxx).ExecContext(...)`. Chamar `r.stmXxx.ExecContext(ctx, ...)` direto **não participa** da transação (pega outra conexão do pool) — **BLOCKER**. Padrão completo em `.claude/sdk/go/knowledge/repository-aggregate-pattern.md`.
-
-## FindByID — Comportamento nil
-
-```go
-// nil, nil  → não encontrado (service deve retornar not found)
-// nil, err  → erro de banco
-// obj, nil  → encontrado com sucesso
-person, err := r.FindByID(ctx, id)
-```
-
-## Consulta de Presença — `(*T, error)` para primitivos
-
-Métodos que consultam um único valor primitivo (ex: `ExistsByEmailAndTenant`) devolvem **`(*T, error)`**. O retorno de `sqln.FindFromCriteria[T](...).Execute()` já tem a semântica certa: `nil` quando não encontrado, ponteiro quando encontrado. **Não converta** manualmente para `(T, error)`.
-
-```go
-// Interface
-type UserRepository interface {
-    ExistsByEmailAndTenant(ctx context.Context, email string, tenantID int64) (*bool, error)
-    // ...
-}
-
-// Implementação — retorna direto o resultado de Execute()
-func (r *userRepository) ExistsByEmailAndTenant(ctx context.Context, email string, tenantID int64) (*bool, error) {
-    return sqln.FindFromCriteria[bool](ctx,
-        criteria.From(`"user"`, "u").
-            Select("u.id").
-            Where(criteria.Eq("u.email", email)).
-            Where(criteria.Eq("u.tenant_id", tenantID)),
-    ).Execute()
-}
-```
-
-**No service** o valor apontado é irrelevante — o que importa é `nil` vs não-nil:
-
-```go
-exists, err := s.repo.ExistsByEmailAndTenant(ctx, req.Email, req.TenantID)
-if err != nil   { return ErrUserCreate.Wrap(err) }
-if exists != nil { return ErrUserConflict.New() }
-```
-
-**Anti-padrão** (não usar):
-```go
-result, err := sqln.FindFromCriteria[bool](ctx, q).Execute()
-if err != nil { return false, err }
-return result != nil, nil   // duplica a checagem que o SDK já entrega
-```
-
-Escopo: aplica-se a `Exists*` e a qualquer consulta de **presença** de um único valor primitivo. Listas e contagens numéricas reais seguem seus próprios padrões. Detalhes em `.claude/knowledge/repository-primitive-return.md`.
+- Arquivo único: interface + constantes SQL + implementação.
+- SQL em constantes de pacote; placeholders `$1, $2, …` — nunca concatenação
+  de valor.
+- Escrita: `r.stm.Execute(ctx, query, args...)`. Leitura: `sqln.Find*` com
+  tags `db` (nunca `rows.Scan` à mão).
+- `Update` não checa `RowsAffected` (`repository-update-simple.md`).
+- Conflito UNIQUE traduzido por `connection.AsPgError` + nome da constraint.
+- Helpers com `ctx` que tocam banco são métodos do receiver; só funções puras
+  (`entityArgs(e) []any`) ficam no pacote.
+- Construtor sem `ctx` e sem acesso a banco.

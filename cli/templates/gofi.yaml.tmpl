@@ -130,6 +130,25 @@ ops:
 ai:
     host: {{.AI.Host}}                      # claude-vscode
     model: {{.AI.Model}}                    # modelo default; deve estar ativo em models
+    # O que acontece quando o agente varre a árvore (Grep, Glob, Read do arquivo
+    # inteiro) antes de perguntar ao índice: warn avisa, enforce bloqueia, off
+    # não faz nada. `gofi guard <modo>` troca e mantém o hook em dia.
+    guard: {{.AI.GuardMode}}
+    # O que acontece com um pedido digitado direto no agente: hint planeja pelas
+    # regras e entrega o plano ao agente; gate faz o mesmo e segura o pedido
+    # vago — as perguntas aparecem antes de qualquer modelo ler; off não faz
+    # nada. `gofi install guard` mantém o hook em dia.
+    intake: {{.AI.IntakeMode}}
+    # Modelo de cada nível de capacidade. Cada skill declara o nível de que
+    # precisa (contract.yaml): light lê e responde (status, doc), standard
+    # escreve com escopo definido ou revisa (eng, ui, ops, qa), deep decide e
+    # desenha (pd, spec, full). Sem este bloco, o host decide — no Claude Code,
+    # haiku / sonnet / opus. Aceita alias ou ID completo; depois de mudar, rode
+    # `gofi update skills`.
+    # tiers:
+    #     light: haiku
+    #     standard: sonnet
+    #     deep: claude-opus-5-5
     # Modelos exibidos pelo /model no gofi-ai. Descomente para adicionar ao picker.
     #
     # O picker do `gofi init` e este cardápio saem da MESMA tabela
@@ -137,23 +156,19 @@ ai:
     # Adicionar um modelo é uma entrada lá — não edite esta lista à mão aqui.
     models:
         - {{.AI.Model}}
+        # - claude-fable-5-1
         # - claude-fable-5
+        # - claude-opus-5-5
         # - claude-opus-5
         # - claude-opus-4-8
         # - claude-opus-4-7
+        # - claude-sonnet-5-5
         # - claude-sonnet-5
         # - claude-sonnet-4-6
         # - claude-haiku-4-5
 
-# Agents habilitados. Skills são sempre instaladas em .claude/skills/; esta
-# lista escopa os diretórios .claude/knowledge/{agent}/.
-agents:
-{{- range .Agents}}
-    - {{.}}
-{{- end}}
-
 sources:
-    agents: {{.Sources.Agents}}             # repo-fonte do harness (skills, sdk-docs, knowledge)
+    agents: {{.Sources.Agents}}             # repo-fonte do harness (skills, expertise, templates, sdk)
 {{- if .Sources.Institutional}}
     institutional: {{.Sources.Institutional}} # repo de conhecimento institucional (pull-only)
 {{- end}}
@@ -169,9 +184,6 @@ sources:
         {{$ds}}: {{$ref}}                   # override do repo do design system
 {{- end}}
 {{- end}}
-
-git:
-    remote: "{{.Git.Remote}}"
 
 # ───────────────────────────────────────────────────────────────────────────
 # TEST — tasks rodadas por `gofi test [task]`. `needs` encadeia dependências.
@@ -236,21 +248,21 @@ sonar:
 {{- end}}
 
 # ───────────────────────────────────────────────────────────────────────────
-# GRAPH — mapa do código sob .gofi/graph/, lido pelos agents antes de abrir
+# GRAPH — mapa do código sob .gofi/index/code/, lido pelos agents antes de abrir
 # arquivo. Um escopo por árvore: o backend na raiz, cada superfície de UI em
 # {nome}/, o SDK vendorizado em sdk/. `gofi_graph_index.json` lista todos.
 # ───────────────────────────────────────────────────────────────────────────
 graph:
-    enabled: {{.Graph.Enabled}}             # false desliga o grafo e, com ele, os hooks
-    hooks: {{.Graph.Hooks}}                 # hooks git (pre-commit/post-checkout/post-merge) que o mantêm em dia
+    enabled: {{.Graph.Enabled}}             # false desliga o grafo
+    hooks: {{.Graph.Hooks}}                 # hooks git que mantêm o grafo no commit — gofi index hooks
     # fast (false) lê só a sintaxe: rápido, roda em código que não compila, e
     # não inventa aresta quando a chamada é ambígua — ela é contada, não ligada.
     # deep (true) resolve pelo type-checker: chamada exata e implementação de
     # interface visíveis, ao custo de o projeto precisar compilar.
     # Só em deep a ausência de aresta prova ausência de uso.
-    # Vale para `gofi update` e `gofi graph build`. Os hooks de git reconstroem
-    # sempre em fast (--fast): o commit não espera o type-checker. Deep também
-    # só muda a varredura Go — superfície de UI é sintática de todo jeito.
+    # Vale para `gofi update` e `gofi index code`; `--fast`/`--deep` sobrepõem
+    # numa execução. Deep só muda a varredura Go — superfície de UI é
+    # sintática de todo jeito.
     # Com false, quem pede o deep é o agent, quando precisa provar ausência.
     deep: {{.Graph.Deep}}
     # exclude: pastas fora da varredura, além das ignoradas por padrão

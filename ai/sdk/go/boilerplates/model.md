@@ -1,158 +1,136 @@
+---
+name: boilerplate-model
+description: Esqueleto do model Go — entidade com tags db, DTOs com validate, query_dto com sqln.FilterMapping
+sdk: v0.8.2
+keywords: [boilerplate, model, entity, dto, FilterMapping, db-tag, validator, Page]
+---
+
 # Boilerplate — Model
 
 > **`//gofi:context {contexto}`** abre a cláusula `package` — é o elo entre o
 > símbolo no grafo e `specs/{contexto}/` + `.claude/memory/contexts/{contexto}.md`.
 > Basta em **um** arquivo do pacote (vale para todos os símbolos dele); use o
 > mesmo nome de `specs/{contexto}/`, kebab-case. Detalhe em
-> `.claude/knowledge/shared/graph-retrieval-protocol.md`.
+> `.claude/expertise/harness-protocols/graph-retrieval.md`.
 
-## entity.go — Entidade de domínio
+## entity.go — entidade de domínio
 
 ```go
 //gofi:context {contexto}
 package model
 
-import (
-	"time"
+import "time"
 
-	"github.com/joaoprofile/gofi/sqln"
-)
-
-// PersonResponse é o tipo da resposta paginada — alias para sqln.Page[Person]
-type PersonResponse *sqln.Page[Person]
-
-type Person struct {
+type Entity struct {
 	ID        string    `json:"id"        db:"id"`
+	TenantID  string    `json:"-"         db:"tenant_id"`
 	Name      string    `json:"name"      db:"name"`
 	Email     string    `json:"email"     db:"email"`
-	CPF       string    `json:"cpf"       db:"cpf"`
-	Age       int       `json:"age"       db:"age"`
+	Status    string    `json:"status"    db:"status"`
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 }
 ```
 
+- Tag `db` = nome (ou alias) da coluna no `SELECT`: o mapper casa **por
+  nome** quando o resultado cobre todas as tags; ordem das colunas não importa
+  (`.claude/sdk/go/knowledge/value-objects.md`).
+- Listagem paginada devolve `*sqln.Page[Entity]` direto nas assinaturas — sem
+  alias de tipo ponteiro.
+- Campo calculado depois do scan: só `json`, **sem** tag `db` (nem `db:"-"`).
+
 ### Value Objects aninhados
 
-Quando o domínio tem um value object que encapsula um ou mais atributos (`Pricing`, `Address`, `Money`), declare como struct aninhada com tag `db` no campo externo. O mapper do `sqln` desce recursivamente e liga os sub-campos `db` às colunas da query.
-
 ```go
-type Pricing struct {
-    Price float64 `json:"price" db:"price"`
+type Address struct {
+	Street  string `json:"street"  db:"street"`
+	City    string `json:"city"    db:"city"`
+	ZipCode string `json:"zipCode" db:"zip_code"`
 }
 
-type Product struct {
-    ID    int64   `json:"id"      db:"id"`
-    Name  string  `json:"name"    db:"name"`
-    Price Pricing `json:"pricing" db:"price"`
+type Customer struct {
+	ID      string  `json:"id"      db:"id"`
+	Address Address `json:"address" db:"address"` // outer tag marks the VO; leaves map to columns
 }
 ```
 
-Query: `SELECT id, name, price FROM product` → a coluna `price` escaneia em `Product.Price.Price`. A tag `db` externa é marcador de presença; a ordem dos sub-campos internos define o mapeamento posicional. `time.Time` e tipos que implementam `sql.Scanner` permanecem primitivos.
-
-> Regras, armadilhas e estratégias de persistência (colunas separadas vs. coluna única JSON/bytes) em `.claude/knowledge/value-objects.md`.
+`SELECT c.id, c.street, c.city, c.zip_code ...` preenche `Customer.Address`.
+Coluna JSON única = tipo com `sql.Scanner` + `driver.Valuer`. Regras e
+armadilhas em `.claude/sdk/go/knowledge/value-objects.md`.
 
 ## dto.go — DTOs de entrada
 
 ```go
 package model
 
-import "github.com/joaoprofile/gofi/base/validator"
+import "github.com/gofi-labs/gofi-sdk-go/base/validator"
 
 var v = validator.New()
 
-type CreatePersonRequest struct {
+type CreateEntityRequest struct {
 	Name  string `json:"name"  validate:"required"`
 	Email string `json:"email" validate:"required,email"`
-	CPF   string `json:"cpf"   validate:"required"`
-	Age   int    `json:"age"   validate:"required,min=1"`
 }
 
-func (r CreatePersonRequest) Validate() error {
-	return v.ValidateStruct(r)
+func (r CreateEntityRequest) Validate() error { return v.ValidateStruct(r) }
+
+type UpdateEntityRequest struct {
+	Name   string `json:"name"   validate:"required"`
+	Email  string `json:"email"  validate:"required,email"`
+	Status string `json:"status" validate:"required"`
 }
 
-type UpdatePersonRequest struct {
-	Name  string `json:"name"  validate:"required"`
-	Email string `json:"email" validate:"required,email"`
-	CPF   string `json:"cpf"   validate:"required"`
-	Age   int    `json:"age"   validate:"required,min=1"`
-}
+func (r UpdateEntityRequest) Validate() error { return v.ValidateStruct(r) }
 
-func (r UpdatePersonRequest) Validate() error {
-	return v.ValidateStruct(r)
-}
-
-type PersonFilter struct {
-	Name  string `form:"name"`
-	CPF   string `form:"cpf"`
-	Page  uint16 `form:"page"`
-	Limit uint16 `form:"limit"`
+// EntityFilter is bound from the query string (netx.BindQueryParamsToStruct).
+type EntityFilter struct {
+	TenantID string   `form:"-"` // set from the auth context, never from the query
+	Name     string   `form:"name"`
+	Statuses []string `form:"status"`
+	Page     uint16   `form:"page"`
+	Limit    uint16   `form:"limit" validate:"omitempty,lte=200"`
 }
 ```
 
-## query_dto.go — Filtro Dinâmico (quando necessário)
+## query_dto.go — filtro dinâmico (só quando necessário)
 
-Arquivo separado de `dto.go`. Criado apenas quando o contexto expõe endpoints de filtro dinâmico.
+Arquivo separado de `dto.go`, criado **apenas** quando o contexto expõe
+`/schemas` + `/query` (`.claude/sdk/go/knowledge/dynamic-filter.md`).
 
 ```go
 package model
 
 import (
-    "time"
-    "github.com/joaoprofile/gofi/sqln"
+	"github.com/gofi-labs/gofi-sdk-go/sqln"
+
+	"<module>/common/enums"
 )
 
-func PersonQueryMapping() *sqln.QueryMapping {
-    return &sqln.QueryMapping{
-        AllowedSortingFields: map[string]string{
-            "Name": "sortedBy",
-            "Age":  "sortedBy",
-        },
-        AllowedFields: []sqln.FieldMapping{
-            {Key: "p.name",  Label: "NAME",  FilterType: "text"},
-            {Key: "p.email", Label: "EMAIL", FilterType: "text"},
-            {Key: "p.cpf",   Label: "CPF",   FilterType: "text"},
-        },
-        Operators: map[string]string{
-            sqln.Eq:       sqln.Eq,
-            sqln.Contains: sqln.Contains,
-        },
-        LogicalOperators: map[string]string{
-            sqln.And: sqln.And,
-            sqln.Or:  sqln.Or,
-        },
-    }
-}
-
-// PersonQueryResponse é o tipo de retorno do endpoint de query dinâmica
-type PersonQueryResponse = *sqln.Page[PersonQuery]
-
-// PersonQuery é o read model da query dinâmica — usa tags db:, não gofi:
-type PersonQuery struct {
-    ID        string    `json:"id"        db:"id"`
-    Name      string    `json:"name"      db:"name"`
-    Email     string    `json:"email"     db:"email"`
-    CPF       string    `json:"cpf"       db:"cpf"`
-    Age       int       `json:"age"       db:"age"`
-    CreatedAt time.Time `json:"createdAt" db:"created_at"`
+// EntityFilterMapping is the allowlist of the dynamic query: API names bound
+// to columns, accepted operators and sortable fields. Column is never serialized.
+var EntityFilterMapping = sqln.FilterMapping{
+	"name":    {Column: "e.name", Ops: sqln.Text, Sortable: true, Label: "NAME", FilterType: "text"},
+	"email":   {Column: "e.email", Ops: sqln.Text, Label: "EMAIL", FilterType: "text"},
+	"status":  {Column: "e.status", Ops: sqln.Equality, Label: "STATUS",
+		FilterType: "search-multiple", SearchType: "embedded", Content: enums.EntityStatusMap},
+	"created": {Column: "e.created_at", Ops: sqln.Range, Sortable: true, Label: "CREATED_AT"},
 }
 ```
+
+Read model próprio (`EntityQuery`) só quando a projeção da query dinâmica
+difere da entidade; senão reuse `Entity`.
 
 ## Separação entity.go / dto.go / query_dto.go
 
 | Arquivo | Responsabilidade | Tags | Dependência |
-|---------|-----------------|------|-------------|
-| `entity.go` | Struct mapeado do banco (write model) | `db:"col"`, `json:` | `gofi/sqln` |
-| `dto.go` | Input/output CRUD da API | `validate:`, `json:`, `form:` | `gofi/base/validator` |
-| `query_dto.go` | Mapping de filtro dinâmico + read model | `db:"col"`, `json:` | `gofi/sqln` |
+|---|---|---|---|
+| `entity.go` | struct mapeada do banco | `db`, `json` | — |
+| `dto.go` | entrada/saída da API | `validate`, `json`, `form` | `base/validator` |
+| `query_dto.go` | allowlist do filtro dinâmico (+ read model) | `db`, `json` | `sqln` |
 
 ## Regras
 
-- Validator como **singleton de pacote** — `var v = validator.New()`
-- Método `Validate()` em todos os DTOs de entrada (Create, Update)
-- `Filter` não precisa de `Validate()` — campos opcionais
-- `PersonResponse` como type alias para `*sqln.Page[Person]` — aproveitado em assinaturas do service e repository
-- Tags `db:"col_name"` mapeiam para nomes de coluna SQL
-- Tags `form:"field"` mapeiam query params via `netx.BindQueryParamsToStruct`
-- `query_dto.go` é criado **somente** quando o contexto tem endpoints de filtro dinâmico — não criar por padrão
-- `{Context}Query` struct é o **read model** específico para a query dinâmica — pode ter campos calculados ou projeções diferentes da entidade principal
+- Validator como singleton de pacote (`var v = validator.New()`); `Validate()`
+  em todo DTO de entrada.
+- Tenancy nunca bindada do cliente: `form:"-"` / `json:"-"`, setada do auth.
+- `query_dto.go` só com filtro dinâmico; o mapping é variável de pacote
+  (serializada pelo `getSchema`).

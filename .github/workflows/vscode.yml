@@ -1,0 +1,30 @@
+name: vscode
+
+on:
+  push:
+    branches: [main]
+    paths: ['vscode/**', '.github/workflows/vscode.yml']
+  pull_request:
+    branches: [main]
+    paths: ['vscode/**', '.github/workflows/vscode.yml']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: vscode
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The tests stub the vscode API and need no dependencies.
+      - name: Test
+        run: npm test

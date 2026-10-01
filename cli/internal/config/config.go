@@ -16,6 +16,8 @@ const (
 	FileName       = ".gofi.yaml"
 	CurrentVersion = 2
 
+	// AIHostClaudeVSCode is the ai.host older releases wrote for Claude Code;
+	// still accepted. New projects write the host package's IDs.
 	AIHostClaudeVSCode = "claude-vscode"
 
 	LanguageGo     = "go"
@@ -25,10 +27,13 @@ const (
 	LanguagePython = "python"
 	LanguageNodeJS = "nodejs"
 
+	ModelFable51  = "claude-fable-5-1"
 	ModelFable5   = "claude-fable-5"
+	ModelOpus55   = "claude-opus-5-5"
 	ModelOpus5    = "claude-opus-5"
 	ModelOpus48   = "claude-opus-4-8"
 	ModelOpus47   = "claude-opus-4-7"
+	ModelSonnet55 = "claude-sonnet-5-5"
 	ModelSonnet5  = "claude-sonnet-5"
 	ModelSonnet46 = "claude-sonnet-4-6"
 	ModelHaiku45  = "claude-haiku-4-5"
@@ -36,7 +41,10 @@ const (
 	// DefaultModel is what the init wizard preselects. It is pinned rather than
 	// derived from the head of Models(), so adding a newer release offers it
 	// without changing what a project gets when the user just presses enter.
-	DefaultModel = ModelOpus48
+	// It is the session's model — free conversation, outside a plan's phases —
+	// so the standard tier: each phase runs on its own tier's model, and PRD
+	// and spec on the deep one.
+	DefaultModel = ModelSonnet55
 
 	AgentPD     = "gofi-pd"
 	AgentSpec   = "gofi-spec"
@@ -106,17 +114,6 @@ const (
 	DefaultOpsPath = "ops"
 )
 
-// AllAgents returns the canonical list of the nine gofi agent slugs, in
-// pipeline order. gofi-full comes last: it is the orchestrator that chains the
-// others rather than a phase of its own.
-func AllAgents() []string {
-	return []string{
-		AgentPD, AgentSpec, AgentEng, AgentUI,
-		AgentOps, AgentQA, AgentDoc, AgentStatus,
-		AgentFull,
-	}
-}
-
 // Model is one entry of the model picker: the ID recorded in .gofi.yaml, the
 // name a picker shows, and a short note on what the family is for. The note is
 // carried only by the newest member of each family — repeating it down the list
@@ -136,11 +133,14 @@ type Model struct {
 // Model* const above) and it appears in every picker at once.
 func Models() []Model {
 	return []Model{
+		{ModelFable51, "Fable 5.1", "most capable"},
 		{ModelFable5, "Fable 5", ""},
-		{ModelOpus5, "Opus 5", "most capable"},
+		{ModelOpus55, "Opus 5.5", ""},
+		{ModelOpus5, "Opus 5", ""},
 		{ModelOpus48, "Opus 4.8", ""},
 		{ModelOpus47, "Opus 4.7", ""},
-		{ModelSonnet5, "Sonnet 5", "fast & sharp"},
+		{ModelSonnet55, "Sonnet 5.5", "fast & sharp"},
+		{ModelSonnet5, "Sonnet 5", ""},
 		{ModelSonnet46, "Sonnet 4.6", ""},
 		{ModelHaiku45, "Haiku 4.5", "fastest"},
 	}
@@ -158,25 +158,22 @@ func AllModels() []string {
 }
 
 type GofiConfig struct {
-	Version  int         `yaml:"version"`
-	Project  Project     `yaml:"project"`
-	Backend  *Backend    `yaml:"backend,omitempty"`
-	Frontend *UISurface  `yaml:"frontend,omitempty"`
-	Mobile   *UISurface  `yaml:"mobile,omitempty"`
+	Version  int        `yaml:"version"`
+	Project  Project    `yaml:"project"`
+	Backend  *Backend   `yaml:"backend,omitempty"`
+	Frontend *UISurface `yaml:"frontend,omitempty"`
+	Mobile   *UISurface `yaml:"mobile,omitempty"`
 	// Surfaces holds UI surfaces beyond the web front end and the mobile app —
 	// a back office, an admin console — keyed by the name the project gave
 	// them. Absence means there are none.
 	Surfaces map[string]*UISurface `yaml:"surfaces,omitempty"`
-	Ops      *Ops        `yaml:"ops,omitempty"`
-	AI       AI          `yaml:"ai"`
-	Agents   []string    `yaml:"agents"`
-	Sources  Sources     `yaml:"sources"`
-	Git      Git         `yaml:"git"`
-	Graph    *Graph      `yaml:"graph,omitempty"`
-	Training Training    `yaml:"training,omitempty"`
-	Test     TestSection `yaml:"test"`
-	Hsec     HsecConfig  `yaml:"hsec"`
-	Sonar    SonarConfig `yaml:"sonar"`
+	Ops      *Ops                  `yaml:"ops,omitempty"`
+	AI       AI                    `yaml:"ai"`
+	Sources  Sources               `yaml:"sources"`
+	Graph    *Graph                `yaml:"graph,omitempty"`
+	Test     TestSection           `yaml:"test"`
+	Hsec     HsecConfig            `yaml:"hsec"`
+	Sonar    SonarConfig           `yaml:"sonar"`
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.
@@ -397,6 +394,57 @@ type AI struct {
 	Host   string   `yaml:"host"`
 	Model  string   `yaml:"model"`
 	Models []string `yaml:"models,omitempty"`
+	// Tiers overrides the model that serves each capability tier (light,
+	// standard, deep) on this project's host. Absent keys use the host's
+	// default; a host with no defaults uses the session's model.
+	Tiers map[string]string `yaml:"tiers,omitempty"`
+	// Guard is what happens when an agent searches the tree — Grep, Glob, a
+	// whole-file Read — before asking the index: warn tells it to ask first,
+	// enforce blocks the call, off leaves it alone. Empty means warn.
+	Guard string `yaml:"guard,omitempty"`
+	// Intake is what happens when the person types a task straight into the
+	// coding agent: hint plans it by the rules and hands the agent the plan and
+	// the evidence as context; gate does the same, and holds back a prompt
+	// with open questions — asked there, before any model reads it; off leaves
+	// the prompt alone. Empty means gate.
+	Intake string `yaml:"intake,omitempty"`
+}
+
+// Intake modes.
+const (
+	IntakeHint = "hint"
+	IntakeGate = "gate"
+	IntakeOff  = "off"
+)
+
+// IntakeModes lists the accepted values of ai.intake.
+var IntakeModes = []string{IntakeHint, IntakeGate, IntakeOff}
+
+// IntakeMode is the effective ai.intake: gate unless the project chose
+// otherwise.
+func (a AI) IntakeMode() string {
+	if a.Intake == "" {
+		return IntakeGate
+	}
+	return a.Intake
+}
+
+// Guard modes.
+const (
+	GuardWarn    = "warn"
+	GuardEnforce = "enforce"
+	GuardOff     = "off"
+)
+
+// GuardModes lists the accepted values of ai.guard.
+var GuardModes = []string{GuardWarn, GuardEnforce, GuardOff}
+
+// GuardMode is the effective ai.guard: warn unless the project chose otherwise.
+func (a AI) GuardMode() string {
+	if a.Guard == "" {
+		return GuardWarn
+	}
+	return a.Guard
 }
 
 // MarshalYAML renders the AI block with the picker "menu" comment: active
@@ -417,6 +465,21 @@ func (a AI) MarshalYAML() (interface{}, error) {
 	}
 	add("host", a.Host)
 	add("model", a.Model)
+	if len(a.Tiers) > 0 {
+		tiers := &yaml.Node{Kind: yaml.MappingNode}
+		for _, t := range []string{"light", "standard", "deep"} {
+			if m := a.Tiers[t]; m != "" {
+				tiers.Content = append(tiers.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Value: t},
+					&yaml.Node{Kind: yaml.ScalarNode, Value: m})
+			}
+		}
+		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: "tiers"}, tiers)
+	}
+	add("guard", a.GuardMode())
+	node.Content[len(node.Content)-1].LineComment = strings.Join(GuardModes, " | ") + " — gofi guard <mode>"
+	add("intake", a.IntakeMode())
+	node.Content[len(node.Content)-1].LineComment = strings.Join(IntakeModes, " | ") + " — the plan handed to the agent on each prompt; gofi install guard applies it"
 
 	if len(a.Models) == 0 && len(AllModels()) == 0 {
 		return node, nil
@@ -458,8 +521,8 @@ func (a AI) MarshalYAML() (interface{}, error) {
 type Sources struct {
 	Agents string `yaml:"agents"`
 	// Institutional is the optional business-knowledge repo, maintained by the
-	// org/company independent of any product. When set, `gofi institutional
-	// update` mirrors its <project.name>/ subfolder into
+	// org/company independent of any product. When set, `gofi update
+	// institutional` mirrors its <project.name>/ subfolder into
 	// .claude/institutional/<project.name>/ (full replace). When empty,
 	// institutional/ is seeded locally at init and managed by hand in the
 	// project's own git — there is no upstream to pull from.
@@ -477,11 +540,7 @@ type Sources struct {
 	UI map[string]string `yaml:"ui,omitempty"`
 }
 
-type Git struct {
-	Remote string `yaml:"remote"`
-}
-
-// Graph configures the code graph kept under .gofi/graph/. The whole block is
+// Graph configures the code graph kept under .gofi/index/code/. The whole block is
 // optional, and its absence means every default: the graph is what the agents
 // read before they open a file, so a project has one unless it says otherwise.
 type Graph struct {
@@ -526,7 +585,7 @@ func (g Graph) MarshalYAML() (interface{}, error) {
 		"deep (true) resolve pelo type-checker: chamada exata e implementação de\n"+
 		"interface visíveis, ao custo de o projeto precisar compilar.\n"+
 		"Só em deep a ausência de aresta prova ausência de uso.\n"+
-		"Vale para `gofi update` e `gofi graph build`. Os hooks de git reconstroem\n"+
+		"Vale para `gofi update` e `gofi index code`. Os hooks de git reconstroem\n"+
 		"sempre em fast (--fast): o commit não espera o type-checker. Deep também\n"+
 		"só muda a varredura Go — superfície de UI é sintática de todo jeito.\n"+
 		"Com false, quem pede o deep é o agent, quando precisa provar ausência.",
@@ -561,26 +620,6 @@ func (g *Graph) Excludes() []string {
 		return nil
 	}
 	return g.Exclude
-}
-
-type Training struct {
-	// AutoInvoke controls whether `gofi train` automatically invokes the
-	// active AI host's CLI to ask the agent to read new content. nil
-	// (yaml absence) defaults to true; users opt out by setting false.
-	AutoInvoke *bool `yaml:"auto_invoke,omitempty"`
-
-	Shared []TrainingItem `yaml:"shared,omitempty"`
-	PD     []TrainingItem `yaml:"pd,omitempty"`
-	Spec   []TrainingItem `yaml:"spec,omitempty"`
-	Eng    []TrainingItem `yaml:"eng,omitempty"`
-	QA     []TrainingItem `yaml:"qa,omitempty"`
-}
-
-type TrainingItem struct {
-	Topic       string `yaml:"topic"`
-	Source      string `yaml:"source"`
-	InstalledAt string `yaml:"installed_at"`
-	Hash        string `yaml:"hash"`
 }
 
 type TestSection struct {

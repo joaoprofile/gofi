@@ -1,5 +1,5 @@
 // Package githooks installs the hooks that keep gofi's derived files in step
-// with the code.
+// with the code, and removes them.
 //
 // A repository rarely has hooks to spare: husky, lefthook and hand-written
 // scripts all want the same files. So gofi never owns a hook file — it owns a
@@ -78,7 +78,6 @@ func Install(projectRoot string, bodies map[string]string) ([]Result, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-
 	results := make([]Result, 0, len(Managed))
 	for _, hook := range Managed {
 		body, ok := bodies[hook]
@@ -100,7 +99,6 @@ func installOne(path, hook, body string) (Result, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return res, err
 	}
-
 	block := Begin + "\n" + strings.TrimRight(body, "\n") + "\n" + End
 	var next string
 	switch {
@@ -122,6 +120,16 @@ func installOne(path, hook, body string) (Result, error) {
 // nothing but a shebang is deleted, so uninstalling is not detectable
 // afterwards; anything else is kept, because the rest of it is not gofi's.
 func Uninstall(projectRoot string) ([]Result, error) {
+	return uninstall(projectRoot, func(string) bool { return true })
+}
+
+// UninstallLegacy removes only the blocks older releases wrote — the ones that
+// call commands gofi no longer has. Current blocks stay.
+func UninstallLegacy(projectRoot string) ([]Result, error) {
+	return uninstall(projectRoot, isLegacy)
+}
+
+func uninstall(projectRoot string, match func(block string) bool) ([]Result, error) {
 	dir, err := Dir(projectRoot)
 	if err != nil {
 		return nil, err
@@ -132,6 +140,9 @@ func Uninstall(projectRoot string) ([]Result, error) {
 		path := filepath.Join(dir, hook)
 		old, err := os.ReadFile(path)
 		if err != nil {
+			continue
+		}
+		if !match(blockOf(string(old))) {
 			continue
 		}
 		next := cutBlock(string(old))
@@ -156,6 +167,22 @@ func Uninstall(projectRoot string) ([]Result, error) {
 
 // Installed lists the managed hooks that currently carry a gofi block.
 func Installed(projectRoot string) []string {
+	return installed(projectRoot, func(string) bool { return true })
+}
+
+// Legacy lists the managed hooks whose gofi block is one an older release
+// wrote.
+func Legacy(projectRoot string) []string {
+	return installed(projectRoot, isLegacy)
+}
+
+// isLegacy recognizes a block by what it runs: the commands releases before
+// the index had, which fail on every commit now.
+func isLegacy(block string) bool {
+	return strings.Contains(block, "gofi graph") || strings.Contains(block, "gofi docs")
+}
+
+func installed(projectRoot string, match func(block string) bool) []string {
 	dir, err := Dir(projectRoot)
 	if err != nil {
 		return nil
@@ -166,11 +193,21 @@ func Installed(projectRoot string) []string {
 		if err != nil {
 			continue
 		}
-		if strings.Contains(string(b), Begin) {
+		if strings.Contains(string(b), Begin) && match(blockOf(string(b))) {
 			found = append(found, hook)
 		}
 	}
 	return found
+}
+
+// blockOf is the gofi block of a script, markers included, or "".
+func blockOf(script string) string {
+	from := strings.Index(script, Begin)
+	to := strings.Index(script, End)
+	if from < 0 || to < from {
+		return ""
+	}
+	return script[from : to+len(End)]
 }
 
 // replaceBlock swaps the gofi block of a script, appending it when the script

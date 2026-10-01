@@ -11,7 +11,7 @@ segue o mesmo template:
 > **Nome de export quando difere do arquivo:** o booleano (checkbox/radio/switch)
 > é exportado como **`Toggle`**. A cor de apoio na lib web é o token **`accent`**
 > (`bg-accent`) — o mobile mantém `secondary`; fonte única em
-> [design-tokens.md](../../../../knowledge/ui/design-tokens.md).
+> [design-tokens.md](../../../../expertise/ui-design/design-tokens.md).
 
 ## Átomos (primitivos)
 | Componente | Arquivo | Resumo |

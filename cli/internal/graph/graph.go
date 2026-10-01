@@ -15,10 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/analyze"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
-	"github.com/joaoprofile/gofi-cli/internal/graph/report"
+	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/report"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 )
 
 // Languages gofi reads with an extractor compiled into the binary. Everything
@@ -29,9 +30,8 @@ const (
 	LangJavaScript = "javascript"
 )
 
-// OutDir is where the graph is written, relative to the project root. It sits
-// under .gofi/ with the other derived artifacts (horusec, sonar).
-const OutDir = ".gofi/graph"
+// OutDir is where the graphs are written, relative to the project root.
+const OutDir = layout.CodeDir
 
 // File names inside OutDir. Everything gofi generates carries the gofi_ prefix,
 // so an artifact is never mistaken for something the project itself wrote, and
@@ -49,19 +49,12 @@ type BuildOptions struct {
 	// ProjectRoot is where installed extractors are looked up. Empty means Root,
 	// which is right whenever the scan covers the whole project. A scope that
 	// scans one folder of it — the front-end tree — has to point back at the
-	// project, because that is where `gofi graph install` put the binary.
+	// project, because that is where `gofi index install` put the binary.
 	ProjectRoot string
 	Language    string // "" or "go" for the native extractor, otherwise an external one
 	// Framework the project declared for this tree — react, react-native. It is
 	// recorded in the graph, not acted on: the extractor is chosen by language.
 	Framework string
-	// IndexLang is the language of the index this graph is filed under, which is
-	// not the language of the tree it describes. A front-end scope is written in
-	// TypeScript yet is listed by name in the project's own index, so it is
-	// queried with no --lang at all; only a language built into an index of its
-	// own (`gofi graph build --lang java`) needs the flag. Empty means the scan
-	// language answers for both, which is the standalone build.
-	IndexLang string
 	Deep      bool          // use go/types: exact calls and interface implementations
 	WithTests bool          // include the language's test files
 	Exclude   []string      // directory glob patterns to skip
@@ -100,21 +93,6 @@ func (o BuildOptions) ExtractorsRoot(scanRoot string) string {
 	return o.ProjectRoot
 }
 
-// QueryLang is the --lang a reader has to pass to reach this graph, empty when
-// none is needed. It is what the report's suggested commands carry, and getting
-// it from the scan language would send a reader of a front-end scope to
-// .gofi/graph/typescript/ — a directory that scope does not live in.
-func (o BuildOptions) QueryLang() string {
-	lang := o.IndexLang
-	if lang == "" {
-		lang = o.Lang()
-	}
-	if lang == LangGo {
-		return ""
-	}
-	return lang
-}
-
 // Mode is the scan mode name recorded in the graph.
 func (o BuildOptions) Mode() string {
 	if o.Deep {
@@ -131,18 +109,15 @@ func (o BuildOptions) logger() *slog.Logger {
 }
 
 // Build scans the project and writes gofi_graph.json, gofi_graph_report.md and
-// (unless disabled) gofi_graph.html into the output directory.
-//
-// For a language other than Go the scan is delegated to an external extractor
-// and the output lands in a subdirectory named after the language, so a
-// polyglot repository keeps one graph per language instead of overwriting.
+// (unless disabled) gofi_graph.html into the output directory. A language with
+// no extractor compiled in is delegated to an external one.
 func Build(ctx context.Context, opt BuildOptions) (*Result, error) {
 	root, err := filepath.Abs(opt.Root)
 	if err != nil {
 		return nil, err
 	}
 	lang := opt.Lang()
-	out := outDir(root, opt.Out, lang)
+	out := outDir(root, opt.Out)
 	log := opt.logger()
 	ex := Extractors.For(lang)
 
@@ -179,24 +154,34 @@ func Build(ctx context.Context, opt BuildOptions) (*Result, error) {
 		Diagnostics: ext.Diagnostics,
 		DiagCount:   ext.DiagCount,
 	}
-	if err := writeOutputs(g, out, opt.NoHTML, opt.QueryLang(), res); err != nil {
+	if err := writeOutputs(g, out, opt.NoHTML, res); err != nil {
 		return nil, err
 	}
 	log.Debug("graph written", "dir", out, "nodes", g.Stats.Nodes, "edges", g.Stats.Edges)
 	return res, nil
 }
 
-// outDir resolves the directory a build writes to. An empty Out means the
-// default layout: Go sits at the top so the common case has no extra level, and
-// every other language gets a directory of its own, so a polyglot repository
-// keeps one graph per language instead of overwriting. An Out given explicitly
-// is used as it is — the caller has already decided where the graph goes.
-func outDir(root, out, lang string) string {
+// Fresh reports whether a graph still describes the tree it was built from,
+// with the options it was built with. known is false when that cannot be told
+// without extracting again — an external extractor never says which files its
+// language compiles — so a caller must not read !fresh as stale on its own.
+func Fresh(prev *model.Graph, root string, opt BuildOptions) (fresh, known bool) {
+	inc, ok := Extractors.For(opt.Lang()).(Incremental)
+	if !ok {
+		return false, false
+	}
+	// The mode is part of what was built: a fast graph is not what a deep build
+	// would produce from the same files.
+	opt.Deep = prev.Mode == "deep"
+	_, unchanged := inc.Unchanged(prev, root, opt)
+	return unchanged, true
+}
+
+// outDir resolves the directory a build writes to: OutDir unless the caller
+// has already decided where the graph goes.
+func outDir(root, out string) string {
 	if out == "" {
-		out = OutDir
-		if lang != LangGo {
-			out = filepath.Join(out, lang)
-		}
+		out = filepath.FromSlash(OutDir)
 	}
 	if !filepath.IsAbs(out) {
 		out = filepath.Join(root, out)
@@ -204,7 +189,7 @@ func outDir(root, out, lang string) string {
 	return out
 }
 
-func writeOutputs(g *model.Graph, dir string, noHTML bool, queryLang string, res *Result) error {
+func writeOutputs(g *model.Graph, dir string, noHTML bool, res *Result) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -219,7 +204,7 @@ func writeOutputs(g *model.Graph, dir string, noHTML bool, queryLang string, res
 	}
 	defer root.Close()
 
-	if err := root.WriteFile(ReportFile, []byte(report.Markdown(g, queryLang)), 0o644); err != nil {
+	if err := root.WriteFile(ReportFile, []byte(report.Markdown(g)), 0o644); err != nil {
 		return err
 	}
 	res.Outputs = append(res.Outputs, ReportFile)
@@ -238,38 +223,19 @@ func writeOutputs(g *model.Graph, dir string, noHTML bool, queryLang string, res
 	return nil
 }
 
-// Dir returns the graph output directory for a project root.
-func Dir(projectRoot, language string) string {
-	return outDir(projectRoot, "", (BuildOptions{Language: language}).Lang())
+// Dir returns the directory holding a project's graphs.
+func Dir(projectRoot string) string {
+	return outDir(projectRoot, "")
 }
 
-// Load reads the graph written under a project root.
-func Load(projectRoot, language string) (*model.Graph, error) {
-	path := filepath.Join(Dir(projectRoot, language), GraphFile)
-	g, err := model.Load(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("grafo ausente em %s — rode `%s`", filepath.Dir(path), buildHint(language))
-		}
-		return nil, err
-	}
-	return g, nil
-}
-
-// Open hands the HTML visualization to the system's default browser.
-func Open(projectRoot, language string) error {
-	path := filepath.Join(Dir(projectRoot, language), HTMLFile)
+// Open hands the HTML visualization of one graph to the system's default
+// browser. dir is the graph's directory, as the index lists it.
+func Open(dir string) error {
+	path := filepath.Join(dir, HTMLFile)
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("visualizacao ausente em %s — rode `%s`", path, buildHint(language))
+		return fmt.Errorf("visualizacao ausente em %s — rode `gofi index code`", path)
 	}
 	return openInBrowser(path)
-}
-
-func buildHint(language string) string {
-	if lang := (BuildOptions{Language: language}).Lang(); lang != LangGo {
-		return "gofi graph build --lang " + lang
-	}
-	return "gofi graph build"
 }
 
 func openInBrowser(path string) error {

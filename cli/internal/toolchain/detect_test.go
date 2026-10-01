@@ -67,3 +67,24 @@ func TestDetect_NoNeedsNoChecks(t *testing.T) {
 		t.Errorf("unneeded toolchains default to ok")
 	}
 }
+
+func TestClaudeCodeMinimum(t *testing.T) {
+	for out, ok := range map[string]bool{
+		"2.1.283 (Claude Code)": true,
+		"2.1.277 (Claude Code)": true,
+		"2.1.300 (Claude Code)": true,
+		"3.0.0 (Claude Code)":   true,
+		"2.1.99 (Claude Code)":  false,
+		"2.0.500":               false,
+		"":                      false,
+	} {
+		run := mkRunner(map[string]string{"claude": out})
+		if c := claudeCode(run, "claude"); c.OK != ok {
+			t.Errorf("%q: ok=%v hint=%q", out, c.OK, c.Hint)
+		}
+	}
+	p := detect(Needs{Claude: true}, mkRunner(map[string]string{}))
+	if p.ClaudeOK || len(p.Checks) != 1 || p.Checks[0].Hint == "" {
+		t.Errorf("missing Claude Code not reported: %+v", p)
+	}
+}

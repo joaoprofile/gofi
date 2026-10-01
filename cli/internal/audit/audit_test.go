@@ -209,62 +209,66 @@ func TestMissingIndexOnlyWhenDocsExist(t *testing.T) {
 	}
 }
 
-// The reason this audit exists: update preserves .claude/knowledge/, so a file
-// added upstream after scaffolding never lands, while the skills that ship in
-// the same update already cite it.
-func TestKnowledgeFileNeverArrived(t *testing.T) {
+// A pack upstream ships and the project lacks is named, with the command
+// that installs it.
+func TestPackNeverArrived(t *testing.T) {
 	root := project(t, map[string]string{
-		".gofi.yaml": currentConfig,
-		".claude/knowledge/shared/ddd-principles.md": "x\n",
-		".claude/scripts/gen-index.sh":               "x\n",
+		".gofi.yaml":                            currentConfig,
+		".claude/expertise/diagramming/PACK.md": "x\n",
+		".claude/scripts/gen-index.sh":          "x\n",
 	})
 	upstream := fstest.MapFS{
-		"ai/knowledge/shared/ddd-principles.md":           {Data: []byte("x")},
-		"ai/knowledge/shared/graph-retrieval-protocol.md": {Data: []byte("x")},
+		"ai/expertise/diagramming/PACK.md":  {Data: []byte("x")},
+		"ai/expertise/event-driven/PACK.md": {Data: []byte("x")},
 	}
-
-	f, ok := find(Run(root, Options{Upstream: upstream, UpstreamRoot: "."}), ".claude/knowledge/shared/")
+	f, ok := find(Run(root, Options{Upstream: upstream, UpstreamRoot: "."}), ".claude/expertise/")
 	if !ok {
-		t.Fatal("a knowledge file present upstream and absent locally must be reported")
+		t.Fatal("a pack present upstream and absent locally must be reported")
 	}
-	if !strings.Contains(f.Detail, "graph-retrieval-protocol.md") {
-		t.Errorf("detail should name the missing file, got %q", f.Detail)
+	if !strings.Contains(f.Detail, "event-driven") || strings.Contains(f.Detail, "diagrams") {
+		t.Errorf("detail should name only the missing pack, got %q", f.Detail)
 	}
-	if strings.Contains(f.Detail, "ddd-principles.md") {
-		t.Errorf("a file that is present must not be listed as missing: %q", f.Detail)
-	}
-}
-
-func TestKnowledgeInSyncIsSilent(t *testing.T) {
-	root := project(t, map[string]string{
-		".gofi.yaml": currentConfig,
-		".claude/knowledge/shared/ddd-principles.md": "x\n",
-		".claude/scripts/gen-index.sh":               "x\n",
-	})
-	upstream := fstest.MapFS{"ai/knowledge/shared/ddd-principles.md": {Data: []byte("x")}}
-	if _, ok := find(Run(root, Options{Upstream: upstream, UpstreamRoot: "."}), ".claude/knowledge/shared/"); ok {
-		t.Error("a knowledge tree in sync should raise nothing")
+	if !strings.Contains(f.Hint, "gofi update expertise") {
+		t.Errorf("hint should name the command, got %q", f.Hint)
 	}
 }
 
 // Without the upstream tree there is no way to know what is missing, and
 // guessing would produce a report the user cannot trust.
-func TestNoUpstreamSkipsKnowledgeCheck(t *testing.T) {
+func TestNoUpstreamSkipsPackCheck(t *testing.T) {
 	root := project(t, map[string]string{
 		".gofi.yaml":                   currentConfig,
 		".claude/scripts/gen-index.sh": "x\n",
 	})
-	if _, ok := find(Run(root, Options{}), ".claude/knowledge/shared/"); ok {
-		t.Error("the knowledge check must not run without an upstream tree")
+	if _, ok := find(Run(root, Options{}), ".claude/expertise/"); ok {
+		t.Error("the pack check must not run without an upstream tree")
+	}
+}
+
+// A copy an older gofi seeded into knowledge/ now duplicates a pack section,
+// and as the team's learning it would win the search.
+func TestSeededCopyIsReported(t *testing.T) {
+	root := project(t, map[string]string{
+		".gofi.yaml": currentConfig,
+		".claude/knowledge/shared/ddd-principles.md": "x\n",
+		".claude/knowledge/shared/glossario.md":      "x\n",
+		".claude/scripts/gen-index.sh":               "x\n",
+	})
+	f, ok := find(Run(root, Options{}), ".claude/knowledge/")
+	if !ok {
+		t.Fatal("a seeded copy must be reported")
+	}
+	if !strings.Contains(f.Detail, "shared/ddd-principles.md") || strings.Contains(f.Detail, "glossario") {
+		t.Errorf("detail should name only the seeded copy, got %q", f.Detail)
 	}
 }
 
 func TestGraphEnabledButNeverBuilt(t *testing.T) {
 	root := project(t, map[string]string{".gofi.yaml": currentConfig})
-	if _, ok := find(Run(root, Options{GraphEnabled: true}), ".gofi/graph/"); !ok {
+	if _, ok := find(Run(root, Options{GraphEnabled: true}), ".gofi/index/code/"); !ok {
 		t.Error("an enabled graph that was never built should be reported")
 	}
-	if _, ok := find(Run(root, Options{GraphEnabled: false}), ".gofi/graph/"); ok {
+	if _, ok := find(Run(root, Options{GraphEnabled: false}), ".gofi/index/code/"); ok {
 		t.Error("a disabled graph should not be reported")
 	}
 }
@@ -371,5 +375,23 @@ func TestCurrentSDKLayoutIsSilent(t *testing.T) {
 	})
 	if f, ok := find(Run(root, Options{}), ".claude/"); ok {
 		t.Errorf("a project on the current layout should raise nothing, got %q", f.Detail)
+	}
+}
+
+// Keys the CLI stopped reading still load, so the audit names them.
+func TestRetiredConfigKeysAreNamed(t *testing.T) {
+	root := project(t, map[string]string{
+		".gofi.yaml":                   currentConfig + "agents: [gofi-pd]\ntraining:\n  shared: []\ngit:\n  remote: x\n",
+		".claude/scripts/gen-index.sh": "x\n",
+	})
+	fs := Run(root, Options{})
+	for _, k := range []string{"agents:", "training:", "git:"} {
+		f, ok := find(fs, k)
+		if !ok || !strings.Contains(f.Detail, "no longer read") {
+			t.Errorf("%s not reported: %+v", k, f)
+		}
+	}
+	if _, ok := find(Run(project(t, map[string]string{".gofi.yaml": currentConfig, ".claude/scripts/gen-index.sh": "x\n"}), Options{}), "agents:"); ok {
+		t.Error("a current config must not be reported")
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Fingerprint returns the hash of every Go file without parsing anything. This

@@ -2,8 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -118,25 +116,6 @@ func mapValue(n *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
-}
-
-// LegacyShapes reports what Load had to read differently from what is on disk,
-// so `gofi update` can say which values it is about to write in the current
-// shape instead of changing them silently.
-func LegacyShapes(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	norm, notes, err := normalizeLegacy(data)
-	if err != nil {
-		return nil
-	}
-	for name := range extraSurfaces(norm) {
-		notes = append(notes, fmt.Sprintf("ui.%s: surface kept as surfaces.%s", name, name))
-	}
-	sort.Strings(notes)
-	return notes
 }
 
 // extraSurfaces returns the v1 `ui:` sub-surfaces that are neither web nor

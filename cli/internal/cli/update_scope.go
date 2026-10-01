@@ -6,8 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"golang.org/x/term"
+
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
 )
 
 // updateScope is the answer every `gofi update <target>` owes the user before
@@ -31,7 +33,15 @@ type updateScope struct {
 	// Replaces marks a target that overwrites wholesale (the institutional
 	// mirror), where "keeps" would be a lie.
 	Replaces bool
+	// Hint says what to do about the kept files, shown under KEEPS. Set by the
+	// targets of the gofi zone, where an edited file stops receiving fixes.
+	Hint string
 }
+
+// keepsHint is the Hint of every gofi-zone target: an edit to a file gofi owns
+// freezes it, and the team's rule belongs in knowledge/, where it wins.
+const keepsHint = "an edited file stops getting fixes — move the difference to " +
+	"knowledge/ with overrides: in its frontmatter, then --force to take upstream back"
 
 type scopeLine struct {
 	Path string
@@ -90,6 +100,9 @@ func (s updateScope) String() string {
 		fmt.Fprintf(&b, "  OVERWRITES    %d file(s) you edited — copy kept in .gofi/backup/\n", len(s.Keeps))
 	case len(s.Keeps) > 0:
 		fmt.Fprintf(&b, "  KEEPS         %d file(s) you edited\n", len(s.Keeps))
+		if s.Hint != "" {
+			fmt.Fprintf(&b, "                %s\n", wrapWords(s.Hint, 16, 62))
+		}
 	}
 
 	if len(s.LeavesAlone) > 0 {
@@ -117,16 +130,11 @@ func confirmUpdate(title string, s updateScope, autoConfirm bool) (bool, error) 
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return false, errors.New("this update requires --yes when stdin is not a TTY")
 	}
-	ok := false
-	if err := huh.NewConfirm().
-		Title(title).
-		Description("Only what the block above lists as WRITES is touched.").
-		Affirmative("Yes").
-		Negative("No").
-		Value(&ok).Run(); err != nil {
-		return false, err
+	ok, err := flow.YesNo(title, i18n.T("update.confirm_help"), "", "", false)
+	if errors.Is(err, flow.ErrCancelled) {
+		return false, nil
 	}
-	return ok, nil
+	return ok, err
 }
 
 // wrapList joins items with commas, folding onto continuation lines indented by
@@ -164,4 +172,23 @@ func planNote(newFiles, changed int) string {
 		return fmt.Sprintf("%d new", newFiles)
 	}
 	return fmt.Sprintf("%d new, %d changed", newFiles, changed)
+}
+
+// wrapWords folds text onto continuation lines indented by indent, breaking
+// between words.
+func wrapWords(text string, indent, width int) string {
+	var b strings.Builder
+	line := 0
+	for _, w := range strings.Fields(text) {
+		if line > 0 && line+len(w)+1 > width {
+			b.WriteString("\n" + strings.Repeat(" ", indent))
+			line = 0
+		} else if line > 0 {
+			b.WriteString(" ")
+			line++
+		}
+		b.WriteString(w)
+		line += len(w)
+	}
+	return b.String()
 }

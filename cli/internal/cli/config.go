@@ -9,11 +9,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/detect"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/tui/editor"
-	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/detect"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/tui/editor"
+	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
 )
 
 func newConfigCmd() *cobra.Command {
@@ -93,7 +93,7 @@ func runConfigWizard() error {
 
 	// No detection here: the config already says where every surface lives, and
 	// a scan could only contradict a decision the project already made.
-	res, err := wizard.Run(cfg, detect.Result{})
+	res, err := wizard.Run(cfg, detect.Result{}, wizard.Meta{Version: Version})
 	if err != nil {
 		if errors.Is(err, wizard.ErrCancelled) {
 			fmt.Println("config cancelled.")
@@ -136,7 +136,6 @@ func mergeWizardIntoConfig(cfg *config.GofiConfig, r *wizard.Result) *config.Gof
 	if len(cfg.AI.Models) == 0 {
 		cfg.AI.Models = []string{r.AIModel}
 	}
-	cfg.Agents = append([]string(nil), r.Agents...)
 	cfg.Sources.Agents = r.AgentsRef
 	if len(r.SDKURLs) > 0 {
 		cfg.Sources.SDK = map[string]string{}
@@ -149,7 +148,6 @@ func mergeWizardIntoConfig(cfg *config.GofiConfig, r *wizard.Result) *config.Gof
 	web := func() config.UISurface { return defaultWebSurface(filepath.Join(r.Root, r.WebPath)) }
 	cfg.Frontend = mergeSurface(cfg.Frontend, r.Has(wizard.EnvWeb), web, r.WebPath, r.WebDS)
 	cfg.Mobile = mergeSurface(cfg.Mobile, r.Has(wizard.EnvMobile), defaultMobileSurface, r.MobilePath, r.MobileDS)
-	cfg.Git.Remote = r.GitRemote
 	return cfg
 }
 

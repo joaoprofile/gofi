@@ -2,7 +2,7 @@
 
 A11y é o **padrão**, não uma camada final. Todo PR demonstra estes
 itens. Complementa o princípio 5 de
-[ux-principles.md](../../../../knowledge/ui/ux-principles.md).
+[ux-principles.md](../../../../expertise/ui-design/ux-principles.md).
 
 ## Checklist por componente interativo
 

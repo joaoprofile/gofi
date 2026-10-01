@@ -9,15 +9,15 @@ func TestEnabled_NoColor(t *testing.T) {
 	}
 }
 
-func TestFormTheme_NonNil(t *testing.T) {
-	if FormTheme() == nil {
-		t.Error("FormTheme must never be nil")
-	}
-}
-
 func TestHelpers_PlainWhenDisabled(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	if Header("x") != "x" || Panel("y") != "y" {
+	if Header("x") != "x" || Note("y") != "y" {
 		t.Error("styles must pass content through unchanged when disabled")
+	}
+	if got := Bullet(Done, "ok"); got != "● ok" {
+		t.Errorf("Bullet = %q", got)
+	}
+	if got := Detail("why"); got != "  ⎿  why" {
+		t.Errorf("Detail = %q", got)
 	}
 }

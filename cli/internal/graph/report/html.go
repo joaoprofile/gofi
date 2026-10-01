@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/analyze"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 type vizNode struct {
@@ -173,7 +173,7 @@ const pageHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gofi graph — mapa de pacotes</title>
+<title>gofi index — mapa de pacotes</title>
 <style>
   :root{
     --bg:#0f1216; --panel:#161b22; --line:#232b36; --fg:#e6edf3; --dim:#8b98a5;
@@ -230,7 +230,7 @@ const pageHTML = `<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>gofi graph</h1>
+  <h1>gofi index</h1>
   <span class="sub" id="mod"></span>
   <div class="stats" id="stats"></div>
 </header>

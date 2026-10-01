@@ -1,0 +1,20 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   produces   the artifact the role delivers; the intake plans a request that
+#              aims at it through this role.
+#   requires   what must exist first; the role that produces a missing one runs
+#              before. only_on limits a requirement to some intents; revise_on
+#              runs the producer again for those intents even when it exists.
+#   then       roles that always follow this one.
+#   intents    verbs that point at this role.
+#   needs      data the role cannot start without (context, change).
+tier: standard
+produces: code
+requires:
+  - artifact: spec
+    revise_on: [change]
+then: [gofi-qa]
+intents: [implemente, implementar, implementa, codifique, codificar, programe, programar, desenvolva, desenvolver]
+needs: [context, change]

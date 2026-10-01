@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/detect"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/detect"
 )
 
 func TestNewDefaultResult(t *testing.T) {
@@ -15,9 +15,6 @@ func TestNewDefaultResult(t *testing.T) {
 	}
 	if !r.Has(EnvBack) {
 		t.Errorf("default should include backend")
-	}
-	if len(r.Agents) != len(config.AllAgents()) {
-		t.Errorf("default should activate every agent (%d), got %d", len(config.AllAgents()), len(r.Agents))
 	}
 	if r.AgentsRef != config.DefaultAgentsRef {
 		t.Errorf("default agents ref = %q", r.AgentsRef)
@@ -37,10 +34,10 @@ func TestModelOptionsOfferEveryModel(t *testing.T) {
 		if opts[i].Value != m.ID {
 			t.Errorf("option %d = %q, want %q", i, opts[i].Value, m.ID)
 		}
-		if !strings.HasPrefix(opts[i].Key, m.Label) {
-			t.Errorf("option %d label = %q, want it to start with %q", i, opts[i].Key, m.Label)
+		if opts[i].Label != m.Label {
+			t.Errorf("option %d label = %q, want %q", i, opts[i].Label, m.Label)
 		}
-		if strings.Contains(opts[i].Key, "default") {
+		if strings.Contains(opts[i].Hint, "default") {
 			marked++
 			if m.ID != config.DefaultModel {
 				t.Errorf("%q is marked default, but the default is %q", m.ID, config.DefaultModel)
@@ -165,7 +162,6 @@ func TestSeedFromConfig_MultiSurface(t *testing.T) {
 		Backend:  &config.Backend{Language: config.LanguageGo, Path: "services"},
 		Frontend: &config.UISurface{Framework: config.FrameworkReact, Path: "apps-web", DS: config.DSWeb},
 		Mobile:   &config.UISurface{Framework: config.FrameworkReactNative, Path: "apps-mobile", DS: ""},
-		Agents:   []string{config.AgentEng},
 		Sources:  config.Sources{Agents: config.DefaultAgentsRef},
 	}
 	seedFromConfig(r, cfg)
@@ -177,5 +173,41 @@ func TestSeedFromConfig_MultiSurface(t *testing.T) {
 	}
 	if r.WebDS != config.DSWeb || r.MobileDS != "" {
 		t.Errorf("DS not seeded: web=%q mobile=%q", r.WebDS, r.MobileDS)
+	}
+}
+
+// Blank answers stand for the defaults the questions suggest, and the review
+// shows the finalized values — so a blank folder must come back filled.
+func TestFinalizeFillsBlankAnswers(t *testing.T) {
+	r := newDefaultResult()
+	r.Name = "  shop  "
+	r.Root = t.TempDir()
+	r.Environments = []string{EnvBack, EnvWeb}
+	r.SourcePath, r.WebPath = "", ""
+	r.GitRemote = "git@example.com:x/y.git"
+
+	if err := r.finalize("", false); err != nil {
+		t.Fatal(err)
+	}
+	if r.Name != "shop" {
+		t.Errorf("name = %q", r.Name)
+	}
+	if r.SourcePath != config.DefaultBackendPath || r.WebPath != config.DefaultFrontendPath {
+		t.Errorf("paths = %q / %q", r.SourcePath, r.WebPath)
+	}
+	if r.WebDS != config.DSWeb || r.MobileDS != "" {
+		t.Errorf("design systems = %q / %q", r.WebDS, r.MobileDS)
+	}
+	if r.GitRemote != "" {
+		t.Errorf("remote kept although the user declined it: %q", r.GitRemote)
+	}
+	if len(r.SDKURLs) != 0 {
+		t.Errorf("blank SDK override should be dropped, got %v", r.SDKURLs)
+	}
+	sum := r.Summary()
+	for _, want := range []string{"shop", "backend", "web", "gofi-ui"} {
+		if !strings.Contains(sum, want) {
+			t.Errorf("summary misses %q:\n%s", want, sum)
+		}
 	}
 }

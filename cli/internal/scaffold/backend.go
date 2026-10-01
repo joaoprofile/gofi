@@ -1,14 +1,12 @@
 package scaffold
 
-// backendScaffolds maps a backend language to its embedded template tree.
+// backendScaffolds maps a backend language to its embedded template tree. Only
+// a language that ships a gofi SDK gets a skeleton: the others are adopted or
+// started by hand, and the agents still apply their conventions.
 // Language keys mirror config.Language* without importing config — the
 // scaffold package stays dependency-light, and the pairing is locked by a test.
 var backendScaffolds = map[string]string{
-	"go":     "golang",
-	"rust":   "rust",
-	"java":   "java",
-	"csharp": "csharp",
-	"nodejs": "nodejs",
+	"go": "golang",
 }
 
 // HasBackendScaffold reports whether gofi can bootstrap a project skeleton for

@@ -6,10 +6,10 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/tsjs"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract/tsjs"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Extractor turns a source tree into a graph. Go is built in; every other

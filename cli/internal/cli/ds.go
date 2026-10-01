@@ -7,9 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
 )
 
 func newUpdateDSCmd() *cobra.Command {
@@ -45,13 +46,21 @@ func runDSUpdate(autoConfirm, force bool) error {
 	if err != nil {
 		return fmt.Errorf("read .gofi.yaml: %w", err)
 	}
-
-	surfaces := uiSurfacesFromConfig(cfg)
-	if len(surfaces) == 0 {
+	if len(uiSurfacesFromConfig(cfg)) == 0 {
 		return errors.New("this project declares no front-end surface — there is no design system to update")
 	}
+	fmt.Printf("Resolving %s …\n", cfg.Sources.Agents)
+	t, err := dsTarget(cfg, force)
+	if err != nil {
+		return err
+	}
+	return runTarget(cfg, t, autoConfirm)
+}
+
+// dsTarget plans the design-system update of every front-end surface.
+func dsTarget(cfg *config.GofiConfig, force bool) (*targetPlan, error) {
+	surfaces := uiSurfacesFromConfig(cfg)
 	ref := cfg.Sources.Agents
-	fmt.Printf("Resolving %s …\n", ref)
 
 	// The manifest records .claude/sdk/ as one tree, so the surfaces have to be
 	// picked out of it: a doc tuned under sdk/<lang>/ belongs to the other
@@ -61,35 +70,33 @@ func runDSUpdate(autoConfirm, force bool) error {
 	scope := updateScope{
 		Keeps: tuned,
 		Force: force,
+		Hint:  keepsHint,
 		LeavesAlone: []string{
-			".claude/skills/", ".claude/sdk/<lang>/", ".gofi/gofi-sdk-<lang>/",
+			layout.Skills().Dir + "/", layout.SDK().Path("<lang>") + "/", ".gofi/gofi-sdk-<lang>/",
 			".gofi.yaml", "knowledge/", "memory/", "institutional/", "the graph",
 		},
 	}
 	for _, s := range surfaces {
-		scope.write(".claude/sdk/"+s+"/", "design system ← "+ref)
+		scope.write(layout.SDK().Path(s)+"/", "design system ← "+ref)
 	}
 	printTunedFiles(tuned)
-
-	ok, err := confirmUpdate("Update the design system?", scope, autoConfirm)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		fmt.Println("design system left as it is.")
-		return nil
-	}
 
 	mode := scaffold.InstallUpdate
 	if force {
 		mode = scaffold.InstallReset
 	}
-	if err := installDSFromSource(cfg.Project.Root, surfaces, ref, mode); err != nil {
-		return fmt.Errorf("ds update: %w", err)
-	}
-	fmt.Printf("\nDesign system updated — %s.\n", strings.Join(surfaces, ", "))
-	noteDrift(cfg)
-	return nil
+	return &targetPlan{
+		name:  "design system",
+		title: "Update the design system?",
+		scope: scope,
+		apply: func() error {
+			if err := installDSFromSource(cfg.Project.Root, surfaces, ref, mode); err != nil {
+				return err
+			}
+			fmt.Printf("\nDesign system updated — %s.\n", strings.Join(surfaces, ", "))
+			return nil
+		},
+	}, nil
 }
 
 // filterSurfaces keeps the .claude/sdk/ entries that belong to a front-end
@@ -98,7 +105,7 @@ func filterSurfaces(files, surfaces []string) []string {
 	var out []string
 	for _, f := range files {
 		for _, s := range surfaces {
-			if strings.HasPrefix(f, ".claude/sdk/"+s+"/") {
+			if strings.HasPrefix(f, layout.SDK().Path(s)+"/") {
 				out = append(out, f)
 				break
 			}

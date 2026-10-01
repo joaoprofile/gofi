@@ -1,178 +1,192 @@
-# Observabilidade — OpenTelemetry via `gofi/obs`
+---
+name: observability-otel
+description: Observabilidade com OpenTelemetry no gofi — componente observability, o que já vem instrumentado, métricas de negócio via obs/metrics (lazy, nil-guard, cardinalidade fechada, classifier, decorator), spans de job e teste com ManualReader
+sdk: v0.8.2
+keywords: [observabilidade, OpenTelemetry, OTLP, observability.New, obs/metrics, metrics.NewInt64Counter, histogram, cardinalidade, attrs, classify, decorator, ManualReader, service_name, db_pool, traces, spans]
+---
 
-Padrão SDK pra instrumentar qualquer contexto Go com métricas + traces + logs
-estruturados que fluem pelo OTLP collector configurado em `gofi.New().AddObservability()`.
+# Observabilidade — OpenTelemetry via `gofi`
 
-> **Logs estruturados (slog) já fluem pra Loki automaticamente** via
-> `gofi/obs/logging` (otelslog bridge). Não duplicar log shipping — basta usar
-> `logging.Info/Warn/Error` com `slog.String/Any` que o resto é grátis. Este
-> knowledge cobre só **métricas**.
+API: `.claude/sdk/go/api/gofi-component-observability.md`, `obs.md`,
+`obs-metrics.md`, `obs-logging.md`. Exemplo executável completo (handlers,
+cliente HTTP, fila, job, dashboard): `examples/obs` —
+`.claude/sdk/go/api/examples.md`. Logs: `logging.md`.
 
-## Princípios
+## Ligar
 
-1. **Lazy init via `sync.Once`** — instrumentos sobem na 1ª chamada de qualquer
-   `RecordX`. Zero mudança nos `main.go` dos binários. Idempotente.
-2. **Defensive nil-guard** — observabilidade **nunca** derruba o pipeline. Se
-   init falhar, instrumento fica `nil`; helpers checam e viram no-op.
-3. **Cardinality controlada** — toda label é enum fechado declarado em
-   `attrs.go`. **Zero label free-form** (`error.Error()`, IDs de entidade,
-   IDs em geral). Labels free-form vão pelo log (`slog`), nunca pela métrica.
-4. **Classifier centralizado** — `errs.AppError` é mapeado pra label fechado
-   por **uma** função (`ClassifyHTTPError` / `FailureReason`). Sem if-chain
-   espalhado pelo código.
-5. **Decorator pattern pra interfaces** — bridges, repositórios, etc. ganham
-   instrumentação via wrapper na fronteira (factory). Implementações ficam
-   zero-acopladas (ver `bridge-factory-adapter-pattern.md` § Decorators).
-6. **`ResetForTesting` exposto** — pra trocar `MeterProvider` global entre
-   testes (usar `sdkmetric.NewManualReader` pra asserir contador por
-   attribute set).
+```go
+With(observability.New(), /* database.New(), httpserver.New(...) ... */)
+```
 
-## Onde o pacote mora — `domain/{ctx}/observability/` por padrão, `common/` só por força
+- `observability.New()` lê `OTEL_EXPORTER_OTLP_ENDPOINT` (+ `_HEADERS`,
+  `_INSECURE`) e exporta **traces, métricas e logs** por uma conexão OTLP/gRPC.
+  Endpoint vazio → pulado com warning; todo instrumento vira no-op e o código
+  segue rodando.
+- Inicia primeiro (`StageObservability`) e faz flush por último, depois dos
+  logs de shutdown.
+- Serviço que não importa o componente não linka gRPC nem SDK OTel. Código de
+  aplicação usa só `obs/metrics` e a API `go.opentelemetry.io/otel` — nunca
+  `obs.Init` à mão num serviço gofi.
+- Resource: `service.name` = nome do `gofi.New`, `service.version` =
+  `APP_VERSION` (ou `OTEL_RESOURCE_ATTRIBUTES`, senão `unknown`),
+  `deployment.environment.name` = `APP_ENVIRONMENT`, atributos de host e
+  container, e o que vier em `OTEL_RESOURCE_ATTRIBUTES` (ex.:
+  `service.instance.id` pela downward API).
 
-O pacote de observabilidade **nasce junto do bounded context** que o origina —
-`services/domain/{ctx}/observability/` — porque seus `attrs`/`outcomes`/nomes de
-métrica **são vocabulário de domínio** (`op=create_campaign`,
-`outcome=no_active_campaign`, `{ctx}_event_published_total`), não infra neutra.
-Hoistar isso para `common/` polui a camada compartilhada com semântica que só um
-contexto entende.
+## O que já vem instrumentado — não duplicar
 
-Sobe para `services/common/observability/{ctx}/` em **exatamente dois** casos:
+| Origem | Traces | Métricas |
+|---|---|---|
+| `httpserver` / `netx` server | span por rota (`GET /orders/{id}`); health não é traçado | `http.server.*` com `http.route` |
+| `netx.HttpClient` | span cliente + propagação W3C | `http.client.*` |
+| `msq` (todo provider) | `send`/`process`, contexto pelos headers | `messaging.*` |
+| `database` | — | `db_pool_connections{pool,state}`, `db_pool_wait_count_total`, `db_pool_wait_duration_seconds_total` (`pool` = `main`/`replica`) |
+| runtime Go / processo | — | nomes semconv (`go.*`, `process.*`); `GOFI_OTEL_LEGACY_METRIC_NAMES=true` mantém os antigos `gofi_*` |
 
-- **(a) Direção de dependência força.** Algum pacote em `common/` precisa gravar
-  na métrica (ex.: o runner genérico de `common/scheduler` registra `RecordX` do
-  contexto). Como **`common/` não pode importar `domain/`** (violação de camada /
-  risco de ciclo), o pacote de observabilidade é **empurrado para cima**, para
-  `common/`. Não é estética — é a única posição legal.
-- **(b) Capacidade de plataforma transversal.** A observabilidade instrumenta uma
-  capacidade que **muitos contextos** vão produzir (notificação, auditoria,
-  outbox genérico), não um único dono. Aí mora em `common/` por natureza, mesmo
-  que hoje só um importador exista — é aposta deliberada de "infra compartilhada",
-  não obrigação.
+Pool fora do componente (`connection.NewConnection` extra):
+`metrics.ObserveDBStats("<pool>", db)`, uma vez por pool. Os gauges são
+observáveis (amostram `sql.DB.Stats()` na coleta) — custo zero no hot path.
+Use-os para diagnosticar exaustão de pool / espera por conexão.
 
-**Heurística de decisão:** grep quem importa o pacote. Se **algum importador está
-em `common/`** → tem que estar em `common/` (caso a). Se os importadores são só o
-próprio `domain/{ctx}`, seus adapters e binários top-level (`pathCmd`, que podem
-importar qualquer coisa) → fica em `domain/{ctx}/observability/` (default). O caso
-(b) é o único julgamento subjetivo — na dúvida, **fica no domínio**; promover
-depois é barato, despromover (com `common/` já dependendo) é breaking.
+Logs estruturados (`logging.*` com `slog.*`) já vão para o collector com
+`trace_id`/`span_id` quando emitidos via `logging.FromContext(ctx)`. Este
+arquivo cobre **métricas de negócio** e spans próprios.
+
+## Princípios das métricas de negócio
+
+1. **Lazy init via `sync.Once`** — instrumentos sobem na 1ª chamada de
+   `RecordX`; zero mudança nos `main.go`. (Criar uma vez no boot e injetar,
+   como `examples/obs/telemetry`, também vale — nunca por request.)
+2. **Nil-guard** — observabilidade **nunca** derruba o pipeline: falha na
+   criação deixa o instrumento `nil` e o helper vira no-op.
+3. **Cardinalidade fechada** — todo atributo é enum declarado em `attrs.go`.
+   **Zero valor livre** (`err.Error()`, IDs de entidade/tenant, slugs). Valor
+   livre vai no log.
+4. **Classifier centralizado** — `errs.AppError` → label fechado por **uma**
+   função (`ClassifyHTTPError` / `FailureReason`).
+5. **Decorator na fronteira** — bridges/ports ganham instrumentação por wrapper
+   no factory; implementação fica sem acoplamento (ver
+   `bridge-factory-adapter-pattern.md` § Decorators).
+6. **`ResetForTesting` exposto** — troca de `MeterProvider` entre testes.
+
+Instrumentos vêm de `github.com/gofi-labs/gofi-sdk-go/obs/metrics`
+(`metrics.NewInt64Counter`, `metrics.NewFloat64Histogram`,
+`metrics.NewInt64UpDownCounter`, `metrics.NewInt64Gauge`… ou
+`metrics.Meter()` para opções extras). Os wrappers `obs.New*` / `obs.Meter`
+estão **deprecated**.
+
+## Onde o pacote mora — `domain/{contexto}/observability/` por padrão, `common/` só por força
+
+O pacote nasce junto do bounded context que o origina — atributos, outcomes e
+nomes de métrica **são vocabulário de domínio**. Sobe para
+`common/observability/{contexto}/` em **exatamente dois** casos:
+
+- **(a) Direção de dependência.** Algum pacote em `common/` grava na métrica;
+  como `common/` não importa `domain/`, o pacote é empurrado para cima.
+- **(b) Capacidade de plataforma transversal** (notificação, auditoria,
+  outbox) que muitos contextos produzem.
+
+Heurística: grep quem importa. Importador em `common/` → `common/` (a). Só o
+próprio contexto, seus adapters e `pathCmd` → fica no domínio. Na dúvida,
+domínio; promover depois é barato, despromover é breaking.
+
+O pacote do domínio se chama `observability`, como o componente
+`gofi/component/observability`: onde os dois se encontram (ou quando o pacote
+sobe para `common/`), importe com alias curto (`{contexto}obs`).
 
 ## Layout canônico
 
 ```
-{base}/observability/{ctx}/            # {base} = services/domain/{ctx} (default) | services/common (casos a/b)
-├── metrics.go              — declaração + init lazy de todos os instrumentos
-├── attrs.go                — chaves + enums fechados (cardinality controlada)
-├── classify.go             — ClassifyHTTPError + FailureReason
-├── classify_test.go        — testes de comportamento (1 por categoria de erro)
-├── recorder.go             — helpers RecordX (closure-stop pra duração+outcome)
-├── bridge_middleware.go    — Metered{X}Bridge (decorator do port externo)
-└── bridge_middleware_test.go — teste real com sdkmetric.NewManualReader
+{base}/observability/            # {base} = domain/{contexto} (default) | common/observability/{contexto}
+├── metrics.go                   — declaração + init lazy dos instrumentos
+├── attrs.go                     — chaves + enums fechados
+├── classify.go                  — ClassifyHTTPError + FailureReason
+├── classify_test.go             — 1 teste por categoria de erro
+├── recorder.go                  — helpers RecordX (closure-stop duração+outcome)
+├── bridge_middleware.go         — Metered{X}Bridge (decorator do port)
+└── bridge_middleware_test.go    — teste com sdkmetric.NewManualReader
 ```
-
-`{ctx}` = nome do contexto/domínio que origina as métricas. Permite múltiplos
-contextos coexistirem sem colisão de init (cada um tem seu `sync.Once` e seu
-conjunto de instrumentos isolado). Quando mora no domínio, o nome do pacote é
-`observability` (qualificado pelo path do contexto); quando sobe para `common/`,
-ganha alias curto no import (`syncobs`, `notifobs`) pra desambiguar.
 
 ## `metrics.go` — declaração lazy
 
 ```go
-// Package {ctx}obs centraliza os instrumentos OTel do contexto {ctx}. Init
-// lazy via sync.Once — instrumentos sobem na 1ª chamada de qualquer RecordX.
-// gofi.New().AddObservability() já configurou o MeterProvider global antes.
-//
-// Convenção de naming: `{ctx}_<area>_<unit_or_total>` (snake_case), alinhado
-// ao que o OTel collector exporta pra Prometheus/Grafana.
-package {ctx}obs
+// Package observability holds the OTel instruments of the {contexto} context.
+// Instruments are created lazily on the first RecordX call; the global
+// MeterProvider is installed by the observability component during Build.
+package observability
 
 import (
     "log/slog"
     "sync"
 
-    "github.com/joaoprofile/gofi/obs"
-    "github.com/joaoprofile/gofi/obs/logging"
+    "github.com/gofi-labs/gofi-sdk-go/obs/logging"
+    "github.com/gofi-labs/gofi-sdk-go/obs/metrics"
     "go.opentelemetry.io/otel/metric"
 )
 
 var (
     once sync.Once
 
-    // 1 var por instrumento — global do package.
-    XxxRequestsTotal     metric.Int64Counter
-    XxxRequestDuration   metric.Float64Histogram
-    XxxErrorsTotal       metric.Int64Counter
-    // ...
+    XxxRequests        metric.Int64Counter
+    XxxRequestDuration metric.Float64Histogram
+    XxxErrors          metric.Int64Counter
 )
 
-// ensureInit cria todos os instrumentos uma vez. Idempotente. Chamado por
-// todos os RecordX antes de tocar nos instrumentos.
-//
-// Falhas de criação são logadas mas NÃO panicam — instrumento fica nil, e os
-// recorders fazem nil-guard. Observabilidade nunca derruba o pipeline.
+// durationBuckets fits seconds; the SDK default buckets (0..10000) fit
+// milliseconds and would put every run in the first bucket.
+var durationBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+
+// ensureInit creates the instruments once. Failures are logged, never panic:
+// the instrument stays nil and the recorders skip it.
 func ensureInit() {
     once.Do(func() {
         var err error
-        create := func(label string, fn func() error) {
-            if err = fn(); err != nil {
-                logging.Error("{ctx}obs: instrument init failed",
-                    slog.String("instrument", label), slog.Any("error", err))
+        report := func(name string) {
+            if err != nil {
+                logging.Error("{contexto} observability: instrument init failed",
+                    slog.String("instrument", name), slog.Any("error", err))
             }
         }
-
-        create("xxx_requests_total", func() error {
-            XxxRequestsTotal, err = obs.NewInt64Counter(
-                "{ctx}_xxx_requests_total",
-                "requests sent — labeled by {dim}/method/status_class")
-            return err
-        })
-        create("xxx_request_duration_seconds", func() error {
-            XxxRequestDuration, err = obs.NewFloat64Histogram(
-                "{ctx}_xxx_request_duration_seconds",
-                "latency of xxx requests", "s")
-            return err
-        })
-        // ...
+        XxxRequests, err = metrics.NewInt64Counter("{contexto}.xxx.requests",
+            "Requests sent, by method and status class")
+        report("xxx.requests")
+        XxxRequestDuration, err = metrics.Meter().Float64Histogram("{contexto}.xxx.request.duration",
+            metric.WithDescription("Latency of xxx requests"),
+            metric.WithUnit("s"),
+            metric.WithExplicitBucketBoundaries(durationBuckets...))
+        report("xxx.request.duration")
+        XxxErrors, err = metrics.NewInt64Counter("{contexto}.xxx.errors", "Failed xxx requests, by reason")
+        report("xxx.errors")
     })
 }
 
-// ResetForTesting força re-init dos instrumentos no próximo RecordX. Usado
-// pelos testes que trocam o MeterProvider global pra coletar via ManualReader.
-// NÃO deve ser chamado em produção.
+// ResetForTesting forces a re-init on the next RecordX. Tests only.
 func ResetForTesting() {
     once = sync.Once{}
-    XxxRequestsTotal = nil
-    XxxRequestDuration = nil
-    XxxErrorsTotal = nil
-    // ...
+    XxxRequests, XxxRequestDuration, XxxErrors = nil, nil, nil
 }
 ```
 
 ## `attrs.go` — enums fechados
 
 ```go
-package {ctx}obs
+package observability
 
 import "go.opentelemetry.io/otel/attribute"
 
-// Chaves padronizadas — usadas em todas as métricas do contexto.
 const (
-    AttrXxx         = "xxx"
     AttrMethod      = "method"
     AttrStatusClass = "status_class"
     AttrReason      = "reason"
     AttrOutcome     = "outcome"
-    // ...
 )
 
-// Outcomes — enum fechado. Cardinality controlada.
 const (
     OutcomeSuccess = "success"
     OutcomeFailed  = "failed"
     OutcomeSkipped = "skipped"
 )
 
-// Status classes — buckets HTTP/categoria.
 const (
     StatusClass2xx     = "2xx"
     StatusClass4xx     = "4xx"
@@ -182,96 +196,83 @@ const (
     StatusClassUnknown = "unknown"
 )
 
-// Reasons — enum fechado (NÃO usar error.Error()).
 const (
-    ReasonTimeout       = "timeout"
-    ReasonNetwork       = "network"
-    ReasonHTTP5xx       = "http_5xx"
-    ReasonRateLimit     = "http_429_rate_limit"
-    ReasonAuth          = "auth_failed"
-    ReasonParseFailed   = "parse_failed"
-    ReasonNotSupported  = "not_supported"
-    // ...
+    ReasonTimeout   = "timeout"
+    ReasonNetwork   = "network"
+    ReasonHTTP5xx   = "http_5xx"
+    ReasonRateLimit = "http_429_rate_limit"
+    ReasonAuth      = "auth_failed"
+    ReasonParse     = "parse_failed"
 )
 
-// Helpers pra montar attribute.KeyValue (açúcar — caller pode usar
-// attribute.String() direto também).
-func MethodAttr(name string) attribute.KeyValue       { return attribute.String(AttrMethod, name) }
-func StatusClassAttr(s string) attribute.KeyValue     { return attribute.String(AttrStatusClass, s) }
-func ReasonAttr(r string) attribute.KeyValue          { return attribute.String(AttrReason, r) }
-func OutcomeAttr(o string) attribute.KeyValue         { return attribute.String(AttrOutcome, o) }
+func MethodAttr(v string) attribute.KeyValue      { return attribute.String(AttrMethod, v) }
+func StatusClassAttr(v string) attribute.KeyValue { return attribute.String(AttrStatusClass, v) }
+func ReasonAttr(v string) attribute.KeyValue      { return attribute.String(AttrReason, v) }
+func OutcomeAttr(v string) attribute.KeyValue     { return attribute.String(AttrOutcome, v) }
 ```
 
-**Vetado:** labels com identificadores variáveis (entity IDs, tenant IDs,
-slugs livres do usuário, `error.Error()`), ou qualquer string que cresça
-sem upper bound. Tudo
-isso vai pelo log (`slog.String("sku", x)`), nunca pela métrica.
+**Vetado:** atributo com identificador variável ou string sem teto. **Nunca**
+nomear atributo `job` ou `instance` — o Prometheus reserva esses labels e o
+collector descarta a série inteira no conflito.
 
-## `classify.go` — mapeamento `errs.AppError → label fechado`
+## `classify.go` — `errs.AppError` → label fechado
 
 ```go
-package {ctx}obs
+package observability
 
 import (
     "context"
     "errors"
     "net"
-    "strings"
 
-    "github.com/joaoprofile/gofi/base/errs"
+    "github.com/gofi-labs/gofi-sdk-go/base/errs"
 )
 
-// ClassifyHTTPError mapeia um errs.AppError pra status_class fechado.
-// Heurística: errs.AppError.Kind diz a categoria de domínio; quando é
-// External (HTTP), inspeciona o err embutido pra distinguir timeout/network.
-//
-//   - sem erro → "2xx"
-//   - código de domínio mapeado (ex.: NOT_SUPPORTED) → label dedicado
-//   - código com substring PARSE/EMPTY → "parse"
-//   - External + ctx.DeadlineExceeded → "timeout"
-//   - External + net.DNSError/net.OpError → "network"
-//   - External + net.Error.Timeout() → "timeout"
-//   - External genérico → "5xx" (bucket genérico de "externo falhou")
-//   - Operation/Validation/NotFound domain → "unknown" (não polui buckets HTTP)
+// ClassifyHTTPError maps an AppError to a closed status_class.
 func ClassifyHTTPError(appErr errs.AppError) string {
-    if !appErr.Exists() {
+    switch {
+    case !appErr.Exists():
         return StatusClass2xx
-    }
-    // ... (códigos específicos do contexto primeiro)
-    if strings.Contains(appErr.Code, "PARSE") || strings.Contains(appErr.Code, "EMPTY_PAYLOAD") {
-        return "parse"
-    }
-    if appErr.IsExternalError() {
-        if classified := classifyRawError(appErr.Err); classified != "" {
-            return classified
+    case appErr.IsUnauthorized(), appErr.IsForbidden(), appErr.IsValidation(), appErr.IsNotFound():
+        return StatusClass4xx
+    case appErr.IsExternalError():
+        if c := classifyRawError(appErr.Err); c != "" {
+            return c
         }
         return StatusClass5xx
+    default:
+        return StatusClassUnknown
     }
-    return StatusClassUnknown
 }
 
-// FailureReason refina o reason. Cardinality controlada — só strings do enum.
-func FailureReason(appErr errs.AppError) string { /* ... */ }
-
 func classifyRawError(err error) string {
-    if err == nil { return "" }
-    if errors.Is(err, context.DeadlineExceeded) { return StatusClassTimeout }
+    if err == nil {
+        return ""
+    }
+    if errors.Is(err, context.DeadlineExceeded) {
+        return StatusClassTimeout
+    }
     var netErr net.Error
-    if errors.As(err, &netErr) && netErr.Timeout() { return StatusClassTimeout }
-    var dnsErr *net.DNSError
-    if errors.As(err, &dnsErr) { return StatusClassNetwork }
+    if errors.As(err, &netErr) && netErr.Timeout() {
+        return StatusClassTimeout
+    }
     var opErr *net.OpError
-    if errors.As(err, &opErr) { return StatusClassNetwork }
+    var dnsErr *net.DNSError
+    if errors.As(err, &opErr) || errors.As(err, &dnsErr) {
+        return StatusClassNetwork
+    }
     return ""
 }
 ```
 
-## `recorder.go` — helpers RecordX
+`FailureReason(appErr) string` segue o mesmo formato, devolvendo só
+constantes `Reason*`. Códigos específicos do contexto (`appErr.Code`) são
+tratados antes dos genéricos.
 
-Padrão **closure-stop** pra registrar duração + outcome no fim do escopo:
+## `recorder.go` — closure-stop
 
 ```go
-package {ctx}obs
+package observability
 
 import (
     "context"
@@ -281,274 +282,142 @@ import (
     "go.opentelemetry.io/otel/metric"
 )
 
-// Defensive helpers — guardam contra instrumento nil (init falhou).
-func recordCounter(ctx context.Context, c metric.Int64Counter, delta int64, attrs ...attribute.KeyValue) {
-    if c == nil { return }
-    c.Add(ctx, delta, metric.WithAttributes(attrs...))
+func add(ctx context.Context, c metric.Int64Counter, attrs ...attribute.KeyValue) {
+    if c != nil {
+        c.Add(ctx, 1, metric.WithAttributes(attrs...))
+    }
 }
 
-func recordHistogram(ctx context.Context, h metric.Float64Histogram, val float64, attrs ...attribute.KeyValue) {
-    if h == nil { return }
-    h.Record(ctx, val, metric.WithAttributes(attrs...))
+func record(ctx context.Context, h metric.Float64Histogram, v float64, attrs ...attribute.KeyValue) {
+    if h != nil {
+        h.Record(ctx, v, metric.WithAttributes(attrs...))
+    }
 }
 
-// RecordPipeline retorna closure-stop. Padrão de uso:
+// RecordRequest returns the stop function; call it with the outcome:
 //
-//   stop := {ctx}obs.RecordPipeline(ctx, ...)
-//   defer func() { stop(outcome) }()  // outcome decidido no return
-//
-// Ou inline quando o outcome é trivial:
-//
-//   defer {ctx}obs.RecordPipeline(ctx, ...)({ctx}obs.OutcomeSuccess)
-func RecordPipeline(ctx context.Context, dim, eventType, source string) func(outcome string) {
+//	stop := observability.RecordRequest(ctx, "fetch")
+//	defer func() { stop(outcome) }()
+func RecordRequest(ctx context.Context, method string) func(outcome string) {
     ensureInit()
     start := time.Now()
-    base := []attribute.KeyValue{
-        attribute.String("dim", dim),
-        attribute.String("type", eventType),
-        attribute.String("source", source),
-    }
     return func(outcome string) {
-        recordHistogram(ctx, XxxDuration, time.Since(start).Seconds(), base...)
-        recordCounter(ctx, XxxProcessedTotal, 1, append(base, OutcomeAttr(outcome))...)
+        record(ctx, XxxRequestDuration, time.Since(start).Seconds(), MethodAttr(method))
+        add(ctx, XxxRequests, MethodAttr(method), OutcomeAttr(outcome))
     }
-}
-
-func RecordSkip(ctx context.Context, dim, eventType, reason string) {
-    ensureInit()
-    recordCounter(ctx, XxxSkippedTotal, 1,
-        attribute.String("dim", dim),
-        attribute.String("type", eventType),
-        ReasonAttr(reason),
-    )
 }
 ```
 
-## `bridge_middleware.go` — decorator de instrumentação
+## `bridge_middleware.go` — decorator
 
 ```go
-package {ctx}obs
-
-import (
-    "context"
-    "time"
-
-    "go.opentelemetry.io/otel/attribute"
-    "go.opentelemetry.io/otel/metric"
-
-    "github.com/joaoprofile/gofi/base/errs"
-    "<module>/services/domain/{ctx}/bridge"
-)
-
-// MeteredBridge envelopa qualquer {Ctx}Bridge instrumentando latência,
-// status_class e reason por chamada. Dimensão é fixada no constructor —
-// vem do factory key (chave da dimensão polimórfica do contexto).
 type MeteredBridge struct {
-    inner bridge.{Ctx}Bridge
-    dim   string
+    inner bridge.{Contexto}Bridge
+    dim   string // closed set: the factory key
 }
 
-func WrapBridge(inner bridge.{Ctx}Bridge, dim string) bridge.{Ctx}Bridge {
-    if inner == nil { return nil }
+func WrapBridge(inner bridge.{Contexto}Bridge, dim string) bridge.{Contexto}Bridge {
+    if inner == nil {
+        return nil
+    }
     return &MeteredBridge{inner: inner, dim: dim}
 }
 
-func (m *MeteredBridge) FetchSomething(ctx context.Context, /* args */) (Result, errs.AppError) {
+func (m *MeteredBridge) FetchSomething(ctx context.Context /*, args */) (Result, errs.AppError) {
     start := time.Now()
-    res, appErr := m.inner.FetchSomething(ctx, /* args */)
-    m.record(ctx, "fetch_something", start, appErr)
+    res, appErr := m.inner.FetchSomething(ctx /*, args */)
+    m.observe(ctx, "fetch_something", start, appErr)
     return res, appErr
 }
 
-func (m *MeteredBridge) record(ctx context.Context, method string, start time.Time, appErr errs.AppError) {
+func (m *MeteredBridge) observe(ctx context.Context, method string, start time.Time, appErr errs.AppError) {
     ensureInit()
-    base := []attribute.KeyValue{
-        attribute.String("dim", m.dim),
-        MethodAttr(method),
-    }
-    statusClass := ClassifyHTTPError(appErr)
-
-    if XxxRequestDuration != nil {
-        XxxRequestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(base...))
-    }
-    if XxxRequestsTotal != nil {
-        XxxRequestsTotal.Add(ctx, 1, metric.WithAttributes(append(base, StatusClassAttr(statusClass))...))
-    }
-    if appErr.Exists() && XxxErrorsTotal != nil {
-        XxxErrorsTotal.Add(ctx, 1, metric.WithAttributes(append(base, ReasonAttr(FailureReason(appErr)))...))
+    base := []attribute.KeyValue{attribute.String("dim", m.dim), MethodAttr(method)}
+    record(ctx, XxxRequestDuration, time.Since(start).Seconds(), base...)
+    add(ctx, XxxRequests, append(base, StatusClassAttr(ClassifyHTTPError(appErr)))...)
+    if appErr.Exists() {
+        add(ctx, XxxErrors, append(base, ReasonAttr(FailureReason(appErr)))...)
     }
 }
 ```
 
-Wire no factory ([bridge-factory-adapter-pattern.md](bridge-factory-adapter-pattern.md)
-§ Decorators) — `Get()` envolve com `WrapBridge` antes de cachear.
+O factory envolve com `WrapBridge` antes de cachear.
 
-## `bridge_middleware_test.go` — teste real com ManualReader
+## Teste com `ManualReader`
 
 ```go
-package {ctx}obs_test
-
-import (
-    "context"
-    "testing"
-
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/attribute"
-    sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-    "go.opentelemetry.io/otel/sdk/metric/metricdata"
-
-    {ctx}obs "<module>/{base}/observability/{ctx}"   // {base}: services/domain/{ctx} (default) | services/common
-)
-
-// setupManualReader instala um MeterProvider em memória, força
-// ResetForTesting pra ensureInit registrar instrumentos no provider novo, e
-// devolve o reader pra coletar data points.
 func setupManualReader(t *testing.T) *sdkmetric.ManualReader {
     t.Helper()
     reader := sdkmetric.NewManualReader()
-    mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-    otel.SetMeterProvider(mp)
-    {ctx}obs.ResetForTesting()
-    t.Cleanup({ctx}obs.ResetForTesting)
+    otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+    observability.ResetForTesting() // instruments bind to the new provider
+    t.Cleanup(observability.ResetForTesting)
     return reader
 }
 
 func TestMeteredBridge_RecordsSuccess(t *testing.T) {
     reader := setupManualReader(t)
+    _, _ = observability.WrapBridge(&stubBridge{}, "adapter-a").FetchSomething(context.Background())
 
-    wrapped := {ctx}obs.WrapBridge(&stubBridge{}, "adapter-a")
-    _, _ = wrapped.FetchSomething(context.Background())
-
-    rm := collect(t, reader)
-    requireCounter(t, rm, "{ctx}_xxx_requests_total",
+    var rm metricdata.ResourceMetrics
+    require.NoError(t, reader.Collect(context.Background(), &rm))
+    requireCounter(t, &rm, "{contexto}.xxx.requests",
         map[string]string{"dim": "adapter-a", "method": "fetch_something", "status_class": "2xx"}, 1)
 }
-
-// Helper requireCounter — itera ScopeMetrics → Metrics → DataPoints, encontra
-// o data point com attribute set matching e assere o valor.
-func requireCounter(t *testing.T, rm *metricdata.ResourceMetrics, name string, want map[string]string, expected int64) {
-    t.Helper()
-    for _, sm := range rm.ScopeMetrics {
-        for _, m := range sm.Metrics {
-            if m.Name != name { continue }
-            sum, ok := m.Data.(metricdata.Sum[int64])
-            require.True(t, ok)
-            for _, dp := range sum.DataPoints {
-                if attrsMatch(dp.Attributes, want) {
-                    assert.Equal(t, expected, dp.Value)
-                    return
-                }
-            }
-        }
-    }
-    t.Fatalf("metric %s with attrs %v not found", name, want)
-}
-
-func attrsMatch(set attribute.Set, want map[string]string) bool {
-    got := make(map[string]string)
-    for _, kv := range set.ToSlice() {
-        got[string(kv.Key)] = kv.Value.AsString()
-    }
-    for k, v := range want {
-        if got[k] != v { return false }
-    }
-    return true
-}
 ```
 
-## Naming convention
+`requireCounter` percorre `ScopeMetrics → Metrics → metricdata.Sum[int64]` e
+compara o `attribute.Set` do data point. Funciona porque `metrics.Meter()` lê
+o provider global a cada chamada.
 
-| Métrica | Padrão | Exemplo |
-|---|---|---|
-| Counter | `{ctx}_<area>_<thing>_total` | `{ctx}_pipeline_processed_total` |
-| Histogram (duração) | `{ctx}_<area>_<thing>_seconds` | `{ctx}_bridge_request_duration_seconds` |
-| Histogram (count) | `{ctx}_<area>_<thing>` | `{ctx}_batch_size` |
-| Gauge | `{ctx}_<area>_<thing>` | `{ctx}_queue_depth` |
+## Spans próprios — job e passo de fluxo
 
-**Não usar:** UpperCamelCase, kebab-case, `.` no nome (`.` quebra Prometheus
-exporter; OTel collector converte mas vira ruído).
+- **Execução de job/cron = trace próprio:**
+  `tracer.Start(ctx, "job <nome>", trace.WithNewRoot())` — nunca filho de quem
+  iniciou o scheduler. Duração e outcome por execução em histograma.
+- **Passo relevante de fluxo** = span filho (`tracer.Start(ctx, "<passo>")`).
+- **Falha marca o span:** `span.RecordError(err)` **e**
+  `span.SetStatus(codes.Error, err.Error())` — só `RecordError` não muda o
+  status.
+- Tracer: `otel.Tracer("<module>/<pacote>")`. Padrão completo em
+  `examples/obs/job/archive.go` e `examples/obs/telemetry/telemetry.go`.
 
-## Cardinality budget
+## Nomes
 
-Estimativa antes de adicionar label novo:
-```
-unique_series ≈ ∏(cardinality de cada label)
-```
+| Tipo | Nome (OTel) | Unidade | No Prometheus |
+|---|---|---|---|
+| Counter | `{contexto}.<area>.<coisa>` | — | `{contexto}_<area>_<coisa>_total` |
+| Histogram de duração | `{contexto}.<area>.<coisa>.duration` | `s` + buckets explícitos | `…_duration_seconds_bucket` |
+| UpDownCounter / Gauge | `{contexto}.<area>.<coisa>` | conforme | `{contexto}_<area>_<coisa>` |
 
-Pra contador com 5 labels com cardinality {3, 5, 6, 3, 10}: **2700 séries**.
-Adicionar 1 label novo de cardinality 50 vira **135 000 séries** — instável.
+Nome com pontos, unidade em `WithUnit` — o exporter converte e acrescenta
+sufixos. Métrica já em produção com nome `snake_case` **não** é renomeada
+(quebra dashboard); a regra vale para métrica nova.
 
-**Regra do polegar:** total do contexto < 1000 séries por counter/histogram.
-Acima disso, repensar quais labels são realmente actionable. Labels descartáveis
-(entity IDs em alta cardinalidade) **NÃO** vão pra métrica —
-vão pelo log estruturado.
+## Cardinalidade
+
+`séries ≈ ∏(cardinalidade de cada atributo)`. Cinco atributos {3, 5, 6, 3, 10}
+= 2700 séries; um sexto com 50 valores = 135 000. **Teto: < 1000 séries por
+instrumento no contexto.** Acima disso, cortar atributo.
+
+## Dashboards — filtrar por `service_name`, nunca `job`
+
+O resource `service.name` vira o label `service_name` quando o collector o
+promove (config do collector, infra). Todo binário exporta pelo mesmo
+collector, então `job` é o scrape job (constante) e **não** discrimina
+serviço: `label_values(<métrica>, service_name)` e
+`{service_name=~"$service"}`. Réplicas só se separam com
+`service.instance.id` em `OTEL_RESOURCE_ATTRIBUTES` + promoção no collector.
 
 ## Anti-padrões vetados
 
-- ❌ Labels com strings variáveis (`sku`, `account_id`, `error.Error()`, IDs)
-- ❌ Init de instrumentos no `main.go` (espalha responsabilidade — usar lazy)
-- ❌ Métrica por adapter individual (`{adapter-a}_xxx_total`) — viola "dimensão é label"
-- ❌ Instrumentar dentro do adapter — usar decorator no factory
-- ❌ Skip do classifier — `error.Error()` direto como label cria infinitas séries
-- ❌ Métrica sem assertable threshold — se "ninguém alarma neste número", não emite
-- ❌ Helpers sem nil-guard — observabilidade não pode derrubar pipeline
-
-## Onde a observabilidade é exportada
-
-`gofi.New().AddObservability()` configura:
-- **MeterProvider** OTLP gRPC → collector (Grafana Mimir/Prometheus)
-- **TracerProvider** OTLP gRPC → collector (Grafana Tempo/Jaeger)
-- **LoggerProvider** OTLP gRPC → collector (Grafana Loki via otelslog bridge)
-
-Endereço do collector vem do `environment.Instance().Observability().CollectorAddr`.
-Sem essa env, OTel emite pra nowhere (graceful degradation — código continua
-rodando).
-
-## Convenção de label em dashboards Grafana — `service_name`, **nunca** `job`
-
-Toda métrica/trace/log carrega o resource attribute `service.name` (= nome
-passado em `gofi.New("<svc>")` → `env.AppName`, setado em `obs.Init`). O **OTel
-collector** (`collector-config.yaml`, processor `transform/metrics`) promove
-esse resource attr para o **datapoint label `service_name`** — e idem
-`environment`. Portanto:
-
-- **Particionar/filtrar por serviço usa `service_name`.** `sum by (service_name)`,
-  `<metric>{service_name=~"$service"}`. A variável de template é
-  `label_values(<metric>, service_name)`.
-- **`job` NÃO identifica o serviço.** Todos os binários exportam pelo **mesmo**
-  collector → `job` é o scrape job do Prometheus (constante, ex.: `otel-collector`),
-  igual para todos. Um filtro `job=~"$service"` ou `label_values(..., job)`
-  **parece funcionar mas está quebrado**: a variável lista um valor só e o filtro
-  não discrimina serviço. Armadilha recorrente — já tinha pego os dashboards de
-  Infra e Pricing.
-- **O label já está em TODA métrica** — runtime do SDK (`gofi_*`, `db_pool_*`) e
-  de domínio (`synchronization_*`, `notification_*`, `pricing_*`). Adicionar um
-  filtro por serviço a qualquer dashboard é **de graça** (o dado sempre esteve lá);
-  não exige instrumentação nova.
-- **Tabelas (`instant`/`table`):** manter `job` e `instance` no
-  `transformations[].organize.excludeByName` (`"job": true`) — o collector ainda
-  anexa essas labels; esconder a coluna é o comportamento correto.
-- **Sem breakdown por pod/réplica hoje:** o resource só tem `service.name`,
-  `service.version`, `environment` — **não** `service.instance.id`. Réplicas do
-  mesmo serviço colapsam na mesma série. Habilitar é trabalho de infra: setar
-  `service.instance.id` (downward API → `OTEL_RESOURCE_ATTRIBUTES`) + promover no
-  transform do collector.
-
-## DB pool stats — automáticas via `Build()`
-
-`gofi.New().AddDatabase().AddObservability().Build()` registra **observable
-gauges** do pool de conexões da conexão gerenciada, sem código por serviço:
-- `db_pool_connections{pool,state=open|in_use|idle}`
-- `db_pool_wait_count_total{pool}`
-- `db_pool_wait_duration_seconds_total{pool}`
-
-São **observable** (callback amostra `sql.DB.Stats()` no momento da coleta) →
-zero custo no hot path. Registro acontece no `Build()` (depois de DB + obs).
-Helper público: `obs.ObserveDBStats(pool, db)` — para pools fora do managed
-(`WithDatabase` custom). No-op se DB nil ou telemetria não inicializada.
-
-Use esses gauges pra diagnosticar **exaustão de pool / espera por conexão**
-(p.ex. hang/lentidão de query que satura conexões) — sinal de causa-raiz que
-não aparece em métrica de latência por operação.
+- ❌ Atributo com valor livre (`sku`, `account_id`, `err.Error()`, IDs) ou
+  chamado `job`/`instance`.
+- ❌ Instrumento criado por request / dentro de loop.
+- ❌ Métrica por adapter (`{adapter-a}_xxx`) — dimensão é atributo.
+- ❌ Instrumentar dentro do adapter — decorator no factory.
+- ❌ Histograma em segundos sem `WithExplicitBucketBoundaries`.
+- ❌ Helper sem nil-guard.
+- ❌ Duplicar span/métrica que `netx`/`msq`/`database` já emitem.
+- ❌ `obs.Init` à mão num serviço gofi; `obs.New*`/`obs.Meter` (deprecated).
+- ❌ Métrica sem threshold acionável — se ninguém alarma, não emite.

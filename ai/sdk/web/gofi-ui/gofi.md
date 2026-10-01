@@ -30,7 +30,7 @@ oficial vivem em `specs/` e `.claude/memory/` — **nunca** aqui.
    `.gofi.yaml`, bloco `ui.brand`) e aplicadas via `<ThemeProvider>` — os hex aqui
    são apenas o padrão neutro de partida.
 3. **Tokens/modos como motor de temas** — light/dark vêm dos mesmos tokens.
-   Fonte única: [knowledge/ui/design-tokens.md](../../../knowledge/ui/design-tokens.md).
+   Fonte única: [expertise/ui-design/design-tokens.md](../../../expertise/ui-design/design-tokens.md).
 4. **Geometria arredondada e arejada** — radius generoso, botões pill, espaço para
    respirar (escala 4/8), sombras suaves.
 

@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Limits bound what a single extractor run may produce. An extractor is a

@@ -1,27 +1,28 @@
-// Package styles centralizes the gofi CLI visual language: a lipgloss palette
-// for command output (summaries, next-steps, preflight) and a huh form theme
-// for the interactive wizard. Everything degrades to plain text when color is
+// Package styles centralizes the gofi CLI visual language: the palette taken
+// from the gofi logo, the pixel mascot, and helpers for command output
+// (summaries, next steps, preflight). The interactive dialogues in tui/flow
+// draw with the same colors. Everything degrades to plain text when color is
 // disabled (NO_COLOR) or stdout is not a TTY.
 package styles
 
 import (
 	"os"
 
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/settings"
+	"github.com/gofi-labs/gofi/cli/internal/settings"
 )
 
-// Brand palette (256-color codes for broad terminal support).
-const (
-	brand     = lipgloss.Color("99")  // gofi violet
-	brandSoft = lipgloss.Color("141") // lighter violet (selection)
-	inkMuted  = lipgloss.Color("245") // secondary text
-	good      = lipgloss.Color("42")  // success green
-	warn      = lipgloss.Color("214") // warning amber
-	bad       = lipgloss.Color("203") // error red
+// Palette. Accent is the cyan of the gofi logo.
+var (
+	Accent = lipgloss.Color("#22D3EE")
+	Dim    = lipgloss.Color("#6B6B6B")
+	Border = lipgloss.Color("#4A4A5A")
+	Good   = lipgloss.Color("#4CC38A")
+	Amber  = lipgloss.Color("#F5A524")
+	Bad    = lipgloss.Color("#E5484D")
+	Text   = lipgloss.Color("#EDEDED")
 )
 
 // Enabled reports whether colored output should be used. NO_COLOR always wins,
@@ -39,98 +40,64 @@ func Enabled() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
+func render(st lipgloss.Style, s string) string {
+	if !Enabled() {
+		return s
+	}
+	return st.Render(s)
+}
+
 func style() lipgloss.Style { return lipgloss.NewStyle() }
 
-// Header is a bold brand-colored title.
-func Header(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Bold(true).Foreground(brand).Render(s)
-}
+// Header is a bold title.
+func Header(s string) string { return render(style().Bold(true).Foreground(Text), s) }
 
 // Note renders muted secondary text.
-func Note(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Foreground(inkMuted).Render(s)
-}
+func Note(s string) string { return render(style().Foreground(Dim), s) }
 
 // Label renders a key in a summary row.
-func Label(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Foreground(inkMuted).Render(s)
-}
+func Label(s string) string { return render(style().Foreground(Dim), s) }
 
 // Value renders a value in a summary row.
-func Value(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Foreground(brandSoft).Render(s)
-}
+func Value(s string) string { return render(style().Foreground(Accent), s) }
 
 // Success renders a positive status line.
-func Success(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Bold(true).Foreground(good).Render(s)
-}
+func Success(s string) string { return render(style().Bold(true).Foreground(Good), s) }
 
 // Warn renders a warning status line.
-func Warn(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Foreground(warn).Render(s)
-}
+func Warn(s string) string { return render(style().Foreground(Amber), s) }
 
 // Error renders a failure status line.
-func Error(s string) string {
-	if !Enabled() {
-		return s
+func Error(s string) string { return render(style().Foreground(Bad), s) }
+
+// Bullet renders a transcript "● text" line, the shape every result of the CLI
+// takes. The dot is green for a success, red for a failure and cyan otherwise.
+func Bullet(kind BulletKind, s string) string {
+	dot := "● "
+	if Enabled() {
+		c := Accent
+		switch kind {
+		case Done:
+			c = Good
+		case Failed:
+			c = Bad
+		case Warning:
+			c = Amber
+		}
+		dot = style().Foreground(c).Render(dot)
 	}
-	return style().Foreground(bad).Render(s)
+	return dot + Header(s)
 }
 
-// Hint renders an actionable hint.
-func Hint(s string) string {
-	if !Enabled() {
-		return s
-	}
-	return style().Foreground(brandSoft).Render(s)
-}
+// Detail renders a line nested under a Bullet.
+func Detail(s string) string { return Note("  ⎿  ") + s }
 
-// Panel wraps content in a rounded brand-colored border. Returns the content
-// unchanged when color is disabled (keeps non-TTY output clean and parseable).
-func Panel(content string) string {
-	if !Enabled() {
-		return content
-	}
-	return style().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(brand).
-		Padding(0, 2).
-		Render(content)
-}
+// BulletKind colors a Bullet.
+type BulletKind int
 
-// FormTheme returns the huh theme for the wizard: ThemeCharm with the gofi
-// brand applied to titles, notes and selection. Falls back to the uncolored
-// base theme when color is disabled.
-func FormTheme() *huh.Theme {
-	if !Enabled() {
-		return huh.ThemeBase()
-	}
-	t := huh.ThemeCharm()
-	t.Focused.Title = t.Focused.Title.Foreground(brand).Bold(true)
-	t.Focused.NoteTitle = t.Focused.NoteTitle.Foreground(brand).Bold(true)
-	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(brandSoft)
-	t.Focused.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(brandSoft)
-	t.Focused.Base = t.Focused.Base.BorderForeground(brand)
-	t.Blurred.Title = t.Blurred.Title.Foreground(inkMuted)
-	return t
-}
+const (
+	Info BulletKind = iota
+	Done
+	Failed
+	Warning
+)

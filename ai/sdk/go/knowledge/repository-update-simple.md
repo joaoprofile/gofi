@@ -1,57 +1,70 @@
-# Repository Update() — Padrão Simplificado
+---
+name: repository-update-simple
+description: Update de repository devolve só erro estrutural — sem RowsAffected; not-found fica no FindByID do service
+sdk: v0.8.2
+keywords: [repository, update, RowsAffected, statement, not-found]
+---
+
+# Repository `Update()` — padrão simplificado
 
 ## Regra
 
-Métodos `Update` de repository **não devem** checar `RowsAffected`. Retorne apenas erros estruturais do banco.
+`Update` de repository **não** checa `RowsAffected`: devolve só erro
+estrutural do banco.
 
 ## Por quê
 
-O service já chama `FindByID` antes de `Update` para obter dados imutáveis (ex: `tenant_id` para checar conflito de CPF). Se `FindByID` retorna `nil, nil` o service já retorna not-found antes de chamar `Update`. Checar `RowsAffected == 0` no repository seria redundante e criaria um segundo caminho de not-found inconsistente.
+O service já chama `FindByID` antes do `Update` (precisa de dados imutáveis
+para regras como conflito de chave). Se `FindByID` devolve `nil, nil`, o
+service responde not-found antes do `Update`. `RowsAffected == 0` no repo
+seria um segundo caminho de not-found, inconsistente com o primeiro.
 
 ## Padrão
 
 ```go
-func (r *personRepository) Update(ctx context.Context, id int64, req model.UpdatePersonRequest) error {
-    _, err := r.stmUpdate.ExecContext(ctx,
-        req.Name, req.CPF, req.Email, req.Phone, req.Active,
-        req.City, req.State, req.Address, req.ZipCode, req.Complement,
-        id,
-    )
+func (r *{ctx}Repository) Update(ctx context.Context, id string, req model.Update{Entidade}Request) error {
+    _, err := r.stm.Execute(ctx, {ctx}UpdateQuery, req.Name, req.Email, req.Active, id)
     return err
 }
 ```
 
-## Anti-padrão (não usar)
+`r.stm` é `statement.Statement` (`sqln.NewStatement()`), que entra sozinho na
+transação do `ctx` quando há uma (`persistence-rules.md`).
+
+## Anti-padrão
 
 ```go
-// NÃO FAZER — complexidade desnecessária
-res, err := r.stmUpdate.ExecContext(ctx, ...)
-if err != nil { return err }
-n, err := res.RowsAffected()
-if err != nil { return err }
-if n == 0 { return ErrNoRowsAffected }
+res, err := r.stm.Execute(ctx, {ctx}UpdateQuery, args...)
+if err != nil {
+    return err
+}
+if n, _ := res.RowsAffected(); n == 0 {
+    return ErrNoRowsAffected // not-found duplicado
+}
 return nil
 ```
 
-## Consequência no Service
-
-O service **não** precisa de `errors.Is(err, repository.ErrNoRowsAffected)` no handler de Update — o not-found é detectado pelo `FindByID` que precede o `Update`:
+## Service
 
 ```go
-func (s *personService) Update(ctx context.Context, id int64, req model.UpdatePersonRequest) errs.AppError {
+func (s *{ctx}Service) Update(ctx context.Context, id string, req model.Update{Entidade}Request) errs.AppError {
     existing, err := s.repo.FindByID(ctx, id)
-    if err != nil { return ErrPersonUpdate.Wrap(err) }
-    if existing == nil { return ErrPersonNotFound.New() }  // ← not-found aqui, não no repo
-
-    // ... CPF conflict check ...
-
+    if err != nil {
+        return Err{Entidade}Update.Wrap(err)
+    }
+    if existing == nil {
+        return Err{Entidade}NotFound.New() // not-found aqui, não no repo
+    }
     if err := s.repo.Update(ctx, id, req); err != nil {
-        return ErrPersonUpdate.Wrap(err)  // apenas erros estruturais
+        return Err{Entidade}Update.Wrap(err)
     }
     return errs.AppError{}
 }
 ```
 
-## ErrNoRowsAffected
+## Exceção — lock otimista
 
-`ErrNoRowsAffected` pode ser mantido no pacote `repository` para outros casos de uso (ex: Delete com verificação explícita), mas **Update nunca o retorna**.
+Quando a spec declara versionamento (`UPDATE ... WHERE id = $n AND version = $m`),
+`RowsAffected() == 0` **é** o sinal de conflito: o repo devolve um erro
+sentinela de conflito (`ErrStale{Entidade}`) e o service o traduz para
+`RegisterConflict`. É o único caso de `RowsAffected` em `Update`.

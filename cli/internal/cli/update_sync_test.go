@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/audit"
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/audit"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
 )
 
 // The regression this guard exists for: a project that adapted its design-system
@@ -23,7 +23,7 @@ func TestUpdateKeepsTunedSurfaceDocs(t *testing.T) {
 
 	root := t.TempDir()
 	data := scaffold.TemplateData{ProjectName: "svc", Language: "go"}
-	ref := "github.com/joaoprofile/gofi-agents@main"
+	ref := "github.com/gofi-labs/gofi@main"
 	if _, err := installFromSource(root, "go", []string{"web"}, ref, "", data, scaffold.InstallNew); err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -79,7 +79,7 @@ ai:
   model: claude-opus-5
 agents: [gofi-eng]
 sources:
-  agents: github.com/joaoprofile/gofi-agents@main
+  agents: github.com/gofi-labs/gofi@main
 git:
   remote: origin
 `
@@ -100,7 +100,7 @@ func TestUpdateLeavesTheConfigAlone(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
-	syncGraph(context.Background(), cfg)
+	buildGraphQuietly(context.Background(), cfg, cfg.Project.Root)
 
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -108,9 +108,6 @@ func TestUpdateLeavesTheConfigAlone(t *testing.T) {
 	}
 	if string(before) != string(after) {
 		t.Errorf(".gofi.yaml was rewritten by the update:\n%s", after)
-	}
-	if got := config.FileVersion(path); got != 1 {
-		t.Errorf("on-disk version = %d, want the v1 the project had", got)
 	}
 
 	// And the drift is still visible, or leaving the file alone would just be

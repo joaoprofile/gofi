@@ -1,6 +1,6 @@
 # Radius e elevação
 
-Valores em [design-tokens.md](../../../../knowledge/ui/design-tokens.md).
+Valores em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md).
 Geometria **arredondada e generosa**.
 
 ## Radius por componente

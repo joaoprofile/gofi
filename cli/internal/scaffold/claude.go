@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 	"io/fs"
 	"os"
 	"path"
@@ -13,26 +14,18 @@ import (
 	"text/template"
 )
 
-// allAgents lists every agent shipped in the embedded snapshot. Agents not
-// present in selected get their commands/<agent>.md and knowledge/<short>/
-// directories removed after install.
-var allAgents = []string{
+// allSkills lists every skill gofi ships, in pipeline order. The installs
+// write all of them: the skills are gofi's, and choosing a role is the
+// planner's job, not the project's.
+var allSkills = []string{
 	"gofi-pd", "gofi-spec", "gofi-eng", "gofi-ui",
 	"gofi-ops", "gofi-qa", "gofi-doc", "gofi-status",
 	"gofi-full",
 }
 
-// agentToKnowledgeDir maps an agent name to the per-agent folder under
-// .claude/knowledge/. Shared/ is always kept regardless of agent selection.
-// Agents without an entry (gofi-doc, gofi-status) have no per-agent knowledge dir.
-var agentToKnowledgeDir = map[string]string{
-	"gofi-pd":   "pd",
-	"gofi-spec": "spec",
-	"gofi-eng":  "eng",
-	"gofi-ui":   "ui",
-	"gofi-ops":  "ops",
-	"gofi-qa":   "qa",
-}
+// Skills returns every skill gofi ships, for TemplateData.Agents: the memory
+// template of releases before this one lists them.
+func Skills() []string { return append([]string(nil), allSkills...) }
 
 // InstallMode tells installers whether they're seeding a brand new project
 // or refreshing one that already has user-managed content.
@@ -65,7 +58,7 @@ func (m InstallMode) refreshes() bool { return m == InstallUpdate || m == Instal
 // directory inside that fs (typically "." for an extracted tarball).
 //
 // It installs:
-//   - ai/claude/CLAUDE.md       → .claude/CLAUDE.md
+//   - ai/AGENTS.md              → AGENTS.md (project root; see AgentsFile)
 //   - ai/skills/<name>/         → .claude/skills/<name>/ (all skills, always)
 //   - ai/templates/             → .claude/templates/
 //   - ai/scripts/               → .claude/scripts/ (RAG index tooling)
@@ -73,14 +66,14 @@ func (m InstallMode) refreshes() bool { return m == InstallUpdate || m == Instal
 //   - ai/institutional/         → .claude/institutional/<name>/ (InstallNew only;
 //     embedded scaffold as fallback — see InstallInstitutionalSeed)
 //
-// On InstallNew, knowledge/shared/ is seeded from <srcRoot>/ai/knowledge/shared/
-// (memory/learning protocols, base principles), per-agent knowledge dirs are
-// created empty, and the institutional RAG scaffold (README + INDEX) is seeded
-// under .claude/institutional/<project name>/ for gofi-pd. On InstallUpdate,
-// memory and institutional are left untouched and knowledge is filled without
-// overwriting.
+// knowledge/ is the team's learning: it starts empty (shared/ only), and the portable principles arrive as expertise packs. A
+// source pinned to a release from before the packs still ships ai/knowledge/,
+// and that is seeded as it always was. The institutional RAG scaffold (README +
+// INDEX) is seeded under .claude/institutional/<project name>/ for gofi-pd. On
+// InstallUpdate, memory and institutional are left untouched and knowledge is
+// filled without overwriting.
 func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data TemplateData, mode InstallMode) (created []string, err error) {
-	dest := filepath.Join(projectRoot, ".claude")
+	dest := filepath.Join(projectRoot, layout.Home())
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
@@ -93,24 +86,36 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		}
 	}()
 
-	// CLAUDE.md
-	if body, err := readFromFS(agentsFS, path.Join(srcRoot, "ai", "claude", "CLAUDE.md")); err == nil {
-		target := filepath.Join(dest, "CLAUDE.md")
+	if body, err := readAgentsFile(agentsFS, srcRoot); err == nil {
+		target := filepath.Join(projectRoot, AgentsFile)
+		// A repository adopted with its own AGENTS.md keeps it, as the
+		// project's block inside gofi's text.
+		if existing, err := os.ReadFile(target); err == nil && mode == InstallNew {
+			body = adopt(body, existing)
+		}
 		written, err := p.write(target, body)
 		if err != nil {
 			return created, err
 		}
+		// Recorded without the project's block, which is the team's to edit.
+		p.record(AgentsFile, gofiPart(body))
 		if written {
 			created = append(created, target)
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return created, fmt.Errorf("read CLAUDE.md: %w", err)
+		return created, fmt.Errorf("read %s: %w", AgentsFile, err)
 	}
 
 	c, err := installSkills(agentsFS, srcRoot, dest, p)
 	created = append(created, c...)
 	if err != nil {
 		return created, err
+	}
+
+	c, err = installExpertise(agentsFS, srcRoot, projectRoot, p)
+	created = append(created, c...)
+	if err != nil {
+		return created, fmt.Errorf("install expertise: %w", err)
 	}
 
 	// templates/ (PRD + SDD templates)
@@ -122,37 +127,10 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		created = append(created, c...)
 	}
 
-	// scripts/ (RAG tooling: gen-index.sh regenerates specs/prd INDEX.md from
-	// frontmatter). Portable tool code — refreshed on new and update installs.
-	if srcDir := path.Join(srcRoot, "ai", "scripts"); dirExistsInFS(agentsFS, srcDir) {
-		scriptsDir := filepath.Join(dest, "scripts")
-		c, err := installFS(agentsFS, srcDir, scriptsDir, data, InstallOptions{preserve: p})
-		if err != nil {
-			return created, err
-		}
-		// Every .sh, not only the ones just written: a run that rewrites nothing
-		// is also the run that must not leave a script unexecutable.
-		entries, _ := os.ReadDir(scriptsDir)
-		for _, e := range entries {
-			if strings.HasSuffix(e.Name(), ".sh") {
-				_ = os.Chmod(filepath.Join(scriptsDir, e.Name()), 0o755)
-			}
-		}
-		created = append(created, c...)
-	}
-
-	// Knowledge. On InstallNew, the ENTIRE ai/knowledge/ tree is seeded from the
-	// source — shared/ (protocols, base principles) plus every per-agent dir that
-	// ships upstream content (eng/, ui/, …) — regardless of the selected agent
-	// set, so projects start with all upstream knowledge baked in. Selected
-	// agents that have no upstream content still get an empty placeholder dir the
-	// team fills in.
-	//
-	// InstallUpdate walks the same tree with KeepExisting, which is the only way
-	// to satisfy both halves of the contract: a file the team edited is never
-	// touched, while a file added upstream after the project was scaffolded still
-	// arrives. Without the second half, an update ships skills that cite
-	// protocols the project does not have.
+	// Knowledge. Current sources ship none — the principles are packs — so this
+	// only runs for a source pinned to an older release, which seeds its
+	// ai/knowledge/ tree as it always did: KeepExisting on update, so a file the
+	// team edited is never touched.
 	knowledgeDest := filepath.Join(dest, "knowledge")
 	if knowledgeSrc := path.Join(srcRoot, "ai", "knowledge"); dirExistsInFS(agentsFS, knowledgeSrc) {
 		c, err := installFS(agentsFS, knowledgeSrc, knowledgeDest, data, InstallOptions{
@@ -164,17 +142,10 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 		}
 		created = append(created, c...)
 	}
-	// shared/ always exists (empty if the source shipped none), and selected
-	// agents without upstream content get a placeholder dir.
+	// shared/ always exists, empty: the team's learning starts there. A
+	// folder per role appears the first time a role records something.
 	if err := os.MkdirAll(filepath.Join(knowledgeDest, "shared"), 0o755); err != nil {
 		return created, err
-	}
-	for _, agent := range data.Agents {
-		if short := agentToKnowledgeDir[agent]; short != "" {
-			if err := os.MkdirAll(filepath.Join(knowledgeDest, short), 0o755); err != nil {
-				return created, err
-			}
-		}
 	}
 
 	// Memory + memory/contexts (InstallNew only)
@@ -218,7 +189,7 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 
 // InstallSkillsContent installs only ai/skills/<name>/ into
 // <projectRoot>/.claude/skills/. It is the whole of what `gofi update` writes:
-// once a project has been created, every other file under .claude/ — CLAUDE.md,
+// once a project has been created, AGENTS.md and every other file under .claude/ —
 // templates/, scripts/, sdk/, knowledge/, memory/, institutional/ — is the
 // team's to maintain by hand.
 //
@@ -226,7 +197,7 @@ func InstallAgentsContent(agentsFS fs.FS, srcRoot, projectRoot string, data Temp
 // InstallUpdate keeps it, InstallReset (--force) puts upstream back after
 // copying the replaced content to .gofi/backup/.
 func InstallSkillsContent(agentsFS fs.FS, srcRoot, projectRoot string, mode InstallMode) (created []string, err error) {
-	dest := filepath.Join(projectRoot, ".claude")
+	dest := filepath.Join(projectRoot, layout.Home())
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
@@ -262,7 +233,11 @@ func installSkills(agentsFS fs.FS, srcRoot, dest string, p *preserver) ([]string
 			return created, fmt.Errorf("read skill %s: %w", skill, err)
 		}
 		target := filepath.Join(dest, skillRelPath(skill))
-		written, err := p.write(target, renderSkill(skill, body))
+		model, err := modelFor(agentsFS, srcRoot, skill)
+		if err != nil {
+			return created, err
+		}
+		written, err := p.write(target, renderSkill(skill, body, model))
 		if err != nil {
 			return created, err
 		}
@@ -310,7 +285,7 @@ func InstallInstitutionalSeed(agentsFS fs.FS, srcRoot, projectRoot, projectName 
 	if projectName == "" {
 		return nil, nil
 	}
-	dest := filepath.Join(projectRoot, ".claude", "institutional", projectName)
+	dest := layout.Institutional().Abs(projectRoot, projectName)
 
 	if srcDir := path.Join(srcRoot, "ai", "institutional"); dirExistsInFS(agentsFS, srcDir) {
 		c, err := copyInstitutionalTemplate(agentsFS, srcDir, dest, projectName)
@@ -368,8 +343,8 @@ func copyInstitutionalTemplate(srcFS fs.FS, srcDir, dest, projectName string) ([
 
 // SeedCorpusIndex writes the RAG retrieval manifest (INDEX.md) into a corpus
 // directory at the project root — "specs" or "prd". The seed is an empty index
-// (header + column row) that /gofi-spec and /gofi-pd repopulate via
-// .claude/scripts/gen-index.sh as documents are created. It never overwrites an
+// (header + column row) that `gofi index docs` repopulates as documents are
+// created. It never overwrites an
 // existing INDEX.md, so re-running init on a populated project is a no-op.
 func SeedCorpusIndex(projectRoot, corpus string) error {
 	if corpus != "specs" && corpus != "prd" {
@@ -405,7 +380,7 @@ func InstallInstitutionalMirror(instFS fs.FS, srcSubdir, projectRoot, projectNam
 	if !dirExistsInFS(instFS, srcSubdir) {
 		return nil, fmt.Errorf("%w: %q", ErrNoInstitutionalSubdir, srcSubdir)
 	}
-	dest := filepath.Join(projectRoot, ".claude", "institutional", projectName)
+	dest := layout.Institutional().Abs(projectRoot, projectName)
 	if err := os.RemoveAll(dest); err != nil {
 		return nil, fmt.Errorf("clear %s: %w", dest, err)
 	}
@@ -445,7 +420,9 @@ func InstallSDKContent(srcFS fs.FS, sdkRoot, projectRoot, language string, mode 
 		return nil, nil
 	}
 
-	subdirs := []string{"boilerplates", "sdk-docs", "knowledge"}
+	// api/ is the generated reference; sdk-docs/ is its hand-written
+	// predecessor, still accepted from a source pinned before it.
+	subdirs := []string{"boilerplates", "api", "sdk-docs", "knowledge"}
 	found := false
 	for _, sub := range subdirs {
 		if dirExistsInFS(srcFS, path.Join(sdkRoot, sub)) {
@@ -457,7 +434,7 @@ func InstallSDKContent(srcFS fs.FS, sdkRoot, projectRoot, language string, mode 
 		return nil, ErrNoSDKLayout
 	}
 
-	dest := filepath.Join(projectRoot, ".claude", "sdk", language)
+	dest := layout.SDK().Abs(projectRoot, language)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
@@ -504,7 +481,7 @@ func InstallUIContent(srcFS fs.FS, surfaceRoot, projectRoot, surface string, mod
 	if !dirExistsInFS(srcFS, surfaceRoot) {
 		return nil, nil
 	}
-	dest := filepath.Join(projectRoot, ".claude", "sdk", surface)
+	dest := layout.SDK().Abs(projectRoot, surface)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", dest, err)
 	}
@@ -522,7 +499,7 @@ func InstallUIContent(srcFS fs.FS, surfaceRoot, projectRoot, surface string, mod
 // are absent). Used by `gofi update` to migrate projects to the new
 // .claude/sdk/<lang>/ layout.
 func CleanLegacySDKLayout(projectRoot string) []string {
-	dest := filepath.Join(projectRoot, ".claude")
+	dest := filepath.Join(projectRoot, layout.Home())
 	var removed []string
 	candidates := []string{
 		filepath.Join(dest, "boilerplates"),
@@ -612,4 +589,55 @@ func renderTemplate(raw []byte, data TemplateData) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// AgentsFile is where a project's instructions live, at its root: the one
+// file every coding agent reads — Claude Code, Codex, Copilot, Cursor and the
+// rest of the AGENTS.md convention.
+const AgentsFile = "AGENTS.md"
+
+// agentsSources are where the source repo keeps the instructions, newest
+// first. A project pinned to a release from before AGENTS.md still gets its
+// instructions, under the new name.
+var agentsSources = [][]string{{"ai", "AGENTS.md"}, {"ai", "claude", "CLAUDE.md"}}
+
+func readAgentsFile(agentsFS fs.FS, srcRoot string) ([]byte, error) {
+	for _, src := range agentsSources {
+		body, err := readFromFS(agentsFS, path.Join(append([]string{srcRoot}, src...)...))
+		if err == nil || !errors.Is(err, fs.ErrNotExist) {
+			return body, err
+		}
+	}
+	return nil, fs.ErrNotExist
+}
+
+// RetireHandWrittenSDKDocs removes the hand-written sdk-docs/ once the
+// generated reference is in place beside it: two references of the same API,
+// one of them stale, is worse than one. Everything removed is backed up.
+func RetireHandWrittenSDKDocs(projectRoot, language string) ([]string, error) {
+	sdk := layout.SDK().Abs(projectRoot, language)
+	old := filepath.Join(sdk, "sdk-docs")
+	if _, err := os.Stat(filepath.Join(sdk, "api", "INDEX.md")); err != nil {
+		return nil, nil
+	}
+	if _, err := os.Stat(old); err != nil {
+		return nil, nil
+	}
+	p := newPreserver(projectRoot, InstallReset)
+	var removed []string
+	err := filepath.WalkDir(old, func(f string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if b, err := os.ReadFile(f); err == nil {
+			rel := relSlash(projectRoot, f)
+			p.backup(rel, b)
+			removed = append(removed, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return removed, os.RemoveAll(old)
 }

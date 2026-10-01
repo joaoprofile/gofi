@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 // fixtureRepoFiles is the minimum gofi monorepo tree the CLI tests need: 4
-// skills, the AI/Claude CLAUDE.md, the templates, the memory template and a
+// skills, the AGENTS.md, the templates, the memory template and a
 // small ai/sdk/go/ tree. All harness content lives under ai/. It is
 // intentionally tiny so tests stay fast and the shape stays obvious;
 // production repos will have far richer content.
@@ -16,7 +19,7 @@ var fixtureRepoFiles = map[string]string{
 	"ai/skills/gofi-spec/SKILL.md": "# /gofi-spec — fixture skill",
 	"ai/skills/gofi-eng/SKILL.md":  "# /gofi-eng — fixture skill",
 	"ai/skills/gofi-qa/SKILL.md":   "# /gofi-qa — fixture skill",
-	"ai/claude/CLAUDE.md":          "# CLAUDE — fixture",
+	"ai/AGENTS.md":                 "# AGENTS — fixture",
 	"ai/claude/README.md":          "# README — fixture",
 	"ai/templates/sdd-template.md": "# SDD — fixture",
 	"ai/templates/prd-template.md": "# PRD — fixture",
@@ -48,4 +51,33 @@ func writeFixtureRepo(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+// setupProject creates a fresh project with executePipeline rooted at a temp
+// dir, then chdirs into it so command helpers can find .gofi.yaml. Uses a
+// local fixture repo via GOFI_AGENTS_LOCAL_DIR to avoid hitting GitHub.
+func setupProject(t *testing.T) string {
+	t.Helper()
+	t.Setenv("GOFI_AGENTS_LOCAL_DIR", writeFixtureRepo(t))
+	root := filepath.Join(t.TempDir(), "proj")
+	r := goWizardResult(root)
+	if err := executePipeline(r); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	t.Chdir(root)
+	return root
+}
+
+// restoreGlobals puts back what a command sets for the whole process — the
+// agents folder and the skill models, both chosen from the project's host —
+// when the test ends. A real command runs in a process of its own; tests share
+// one, and a Codex project in one test must not move the next test's files.
+func restoreGlobals(t *testing.T) {
+	t.Helper()
+	home := layout.Home()
+	t.Cleanup(func() {
+		layout.SetHome(home)
+		scaffold.SetSkillModels(host.Host{}, nil)
+	})
+	layout.SetHome(layout.DefaultHome)
 }

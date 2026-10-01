@@ -18,7 +18,7 @@ atualizado: {YYYY-MM-DD}
 > schema, `operacoes` e `marketplaces` do `.claude/lexicon/`. Termo novo entra no
 > léxico **antes** de entrar aqui — é o que impede o índice de voltar a ser uma
 > nuvem de tags onde cada termo aparece uma vez e não discrimina nada.
-> `gofi docs validate` reprova termo fora do léxico.
+> `gofi index check` reprova termo fora do léxico.
 >
 > **`keywords` é o resto**, com teto de 12: o que não coube nas facetas.
 
@@ -84,7 +84,7 @@ type {Contexto}Repository interface {
     Save(ctx context.Context, e model.{Entidade}) (*model.{Entidade}, error)
     FindByID(ctx context.Context, id {tipo}) (*model.{Entidade}, error)
     // FindByDynamicQuery: apenas quando filtro dinâmico está ativo
-    FindByDynamicQuery(ctx context.Context, filters *sqln.Filters) (model.{Contexto}QueryResponse, error)
+    FindByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.{Ctx}Query], error)
     // ...
 }
 ```
@@ -95,7 +95,7 @@ type {Contexto}Service interface {
     // {operação}: {descrição breve}
     Create(ctx context.Context, req model.Create{Entidade}Request) (*model.{Entidade}, errs.AppError)
     // GetByDynamicQuery: apenas quando filtro dinâmico está ativo
-    GetByDynamicQuery(ctx context.Context, filters *sqln.Filters) (model.{Contexto}QueryResponse, errs.AppError)
+    GetByDynamicQuery(ctx context.Context, tenantID string, f *sqln.Filters) (*sqln.Page[model.{Ctx}Query], errs.AppError)
     // ...
 }
 ```
@@ -117,7 +117,7 @@ type {Contexto}Service interface {
 ## 2. Diagrama de Contexto
 
 > Formato obrigatório: PlantUML (` ```plantuml `). Demais convenções e tipos
-> de diagrama em `.claude/knowledge/shared/diagram-conventions.md`.
+> de diagrama em `.claude/expertise/diagramming/conventions.md`.
 
 ```plantuml
 @startuml
@@ -250,15 +250,13 @@ CREATE TABLE {contexto}s (
 **Auth:** {conforme definido}  
 **Body:** nenhum
 
-**Response 200:**
+**Response 200:** o `{Ctx}FilterMapping` serializado — objeto indexado pelo
+nome de API (`Column` nunca sai; campos vazios omitidos):
 ```json
 {
-  "allowedFields": [
-    { "key": "p.name", "label": "NAME", "filterType": "text" }
-  ],
-  "allowedSortingFields": { "Name": "sortedBy" },
-  "operators": { "eq": "eq", "contains": "contains" },
-  "logicalOperators": { "and": "and", "or": "or" }
+  "name":   { "ops": ["=", "!=", "LIKE", "NOT LIKE", "..."], "sortable": true, "label": "NAME", "filterType": "text" },
+  "status": { "ops": ["=", "!=", "IN", "NOT IN", "IS NULL", "IS NOT NULL"], "label": "STATUS",
+              "filterType": "search-multiple", "searchType": "embedded", "content": { "ACTIVE": "ACTIVE" } }
 }
 ```
 
@@ -269,21 +267,22 @@ CREATE TABLE {contexto}s (
 **Endpoint:** `POST /v1/{contextos}/query`  
 **Auth:** {conforme definido}
 
-**Campos filtráveis:**
+**Campos filtráveis** (`{Ctx}FilterMapping` — campo, operador ou sort fora dele → 400):
 
-| Label | Key SQL | FilterType | Operadores permitidos |
-|-------|---------|------------|----------------------|
-| NAME  | p.name  | text       | eq, contains         |
+| Campo (API) | Column | Ops | Sortable | Label | FilterType | SearchType | Content |
+|-------------|--------|-----|----------|-------|------------|------------|---------|
+| `name`      | `p.name` | `sqln.Text` | sim | NAME | text | — | — |
 
-**Campos ordenáveis:** {lista}
+**Campos ordenáveis:** {lista — os com `Sortable`}
 
 **Filtro default** (quando body vazio ou `filters` não enviado): `{campo} = {valor}`
 
 **Request:**
 ```json
 {
+  "params": { "page": 0, "limit": 15, "sortField": "name", "sortDirection": "ASC" },
   "filters": [
-    { "field": "NAME", "operator": "contains", "value": "produto" }
+    { "field": "name", "condition": "LIKE", "value": "produto" }
   ]
 }
 ```
@@ -293,7 +292,7 @@ CREATE TABLE {contexto}s (
 | Status | Situação |
 |--------|----------|
 | 200 | Retorna `sqln.Page[{Ctx}Query]` paginado |
-| 400 | Filtro inválido — campo ou operador não permitido |
+| 400 | Filtro inválido — campo, operador ou `sortField` fora do mapping (rejeitado pelo SDK) |
 | 500 | Erro interno |
 
 ---
@@ -364,7 +363,7 @@ src/{contexto}/
 ├── model/
 │   ├── entity.go          # {Entidade} struct, {Entidade}Response type
 │   ├── dto.go             # CreateRequest, UpdateRequest, Filter + Validate()
-│   └── query_dto.go       # {Ctx}QueryMapping(), {Ctx}QueryResponse, {Ctx}Query  ← apenas se filtro dinâmico
+│   └── query_dto.go       # var {Ctx}FilterMapping (sqln.FilterMapping), {Ctx}Query  ← apenas se filtro dinâmico
 ├── service/
 │   ├── errors.go          # Vars de erros registrados
 │   ├── {contexto}_service.go

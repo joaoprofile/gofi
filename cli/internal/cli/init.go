@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -13,62 +14,86 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/detect"
-	"github.com/joaoprofile/gofi-cli/internal/gitops"
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
-	"github.com/joaoprofile/gofi-cli/internal/hsec"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
-	"github.com/joaoprofile/gofi-cli/internal/sonar"
-	"github.com/joaoprofile/gofi-cli/internal/toolchain"
-	"github.com/joaoprofile/gofi-cli/internal/tui/spinner"
-	"github.com/joaoprofile/gofi-cli/internal/tui/styles"
-	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/detect"
+	"github.com/gofi-labs/gofi/cli/internal/gitops"
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/hsec"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/sonar"
+	"github.com/gofi-labs/gofi/cli/internal/toolchain"
+	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/gofi-labs/gofi/cli/internal/tui/spinner"
+	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
 )
 
 func newInitCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "init",
+		Use:   "init [name]",
 		Short: i18n.T("cmd.init.short"),
-		Long: `Run an interactive wizard that creates a new gofi project end-to-end.
+		Long: `Create a new gofi project, or adopt an existing repository, through an
+interactive dialogue.
 
-The wizard asks for AI host, Claude model, project name, repository name, root path,
-target language (go | rust), agents to activate and (optionally) the git remote URL.
-After confirmation, gofi creates the project directory, runs git init, scaffolds the
-language toolchain, installs the .claude/ structure with the selected agents and
-writes .gofi.yaml as the source of truth.
+With a name, the project is created in ./<name>; without one, in the current
+folder. The dialogue asks for the surfaces (backend, web, mobile), the backend
+language and module, the Claude model, the agents to activate and, optionally,
+the git remote. Every question comes with a suggestion — enter keeps it, esc
+goes back to the previous question, ctrl+c leaves without writing anything.
 
-Failures roll back the created directory.`,
-		Example: `gofi init`,
+After the review, gofi creates the folder, runs git init, scaffolds each
+surface, installs the .claude/ structure with the selected agents and writes
+.gofi.yaml as the source of truth. Failures roll back a folder gofi created.`,
+		Example: `gofi init my-project
+gofi init`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !term.IsTerminal(int(os.Stdin.Fd())) {
 				return errors.New("gofi init requires an interactive terminal")
 			}
-			return runInit()
+			name := ""
+			if len(args) == 1 {
+				name = strings.TrimSpace(args[0])
+				if !initNameRe.MatchString(name) {
+					return errors.New(i18n.T("init.invalid_name", name))
+				}
+			}
+			return runInit(name)
 		},
 	}
 }
 
-func runInit() error {
+// initNameRe mirrors the wizard's project-name rule, so a bad name fails before
+// the dialogue opens instead of on its first question.
+var initNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]+$`)
+
+func runInit(name string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve current directory: %w", err)
 	}
 
-	res, err := wizard.Run(nil, detect.Scan(cwd))
+	meta := wizard.Meta{Version: Version}
+	target := cwd
+	if name != "" {
+		target = filepath.Join(cwd, name)
+		meta.Name, meta.Root = name, target
+	}
+
+	res, err := wizard.Run(nil, detect.Scan(target), meta)
 	if err != nil {
 		if errors.Is(err, wizard.ErrCancelled) {
-			fmt.Println("init cancelled.")
+			fmt.Println(styles.Note(i18n.T("init.cancelled")))
 			return nil
 		}
 		return err
 	}
 
-	// The wizard may point the root somewhere other than here, in which case the
-	// pre-wizard scan describes the wrong tree.
-	if res.Root != cwd {
+	// The wizard may point the root somewhere other than the scanned folder, in
+	// which case the pre-wizard scan describes the wrong tree.
+	if res.Root != target {
 		res.Detected = detect.Scan(res.Root)
 	}
 
@@ -76,7 +101,8 @@ func runInit() error {
 		return err
 	}
 
-	confirmSummary(res)
+	fmt.Println()
+	flow.Say(i18n.T("init.creating", res.Name, res.Root))
 
 	// Track whether the workspace folder didn't exist before init so rollback
 	// knows whether to nuke it. When initialising in-place (cwd or any other
@@ -151,15 +177,31 @@ func executePipeline(r *wizard.Result) error {
 	needNode := (r.Has(wizard.EnvWeb) && !r.Adopted(wizard.EnvWeb)) ||
 		(r.Has(wizard.EnvMobile) && !r.Adopted(wizard.EnvMobile))
 
-	pre := detectToolchain(toolchain.Needs{Go: goBackend, Node: needNode})
+	// The host decides the folder everything below is written to: fixed first,
+	// so no path is resolved against another host's layout.
+	h, ok := host.Get(r.AIHost)
+	if !ok {
+		return fmt.Errorf("ai host %q is not supported (expected one of %s)", r.AIHost, strings.Join(host.IDs(), ", "))
+	}
+	layout.SetHome(h.Home)
+	scaffold.SetSkillModels(h, nil)
+
+	onClaude := h.ID == host.ClaudeCode.ID
+	pre := detectToolchain(toolchain.Needs{Go: goBackend, Node: needNode, Claude: onClaude})
 	renderPreflight(pre)
+	// The one toolchain init cannot work around on Claude Code: one older than
+	// the minimum starts every session without the project's instructions.
+	// Stopping here, before anything is written, leaves nothing half-made.
+	if !pre.ClaudeOK {
+		return fmt.Errorf("%s", i18n.T("init.claude_required", toolchain.MinClaudeCode))
+	}
 
 	data := scaffold.TemplateData{
 		ProjectName: r.Name,
 		Date:        time.Now().Format("2006-01-02"),
 		AIHost:      r.AIHost,
 		AIModel:     r.AIModel,
-		Agents:      r.Agents,
+		Agents:      scaffold.Skills(),
 	}
 	if hasBack {
 		data.Language = r.Language
@@ -179,14 +221,14 @@ func executePipeline(r *wizard.Result) error {
 	// An adopted backend needs no scaffold whatever its language, so reporting a
 	// missing one would describe a gap that is not there.
 	if hasBack && !adoptedBack && !scaffold.HasBackendScaffold(r.Language) {
-		skipped = append(skipped, fmt.Sprintf("backend (%s) — no project skeleton for this language yet", r.Language))
+		skipped = append(skipped, i18n.T("init.skip.no_scaffold", r.Language))
 	}
 
 	steps := []spinner.Step{
-		{Name: "Create workspace folder", Fn: func() error {
+		{Name: i18n.T("init.step.mkdir"), Fn: func() error {
 			return os.MkdirAll(r.Root, 0o755)
 		}},
-		{Name: "Initialise git repository (no-op if existing)", Fn: func() error {
+		{Name: i18n.T("init.step.git"), Fn: func() error {
 			return gitops.Init(r.Root)
 		}},
 	}
@@ -194,29 +236,29 @@ func executePipeline(r *wizard.Result) error {
 	case !hasBack || !scaffold.HasBackendScaffold(r.Language):
 		// Nothing to write — already reported in skipped above.
 	case goBackend && !pre.GoOK:
-		skipped = append(skipped, "backend (Go) — Go toolchain not found; install Go and run scaffold later")
+		skipped = append(skipped, i18n.T("init.skip.no_go"))
 	case goBackend && adoptedBack:
 		// The tree is already there. Writing the scaffold over it would litter
 		// someone's repository with a README, a main.go and empty folders it
 		// never asked for; only go.work is added, because the SDK needs it.
-		steps = append(steps, spinner.Step{Name: "Adopt Go backend (" + r.SourcePath + ")", Fn: func() error {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.adopt_go", r.SourcePath), Fn: func() error {
 			return scaffold.EnsureGoWork(r.Root, r.SourcePath)
 		}})
 	case adoptedBack:
 		// Same reasoning as Go, minus go.work: outside Go there is no workspace
 		// file to reconcile, so adoption means leaving the tree exactly as is.
-		skipped = append(skipped, fmt.Sprintf("backend (%s) — adopted the existing project at %s/; left untouched", r.Language, r.SourcePath))
+		skipped = append(skipped, i18n.T("init.skip.adopted_back", r.Language, r.SourcePath))
 	default:
-		steps = append(steps, spinner.Step{Name: "Scaffold " + r.Language + " (" + r.SourcePath + "/)", Fn: func() error {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.scaffold", r.Language, r.SourcePath), Fn: func() error {
 			_, err := scaffold.InstallBackend(r.Language, r.Root, data)
 			return err
 		}})
 	}
 	steps = append(steps,
-		spinner.Step{Name: "Write .gofi.yaml", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.yaml"), Fn: func() error {
 			return config.Save(filepath.Join(r.Root, config.FileName), cfg)
 		}},
-		spinner.Step{Name: "Seed .gofi/ + .gitignore", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.gofi_dir"), Fn: func() error {
 			if err := os.MkdirAll(filepath.Join(r.Root, ".gofi"), 0o755); err != nil {
 				return err
 			}
@@ -225,7 +267,7 @@ func executePipeline(r *wizard.Result) error {
 			}
 			return ensureGitignore(r.Root, ".env")
 		}},
-		spinner.Step{Name: "Seed local .env", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.env"), Fn: func() error {
 			// Backend projects get a populated .env from
 			// env/localstack/.env-example in the "Seed ops/localstack + .env"
 			// step below; here we only seed an empty one for non-backend setups.
@@ -234,7 +276,7 @@ func executePipeline(r *wizard.Result) error {
 			}
 			return ensureEnvFile(r.Root)
 		}},
-		spinner.Step{Name: "Seed Horusec config", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.hsec"), Fn: func() error {
 			if !cfg.Hsec.Enabled {
 				return nil
 			}
@@ -243,7 +285,7 @@ func executePipeline(r *wizard.Result) error {
 			}
 			return nil
 		}},
-		spinner.Step{Name: "Seed Sonar config", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.sonar"), Fn: func() error {
 			if !cfg.Sonar.Enabled {
 				return nil
 			}
@@ -252,7 +294,7 @@ func executePipeline(r *wizard.Result) error {
 			}
 			return nil
 		}},
-		spinner.Step{Name: "Seed specs/ prd/ ops/", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.docs"), Fn: func() error {
 			if err := seedDocDir(r.Root, "ops"); err != nil {
 				return err
 			}
@@ -274,7 +316,7 @@ func executePipeline(r *wizard.Result) error {
 			}
 			return nil
 		}},
-		spinner.Step{Name: "Fetch agents + install .claude/", Fn: func() error {
+		spinner.Step{Name: i18n.T("init.step.claude"), Fn: func() error {
 			sha, err := installFromSource(r.Root, backendLang, uiSurfaces, r.AgentsRef, sdkRef, data, scaffold.InstallNew)
 			if err != nil {
 				return err
@@ -285,24 +327,37 @@ func executePipeline(r *wizard.Result) error {
 			}
 			return nil
 		}},
+		spinner.Step{Name: i18n.T("init.step.mcp"), Fn: func() error {
+			h, _ := host.Get(r.AIHost)
+			if _, err := h.RegisterMCP(r.Root); err != nil {
+				return err
+			}
+			// The guard and the allowed read-only queries live in the host's
+			// settings; only a host whose hook contract gofi verified gets them.
+			if !h.Guard {
+				return nil
+			}
+			_, err := installAgentSettings(r.Root, config.AI{Guard: config.GuardWarn})
+			return err
+		}},
 	)
 	if r.InstitutionalRef != "" {
-		steps = append(steps, spinner.Step{Name: "Pull institutional base", Fn: func() error {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.institutional"), Fn: func() error {
 			return seedInstitutionalFromRepo(r.Root, r.Name, r.InstitutionalRef)
 		}})
 	}
 	if hasBack {
-		steps = append(steps, spinner.Step{Name: "Seed ops/localstack + .env", Fn: func() error {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.localstack"), Fn: func() error {
 			return seedLocalstackEnv(r.Root, r.AgentsRef)
 		}})
 	}
 	if goBackend && pre.GoOK {
-		steps = append(steps, spinner.Step{Name: "Wire SDK into go.work", Fn: func() error {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.gowork"), Fn: func() error {
 			return scaffold.EnsureGoWorkSDK(r.Root, r.Language)
 		}})
 	}
 	if r.GitRemote != "" {
-		steps = append(steps, spinner.Step{Name: "Configure git remote", Fn: func() error {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.remote"), Fn: func() error {
 			return gitops.AddRemote(r.Root, "origin", r.GitRemote)
 		}})
 	}
@@ -311,19 +366,27 @@ func executePipeline(r *wizard.Result) error {
 	// project now has. Best effort: a machine with no editor on PATH still gets
 	// a working project, and `gofi install extensions` fixes it later.
 	var extensionsNote string
-	steps = append(steps, spinner.Step{Name: "Install the GOFI AI extension", Fn: func() error {
-		extensionsNote = installExtensionsOnInit(context.Background())
-		return nil
-	}})
+	if onClaude {
+		// The extension's chat drives Claude Code; another host has its own.
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.extension"), Fn: func() error {
+			extensionsNote = installExtensionsOnInit(context.Background())
+			return nil
+		}})
+	}
 	// The graph is the map the agents read before they open a file, so a
 	// project ships with one. Best effort like the extension above: a scaffold
 	// that cannot be scanned yet is still a working scaffold.
-	var graphNote, hooksNote string
-	steps = append(steps, spinner.Step{Name: "Build the code graph", Fn: func() error {
+	var graphNote string
+	steps = append(steps, spinner.Step{Name: i18n.T("init.step.graph"), Fn: func() error {
 		graphNote = buildGraphQuietly(context.Background(), cfg, r.Root)
-		hooksNote = installGraphHooksQuietly(cfg, r.Root)
 		return nil
 	}})
+	if wantsIndexHooks(cfg) {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.hooks"), Fn: func() error {
+			_, err := installIndexHooks(r.Root)
+			return err
+		}})
+	}
 
 	results := spinner.Run(steps)
 	if spinner.AnyFailed(results) {
@@ -333,9 +396,9 @@ func executePipeline(r *wizard.Result) error {
 			}
 		}
 	}
-	for _, note := range []string{extensionsNote, graphNote, hooksNote} {
+	for _, note := range []string{extensionsNote, graphNote} {
 		if note != "" {
-			fmt.Println("  " + styles.Note(note))
+			fmt.Println(styles.Detail(styles.Note(note)))
 		}
 	}
 
@@ -349,33 +412,33 @@ func executePipeline(r *wizard.Result) error {
 	if r.Has(wizard.EnvWeb) {
 		switch {
 		case r.Adopted(wizard.EnvWeb):
-			fmt.Println("\n" + styles.Note("Adopted the web app at "+r.WebPath+"/ — left untouched."))
+			fmt.Println("\n" + styles.Bullet(styles.Info, i18n.T("init.web_adopted", r.WebPath)))
 			if r.WebDS == config.DSWeb {
-				skipped = append(skipped, "web design system — adopted app; install it yourself: npm install "+config.DSWeb)
+				skipped = append(skipped, i18n.T("init.skip.web_ds", config.DSWeb))
 			}
 		case pre.NodeOK:
-			fmt.Println("\n" + styles.Header("▶ Creating web app (Vite) at "+r.WebPath+"/"))
+			fmt.Println("\n" + styles.Bullet(styles.Info, i18n.T("init.web", r.WebPath)))
 			if err := createViteApp(r.Root, r.WebPath, r.WebDS == config.DSWeb); err != nil {
 				return fmt.Errorf("create web app: %w", err)
 			}
 		default:
-			skipped = append(skipped, "web — Node.js LTS not found; install it, then: npm create vite@latest "+r.WebPath)
+			skipped = append(skipped, i18n.T("init.skip.no_node_web", r.WebPath))
 		}
 	}
 	if r.Has(wizard.EnvMobile) {
 		switch {
 		case r.Adopted(wizard.EnvMobile):
-			fmt.Println("\n" + styles.Note("Adopted the mobile app at "+r.MobilePath+"/ — left untouched."))
+			fmt.Println("\n" + styles.Bullet(styles.Info, i18n.T("init.mobile_adopted", r.MobilePath)))
 			if r.MobileDS == config.DSMobile {
-				skipped = append(skipped, "mobile design system — adopted app; install it yourself: npm install "+config.DSMobile)
+				skipped = append(skipped, i18n.T("init.skip.mobile_ds", config.DSMobile))
 			}
 		case pre.NodeOK:
-			fmt.Println("\n" + styles.Header("▶ Creating mobile app (Expo) at "+r.MobilePath+"/"))
+			fmt.Println("\n" + styles.Bullet(styles.Info, i18n.T("init.mobile", r.MobilePath)))
 			if err := createExpoApp(r.Root, r.MobilePath, r.MobileDS == config.DSMobile); err != nil {
 				return fmt.Errorf("create mobile app: %w", err)
 			}
 		default:
-			skipped = append(skipped, "mobile — Node.js LTS not found; install it, then: npx create-expo-app "+r.MobilePath)
+			skipped = append(skipped, i18n.T("init.skip.no_node_mobile", r.MobilePath))
 		}
 	}
 
@@ -390,21 +453,22 @@ func renderPreflight(p toolchain.Preflight) {
 		return
 	}
 	fmt.Println()
-	fmt.Println("  " + styles.Header("Toolchain"))
+	fmt.Println(styles.Bullet(styles.Info, i18n.T("init.toolchain")))
 	for _, c := range p.Checks {
 		switch {
 		case c.OK && !c.Warn:
-			fmt.Println("    " + styles.Success("✓") + " " + c.Name + " " + c.Version)
+			fmt.Println("  " + styles.Success("✓") + " " + c.Name + " " + styles.Note(c.Version))
 		case c.OK && c.Warn:
-			fmt.Println("    " + styles.Warn("!") + " " + c.Name + " " + c.Version + " — " + c.Hint)
+			fmt.Println("  " + styles.Warn("!") + " " + c.Name + " " + styles.Note(c.Version+" — "+c.Hint))
 		default:
-			line := "    " + styles.Error("✗") + " " + c.Name
+			line := "  " + styles.Error("✗") + " " + c.Name
 			if c.Hint != "" {
-				line += " — " + c.Hint
+				line += " " + styles.Note("— "+c.Hint)
 			}
 			fmt.Println(line)
 		}
 	}
+	fmt.Println()
 }
 
 // seedDocDir creates <projectRoot>/<name>/.gitkeep so the directory exists
@@ -432,25 +496,9 @@ func ensureEnvFile(projectRoot string) error {
 	return os.WriteFile(path, []byte{}, 0o600)
 }
 
-// gofiIgnoreRules keep .gofi/ out of git except for the graph.
-//
-// The graph is versioned on purpose: it is the map the agents read, so the team
-// and CI should share the one the code actually produced instead of each
-// rebuilding their own. Canonical ordering in the JSON is what makes that
-// bearable to diff.
-//
-// Excluding a directory and re-including a child of it needs the `.gofi/*`
-// spelling — a plain `.gofi/` stops git from ever descending, and the negation
-// below would never be reached.
-var gofiIgnoreRules = []string{
-	".gofi/*",
-	"!" + graph.OutDir + "/",
-	external.ExtractorsDir + "/",
-}
-
-// ensureGofiIgnored writes those rules, upgrading a .gitignore written before
-// the graph existed. Order matters, so the legacy line is rewritten in place
-// rather than left to compete with the new ones.
+// ensureGofiIgnored writes layout.IgnoreRules, upgrading a .gitignore written
+// by an older release. Order matters, so the legacy lines are taken out rather
+// than left to compete with the new ones.
 func ensureGofiIgnored(projectRoot string) error {
 	path := filepath.Join(projectRoot, ".gitignore")
 	existing, err := os.ReadFile(path)
@@ -459,7 +507,7 @@ func ensureGofiIgnored(projectRoot string) error {
 	}
 	var kept []string
 	for line := range strings.Lines(string(existing)) {
-		if trimmed := strings.TrimSpace(line); trimmed == ".gofi/" || slices.Contains(gofiIgnoreRules, trimmed) {
+		if trimmed := strings.TrimSpace(line); slices.Contains(layout.LegacyIgnoreRules, trimmed) || slices.Contains(layout.IgnoreRules, trimmed) {
 			continue
 		}
 		kept = append(kept, strings.TrimRight(line, "\n"))
@@ -467,7 +515,7 @@ func ensureGofiIgnored(projectRoot string) error {
 	for len(kept) > 0 && strings.TrimSpace(kept[len(kept)-1]) == "" {
 		kept = kept[:len(kept)-1]
 	}
-	body := strings.Join(append(kept, gofiIgnoreRules...), "\n") + "\n"
+	body := strings.Join(append(kept, layout.IgnoreRules...), "\n") + "\n"
 	if body == string(existing) {
 		return nil
 	}
@@ -558,9 +606,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 		Ops:      config.DefaultOps(),
 		Graph:    config.DefaultGraph(),
 		AI:       config.AI{Host: r.AIHost, Model: r.AIModel, Models: []string{r.AIModel}},
-		Agents:   r.Agents,
 		Sources:  src,
-		Git:      config.Git{Remote: r.GitRemote},
 		Test:     config.DefaultTestSection(testLang, testPath),
 		Hsec:     config.DefaultHsec(),
 		Sonar:    config.DefaultSonar(proj.Name, backend, frontend, mobile),
@@ -592,78 +638,58 @@ func uiSurfacesFromConfig(cfg *config.GofiConfig) []string {
 	return s
 }
 
-func confirmSummary(r *wizard.Result) {
-	row := func(k, v string) string {
-		return styles.Label(fmt.Sprintf("%-9s", k)) + " " + styles.Value(v)
-	}
-	dsLabel := func(ds string) string {
-		if ds == "" {
-			return "no design system"
-		}
-		return ds
-	}
-	lines := []string{styles.Header("Summary"), ""}
-	lines = append(lines, row("name", r.Name))
-	lines = append(lines, row("root", r.Root))
-	lines = append(lines, row("surfaces", strings.Join(r.Environments, ", ")))
-	if r.Has(wizard.EnvBack) {
-		b := r.Language + " (" + r.SourcePath + "/)"
-		if r.Language == config.LanguageGo {
-			b += "  module=" + r.Module
-		}
-		lines = append(lines, row("backend", b))
-	}
-	if r.Has(wizard.EnvWeb) {
-		lines = append(lines, row("web", "react ("+r.WebPath+"/)  "+dsLabel(r.WebDS)))
-	}
-	if r.Has(wizard.EnvMobile) {
-		lines = append(lines, row("mobile", "expo ("+r.MobilePath+"/)  "+dsLabel(r.MobileDS)))
-	}
-	lines = append(lines, row("ops", "ops/"))
-	lines = append(lines, row("AI", r.AIHost+" ("+r.AIModel+")"))
-	lines = append(lines, row("agents", strings.Join(r.Agents, ", ")))
-	lines = append(lines, row("skills", r.AgentsRef))
-	if r.InstitutionalRef != "" {
-		lines = append(lines, row("institutional", r.InstitutionalRef))
-	} else {
-		lines = append(lines, row("institutional", "manual (no repo)"))
-	}
-	if r.GitRemote != "" {
-		lines = append(lines, row("remote", r.GitRemote))
-	}
-	fmt.Println()
-	fmt.Println(styles.Panel(strings.Join(lines, "\n")))
-}
-
 func printNextSteps(r *wizard.Result) {
-	fmt.Printf("\n  %s — project created at %s (.claude/ from %s)\n\n",
-		styles.Success("✓ done"), r.Root, sourceLabel(r.ClaudeSource))
+	fmt.Println()
+	fmt.Println(styles.Bullet(styles.Done, i18n.T("init.done", r.Root)))
+	fmt.Println(styles.Detail(styles.Note(i18n.T("init.source", sourceLabel(r.ClaudeSource)))))
+
 	if len(r.Skipped) > 0 {
-		fmt.Println("  " + styles.Warn("Skipped — install the toolchain, then create later:"))
-		for _, s := range r.Skipped {
-			fmt.Println("    - " + s)
-		}
 		fmt.Println()
+		fmt.Println(styles.Bullet(styles.Warning, i18n.T("init.skipped")))
+		for i, s := range r.Skipped {
+			prefix := "     "
+			if i == 0 {
+				prefix = "  ⎿  "
+			}
+			fmt.Println(styles.Note(prefix) + s)
+		}
 	}
 	// Adopting a repository leaves the code unannotated, so the graph knows the
 	// calls but not which context a symbol belongs to. That bridge is built by
 	// the agents, and nothing else in the output says so.
 	if r.Detected.Any() {
-		fmt.Println("  " + styles.Note("Existing code was adopted and left untouched."))
-		fmt.Println("  " + styles.Note("Run /gofi-spec to map it into contexts, then /gofi-eng to"))
-		fmt.Println("  " + styles.Note("write the //gofi:context directives the graph reads."))
 		fmt.Println()
+		fmt.Println(styles.Bullet(styles.Info, i18n.T("init.adopted")))
+		fmt.Println(styles.Detail(styles.Note(i18n.T("init.adopted.hint"))))
 	}
-	fmt.Println("  " + styles.Header("Next steps"))
-	fmt.Printf("    cd %s\n", r.Root)
-	fmt.Println("    git status                 # review the scaffolded files")
-	fmt.Println("    gofi commit \"chore: gofi init\"")
+
+	type step struct{ cmd, why string }
+	steps := []step{
+		{"cd " + r.Root, ""},
+		{"git status", i18n.T("init.next.review")},
+		{`git add -A && git commit -m "chore: gofi init"`, ""},
+	}
 	if r.GitRemote == "" {
-		fmt.Println("    gofi remote add <url>      # configure a git remote")
+		steps = append(steps, step{"git remote add origin <url>", i18n.T("init.next.remote")})
 	}
-	fmt.Println("    gofi h                     # explore commands")
-	for _, a := range r.Agents {
-		fmt.Printf("    /%s\n", a)
+	steps = append(steps, step{"gofi h", i18n.T("init.next.help")}, step{"/" + config.AgentPD, i18n.T("init.next.chat")})
+	width := 0
+	for _, s := range steps {
+		width = max(width, len(s.cmd))
+	}
+
+	fmt.Println()
+	fmt.Println(styles.Bullet(styles.Info, i18n.T("init.next")))
+	for i, s := range steps {
+		prefix := "     "
+		if i == 0 {
+			prefix = "  ⎿  "
+		}
+		line := styles.Note(prefix) + styles.Value(s.cmd)
+		if s.why != "" {
+			line += strings.Repeat(" ", width-len(s.cmd)+2) + styles.Note("# "+s.why)
+		}
+		fmt.Println(line)
 	}
 	fmt.Println()
 }

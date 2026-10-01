@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // IndexFile lists the scopes a project has. It is the entry point for a reader
@@ -59,7 +59,7 @@ func newIndex(opt Options, results []ScopeResult, prev *Index) *Index {
 		root = opt.Root
 	}
 	lang := (graph.BuildOptions{Language: opt.Language}).Lang()
-	base := graph.Dir(root, lang)
+	base := graph.Dir(root)
 
 	ix := &Index{Schema: model.SchemaVersion, Tool: model.Tool, Language: lang}
 	for _, r := range results {
@@ -121,13 +121,13 @@ func relSlash(base, target string) string {
 }
 
 // IndexPath is where the index of a project lives.
-func IndexPath(projectRoot, language string) string {
-	return filepath.Join(graph.Dir(projectRoot, language), IndexFile)
+func IndexPath(projectRoot string) string {
+	return filepath.Join(graph.Dir(projectRoot), IndexFile)
 }
 
 // Save writes the index next to the graphs it describes.
-func (ix *Index) Save(projectRoot, language string) error {
-	path := IndexPath(projectRoot, language)
+func (ix *Index) Save(projectRoot string) error {
+	path := IndexPath(projectRoot)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -140,8 +140,8 @@ func (ix *Index) Save(projectRoot, language string) error {
 
 // LoadIndex reads the index of a project. A missing index is not an error to
 // the caller that only wants to know what was built last time.
-func LoadIndex(projectRoot, language string) (*Index, error) {
-	b, err := os.ReadFile(IndexPath(projectRoot, language))
+func LoadIndex(projectRoot string) (*Index, error) {
+	b, err := os.ReadFile(IndexPath(projectRoot))
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,24 @@
-# Checklist de Auditoria — Go
+---
+name: qa-checklist
+description: Checklist de auditoria Go do gofi-qa contra o SDK v0.8.2 — ciclo de vida por componentes, Config tipado, secret://, UTC, sqln com allowlist, netx, iam, msq e observabilidade
+sdk: v0.8.2
+keywords: [qa, auditoria, checklist, gofi.New, componentes, config, secret, timezone, sqln, filtro-dinamico, netx, iam, msq, observabilidade]
+---
 
-Aplicado por `gofi-qa` em todo contexto Go implementado.
+# Checklist de Auditoria — Go (SDK v0.8.2)
+
+Aplicado por `gofi-qa` em todo contexto Go implementado. Itens de PostgreSQL
+(aggregate, statements, índices, dinheiro) ficam em `qa-checklist-postgres.md`
+e se somam a este quando o contexto os toca. API citada:
+`.claude/sdk/go/api/` (procure com `gofi find --in sdk "<símbolo>"`).
+
+**Como verificar.** Cada item diz o que procurar. Consulte o grafo antes
+(`gofi show <símbolo>` lista quem chama; `gofi find --in code "<termo>"`
+acha o símbolo); a busca literal é `gofi find --text "<literal>" --in code`
+ou `gofi find --regex "<re>" --in code` (`-i` ignora caixa), declarada.
+Prova de ausência ("ninguém chama X") em grafo `fast` pede
+`gofi index code --deep` ou a limitação declarada. Severidade ao fim de cada
+item; a tabela está no final.
 
 ## 1. Conformidade com a Spec
 - [ ] Todos os campos da entidade estão implementados
@@ -9,171 +27,326 @@ Aplicado por `gofi-qa` em todo contexto Go implementado.
 - [ ] HTTP status codes correspondem ao mapeado na spec
 - [ ] Filtros de listagem se comportam como especificado
 
-## 2. Padrões gofi/sqln
-- [ ] Repository usa statements preparados (`sqln.NewStatement().Prepare`) para mutations — `*sql.Stmt` em campo do struct (`stmInsertX`, `stmUpdateX`, `stmDeleteX`), preparado **uma única vez** em `New{Contexto}Repository(ctx)`. `sqln.NewStatement().Execute(ctx, sql, args...)` inline em mutation (prepara + executa + descarta a cada chamada) é **MAJOR** — quebra cache de prepare e cria round-trip extra. Exceção: SQL dinâmico montado em runtime (filtro dinâmico) não pode ser preparado.
-- [ ] **Helpers de persistência são métodos do receiver** — nenhuma função no arquivo do repo tem assinatura `func xxx(ctx context.Context, ...) error` executando SQL. Todas são `func (r *{contexto}Repository) ...`. Helper como `func insertConfig(ctx, e) error` solto no pacote (sem receiver) é **MAJOR** — perde acesso aos stmts preparados no struct e borra a fronteira de encapsulamento. Funções **puras** sem `ctx`/I/O (ex.: `configArgs(e *Config) []any`) podem ficar como funções de pacote.
-- [ ] Dentro de `r.tx.Execute(...)`, helpers fazem rebind via `ctx.Value(connection.SqlTxContextKey).(*sql.Tx).Stmt(r.stmXxx)` antes de `ExecContext` — chamar `r.stmXxx.ExecContext` direto pega outra conexão do pool e não participa da transação (**BLOCKER** — quebra atomicidade silenciosamente).
-- [ ] `Close()` fecha **todos** os `*sql.Stmt` do struct em sequência, retornando o primeiro erro.
-- [ ] Entidade usa tags `db:"col_name"` — **nunca `gofi:""`** (tag errada, não é mapeada)
-- [ ] `sqln.Filters.Tenant` é `int32` — nunca assumir `int64`
-- [ ] Paginação usa `sqln.NewPageRequest(page, limit, sorts)` com `page` 0-indexed
-- [ ] Criteria usa `criteria.From(table, alias).Select(...).Where(...)`
-- [ ] `FindByID` retorna `(*Entity, error)` — `nil, nil` quando não encontrado
-- [ ] **Consultas de presença** (`ExistsByXxx`) retornam **`(*T, error)`** direto do `FindFromCriteria[T].Execute()` — service consome via `if exists != nil { ... }` (ver `repository-primitive-return.md`)
-- [ ] Nunca usa `database/sql` diretamente
-- [ ] **Value objects aninhados** (ver `value-objects.md`):
-  - Campo externo tem tag `db:""` (marcador de presença)
-  - Sub-campos têm tags `db:""` e a ordem corresponde à ordem das colunas
-  - VO multi-coluna → struct simples (mapper expande recursivamente)
-  - VO em coluna única (JSON) → implementa `sql.Scanner`/`driver.Valuer`
+## 2. Ciclo de vida — `gofi.New` + componentes
+Ver `gofi-orchestrator.md`, `service-bootstrap.md` e `database-connection.md`.
 
-## 3. Padrões gofi/base/errs
-- [ ] Erros do service em `errors.go` registrados com `errs.Register*`
-- [ ] Service retorna `errs.AppError` — nunca `error` puro
-- [ ] Erros de validação usam `ErrXxxValidation.WithDetails(err)`
-- [ ] Not-found em Update: detectado via `FindByID` retornando nil **antes** de chamar `repo.Update` — não via `ErrNoRowsAffected`
-- [ ] Erros de operação usam `ErrXxxAction.Wrap(err)`
+- [ ] **Serviço nasce em `gofi.New(nome).With(componentes...).Build()`** e
+  termina em `svc.ListenAndServe()` (job sem HTTP: trabalho → `svc.Shutdown(ctx)`).
+  Recursos vêm dos componentes (`database.New()`, `cache.New()`,
+  `session.New()`, `messaging.New()`, `iam.New()`, `observability.New()`,
+  `httpserver.New(port, cfg)`). Bootstrap manual num serviço que usa `gofi.New`
+  é **MAJOR** — o recurso fica fora da ordem de start/close e do health:
+  `gofi find --regex "obs\.Init\(|connection\.(NewConnection|SetGlobal)\(|sqln\.NewCacheRedis\(|msq\.(New|Open)\(|netx\.NewServer\(" --in code`;
+  para identidade, `gofi find --text "gofi-sdk-go/iam\"" --in code` (o pacote
+  raiz `iam`, com `iam.New`/`iam.NewDefault`, importado no lugar de
+  `gofi/component/iam`, cujo `New` tem o mesmo nome). Segunda conexão de banco
+  deliberada (`connection.NewConnection` usada com `WithConnection`) não conta.
+  Exceção: recurso do chamador injetado por `database.FromDB`,
+  `cache.FromClient`, `messaging.FromBroker`, `iam.FromService`,
+  `observability.FromTelemetry`, `httpserver.FromServer` (quem abriu fecha).
+- [ ] **Erro do `Build()` tratado** — `svc, err := ...Build(); if err != nil`
+  encerra o `main`. `Build` devolve **todos** os erros de configuração
+  juntos; ignorá-lo sobe o serviço com recurso nil. **BLOCKER**
+- [ ] **Imports que registram providers presentes no `main`**: com
+  `database.New()`, `_ ".../sqln/driver/<driver>"`; com `messaging.New()` sem
+  `Broker`, `_ ".../msq/provider/<provider>"`; com variável
+  `secret://awssm/...` ou `secret://ocivault/...`,
+  `_ ".../base/secrets/awssm"` ou `.../ocivault`. Ausente: o `Build` falha no
+  boot. **MAJOR** — `gofi find --regex "sqln/driver/|msq/provider/|base/secrets/" --in code`
+- [ ] **Handle de componente lido depois do `Build`** — `db.DB()`,
+  `identity.Service()`, `mq.Broker()`, `Telemetry()` do componente de
+  observabilidade são nil antes. Handler
+  ou consumer montado antes do `Build` com esse handle: **BLOCKER** (nil
+  deref). Construtor de repositório não toca o banco (pode vir antes).
+- [ ] **Trabalho em background parado pelo ciclo de vida** — consumers via
+  `msq.NewConsumerManager(mq.Broker())` (o `ListenAndServe` drena); loops e
+  jobs como `gofi.Runner` (`Run`/`Stop`). `go loop()` solto, sem `Stop`
+  nem cancelamento: **MAJOR** (shutdown corta trabalho no meio) —
+  `gofi find --regex "^\s*go (func|\w+\()" --in code`
+- [ ] **Componente próprio** (`Name`/`Stage`/`Start`) registra o que abre
+  em `rt.OnClose` e o readiness em `rt.AddHealthCheck`. Ausente: **MAJOR**
+- [ ] **Nada de `log.Fatal`/`os.Exit`/`logging.Fatal`/`panic` fora do
+  `package main`** — biblioteca e camadas devolvem `error`.
+  `gofi find --regex "log\.Fatal|os\.Exit\(|logging\.Fatal\(|panic\(" --in code`;
+  ocorrência fora do `main` é **MAJOR**
+- [ ] Deploy com probes (k8s): `httpserver.New(port, &netx.WSConfig{Health: &netx.HealthConfig{}})`
+  — sem `Health` não há `/livez`/`/readyz` nem drenagem antes do shutdown.
+  **MINOR** (MAJOR se a spec de infra declara as probes)
 
-## 4. Padrões gofi/base/validator
-- [ ] DTOs têm `Validate()` chamando `v.ValidateStruct(r)`
-- [ ] Validator é instância de pacote (`var v = validator.New()`)
-- [ ] Tags `validate:"..."` cobrem todas as RNs de validação
+## 3. Configuração — `Config` tipado, variáveis e `secret://`
+Ver `configuration.md` e `env-vars-standard.md`.
 
-## 5. Padrões gofi/netx
-- [ ] Body JSON via `netx.ParseRequestBody(w, r, &req)`
-- [ ] Query params via `netx.BindQueryParamsToStruct(r, w, &f)` (tag `form:"field"`)
-- [ ] Path param via `netx.GetPathParam("id", r)`
-- [ ] Response via `netx.Response(w, status, data)`
-- [ ] Erros 400/404/409/500 via `netx.RespondError(w, appErr)`
-- [ ] Erros 401/403 via `netx.Error(w, http.StatusXxx, err)` — **nunca** `netx.RespondError`
-- [ ] Handler **não** contém lógica de negócio
+- [ ] **Sem `os.Getenv`/`os.LookupEnv`/`environment.Instance()` em código
+  folha** (`domain/`, service, repository, handler, adapter). Quem lê ambiente
+  é o `main` (ou um `config.go` do `package main`); o resto recebe `Config`
+  tipado no construtor. `gofi find --regex "os\.(Getenv|LookupEnv)\(|environment\.Instance\(" --in code`
+  — ocorrência fora do `main`: **MAJOR**
+- [ ] Config do app lido **num lugar só**, validado no boot e devolvido como
+  `(Config, error)` (`common.ParseStructAnnotationFunc` com tag `env` ou
+  leitura explícita); valores do SDK vêm de `svc.Environment()`. Mesma
+  variável lida em dois pontos: **MAJOR**
+- [ ] Nomes de variável no padrão do SDK (`APP_*`, `DATABASE_*`, `CACHE_*`,
+  `MESSAGING_*`, `BUCKET_*`, `MAIL_*`, `JWT_*`, `OAUTH_*`, `OTEL_*`, `LOG_*`,
+  `TIMEZONE`, `ALLOWED_ORIGINS`). Sinônimo próprio (`DB_HOST`, `REDIS_ADDR`)
+  para algo que o SDK já lê: **MAJOR**. Exceção de terceiro documentada na spec
+- [ ] **Segredo nunca em texto** — nem literal no código, nem no manifesto,
+  nem em `.env` versionado: `VAR=secret://<provider>/<nome>[#chave]` ou
+  `VAR_FILE=/caminho`. `gofi find --regex -i "(password|secret|token|api_?key)\s*[:=]\s*\"[^\"]+\"" --in code`.
+  Segredo literal: **BLOCKER**
+- [ ] Variável **própria do app** com `secret://` é resolvida com
+  `secrets.Resolve(ctx, v)` no `main` — o loader do SDK só resolve os campos
+  de `environment.Environment`. Sem isso o valor chega como a string
+  `secret://...`. **MAJOR**
+- [ ] Produção sem `.env`: `GOFI_DOTENV=true`, `TLS_INSECURE_SKIP_VERIFY=true`
+  ou `netx.ExposeErrorCause = true` fora de teste — `gofi find --regex "ExposeErrorCause\s*=\s*true|GOFI_DOTENV|TLS_INSECURE_SKIP_VERIFY"`.
+  **MAJOR**
 
-## 6. Separação de Camadas
-- [ ] Handler não acessa repository diretamente
-- [ ] Service não conhece `http.ResponseWriter` / `http.Request`
-- [ ] Repository não conhece DTOs
+## 4. Tempo e fuso
+- [ ] **Fuso do processo é UTC por padrão** (`TIMEZONE` vazio → UTC, aplicado
+  pelo `Build`). Código não reatribui `time.Local`
+  (`gofi find --regex "time\.Local\s*=" --in code` — **MAJOR**) nem supõe que
+  `time.Now()` está no fuso de negócio: cálculo de "dia", "mês" ou janela de
+  negócio usa `time.LoadLocation(nome)` com o nome vindo do `Config`.
+  Fronteira de dia calculada no fuso do processo quando a spec fixa um fuso
+  de negócio: **MAJOR**
+- [ ] Timestamps persistidos e trafegados em UTC (`timestamptz`, RFC 3339).
+  **MAJOR** se misturar fusos na mesma coluna
+- [ ] **Cron com horário fixo** (`cronjob.ScheduleConfig{Mode: cronjob.Fixed}`):
+  `LocationName` IANA explícito quando o horário é de negócio — vazio usa
+  `time.Local` (UTC por padrão). **MAJOR** se a spec fixa o horário no fuso de
+  negócio; **MINOR** nos demais
+- [ ] `cronjob.ScheduleJob` **panica** com config inválida (nome IANA
+  desconhecido, hora fora da faixa). A base IANA vem embutida pelo
+  `base/timezone`, que todo binário com `gofi.New` já linka; binário sem
+  `gofi` que use `LocationName`/`time.LoadLocation` importa
+  `_ "time/tzdata"`. Ausente: **MAJOR** (panic no boot em imagem sem tzdata)
+- [ ] Job agendado com efeito colateral em serviço com mais de uma réplica usa
+  `Locker` (`cronjob.RedisLocker`) + `Name`. Ausente com job não idempotente:
+  **MAJOR**
 
-## 7. Testabilidade
-- [ ] Service recebe interface de repository
-- [ ] Handler recebe interface de service
-- [ ] Service test cobre: sucesso, validação inválida, not-found, erro de repo
-- [ ] Handler test cobre: sucesso, decode error, service error mapeado
-- [ ] Mocks handcraft (fn fields no service test, campos de retorno no handler test) — sem frameworks
+## 5. Persistência `sqln` (genérico; PostgreSQL em `qa-checklist-postgres.md`)
+Ver `persistence-rules.md`, `database-connection.md` e `transactions.md`.
 
-## 8. Segurança
-- [ ] Sem SQL concatenado — sempre parâmetros posicionais (`$1`, `$2`, ...)
-- [ ] Sem dados sensíveis em log (senha, token, CPF completo)
-- [ ] Sem erros internos vazando em respostas HTTP
-- [ ] IDs de rota validados antes de uso (UUID format quando aplicável)
+- [ ] Entidade usa tags `db:"col"` — nunca `gofi:""` (não é mapeada). **MAJOR**
+- [ ] Leitura por `sqln.Find[T]`, `sqln.FindFromCriteria[T]` ou
+  `sqln.FindWithFilter[T]` + `.UniqueResult()`/`.Execute()`/`.List()`/
+  `.PagedList()`/`.All()`. Escrita por `sqln.NewStatement().Execute(ctx, sql, args...)`
+  (entra sozinha na transação do `ctx`). `*sql.DB` na mão no repository
+  (`connection.DB()`, `connection.MustDB()`, `db.DB()`) é **MAJOR** — exceção:
+  segundo banco via `statement.NewWithConnection`/`.WithConnection(conn)`
+- [ ] `FindByID` devolve `(*T, error)` com `nil, nil` quando não acha
+  (`UniqueResult` já faz isso); consultas de presença (`ExistsByXxx`) idem —
+  ver `repository-primitive-return.md`. **MINOR**
+- [ ] SQL só com placeholders (`$1`, `$2`…); nada de `fmt.Sprintf` com valor
+  do cliente. `gofi find --regex "Sprintf\(\s*\"(SELECT|INSERT|UPDATE|DELETE)" -i --in code`.
+  Valor de cliente interpolado: **BLOCKER**
+- [ ] **Réplica de leitura** (`DATABASE_READ_HOST`): leitura fora de transação
+  vai para a réplica. Ler para decidir uma escrita (check-then-act) ou reler o
+  que acabou de gravar fora de `transaction.Execute`: **MAJOR** (lag)
+- [ ] `transaction.Options{MaxRetries: n}` reexecuta `fn` inteira: dentro de
+  `fn` não há publicação em fila, chamada HTTP, e-mail nem outro efeito fora
+  do banco. Presente: **MAJOR**
+- [ ] Paginação: `sqln.NewPageRequest(page, limit, sorts)`, `page` 0-indexed.
+  O SDK não limita `limit` (até 65535): handler aplica teto. Sem teto em
+  listagem pública: **MINOR**
+- [ ] **Value objects aninhados** (ver `value-objects.md`): campo externo com
+  `db:""`, sub-campos com `db:"col"`; multi-coluna = struct simples (o mapper
+  expande); coluna única JSON = `sql.Scanner`/`driver.Valuer`. Colunas casam
+  por nome; ordem só importa quando o SELECT não cobre todos os campos
+  tagueados. **MAJOR** se o VO não é populado
 
-## 9. Logging
-- [ ] Usa `logging.*` do `gofi/obs/logging` — nunca `fmt.Println`/`log.*`
-- [ ] Erros fatais na inicialização: `logging.Fatal`
-- [ ] Campos estruturados: `slog.Any("key", val)` — não interpolação
+## 6. Filtro dinâmico — allowlist (`sqln.FilterMapping`)
+Ver `dynamic-filter.md` e `examples/sqln/filter-api`.
 
-## 10. Wiring (main.go + estrutura)
-- [ ] `main.go` em `pathCmd` (`./src/{projectName}/main.go`) — não na raiz de `pathService`
-- [ ] `go.mod` em `pathService` (`./src/go.mod`) — não em `pathCmd`
-- [ ] `domain/` em `pathService` — não dentro de `pathCmd`
-- [ ] `.migrations/` em `pathService` (`./src/.migrations/`)
-- [ ] `go.work` usa `pathService` (`use ./src`)
-- [ ] Replace paths no `go.mod` apontam para `../gofi`
-- [ ] Constantes `APP_NAME` e `APP_PORT` definidas (não literais inline)
-- [ ] `var AllowedOrigins` declarada
-- [ ] Wiring após Build: `repository.New(ctx)` → `service.New(repo)` → `handler.New(svc)`
-- [ ] Registro via `api.HttpServer().AddHandlers(handler)` — não via `.Handlers()` no builder chain
-- [ ] `api.ListenAndServe()` é a última instrução
-- [ ] **Cron com horário fixo** (`cronjob.Fixed` Hour/Minute): `LocationName` IANA **explícito** (fuso de negócio, não tz do container) — `Hour:0` sem location roda em UTC silenciosamente. **MINOR** se faltar location explícito num job "noturno"
-- [ ] Binário que usa `time.LoadLocation`/`cronjob.Fixed` com nome IANA importa `_ "time/tzdata"` — **MAJOR**: sem isso `ScheduleJob` **panica no boot** em imagem slim/scratch/distroless sem tzdata do SO (ver `worker-bootstrap.md` §"Cron com horário fixo")
+- [ ] **Todo filtro vindo do cliente passa por `sqln.FilterMapping`**:
+  `sqln.BuildQuery(base, args, filters, mapping, nil)` +
+  `sqln.NewPageRequestFilter(filters, mapping)` com **o mesmo** mapping e
+  `sqln.FindWithFilter[T](ctx, q).WithPage(page).PagedList()`. Campo ou
+  ordenação do cliente concatenado no SQL sem mapping: **BLOCKER** —
+  `gofi show sqln.BuildQuery` e `gofi find --regex "FilterMapping|AllowColumns|filter\.Allow" --in code`
+- [ ] Mapping declarado como `var` do pacote, cada campo com `Column`,
+  `Ops` (`sqln.Equality`/`sqln.Range`/`sqln.Text` ou lista explícita) e
+  `Sortable` explícito. `sqln.AllowColumns`/`filter.Allow` (todo operador,
+  toda ordenação, nome = coluna) em código novo: **MINOR**
+- [ ] Mapping **não** expõe coluna sensível (hash de senha, token, segredo) nem
+  a coluna de tenant. Presente: **BLOCKER**
+- [ ] **Tenant fora do body.** `sqln.Filters.Tenant` é `any` **sem tag json**
+  e o SDK não o usa: o tenant entra na base como placeholder
+  (`... WHERE p.<tenant_col> = $1`, `args = []any{tenant}`) com o valor
+  tirado dos claims. Tenant lido de `filters.Tenant` sem o handler
+  sobrescrevê-lo depois do `ParseRequestBody` (o cliente manda `"tenant"` no
+  JSON), ou tenant anexado em `filters.Filters` (o `OR` do cliente fura o
+  isolamento dentro dos parênteses): **BLOCKER**. Tenant por `fmt.Sprintf` na
+  base: **MAJOR**
+- [ ] Base termina dentro do `WHERE` (predicado de tenant ou `WHERE 1=1`),
+  como constante — o SDK anexa `AND ( … )`. **MAJOR** se não
+- [ ] Handler traduz `errors.Is(err, sqln.ErrInvalidFilter)` em **400**.
+  Cair em 500: **MAJOR**
+- [ ] Endpoint de schema devolve o próprio `FilterMapping` (`Column` tem
+  `json:"-"`). DTO próprio que copia `Column` para a resposta: **MAJOR**
+  (expõe o schema)
+- [ ] Símbolos anteriores à allowlist (`NewQueryBuild`, `QueryMapping`,
+  `FieldMapping`, `.Validate(filters)`) não existem na v0.8.2: presença indica
+  código não migrado. **BLOCKER** (não compila)
 
-## 11. Qualidade Geral
-- [ ] Sem dead code (funções não chamadas, vars não usadas)
-- [ ] Sem magic strings repetidas — extrair para constantes
-- [ ] Sem TODO/FIXME sem rastreamento
-- [ ] `go vet` e `golangci-lint` passam sem warnings
+## 7. Lookup de enums no schema (só com filtro dinâmico)
+Ver `lookup-endpoints.md`. `sqln.FilterField` carrega `FilterType`,
+`SearchType` e `Content` como metadado de UI; não há endpoint `/status`.
 
-## 12. Variáveis de Ambiente
-- [ ] `os.Getenv(...)` usa nomes do padrão gofi (`DATABASE_*`, `CACHE_*`, `MESSAGING_*`, `APP_*`, `OTEL_*`, `SERVICE_DEBUG_*`, `CLOUD_*`)
-- [ ] Variáveis fora do padrão (`REDIS_ADDR`, `DB_HOST`, etc.) são MAJOR — desvio do SDK
-- [ ] Exceções legítimas (IDP externo, terceiros) documentadas explicitamente na spec
-- [ ] Ver `env-vars-standard.md` para a tabela completa
+- [ ] Campo enum com `FilterType` `search-multiple`/`search-single`
+  (`"text"` num enum: **MAJOR**) e `SearchType` não vazio (**MAJOR**)
+- [ ] `SearchType: "embedded"` ⇒ `Content` com constante exportada (nil ou map
+  literal inline: **MAJOR**); api-path ⇒ `Content` nil (**MINOR**) e caminho
+  relativo sem `/` inicial (`"/v1/..."` ou URL absoluta: **MAJOR**)
+- [ ] Rota `getStatus` em código novo: **MAJOR**; em legado: **SUGGESTION**
+- [ ] Enum declarado uma vez no pacote comum de enums do projeto (slice para
+  `oneof`, map para `Content` e `IsValid`), reusado por todo mapping.
+  Redeclaração paralela: **MAJOR**; `IsValidXxx` com switch duplicado:
+  **MINOR**
+- [ ] Schema serializa o `FilterField` inteiro. Filtrar campos no handler:
+  **MAJOR**
 
-## 13. Índices e perfil de acesso ao banco (PostgreSQL)
+## 8. Erros — `base/errs`
+Ver `error-handling.md`.
 
-Ver `postgres-index-strategy.md` para o catálogo completo (perfis, padrões
-por tipo de filtro, fillfactor, autovacuum, particionamento).
+- [ ] Erros do service em `errors.go`, registrados com `errs.Register*`
+  (`RegisterValidation`, `RegisterNotFound`, `RegisterConflict`,
+  `RegisterOperation`, `RegisterExternalError`, `RegisterUnauthorized`,
+  `RegisterForbidden`). **MAJOR** se criados ad hoc
+- [ ] Service devolve `errs.AppError`, nunca `error` puro. **MAJOR**
+- [ ] Validação: `ErrXxxValidation.WithDetails(err)`; operação:
+  `ErrXxxAction.Wrap(err)`. **MINOR**
+- [ ] Not-found em Update detectado por `FindByID` nil **antes** do update.
+  **MAJOR**
 
-- [ ] Cada tabela do contexto tem perfil declarado na spec (`cold` / `hot UPDATE` / `hot DELETE+INSERT` / `append-only`). Ausente: **MAJOR**
-- [ ] Multi-tenant: todo índice tem leading column = tenant (composite ou partial). Single-column em não-tenant: **MAJOR**
-- [ ] `LIKE '%x%'` / `ILIKE` / regex em `text`: índice GIN com `gin_trgm_ops` (extensão `pg_trgm`). Btree single-column: **MAJOR**
-- [ ] Hot UPDATE: índices em colunas voláteis minimizados (cada um quebra HOT update)
-- [ ] Hot UPDATE com colunas indexadas estáveis: `fillfactor=70-80` aplicado
-- [ ] Hot UPDATE / Hot DELETE+INSERT: autovacuum tunado (`vacuum_scale_factor=0.01` e similares)
-- [ ] Worker cross-cutting (purge, archive, replicação) declarado no projeto: índice da coluna em **toda tabela** onde ela existe
-- [ ] Append-only de alto volume: tabela particionada (`PARTITION BY RANGE (created_at)`); índices declarados no parent
-- [ ] Boolean indexado sem partial: **MINOR**
-- [ ] Drop+recreate de índice em migration de produção usa `CONCURRENTLY`
+## 9. Validação — `base/validator`
+Ver `validation.md`.
 
-## 14. Filtro Dinâmico (apenas quando o contexto usa)
+- [ ] DTO com `Validate()` chamando `v.ValidateStruct(r)`; `var v = validator.New()`
+  no pacote. **MINOR**
+- [ ] Tags `validate:"..."` cobrem as RNs de validação. **MAJOR**
 
-Ver `dynamic-filter.md` para o checklist específico (model `query_dto.go`,
-handler com `queryMapping.Validate(filters)`, service que apenas repassa
-`*sqln.Filters`, repository com `FindWithFilter` + `NewQueryBuild` +
-`NewPageRequestFilter`, query base com predicate de tenancy ou `WHERE 1=1`
-declarada como constante).
+## 10. HTTP servidor — `netx` + componente `httpserver`
+Ver `http-auth-middleware.md`.
 
-Checks de segurança específicos (auditar **sempre** que o contexto tem
-tenancy + filtro dinâmico):
+- [ ] Body: `netx.ParseRequestBody(w, r, &req)`; query:
+  `netx.BindQueryParamsToStruct(r, w, &f)` (tag `form`); path:
+  `netx.GetPathParam("id", r)`; resposta: `netx.Response(w, status, data)`.
+  **MINOR**
+- [ ] Erro de service: `netx.RespondError(w, r, appErr)` — o `Kind` vira o
+  status (404, 409, 400, 401, 403, 502, 500) e a causa só vai para o log.
+  `netx.Error(w, status, err)` para erro fora de `AppError` (decode,
+  middleware). Assinatura antiga `RespondError(w, appErr)`: **BLOCKER** (não
+  compila); status escolhido à mão para um `AppError`: **MINOR**
+- [ ] **`Use`/`UseAuth` antes de `Handlers`** e rota autenticada em
+  `netx.PrivateRoutes`. Rota privada registrada antes do `UseAuth` (ou sem
+  `UseAuth`) fica **sem** autenticação: **BLOCKER** — `gofi show` do `main`
+- [ ] `WSConfig` explícito no que o endpoint pede: `AllowedOrigins` com as
+  origens da spec (o componente não aplica `ALLOWED_ORIGINS` sozinho: o `main`
+  passa `Environment.HTTP().AllowedOrigins` ou o valor do `Config`), `MaxBodyBytes` + `ReadTimeout`/`WriteTimeout` para upload,
+  `RequestTimeout`, `CrossOriginProtection` com sessão por cookie. Upload
+  grande sem subir o teto: **MAJOR**; cookie sem `CrossOriginProtection`:
+  **MAJOR**
+- [ ] Handler sem lógica de negócio; não acessa repository. **MAJOR**
 
-- [ ] **Tenant na base query, nunca em `filters.Filters`** — repository tem
-  `WHERE p.<tenant_col> = %d` na constante base + `fmt.Sprintf(...,
-  filters.Tenant)` no método. Handler **só** seta `filters.Tenant`. Se o
-  handler faz `filters.Filters = append([]*sqln.Filter{NewFilter("p.<tenant_col>", ...)}, ...)`:
-  **BLOCKER** — vazamento cross-tenant quando cliente envia `OR` no body
-  (precedência `AND > OR` quebra o isolamento; o parêntese externo do SDK
-  envolve o conjunto, não o tenant individual)
-- [ ] `filters.Tenant` é setado pelo handler antes de chamar o service
-- [ ] `<tenant_col>` (a coluna canônica de tenancy do projeto, ex.: `p.tenant_id`)
-  **não** aparece em `AllowedFields` do `QueryMapping` — cliente não pode
-  filtrar por tenant via body
+## 11. HTTP cliente — `netx.NewClient`
+- [ ] Cliente criado **uma vez** (`netx.NewClient(&netx.HttpClientConfig{Name, BaseURL, Timeout, Retries})`)
+  e injetado; `Name` preenchido (nomeia os spans). Cliente por requisição:
+  **MAJOR**
+- [ ] **Retry só em método idempotente.** O cliente reexecuta GET/HEAD/OPTIONS/
+  PUT/DELETE e 429; POST/PATCH só com header `Idempotency-Key` (via
+  `req.SetHeader`) que o servidor honre. Laço de retry manual em volta de
+  `Execute()` para POST/PATCH sem chave: **MAJOR** (efeito duplicado)
+- [ ] `Retries: 0` **não** desliga retry (vira o padrão do SDK): quem precisa
+  de uma tentativa só declara isso na spec e trata. `DisableRetryOn429: true`
+  quando um rate limiter externo controla o ritmo. **MINOR**
+- [ ] Assinatura por `req.SetSignature(signer)` (`netx/awssign` ou
+  `netx.Signature` próprio) — nunca header de assinatura calculado fora do
+  `Sign` (retry reenvia assinatura velha). **MAJOR**
 
-## 15. Lookup endpoints — shape v2 do `FieldMapping` (apenas com filtro dinâmico)
+## 12. Identidade — `iam`
+Ver `iam.md`, `rbac.md` e `http-auth-middleware.md`.
 
-Ver `lookup-endpoints.md` para o catálogo completo. O `FieldMapping` ganhou
-`SearchType` + `Content`; **o endpoint dedicado `GET /{ctx}/status` foi
-descontinuado** — front lê `allowedFields[i].content` direto da resposta
-de `getSchema`.
+- [ ] Serviço de identidade pelo componente `iam.New(iam.Config{User, Tenant, RBAC})`
+  — configuração de token e sessão vem do ambiente (`JWT_SECRET` com 32+ bytes,
+  por `secret://` em produção; `*_TOKEN_TTL`). Ajuste fino em `Configure`.
+  **MAJOR** se montado à mão (ver §2)
+- [ ] Rotas privadas passam por `middleware.AuthMiddleware(svc)` (ou middleware
+  próprio que chama `ValidateToken`); permissão por
+  `middleware.RBACMiddleware(svc, recurso, ação)` depois do auth; revogação de
+  acesso ao tenant imediata com `middleware.TenantMiddleware(svc)`.
+  **BLOCKER** se rota com dado de tenant não valida token
+- [ ] **Tenant e usuário vêm dos claims** (`middleware.ClaimsFromContext(ctx)`),
+  nunca de body, query ou header livre. **BLOCKER**
+- [ ] Senha com `password.Hash` (Argon2id) e `password.Verify`;
+  `password.NeedsRehash` no login migra hash bcrypt. Hash novo com bcrypt:
+  **MAJOR**; senha em claro ou hash rápido (MD5/SHA): **BLOCKER**
+- [ ] Mais de uma réplica ⇒ sessão em Redis (`CACHE_TYPE=redis`); em memória
+  o logout não vale nas outras réplicas. **MAJOR**
+- [ ] Login com seleção de tenant usa `Security.RequireTenantTicket`.
+  **MINOR**
 
-- [ ] **`FilterType`** de cada campo enum é `search-multiple` ou
-      `search-single`. Campo enum com `FilterType: "text"` é **MAJOR**
-      (front não consegue renderizar dropdown)
-- [ ] **`SearchType` não-vazio** em todo campo `search-*` — vazio é **MAJOR**
-      (front não sabe de onde tirar os valores)
-- [ ] **`SearchType: "embedded"` ⇒ `Content` populado** com constante
-      exportada (ex.: `enums.XxxStatusMap`). `Content` nil ou literal map
-      inline é **MAJOR**
-- [ ] **`SearchType: "v1/..."` ⇒ `Content` nil/omitido** — ter `Content`
-      junto com api-path é **MINOR** (confuso; front ignora)
-- [ ] **`SearchType` de api-path sem `/` inicial** — `"/v1/..."` ou URL
-      absoluta (`"https://..."`) é **MAJOR** (front concatena base
-      incorretamente)
-- [ ] **Nenhuma rota `getStatus`** no handler — código novo não cria.
-      Presente em código novo: **MAJOR** (padrão descontinuado). Presente
-      em código legado: **SUGGESTION** (refactor para remover quando o
-      front migrar)
-- [ ] **Constantes em `services/common/enums/{topico}.go`** (pacote único
-      com prefixo nas constantes — `ProductStatusMap`, `AgentStatusMap`)
-      ou `services/common/{contexto}/` se o repo já usa pacote por
-      contexto. **Slice + map declarados juntos** (slice para
-      `oneof`/iteração, map para `Content` + `IsValid`)
-- [ ] **`IsValidXxx()` deriva do map** — switch case duplicado é **MINOR**
-      (perde fonte única)
-- [ ] **Reuso cross-context**: o mesmo enum embedded usado em N
-      `QueryMapping`s referencia **a mesma constante** — redeclaração
-      paralela é **MAJOR** (drift garantido na próxima evolução)
-- [ ] **`getSchema` serializa `FieldMapping` inteiro** (incluindo
-      `Content`) — filtrar campos no handler é **MAJOR** (front fica
-      sem dados de embedded)
+## 13. Mensageria — `msq`
+Ver `messaging-msq.md` e `kafka-consumer-naming.md`.
+
+- [ ] Broker pelo componente `messaging.New(...)`; consumers por
+  `msq.NewConsumerManager(mq.Broker()).Register(cfg, handler).Start()`.
+  **MAJOR** se fora do ciclo de vida (ver §2)
+- [ ] `cfg := msq.DefaultConsumeConfig(topic)` com `MaxRetries`,
+  `RetryBackoff`, `DeadLetterTopic` e `HandlerTimeout` definidos para handler
+  que pode falhar. `MaxRetries > 0` sem `DeadLetterTopic` devolve o Nack ao
+  broker (redelivery sem fim): **MAJOR**. Sem `HandlerTimeout`: **MINOR**
+- [ ] Resultado certo: `msq.Ack` processado; `msq.Nack` falha transitória;
+  `msq.Ignore` falha permanente (payload inválido — retry não conserta).
+  `Nack` em erro de `msq.UnpackMessage`: **MAJOR** (mensagem venenosa)
+- [ ] Handler idempotente (entrega pelo menos uma vez; o DLQ ou o retry
+  repetem). Efeito duplicado em reprocessamento: **MAJOR**
+- [ ] Existe consumer ou alerta para o tópico de DLQ (lê
+  `msq.HeaderDLQOriginalTopic`/`HeaderDLQError`/`HeaderDLQAttempts`).
+  **MINOR**
+- [ ] Erro de `msq.NewMessage`/`msq.NewMessageWithTopic` e de `SendMessage`
+  tratado. Ignorado: **MAJOR**
+
+## 14. Observabilidade e logging
+Ver `observability-otel.md` e `logging.md`.
+
+- [ ] Telemetria pelo componente `observability.New()` (`OTEL_EXPORTER_OTLP_ENDPOINT`);
+  `obs.Init` à mão: **MAJOR** (ver §2)
+- [ ] Sem span/middleware de tracing próprio em volta de rota `netx`, chamada
+  do `netx.HttpClient` ou consumer `msq` — o SDK já cria o span e propaga o
+  contexto. Duplicado: **MINOR**
+- [ ] Instrumentos (`obs/metrics`: `NewInt64Counter`, `NewFloat64Histogram`,
+  ...) criados **uma vez** no boot e injetados. Criados por requisição:
+  **MAJOR**. Atributo de alta cardinalidade (ID, e-mail) ou chamado `job`/
+  `instance` (a série é descartada): **MAJOR**
+- [ ] Log por `logging.*`/`logging.FromContext(ctx)` com atributos `slog`;
+  nunca `fmt.Println`/`log.*` fora do `main` —
+  `gofi find --regex "fmt\.Print|log\.(Print|Fatal|Panic)" --in code`. **MAJOR**
+- [ ] `Info` só no início/fim de fluxo; nada de `Info` por item de loop ou por
+  mensagem. **MINOR**
+- [ ] Sem dado sensível em log (senha, token, documento completo). **BLOCKER**
+
+## 15. Estrutura
+Ver `structure.md`.
+
+- [ ] `main.go` em `pathCmd` (`./src/{projectName}/main.go`); `go.mod`,
+  `domain/` e `.migrations/` em `pathService`; `go.work` na raiz com
+  `use ./src`. **MINOR**
+- [ ] Imports do SDK com os paths de módulo da v0.8.2
+  (`github.com/gofi-labs/gofi-sdk-go/gofi`, `.../sqln`, `.../netx`, ...).
+  Path antigo do orquestrador na raiz (`github.com/gofi-labs/gofi-sdk-go` sem
+  sufixo): **BLOCKER** (não resolve)
+- [ ] Separação de camadas: service não conhece `http.ResponseWriter`/
+  `http.Request`; repository não conhece DTOs. **MAJOR**
+
+## 16. Testabilidade e qualidade
+- [ ] Service recebe interface de repository; handler, interface de service.
+  **MAJOR**
+- [ ] Service test cobre sucesso, validação, not-found, erro de repo; handler
+  test cobre sucesso, decode error, erro do service mapeado. Mocks handcraft,
+  sem framework. **MAJOR**
+- [ ] Sem dead code, magic string repetida, TODO sem rastreio. **MINOR**
+- [ ] `go vet` e `golangci-lint` limpos. **MINOR**
 
 ---
 
@@ -181,7 +354,7 @@ de `getSchema`.
 
 | Nível | Quando |
 |-------|--------|
-| **BLOCKER** | Impede funcionamento correto: SQL injection, panic em produção, retorno errado |
-| **MAJOR** | Viola padrão gofi ou introduz bug latente: stmt não preparado, service retornando `error` puro |
-| **MINOR** | Desvio de convenção sem impacto funcional: import desordenado, nome fora de padrão |
+| **BLOCKER** | Impede funcionamento correto ou abre falha de segurança: SQL injection, tenant do cliente, rota privada sem auth, panic, código que não compila |
+| **MAJOR** | Viola o SDK ou introduz bug latente: bootstrap manual, `os.Getenv` em código folha, retry não idempotente, `Nack` em mensagem venenosa |
+| **MINOR** | Desvio de convenção sem impacto funcional: nome fora de padrão, `Info` demais |
 | **SUGGESTION** | Melhoria opcional: extrair constante, refinar mensagem |

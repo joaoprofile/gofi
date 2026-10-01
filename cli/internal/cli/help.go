@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/joaoprofile/gofi-cli/internal/help"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/help"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
 )
 
 func newHelpCmd() *cobra.Command {

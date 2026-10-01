@@ -1,0 +1,44 @@
+# Words the intake reads a request by. Matched after lowercasing and removing
+# accents, as whole words or whole phrases; the earliest match in the request
+# decides. A role's contract adds its own verbs (contract.yaml `intents`),
+# which point at the artifact that role produces.
+#
+# Intents are what the request wants done; artifacts are what it ends with.
+
+intents:
+  create: [crie, criar, cria, criacao, construa, construir, gere, gerar, desenvolva, desenvolver, implemente, implementar, implementa, programe, programar, codifique, codificar, elabore, elaborar, monte, montar, escreva, escrever, novo, nova, novos, novas, create, build, implement, develop, write, generate, new]
+  change: [altere, alterar, altera, alteracao, mude, mudar, muda, mudanca, ajuste, ajustar, adicione, adicionar, adicionando, acrescente, acrescentar, inclua, incluir, remova, remover, retire, retirar, troque, trocar, substitua, substituir, renomeie, renomear, mova, mover, estenda, estender, melhore, melhorar, otimize, otimizar, atualize, atualizar, refatore, refatorar, reescreva, reescrever, change, update, modify, add, remove, rename, improve, optimize, refactor]
+  fix: [corrija, corrigir, corrige, correcao, conserte, consertar, arrume, arrumar, resolva, resolver, repare, reparar, bug, erro, falha, quebrado, quebrou, quebra, "nao funciona", "parou de funcionar", fix, broken]
+  review: [audite, auditar, audita, revise, revisar, valide, validar, verifique, verificar, confira, conferir, avalie, avaliar, inspecione, inspecionar, "code review", review, audit, verify, evaluate]
+  document: [documente, documentar, documenta, document]
+  status: [status, andamento, panorama, progresso, situacao, "como esta", "em que pe", "o que falta", "o que ja foi feito", "o que esta pronto"]
+  migrate: [migre, migrar, migracao, adote, adotar, migrate, adopt]
+  deploy: [implante, implantar, provisione, provisionar, publique, publicar, deploy, provision]
+  # A question about the project, answered from it without changing it: no
+  # role, no pipeline — it goes to the conversation with pointers to the
+  # sections that answer it.
+  explain: [explique, explicar, explica, descreva, descrever, descreve, analise, analisar, analisa, entenda, entender, resuma, resumir, resume, detalhe, detalhar, mostre, mostrar, "me diga", "me dica", "me diz", "me conte", "me conta", "me fala", "me explique", "me explica", "me mostre", "o que faz", "o que fazem", "o que e", "o que sao", "como funciona", "como funcionam", "para que serve", "pra que serve", "qual a funcao", "onde fica", "onde esta", "por que", explain, describe, analyze, analyse, summarize, "how does", "what does", "what is"]
+
+# Verbs that say something is wanted but not what — "faça", "quero",
+# "preciso". They decide only when no other verb in the request does: in
+# "faça a correção do bug" the fix wins; in "faça um PRD de …" the PRD is
+# created.
+weak_intents:
+  create: [faca, fazer, faz, facam, quero, queria, gostaria, preciso, precisamos, precisa, vamos, "da para", "tem como", please, want, need]
+
+artifacts:
+  prd: [prd, discovery, requisitos de produto]
+  spec: [spec, sdd, especificacao, especificacao tecnica]
+  ui: [tela, telas, interface, frontend, pagina, componente, ui]
+  infra: [infra, infraestrutura, pipeline, terraform, cluster, ci/cd]
+  docs: [documentacao, doc de api, contrato de api]
+  audit: [auditoria]
+  migration: [migracao]
+
+# Words that carry no subject: left out when a new context is named from the
+# request ("crie um PRD de sincronização de pedidos" → sincronizacao-pedidos).
+stopwords: [um, uma, uns, umas, o, a, os, as, de, da, do, das, dos, em, no, na, nos, nas, para, pra, por, com, e, ou, que, se, ao, aos, the, of, for, to, and, in, on, with, fluxo, contexto, novo, nova]
+# Words that point at something without naming it — "aquilo do login", "o
+# problema do pricing". Meaningful in a conversation, empty in a request: a
+# change made only of them is asked what changes.
+vague: [aquilo, aquela, aquele, aquelas, aqueles, isso, isto, esse, essa, esses, essas, este, esta, estes, estas, coisa, coisas, negocio, parada, lance, algo, detalhe, detalhes, tudo, problema, problemas, ponto, pontos, questao, questoes, ajuste, ajustes, mudanca, mudancas, melhoria, melhorias, thing, things, stuff, issue, issues]

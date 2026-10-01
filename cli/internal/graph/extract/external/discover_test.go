@@ -74,7 +74,7 @@ func TestFindMissingIsActionable(t *testing.T) {
 	}
 	// The message is the only thing standing between the user and a dead end,
 	// so it has to name the command that fixes it.
-	if !strings.Contains(err.Error(), "gofi graph install cobol") {
+	if !strings.Contains(err.Error(), "gofi index install cobol") {
 		t.Errorf("error %q does not say how to fix it", err)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/vsix"
+	"github.com/gofi-labs/gofi/cli/internal/vsix"
 )
 
 // repoRoot walks up from the test's directory to the repo root, identified by
@@ -32,7 +32,7 @@ func repoRoot(t *testing.T) string {
 }
 
 // TestEmbeddedVSIXMatchesSources is the guard that makes the committed
-// artefact trustworthy: it rebuilds the package from gofi-ai/ and compares
+// artefact trustworthy: it rebuilds the package from vscode/ and compares
 // bytes. Editing the extension without running `go generate` fails here rather
 // than silently shipping the previous build to users.
 func TestEmbeddedVSIXMatchesSources(t *testing.T) {
@@ -52,7 +52,7 @@ func TestEmbeddedVSIXMatchesSources(t *testing.T) {
 			embeddedManifest.Version, freshManifest.Version)
 	}
 	if !bytes.Equal(fresh, embedded) {
-		t.Errorf("embedded vsix differs from gofi-ai/ — run `go generate ./internal/extensions`")
+		t.Errorf("embedded vsix differs from vscode/ — run `go generate ./internal/extensions`")
 	}
 }
 

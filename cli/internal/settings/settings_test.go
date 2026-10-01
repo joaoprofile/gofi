@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
 )
 
 // isolate points the settings file at a temp dir for the duration of a test.
@@ -155,12 +155,12 @@ func TestUseAppliesLanguage(t *testing.T) {
 	defer Use(Default())
 
 	s := Default()
-	s.Language = i18n.LangFR
+	s.Language = i18n.LangPT
 	Use(s)
-	if i18n.Current() != i18n.LangFR {
-		t.Errorf("active language = %q, want fr", i18n.Current())
+	if i18n.Current() != i18n.LangPT {
+		t.Errorf("active language = %q, want pt", i18n.Current())
 	}
-	if !Active().Checkin || Active().Language != i18n.LangFR {
+	if !Active().Checkin || Active().Language != i18n.LangPT {
 		t.Errorf("Active() = %+v", Active())
 	}
 
@@ -170,7 +170,7 @@ func TestUseAppliesLanguage(t *testing.T) {
 	if i18n.Current() != i18n.LangPT {
 		t.Errorf("with GOFI_LANG=pt, active language = %q, want pt", i18n.Current())
 	}
-	if Active().Language != i18n.LangFR {
+	if Active().Language != i18n.LangPT {
 		t.Errorf("GOFI_LANG changed the stored language to %q", Active().Language)
 	}
 }
@@ -178,7 +178,7 @@ func TestUseAppliesLanguage(t *testing.T) {
 func TestCloneIsIndependent(t *testing.T) {
 	s := Default()
 	c := s.Clone()
-	c.Language = i18n.LangFR
+	c.Language = i18n.LangPT
 	c.Checkin = !c.Checkin
 	if s.Language == c.Language || s.Checkin == c.Checkin {
 		t.Error("Clone shares state with the original")

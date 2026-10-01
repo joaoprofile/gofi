@@ -30,7 +30,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Options controls a scan.

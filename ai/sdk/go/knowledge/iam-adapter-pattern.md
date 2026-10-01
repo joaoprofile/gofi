@@ -1,229 +1,125 @@
-# IAM adapter pattern — `port.SessionPort` + `port.TokenPort` quando o domínio não bate com o SDK
+---
+name: iam-adapter-pattern
+description: Ports próprios do iam — quando sair do componente para iam.New, contrato do SessionPort sobre storage existente, AuthPort para provedor externo, TokenPort assimétrico
+sdk: v0.8.2
+keywords: [iam, adapter, port, SessionPort, SessionRevoker, AuthPort, TokenPort, UserPort, TenantPort, iam.New, FromService, jwt.NewProvider, sessão de domínio]
+---
+
+# IAM adapter pattern — ports próprios só onde o default não serve
+
+Caminho padrão: componente `iamc.New` com `UserPort`/`TenantPort` do projeto
+(`iam.md`). Este arquivo cobre o que **sai** do padrão. Referência:
+`.claude/sdk/go/api/iam-port.md`, `iam.md`, `iam-config.md`, `iam-provider-*.md`.
 
 ## Quando usar
 
-Quando o projeto:
+| Situação | Port | Como |
+|---|---|---|
+| Usuários/tenants no banco do projeto | `UserPort`, `TenantPort` | **sempre** — adapter sobre o repository (`iam.md` §"Ports do projeto") |
+| Sessões precisam morar num storage já existente | `SessionPort` (+ `SessionRevoker`) | adapter próprio + `iam.New` |
+| Credencial validada por provedor externo (IdP corporativo, serviço de auth legado) | `AuthPort` | implementação própria + `iam.New` |
+| RS256/ES256, `Audience`, chave em HSM | `TokenPort` | `jwt.NewProvider(jwt.Config{...})` — sem código próprio |
+| Atributos de domínio no token/sessão | — | **não** é caso de adapter: `SelectTenantInput.Extra` → `Claims.Extra`/`Session.Extra` |
 
-1. Já tem `repository.SessionRepository` (Redis ou outro) com um `model.UserSession` que carrega campos de domínio (`CompanyID`, `ManagerID`, `Role`, `GumgaToken`...) que `iam/types.Session` **não** modela.
-2. Já emite JWT manualmente em `auth_service.go` com custom claims (`name`/`companyId`/`managerId`/`role`) que `iam/provider/jwt.iamClaims` **não** modela.
-3. Quer ativar `iamSvc.ValidateToken` para o middleware HTTP delegar revogação ao SDK **sem** migrar a emissão do token e a sessão para o SDK (Fase 2b).
+O motivo antigo para `TokenPort`/re-parse próprios (claims de domínio que o
+SDK descartava) **não existe mais**: `types.Claims.Extra` faz round-trip no JWT.
 
-Esse é o padrão "adapter mínimo": só o que o middleware precisa.
-
-## Regra
-
-`services/domain/{contexto}/adapter/` recebe **um arquivo por port**:
-
-- `session_port.go` — implementa `port.SessionPort` traduzindo `types.Session` ↔ `model.UserSession`. `Save` é **stub explícito com erro** (o service do contexto cria sessões direto via repo).
-- `token_port.go` — implementa `port.TokenPort.ParseToken` parseando o JWT manual e extraindo apenas o subconjunto que `types.Claims` carrega (`UserID`, `TenantID`, `SessionID`, `Issuer`). `IssueAccessToken`/`IssueRefreshToken` são **stubs explícitos com erro** (o service do contexto emite tokens direto).
-- `adapter_test.go` — testes handcraft com mock de `repository.SessionRepository` em fn-fields.
-
-`services/{service}/iam.go` (novo arquivo no `pathCmd`, ao lado de `config.go`/`wire.go`) constrói o `*iamcore.IAMService` via `iam.New(Config{Token, Session, Security: ...})`. **Não** passar `User`/`Tenant`/`RBAC` quando o middleware só usa `ValidateToken` — o SDK valida apenas `cfg.Session != nil`.
-
-## Por quê
-
-- **Não forkar o SDK.** O `iam/provider/jwt.iamClaims` é struct fechado sem `Extra map[string]any`. Implementar `port.TokenPort` no projeto contorna sem patch.
-- **`port.SessionPort` é a interface mais limpa de adaptar.** O SDK só usa `Save`/`Get`/`Revoke`/`RevokeAllForUser`/`ListByUser`. Mapeia 1-pra-1 com o repo existente exceto pela conversão de struct.
-- **Stubs explícitos > silenciosos.** Métodos não suportados retornam `errors.New("auth/adapter: X not supported (reason)")` — quem chamar por engano descobre na hora. Não use `panic` (mata o processo), não use `return nil` silencioso (esconde bug).
-- **`Save` stub é seguro** porque o caminho `localAuth.SelectTenant` (que chamaria `Save`) só é exercitado se o middleware chamar `iamSvc.Authenticate` + `iamSvc.SelectTenant`. Como o middleware só usa `ValidateToken`, `Save` nunca é tocado em runtime.
-
-## Padrão — `session_port.go`
+## Montagem com `iam.New`
 
 ```go
-type sessionPort struct {
-    repo       repository.SessionRepository
-    revokedTTL time.Duration
-}
-
-func NewSessionPort(repo repository.SessionRepository, revokedTTL time.Duration) port.SessionPort {
-    return &sessionPort{repo: repo, revokedTTL: revokedTTL}
-}
-
-func (a *sessionPort) Save(ctx context.Context, _ *types.Session) error {
-    return errors.New("<ctx>/adapter: SessionPort.Save not supported (auth_service writes sessions directly)")
-}
-
-func (a *sessionPort) Get(ctx context.Context, sessionID string) (*types.Session, error) {
-    sess, err := a.repo.Get(ctx, sessionID)
-    if err != nil {
-        if errors.Is(err, repository.ErrSessionNotFound) {
-            return nil, iamcore.ErrSessionNotFound // traduz pro erro sentinel do SDK
-        }
-        return nil, err
-    }
-    return toTypesSession(sess), nil
-}
-
-func (a *sessionPort) Revoke(ctx context.Context, sessionID string) error {
-    if err := a.repo.Revoke(ctx, sessionID, a.revokedTTL); err != nil {
-        if errors.Is(err, repository.ErrSessionNotFound) {
-            return iamcore.ErrSessionNotFound
-        }
-        return err
-    }
-    return nil
-}
-
-func (a *sessionPort) RevokeAllForUser(ctx context.Context, userID string) error {
-    _, err := a.repo.RevokeAll(ctx, userID, a.revokedTTL)
-    return err
-}
-
-func (a *sessionPort) ListByUser(ctx context.Context, userID string) ([]*types.Session, error) {
-    ids, err := a.repo.ListByUserID(ctx, userID)
-    if err != nil {
-        return nil, err
-    }
-    out := make([]*types.Session, 0, len(ids))
-    for _, id := range ids {
-        sess, err := a.repo.Get(ctx, id)
-        if err != nil {
-            continue // sessão pode ter expirado entre lista e get
-        }
-        out = append(out, toTypesSession(sess))
-    }
-    return out, nil
-}
-
-// Tradução model.UserSession → types.Session. Só preenche o que o SDK
-// efetivamente lê em ValidateToken (Revoked, ExpiresAt) + campos audit
-// úteis. Campos de domínio sem destino no SDK (ManagerID, Role, GumgaToken)
-// são descartados — o blob rico continua no Redis para quem precisar.
-func toTypesSession(s *model.UserSession) *types.Session {
-    return &types.Session{
-        ID:               s.SessionID,
-        UserID:           s.IAMUserID,
-        TenantID:         s.CompanyID,
-        RefreshTokenHash: s.RefreshTokenHash,
-        ExpiresAt:        s.ExpiresAt,
-        CreatedAt:        s.CreatedAt,
-        LastUsedAt:       s.CreatedAt,
-        Revoked:          s.RevokedAt != nil,
-        RevokedAt:        s.RevokedAt,
-        IPAddress:        s.IP,
-        UserAgent:        s.UserAgent,
-    }
-}
-```
-
-## Padrão — `token_port.go`
-
-```go
-type tokenPort struct {
-    cfg environment.AuthConfig
-}
-
-func NewTokenPort() port.TokenPort {
-    return &tokenPort{cfg: environment.Instance().Auth()}
-}
-
-func (t *tokenPort) IssueAccessToken(_ types.Claims) (string, error) {
-    return "", errors.New("<ctx>/adapter: TokenPort.IssueAccessToken not supported (auth_service mints tokens directly)")
-}
-
-func (t *tokenPort) IssueRefreshToken(_ types.Claims) (string, error) {
-    return "", errors.New("<ctx>/adapter: TokenPort.IssueRefreshToken not supported (auth_service mints tokens directly)")
-}
-
-func (t *tokenPort) ParseToken(tokenStr string) (*types.Claims, error) {
-    tok, err := jwt.Parse(tokenStr, func(j *jwt.Token) (any, error) {
-        if j.Method.Alg() != "HS256" {
-            return nil, iamcore.ErrTokenInvalid
-        }
-        return t.cfg.JWTSecret, nil
+func buildIAM(users *adapter.UserAdapter, sessions port.SessionPort, rbac port.RBACPort, ticketKey []byte) (*core.IAMService, error) {
+    a := environment.Instance().Auth() // JWT_SECRET, JWT_ISSUER, *_TOKEN_TTL
+    tokens, err := jwt.NewProvider(jwt.Config{
+        Algorithm: jwt.HS256, Secret: a.JWTSecret,
+        AccessTokenTTL: a.AccessTokenTTL, Issuer: a.Issuer,
     })
-    if err != nil || tok == nil || !tok.Valid {
-        return nil, iamcore.ErrTokenInvalid
+    if err != nil {
+        return nil, fmt.Errorf("iam token provider: %w", err)
     }
-    mc, ok := tok.Claims.(jwt.MapClaims)
-    if !ok {
-        return nil, iamcore.ErrTokenInvalid
-    }
-    sessionID := asString(mc["sessionId"])
-    iamUserID := asString(mc["iamUserId"])
-    if sessionID == "" || iamUserID == "" {
-        return nil, iamcore.ErrTokenInvalid
-    }
-    return &types.Claims{
-        UserID:    iamUserID,
-        TenantID:  asString(mc["companyId"]),
-        SessionID: sessionID,
-        Issuer:    asString(mc["iss"]),
-    }, nil
-}
-```
-
-**Custom claims do projeto** (`name`, `companyId`, `managerId`, `role`, `sub`) **não** entram em `types.Claims` — o middleware HTTP reparseia o token na enrichment phase (ver `http-auth-middleware.md` §"Assinatura — variante delegada ao SDK").
-
-## Padrão — `iam.go` no `pathCmd`
-
-```go
-package main
-
-import (
-    authAdapterPkg "<module>/services/domain/<ctx>/adapter"
-
-    "github.com/joaoprofile/gofi/iam"
-    iamcore "github.com/joaoprofile/gofi/iam/core"
-)
-
-func buildIAM(cfg Config, repos <ctx>Repos) (*iamcore.IAMService, error) {
-    sessionPort := authAdapterPkg.NewSessionPort(repos.session, cfg.RevokedSessionTTL)
-    tokenPort := authAdapterPkg.NewTokenPort()
-
-    iamSvc, err := iam.New(iam.Config{
-        Token:   tokenPort,
-        Session: sessionPort,
+    return iam.New(iam.Config{
+        User: users, Tenant: users, Token: tokens, Session: sessions, RBAC: rbac,
         Security: iam.SecurityConfig{
-            AccessTokenTTL:  cfg.Auth.AccessTokenTTL,
-            RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
-            Issuer:          cfg.Auth.Issuer,
+            AccessTokenTTL:      a.AccessTokenTTL,
+            RefreshTokenTTL:     a.RefreshTokenTTL,
+            Issuer:              a.Issuer,
+            TenantTicketSecret:  ticketKey, // ≥ 32 bytes, segredo próprio
+            RequireTenantTicket: true,
         },
     })
-    if err != nil {
-        return nil, fmt.Errorf("build iam: %w", err)
-    }
-    return iamSvc, nil
 }
 ```
 
-`main.go` chama `iamSvc, err := buildIAM(cfg, authRepos)` antes de
-`buildAuthMiddleware(iamSvc)`, fataliza em erro via `logging.Fatal`.
+- `iam.New` **não** deriva `TenantTicketSecret` (só `NewDefault`/componente
+  derivam do `JWT_SECRET`). Sem ele, `AuthResult.Ticket` vem vazio e o passo
+  `SelectTenant` fica sem prova de `Authenticate`. Defina-o.
+- `Session` é obrigatório (`core.ErrSessionPortRequired`); TTLs acima do teto
+  falham na montagem.
+- Ports só são chamados em request. Se o adapter precisa de handle aberto por
+  componente (`cache.Client()`, conexão), monte o iam **depois** do `Build` e
+  passe direto ao middleware — não precisa ser componente. Montado antes,
+  registre com `iamc.FromService(svc)`.
+
+## `SessionPort` sobre storage existente
+
+```go
+type sessionAdapter struct{ repo repository.SessionRepository }
+
+func (a *sessionAdapter) Get(ctx context.Context, id string) (*types.Session, error) {
+    s, err := a.repo.Get(ctx, id)
+    if errors.Is(err, repository.ErrSessionNotFound) {
+        return nil, core.ErrSessionNotFound
+    }
+    return s, err
+}
+
+// RevokeIfActive makes refresh rotation atomic (port.SessionRevoker).
+func (a *sessionAdapter) RevokeIfActive(ctx context.Context, id string) (bool, error) {
+    return a.repo.MarkRevokedIfActive(ctx, id, time.Now()) // compare-and-set no storage
+}
+```
+
+Contrato — cada item é um bug de segurança se violado:
+
+- **`Save` nunca persiste `AccessToken` nem `RefreshToken`** (credenciais
+  cruas). Persiste `RefreshTokenHash`, `Revoked`, `RevokedAt`, `ExpiresAt`,
+  auditoria e `Extra`; expira o registro em `ExpiresAt`.
+- **`Revoke` marca, não apaga.** A sessão revogada tem que continuar legível até
+  `ExpiresAt`: é ela que detecta reuso de refresh token (revoga tudo). Apagar
+  transforma roubo em simples "sessão não encontrada".
+- **`Get` inexistente → `core.ErrSessionNotFound`.**
+- **Implemente `RevokeIfActive`** (`port.SessionRevoker`) com operação atômica
+  do storage; sem ele a rotação usa `Revoke` e dois refreshes concorrentes
+  podem ambos vencer.
+- `ListByUser` devolve só sessões ativas; `RevokeAllForUser` cobre todas.
+- Campo de domínio da sessão sem par no SDK vai em `Session.Extra`
+  (`map[string]string`) — não reaproveite `Module`/`AuthProvider` para outra coisa.
+
+Sem storage prévio, **não escreva adapter**: `iam/provider/redis`
+(`NewProvider`/`NewProviderWithClient`) e `iam/provider/memory` já cumprem o
+contrato, inclusive `RevokeIfActive`.
+
+## `AuthPort` para provedor externo
+
+Substitui `Authenticate`/`SelectTenant`/`Logout`/`RefreshToken`/`ValidateToken`
+inteiros. Handoff entre os passos por `AuthInput.Extra` → `AuthResult.Extra` →
+o caller reinjeta em `SelectTenantInput.Extra`. `ValidateToken` continua
+obrigado a checar a sessão (logout real). Com `Auth` próprio, `User`/`Tenant`
+podem ser nil se o `AuthPort` os encapsula — mas `TenantMiddleware`/
+`AssertAccess` por request dependem do `TenantPort`.
+
+## Testes do adapter
+
+- `SessionPort`: round-trip `Save`/`Get` sem token cru; `Revoke` mantém
+  legível; `RevokeIfActive` devolve `false` na segunda chamada; not-found →
+  `core.ErrSessionNotFound`.
+- Fluxo completo sem infraestrutura: `iam.New` com
+  `memory.NewTestProvider()` (sem goroutine/TTL) e `jwt.NewProvider` com
+  segredo de 32 bytes de teste.
 
 ## Anti-padrões
 
-```go
-// ❌ Forkar o jwt provider do SDK para suportar custom claims — divergência permanente
-// ❌ panic em métodos não suportados — derruba o processo numa rota não-coberta
-func (a *sessionPort) Save(ctx context.Context, _ *types.Session) error {
-    panic("not implemented")
-}
-
-// ❌ return nil silencioso — esconde bug futuro
-func (a *sessionPort) Save(ctx context.Context, _ *types.Session) error {
-    return nil
-}
-
-// ❌ Passar User/Tenant/RBAC mockados só pra satisfazer assinatura do SDK
-iam.New(iam.Config{
-    Token: ..., Session: ...,
-    User:   noopUserPort{},   // não use — SDK só valida Session!=nil
-    Tenant: noopTenantPort{},
-    RBAC:   noopRBACPort{},
-})
-
-// ❌ Adapter inflado tentando carregar TODOS os campos de domínio em types.Session.
-//    Module := s.ManagerID; AuthProvider := s.Role  ← abuso semântico que confunde quem lê depois
-```
-
-## Checklist
-
-- [ ] `adapter/session_port.go` traduz `model.UserSession → types.Session` mantendo só `ID`/`UserID`/`TenantID`/`Revoked`/`RevokedAt`/`ExpiresAt` (+ audit se útil)
-- [ ] `repository.ErrSessionNotFound` → `iamcore.ErrSessionNotFound` (erro sentinel do SDK)
-- [ ] `Save` retorna `errors.New(...)` explícito — nunca `panic`, nunca `return nil`
-- [ ] `adapter/token_port.go` valida HS256 + segredo de `environment.Auth()`; lê `iamUserId`/`sessionId` (rejeita se vazios)
-- [ ] `Issue*` retornam `errors.New(...)` explícito — emissão fica em `auth_service.go`
-- [ ] `services/{cmd}/iam.go` constrói via `iam.New(Config{Token, Session, Security})` — sem User/Tenant/RBAC mockados
-- [ ] `main.go` fataliza erro de `buildIAM` via `logging.Fatal`
-- [ ] `adapter/adapter_test.go` com `mockSessionRepo` handcraft (fn-fields) cobrindo: `Get` not-found, `Get` live, `Get` revoked, `Revoke`/`RevokeAll` propagação de TTL, `ListByUser` skip-on-error, `Save` retorna erro, `ParseToken` happy path / tampered / missing-required
-- [ ] Middleware HTTP usa variante delegada ao SDK + re-parse (ver `http-auth-middleware.md`)
+- ❌ `TokenPort` próprio ou re-parse do JWT para carregar claims de domínio — use `Extra`.
+- ❌ Métodos de port que "não se aplicam" devolvendo `nil` silencioso ou `panic` — erro explícito (`errors.New("<ctx>/adapter: X not supported")`).
+- ❌ `User`/`Tenant`/`RBAC` noop só para compilar — sem login, deixe nil (resource server).
+- ❌ Forkar provider do SDK — implemente o port.
+- ❌ `iam.New` sem `TenantTicketSecret`.

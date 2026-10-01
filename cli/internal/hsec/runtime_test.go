@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // Regression: horusec v2.8.0 slices the daemon version by fixed offsets, so

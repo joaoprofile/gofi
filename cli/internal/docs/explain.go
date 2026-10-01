@@ -1,6 +1,10 @@
 package docs
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+)
 
 // Neighbors is the local view of one node: what points at it, what it points
 // to, and the code it reaches through its entities.
@@ -14,8 +18,8 @@ type Neighbors struct {
 
 // Link is one edge seen from a node.
 type Link struct {
-	Node string
-	Kind string
+	Node string `json:"node"`
+	Kind string `json:"kind"`
 }
 
 // Explorer answers graph questions.
@@ -155,13 +159,15 @@ var referenceKinds = map[string]bool{
 
 // Orphans lists documents nothing points to.
 //
-// Context memory is excluded unless all is set: it is an entry point by design,
-// pointing out at specs and PRDs with nothing pointing back. Counting it as
-// orphaned buries the real finding under false alarms.
+// Context memory and the reference libraries are excluded unless all is set:
+// memory is an entry point by design, pointing out at specs and PRDs with
+// nothing pointing back, and reference material is reached by searching, not
+// by being cited. Counting either as orphaned buries the real finding under
+// false alarms.
 func (e *Explorer) Orphans(all bool) (orphans []string, total int) {
 	_, in := e.edges()
 	for id, n := range e.Graph.Nodes {
-		if n.Kind != NodeDoc || (!all && n.Corpus == ".claude/memory/contexts") {
+		if n.Kind != NodeDoc || (!all && (n.Corpus == layout.Contexts().Dir || isLibrary(id))) {
 			continue
 		}
 		total++
@@ -178,42 +184,6 @@ func (e *Explorer) Orphans(all bool) (orphans []string, total int) {
 	}
 	sort.Strings(orphans)
 	return orphans, total
-}
-
-// Hub is a document and how many others reference it.
-type Hub struct {
-	Path  string
-	Count int
-}
-
-// Hubs ranks the most referenced documents — the anchors of the corpus.
-func (e *Explorer) Hubs(limit int) []Hub {
-	_, in := e.edges()
-	var hubs []Hub
-	for id, n := range e.Graph.Nodes {
-		if n.Kind != NodeDoc {
-			continue
-		}
-		c := 0
-		for _, l := range in[id] {
-			if referenceKinds[l.Kind] {
-				c++
-			}
-		}
-		if c > 0 {
-			hubs = append(hubs, Hub{id, c})
-		}
-	}
-	sort.Slice(hubs, func(i, j int) bool {
-		if hubs[i].Count != hubs[j].Count {
-			return hubs[i].Count > hubs[j].Count
-		}
-		return hubs[i].Path < hubs[j].Path
-	})
-	if limit > 0 && len(hubs) > limit {
-		hubs = hubs[:limit]
-	}
-	return hubs
 }
 
 func isCode(id string) bool { return len(id) > 5 && id[:5] == PrefixCode }

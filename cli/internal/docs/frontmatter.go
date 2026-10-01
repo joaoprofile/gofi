@@ -27,6 +27,14 @@ func Parse(content string) (Frontmatter, []string) {
 	return Frontmatter{}, lines
 }
 
+// bodyOffset is how many lines of content come before the body: the
+// frontmatter and its two --- fences, or none. Section ranges add it, so they
+// count lines of the file — the numbers a reader opens it at — not of the body.
+func bodyOffset(content string, body []string) int {
+	total := strings.Count(strings.ReplaceAll(content, "\r\n", "\n"), "\n") + 1
+	return total - len(body)
+}
+
 // ParseFile reads and parses a document.
 func ParseFile(path string) (Frontmatter, []string, error) {
 	b, err := os.ReadFile(path)

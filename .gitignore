@@ -14,11 +14,11 @@ gofi.json
 /gofi.html
 
 /.gofi.yaml
-/.claude
-# Exceção: permissões do Claude Code são política de time, não estado
-# gerado — versionadas para valer em qualquer terminal/VS Code de qualquer
-# dev, ao contrário do resto de .claude/ (gerado por `gofi update`, local).
-!/.claude/settings.json
+/.gofi/
 
-/cli/cmd/cmd
+# `/.claude/*`, not `/.claude`: git never looks inside an excluded directory,
+# so the exception below only works when the contents are excluded instead.
+/.claude
+/cli/cmd/gofi/gofi
 /cli/internal/extensions/gen/gen
+/docs/

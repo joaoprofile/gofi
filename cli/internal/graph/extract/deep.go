@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // listPkg is the subset of the `go list -json` output we care about.

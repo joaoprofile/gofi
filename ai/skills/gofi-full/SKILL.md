@@ -27,75 +27,38 @@ O ciclo só **termina** quando o `gofi-qa` der veredicto **✅ Aprovado** com
 (⚠️ aprovado com ressalvas, ❌ reprovado) **reabre** o pipeline na fase
 responsável pela causa-raiz e continua.
 
+Esta skill carrega só a **lógica de orquestração do pipeline** — sequência,
+gates, roteamento de reprovação, guarda de loop.
+
 ---
 
-## Leis (regras básicas — aplicam antes de tudo)
+## Leis
 
-1. **Especialista genérica e portável.** Esta skill carrega só a **lógica de
-   orquestração do pipeline** — sequência, gates, roteamento de reprovação,
-   guarda de loop. **Nada** específico de produto, empresa ou instituição.
-   Trocar de projeto **não** muda a skill.
-2. **Você não faz o trabalho das fases.** Todo PRD/spec/código/auditoria é
-   produzido pelo agente dono (`gofi-pd`/`gofi-spec`/`gofi-eng`/`gofi-qa`).
-   Você invoca, lê o veredicto e decide o próximo salto. Nunca curto-circuite
-   uma fase escrevendo o artefato você mesmo.
-3. **Perguntas ao usuário continuam existindo.** Discovery, refinamento e
-   decisões de negócio/arquitetura **são feitas pelos agentes** durante a fase —
-   você **não suprime** essas perguntas. O que é contínuo é o **fluxo de
-   desenvolvimento** (não há "pare e me chame de volta" entre fases que
-   aprovaram); o que **não** é automático é uma **decisão do usuário**.
-4. **A fonte de estado é o frontmatter de `contexts/{contexto}.md`.** O
-   roteamento lê e respeita `status` (ver `/gofi-status`). Você não inventa
-   estado — lê o que os agentes gravaram.
-5. **Entrega máxima por fase — nada de empurrar problema pra frente.** Cada
-   fase só "passa" o gate quando entrega o **melhor artefato possível** para a
-   próxima: discovery sem ambiguidade bloqueante, spec completa e consistente,
-   **código que compila com testes verdes**. Testes **não devem falhar** ao sair
-   do `gofi-eng` — uma fase nunca delega ao QA o que era responsabilidade dela
-   resolver. O QA audita **qualidade**, não recolhe lixo das fases anteriores.
-6. **Bug fix ou melhoria → teste de regressão junto (LEI, gateada no `gofi-eng`).**
-   Se o passe de implementação corrige um bug ou melhora comportamento, ele só
-   passa o gate com o **teste de regressão** que trava o cenário (falha sem o
-   fix, passa com ele). Entrega sem esse teste **não** avança para o `gofi-qa` —
-   volta ao `gofi-eng` para completá-la. É responsabilidade da fase de
-   implementação, não do QA.
-7. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina
-   atualizando o que é derivado, na ordem: **memória do contexto** →
-   `gofi graph build --update` (código) → **`gofi docs build`** (índice de
-   seções, grafo de documentos e os `INDEX.md`) → **`gofi docs validate`**.
-   Faceta fora do léxico reprova e é barata de corrigir agora, cara de
-   descobrir três fases depois.
+**Leis comuns** (AGENTS.md §Leis comuns): 1 portável · 2 índice primeiro · 3 fechar reindexa · 4 versão = produção · 5 regressão · 6 só o documentado · 7 só o combinado.
 
-   Os hooks de git fazem isso **no commit** — e é justamente por isso que você
-   também precisa fazer: entre o seu fim e o commit existe a próxima skill, que
-   vai procurar com `gofi find` o documento que você acabou de escrever. Sem o
-   build, ela não o encontra. E **índice desatualizado é pior que índice
-   nenhum**: sem índice o agente sabe que não sabe; com um velho ele aponta com
-   confiança para o lugar errado.
+Próprias do `/gofi-full` (texto completo → `reference/orchestrator-laws.md`):
 
-8. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
-   spec nascem em `1.0` e **permanecem em `1.0`** enquanto a solução descrita não
-   estiver em produção. Refinar, reescrever, trocar decisão de arquitetura,
-   acrescentar ADR, corrigir erro factual, pôr nota de superseded: **nada disso
-   bumpa** e nada disso entra no `## Histórico de versões`. Código mergeado e não
-   deployado ainda é `1.0`. A versão só sobe quando a solução **já está em
-   produção** e o documento passa a descrever comportamento diferente **que irá**
-   para produção. **Teste:** *esta edição vai fazer alguém mudar código que já
-   roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
-   a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
-   em `1.0`. Política completa em
-   `.claude/knowledge/shared/document-versioning.md`.
+1. **Você não faz o trabalho das fases.** Invoca o agente dono, lê o veredicto
+   e decide o próximo salto; nunca escreve o artefato você mesmo.
+2. **Perguntas ao usuário continuam existindo.** Contínuo é o fluxo entre fases
+   que aprovaram; **decisão do usuário** nunca é automática nem suprimida.
+3. **A fonte de estado é o frontmatter de `contexts/{contexto}.md`.** O
+   roteamento lê e respeita `status` (ver `/gofi-status`); você não inventa estado.
+4. **Entrega máxima por fase — nada de empurrar problema pra frente.** O QA
+   audita **qualidade**, não recolhe lixo das fases anteriores.
+5. **Bug fix ou melhoria → teste de regressão junto (LEI, gateada no `gofi-eng`).**
+   Sem o teste, a entrega **não** avança para o `gofi-qa` — volta ao `gofi-eng`.
 
 ---
 
 ## Pré-execução obrigatória
 
 1. Ler `.gofi.yaml` (raiz) — `project.language`, `project.name`.
-2. Ler `.claude/CLAUDE.md` — mapa de paths e doutrina das skills.
+2. O `AGENTS.md` da raiz (já carregado) — mapa de paths e doutrina das skills.
 3. Identificar o **contexto** alvo:
    - Se veio como argumento (`/gofi-full {contexto}`), use-o.
    - Senão, **pergunte** ao usuário qual o problema/contexto (isto é uma
-     decisão de escopo — pergunta legítima, ver Lei 3).
+     decisão de escopo — pergunta legítima, ver Lei 2).
 4. Ler `.claude/memory/contexts/{contexto}.md` se existir — **frontmatter**
    (`status`) define o **ponto de entrada** (tabela abaixo).
 
@@ -122,92 +85,39 @@ do zero, comece em `gofi-pd`.
 
 ---
 
-## Procedimento — o loop contínuo
+## Workflow — o loop contínuo
 
-Mantenha um **estado de execução** (use `TodoWrite` para tornar visível): fase
-atual, número de idas-e-voltas por fase, e o veredicto da última fase.
-
-```
-fase ← ponto de entrada
-loop:
-  1. INVOCAR o agente da `fase` (via Skill tool: /gofi-pd, /gofi-spec, /gofi-eng, /gofi-qa).
-     - Deixe o agente fazer sua pré-execução, suas PERGUNTAS de discovery/decisão,
-       e gravar o artefato + frontmatter. Não interfira no método dele.
-  2. LER o veredicto da fase (artefato + frontmatter atualizado).
-  3. GATE — a fase passou? (critérios por fase abaixo)
-       - SIM  → avança para a próxima fase na sequência. Se a fase era gofi-qa
-                e passou limpo → FIM (entrega aprovada).
-       - NÃO  → CLASSIFIQUE a causa-raiz e VOLTE para a fase responsável
-                (roteamento abaixo). Passe ao agente anterior o laudo/lacuna
-                concreta a corrigir. Depois de corrigir, **re-avança** pela
-                sequência (não pula fases: spec corrigida → eng → qa de novo).
-  4. GUARDA DE LOOP — ver abaixo. Se exceder, ESCALE ao usuário.
-```
-
-### Gate por fase (quando a fase "passou")
-
-| Fase | Passou quando | Reprova quando |
-|------|---------------|----------------|
-| `gofi-pd`  | PRD gerado, sem ambiguidade bloqueante de escopo; frontmatter `status: prd` | discovery incompleto a ponto de impedir a spec |
-| `gofi-spec`| spec SDD completa e internamente consistente; `status: spec` | spec não fecha por **lacuna de negócio** no PRD |
-| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes), **todo bug fix/melhoria vem com teste de regressão** e o **grafo foi reconstruído** (`gofi graph build --update`); `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
-| `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** | qualquer blocker/major, **⚠️ com ressalvas**, ou ❌ reprovado |
-
-> **Índice de documentos entre fases.** Cada fase escreve documento que a
-> seguinte precisa achar: o PRD do `gofi-pd`, a spec do `gofi-spec`. Como este
-> loop não commita entre fases, o hook não roda — sem `gofi docs build` ao fim de
-> cada fase, o `gofi find` da fase seguinte não enxerga o que acabou de ser
-> escrito. Rode também `gofi docs validate`: faceta fora do léxico é barata de
-> corrigir na hora e cara de descobrir três fases depois.
->
-> **Grafo entre fases.** O hook de pre-commit só reconstrói o grafo **no
-> commit**, e este loop não commita entre fases — sem `gofi graph build --update`
-> ao fim do `gofi-eng`, o `gofi-qa` auditaria um mapa sem a implementação recém
-> escrita. Se a fase anterior não rodou, rode você antes de invocar o QA.
->
-> **O modo importa tanto quanto o frescor.** Os hooks de git reconstroem sempre
-> em `fast`, e `--update` no modo do `.gofi.yaml` (`graph: deep:`), que **por
-> padrão também é `fast`** — e em `fast` a ausência de aresta não prova ausência
-> de uso. Quando a entrega mexeu em artefato compartilhado (struct de `model/`,
-> interface, enum, coluna), ou quando o laudo vai afirmar uma ausência, o gate do
-> `gofi-eng` exige `gofi graph build --deep`, senão a análise de impacto e o
-> laudo do QA se apoiam numa negativa que o grafo não sustenta. Os gatilhos estão
-> listados em *Quando rodar `--deep`*.
-> Protocolo: `.claude/knowledge/shared/graph-retrieval-protocol.md`.
-
-> **Minors/suggestions do QA:** o usuário pediu "sem nenhuma ressalva". Trate
-> minors como itens a corrigir no mesmo passe de `gofi-eng` antes de reauditar.
-> Suggestions são opcionais — só viram ressalva-aceita se o **usuário decidir**
-> explicitamente ignorá-las (Lei 3). Sem decisão do usuário, o alvo é laudo limpo.
-
-### Roteamento de reprovação (causa-raiz → fase de retorno)
-
-A reprovação **não** volta sempre uma casa: volta à fase **dona da causa**.
-
-- **Bug de implementação / violação de camada / padrão do SDK / conformidade
-  com spec** → volta para **`gofi-eng`** (a spec está certa, o código não a
-  cumpre). Maioria dos casos.
-- **Spec errada / drift spec↔código onde a spec é que está errada / RN faltando
-  na spec / contrato mal especificado** → volta para **`gofi-spec`**; depois
-  **`gofi-eng`** re-implementa e **`gofi-qa`** reaudita.
-- **Lacuna de negócio / requisito ausente / intenção errada / regra de domínio
-  que ninguém definiu** → volta para **`gofi-pd`**; depois desce spec → eng → qa.
-
-Ao voltar, **entregue ao agente anterior a lista concreta** (itens do laudo,
-linhas, RN faltante) — não mande "refaça", mande "corrija isto".
-
-### Guarda de loop (anti-ciclo infinito)
-
-- Conte idas-e-voltas **por fase**. Se a **mesma fase reprovar 2× pelo mesmo
-  motivo**, **pare e escale ao usuário**: apresente o impasse, o que já foi
-  tentado, e peça **decisão** (relaxar requisito? mudar abordagem? aceitar como
-  ressalva?). Isso é decisão do usuário (Lei 3), não falha do fluxo.
-- Se um agente **pedir input que você não tem** (discovery/decisão), **não
-  invente** — deixe a pergunta chegar ao usuário e aguarde a resposta antes de
-  prosseguir aquela fase.
-- Teto duro: **3 ciclos completos** (pd→qa) sem aprovação limpa → escale.
+1. Declare o ponto de entrada e o plano de fases (`TodoWrite`: fase atual,
+   idas-e-voltas por fase, último veredicto). → `reference/pipeline-loop.md` §Procedimento — o loop contínuo
+2. **Invocar** o agente da fase (Skill tool: `/gofi-pd`, `/gofi-spec`, `/gofi-eng`,
+   `/gofi-qa`); deixe-o fazer pré-execução, perguntas e gravar artefato + frontmatter.
+3. **Ler** o veredicto da fase (artefato + frontmatter atualizado).
+4. **Gate** — passou? Sim → próxima fase; `gofi-qa` limpo → FIM.
+   → `reference/pipeline-loop.md` §Gate por fase (quando a fase "passou")
+5. **Entre fases**, garanta índice e grafo frescos (`gofi index docs`/`check`
+   após PRD/spec; `gofi index code`, `--deep` quando o gatilho pedir, antes do QA).
+   → `reference/pipeline-loop.md` §Gate por fase (notas de índice, grafo e modo)
+6. **Reprovou** → volte à fase **dona da causa-raiz** com a lista concreta do que
+   corrigir e re-avance pela sequência. → `reference/pipeline-loop.md` §Roteamento de reprovação
+7. **Guarda de loop** — mesma fase 2× pelo mesmo motivo, ou 3 ciclos completos
+   sem aprovação limpa → escale ao usuário. → `reference/pipeline-loop.md` §Guarda de loop
 
 ---
+
+## Dentro do agente ou conduzido pelo gofi
+
+Você conduz as fases **dentro de uma sessão**: a conversa cresce a cada fase, e
+PRD e spec são entrevistas no modelo da skill. É o caminho quando a pessoa quer
+acompanhar e conversar. Para o mesmo ciclo mais barato, o gofi conduz de fora —
+`gofi ask "<pedido>"`, o `gofi chat` ou o painel: cada fase numa sessão nova,
+as decisões de PRD e spec levantadas antes num nível mais barato e o modelo caro
+só com trabalho fechado. Ao começar, se o pedido chegou em texto livre, diga isso
+à pessoa em uma linha — e siga, se ela quiser você.
+
+## Saída e memória
+
+Você não grava artefato nem memória: cada agente grava o seu (PRD, spec,
+código, laudo, frontmatter do contexto). Sua saída é a comunicação do fluxo.
 
 ## Comunicação durante o fluxo
 
@@ -231,3 +141,14 @@ linhas, RN faltante) — não mande "refaça", mande "corrija isto".
 - Não toca em `gofi-ui`/`gofi-ops`/`gofi-doc` — esta skill é o ciclo
   **pd→spec→eng→qa**. Camada de UI e infra são pipelines à parte (sugira ao
   usuário ao final, se aplicável).
+
+---
+
+## Referências
+
+Abra uma referência com `gofi show .claude/skills/gofi-full/reference/<arquivo>.md` (lista as seções com as linhas) e leia só a seção que o passo pede; ou busque com `gofi find --in skills "<tema>"`.
+
+| Arquivo | O que tem | Quando abrir |
+|---------|-----------|--------------|
+| `reference/pipeline-loop.md` | pseudocódigo do loop, tabela de gate por fase, notas de índice/grafo/modo entre fases, minors/suggestions do QA, roteamento de reprovação, guarda de loop | a cada gate, reprovação ou suspeita de ciclo |
+| `reference/orchestrator-laws.md` | texto integral das leis próprias do orquestrador | dúvida sobre o que delegar, perguntar ou exigir de uma fase |

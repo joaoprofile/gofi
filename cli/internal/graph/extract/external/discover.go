@@ -8,12 +8,14 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 )
 
-// ExtractorsDir is where `gofi graph install` puts extractors, relative to the
+// ExtractorsDir is where `gofi index install` puts extractors, relative to the
 // project root. Keeping them inside the project rather than in a shared
 // location means two projects can pin different extractor versions.
-const ExtractorsDir = ".gofi/graph/extractors"
+const ExtractorsDir = layout.ExtractorsDir
 
 // BinaryPrefix is the naming convention an extractor must follow to be found.
 const BinaryPrefix = "gofi-graph-"
@@ -40,7 +42,7 @@ func Find(projectRoot, language string) (Spec, error) {
 		return Spec{Language: language, Path: p}, nil
 	}
 	return Spec{}, fmt.Errorf(
-		"nenhum extractor para %q — instale com `gofi graph install %s`, "+
+		"nenhum extractor para %q — instale com `gofi index install %s`, "+
 			"ou ponha um executavel %s no PATH", language, language, name)
 }
 

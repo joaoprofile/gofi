@@ -1,3 +1,10 @@
+---
+name: bridge-factory-adapter-pattern
+description: Bridge/Factory/Adapter para dimensão polimórfica externa — layout, factory com cache, decorators, adapter HTTP canônico sobre netx
+sdk: v0.8.2
+keywords: [bridge, factory, adapter, integration, netx, decorator, rate-limit, http-client, classifier]
+---
+
 # Bridge / Factory / Adapter — padrão para dimensão polimórfica externa
 
 Use **quando** o contexto integra com **N implementações intercambiáveis** de
@@ -35,7 +42,7 @@ services/
 > **Application + service split é obrigatório quando há bridge/factory.** Use
 > case (application) faz o workflow externo; domain service (service)
 > faz a parte de domínio (hidratação, persistência). Detalhes em
-> `.claude/knowledge/shared/application-vs-domain-service.md`.
+> `.claude/expertise/ddd-architecture/application-vs-domain-service.md`.
 
 Exemplo do shape:
 
@@ -96,6 +103,7 @@ import (
     "sync"
 
     "<module>/services/domain/{ctx}/bridge"
+    {ctx}obs "<module>/services/domain/{ctx}/observability" // decorator do PROJETO
 )
 
 type BridgeBuilder func() bridge.{Ctx}Bridge
@@ -137,7 +145,7 @@ func (f *Factory) Get(key uint8) (bridge.{Ctx}Bridge, error) {
     }
     // Envelopa com decorators (observabilidade etc.) ANTES de cachear —
     // todos os callers compartilham o mesmo wrapper instrumentado.
-    wrapped := obs.WrapBridge(build(), keyLabel(key))
+    wrapped := {ctx}obs.WrapBridge(build(), keyLabel(key))
     actual, _ := f.cache.LoadOrStore(key, wrapped)
     return actual.(bridge.{Ctx}Bridge), nil
 }
@@ -163,17 +171,22 @@ A bridge envolvida por decorator no `Get()` mantém o adapter **zero-acoplado**
 a cross-cutting concerns. Padrão recomendado:
 
 ```go
-// Decorator 1: observabilidade (MeteredBridge captura latência/status/reason)
-wrapped := obs.WrapBridge(build(), keyLabel(key))
+// Decorator 1: observabilidade (MeteredBridge do pacote de observabilidade do contexto)
+wrapped := {ctx}obs.WrapBridge(build(), keyLabel(key))
 
-// Decorator 2 (opcional): retry com backoff exponencial
-wrapped = retry.WrapBridge(wrapped, retry.Config{...})
+// Decorator 2 (opcional): retry com backoff exponencial — pacote do projeto
+wrapped = {ctx}retry.WrapBridge(wrapped, {ctx}retry.Config{...})
 
-// Decorator 3 (opcional): circuit breaker
-wrapped = cb.WrapBridge(wrapped, cb.Config{...})
+// Decorator 3 (opcional): circuit breaker — pacote do projeto
+wrapped = {ctx}cb.WrapBridge(wrapped, {ctx}cb.Config{...})
 
 f.cache.LoadOrStore(key, wrapped)
 ```
+
+> Os decorators são **do projeto** (o SDK não fornece `WrapBridge`): o
+> `MeteredBridge` mora no pacote de observabilidade do contexto
+> (`observability-otel.md` § "Onde o pacote mora"), usando `obs/metrics` e
+> tracing do SDK por dentro.
 
 Cada decorator implementa `bridge.{Ctx}Bridge` envolvendo o `inner` da camada
 abaixo. Adapters reais (`adapter-A`, `adapter-B`, etc.) **não conhecem**
@@ -426,7 +439,7 @@ func (b *bridge) Revert{Z}(ctx, owner, entity) error         { /* DELETE /api/..
 - Tratamento de erro do adapter de escrita exige classificação **transient
   vs permanent** (`5xx`/`429`/timeout vs `4xx`/regra externa violada) —
   caller (executor) lê o tipo do erro para decidir retry. Detalhes do
-  padrão executor em `.claude/knowledge/shared/event-driven-executor-pattern.md`.
+  padrão executor em `.claude/expertise/event-driven/executor-pattern.md`.
 
 ---
 
@@ -451,9 +464,9 @@ import (
 
     "<module>/services/domain/integration/token"
     {ctx}Bridge "<module>/services/domain/{ctx}/bridge"
-    "github.com/joaoprofile/gofi/base/errs"
-    "github.com/joaoprofile/gofi/netx"
-    "github.com/joaoprofile/gofi/obs/logging"
+    "github.com/gofi-labs/gofi-sdk-go/base/errs"
+    "github.com/gofi-labs/gofi-sdk-go/netx"
+    "github.com/gofi-labs/gofi-sdk-go/obs/logging"
 )
 
 // 1. URL/path constants + tuning constants
@@ -533,9 +546,11 @@ func classify{Op}Error(err error) errs.AppError {
     switch {
     case status == http.StatusUnauthorized:
         return Err{Tech}{Ctx}{Op}Auth.Wrap(err)
-    case status == http.StatusTooManyRequests:
+    // 429 chega como 429 só com DisableRetryOn429; com retry do netx esgotado
+    // o erro vem com status 408 (RequestTimeout).
+    case status == http.StatusTooManyRequests || status == http.StatusRequestTimeout:
         return Err{Tech}{Ctx}{Op}RateLimited.Wrap(err)
-    case status >= 500 || status == 0:  // 0 = timeout/network
+    case status >= 500: // rede sem resposta vira 503; erro fora do HTTP (ctx, rate limiter local) vira 500
         return Err{Tech}{Ctx}{Op}Transient.Wrap(err)
     default:
         return Err{Tech}{Ctx}{Op}Permanent.Wrap(err)
@@ -601,7 +616,19 @@ func classify{Op}Error(err error) errs.AppError {
     provider exige naquele endpoint específico (frequentemente difere entre
     `authorization_code` exchange e `refresh_token` do mesmo provider; conferir
     a doc oficial do provider, não assumir). Header manual de `Content-Type` não
-    troca o encoding; o tipo do body troca.
+    troca o encoding; o tipo do body troca. (`*bytes.Buffer`/`io.Reader` vão
+    crus, sem `Content-Type` automático.)
+14. **Resposta sem `Content-Type: application/json` (ou `204`) → `Execute()`
+    devolve `(nil, nil)`.** O corpo é descartado sem erro. Adapter checa
+    `resp == nil` antes de usar; em `httptest`, sempre
+    `w.Header().Set("Content-Type", "application/json")` antes do `Write`.
+15. **`POST`/`PATCH` não são retentados em rede/5xx** — o `netx` só repete
+    método idempotente (`GET`/`PUT`/`DELETE`…) ou request com header
+    `Idempotency-Key`. Escrita que precisa de retry automático e o provider
+    aceita chave de idempotência → `req.SetHeader("Idempotency-Key", id)`.
+    `429` é sempre retentado (respeitando `Retry-After`), salvo
+    `HttpClientConfig.DisableRetryOn429: true` — use quando um rate limiter
+    externo controla o ritmo; então o `429` volta na hora com status 429.
 
 ### Precedente no repo
 
@@ -627,25 +654,9 @@ Procurar implementações canônicas via grep no projeto:
 
 ---
 
-## Setup obrigatório de tests com logging
+## Logging em testes
 
-Service com `logging.Error(...)` panica em test sem inicializar o logger.
-Cada package de service que loga precisa de:
-
-```go
-// service/setup_test.go
-package service
-
-import (
-    "context"
-    "os"
-    "testing"
-
-    "github.com/joaoprofile/gofi/obs/logging"
-)
-
-func TestMain(m *testing.M) {
-    _ = logging.InitGlobal(context.Background(), logging.Config{ServiceName: "{ctx}-test"})
-    os.Exit(m.Run())
-}
-```
+Desde o SDK v0.8, `logging.*` **não** panica sem `InitGlobal`: antes da
+inicialização cai no `slog.Default()` (com um aviso). `TestMain` com
+`logging.InitGlobal` é **opcional** — só quando o teste quer o formato do
+logger do serviço. Quem reinicializa entre testes usa `logging.ResetForTesting()`.

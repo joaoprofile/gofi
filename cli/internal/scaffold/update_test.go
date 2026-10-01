@@ -18,6 +18,9 @@ func TestInstallAgentsContent_UpdateMode_PreservesUserContent(t *testing.T) {
 
 	// Simulate user-installed training topic and edited memory.
 	userTopic := filepath.Join(projectRoot, ".claude/knowledge/pd/dominio-fiscal.md")
+	if err := os.MkdirAll(filepath.Dir(userTopic), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(userTopic, []byte("user content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -26,10 +29,10 @@ func TestInstallAgentsContent_UpdateMode_PreservesUserContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// New gofi-agents tarball: updated CLAUDE.md + new agent body. Memory
+	// New gofi-agents tarball: updated AGENTS.md + new agent body. Memory
 	// template must NOT be re-rendered, knowledge seed must NOT overwrite.
 	updatedFS := fstest.MapFS{
-		"ai/claude/CLAUDE.md":          {Data: []byte("# CLAUDE — updated")},
+		"ai/AGENTS.md":                 {Data: []byte("# AGENTS — updated")},
 		"ai/skills/gofi-pd.md":         {Data: []byte("new pd skill")},
 		"ai/templates/sdd-template.md": {Data: []byte("new spec template")},
 		"ai/memory/project.md.tmpl":    {Data: []byte("# Memory — {{.ProjectName}}")},
@@ -40,7 +43,7 @@ func TestInstallAgentsContent_UpdateMode_PreservesUserContent(t *testing.T) {
 		t.Fatalf("update: %v", err)
 	}
 
-	mustContain(t, filepath.Join(projectRoot, ".claude/CLAUDE.md"), "updated")
+	mustContain(t, filepath.Join(projectRoot, "AGENTS.md"), "updated")
 	mustContain(t, filepath.Join(projectRoot, ".claude/skills/gofi-pd/SKILL.md"), "new pd skill")
 	mustContain(t, filepath.Join(projectRoot, ".claude/templates/sdd-template.md"), "new spec template")
 
@@ -80,48 +83,6 @@ func TestInstallSDKContent_RefreshesUntouchedFiles(t *testing.T) {
 	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/go/boilerplates/m.md"), "v2")
 	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/go/sdk-docs/overview.md"), "v2 docs")
 	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/go/knowledge/k.md"), "v2 knowledge")
-}
-
-func TestInstallSDKContent_KeepsLocalEdits(t *testing.T) {
-	projectRoot := t.TempDir()
-
-	first := fstest.MapFS{
-		"sdk/web/knowledge/design-tokens.md": {Data: []byte("upstream tokens")},
-		"sdk/web/boilerplates/page.md":       {Data: []byte("v1 page")},
-	}
-	if _, err := InstallUIContent(first, "sdk/web", projectRoot, "web", InstallNew); err != nil {
-		t.Fatalf("install v1: %v", err)
-	}
-
-	tuned := filepath.Join(projectRoot, ".claude/sdk/web/knowledge/design-tokens.md")
-	if err := os.WriteFile(tuned, []byte("our own tokens"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	second := fstest.MapFS{
-		"sdk/web/knowledge/design-tokens.md": {Data: []byte("upstream tokens v2")},
-		"sdk/web/boilerplates/page.md":       {Data: []byte("v2 page")},
-	}
-	if _, err := InstallUIContent(second, "sdk/web", projectRoot, "web", InstallUpdate); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	mustContain(t, tuned, "our own tokens")
-	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/web/boilerplates/page.md"), "v2 page")
-
-	kept := PreservedFiles(projectRoot)
-	if len(kept) != 1 || kept[0] != ".claude/sdk/web/knowledge/design-tokens.md" {
-		t.Errorf("PreservedFiles = %v, want the tuned tokens file", kept)
-	}
-
-	// --force takes upstream back, leaving the replaced content recoverable.
-	if _, err := InstallUIContent(second, "sdk/web", projectRoot, "web", InstallReset); err != nil {
-		t.Fatalf("reset: %v", err)
-	}
-	mustContain(t, tuned, "upstream tokens v2")
-	if !hasBackupOf(t, projectRoot, "our own tokens") {
-		t.Error("the replaced content should have been copied to .gofi/backup/")
-	}
 }
 
 // TestInstallUIContent_UntrackedTreeIsTheTeams covers a project scaffolded
@@ -214,5 +175,42 @@ func TestCleanLegacySDKLayout_RemovesPreV24Dirs(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(projectRoot, ".claude/CLAUDE.md")); err != nil {
 		t.Errorf("CLAUDE.md should not be touched: %v", err)
+	}
+}
+
+func TestInstallSDKContent_KeepsLocalEdits(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	first := fstest.MapFS{
+		"sdk/web/knowledge/design-tokens.md": {Data: []byte("upstream tokens")},
+		"sdk/web/boilerplates/page.md":       {Data: []byte("v1 page")},
+	}
+	if _, err := InstallUIContent(first, "sdk/web", projectRoot, "web", InstallNew); err != nil {
+		t.Fatalf("install v1: %v", err)
+	}
+
+	tuned := filepath.Join(projectRoot, ".claude/sdk/web/knowledge/design-tokens.md")
+	if err := os.WriteFile(tuned, []byte("our own tokens"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	second := fstest.MapFS{
+		"sdk/web/knowledge/design-tokens.md": {Data: []byte("upstream tokens v2")},
+		"sdk/web/boilerplates/page.md":       {Data: []byte("v2 page")},
+	}
+	if _, err := InstallUIContent(second, "sdk/web", projectRoot, "web", InstallUpdate); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	mustContain(t, tuned, "our own tokens")
+	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/web/boilerplates/page.md"), "v2 page")
+
+	// --force takes upstream back, leaving the replaced content recoverable.
+	if _, err := InstallUIContent(second, "sdk/web", projectRoot, "web", InstallReset); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	mustContain(t, tuned, "upstream tokens v2")
+	if !hasBackupOf(t, projectRoot, "our own tokens") {
+		t.Error("the replaced content should have been copied to .gofi/backup/")
 	}
 }

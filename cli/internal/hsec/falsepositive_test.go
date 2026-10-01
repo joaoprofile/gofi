@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 func TestGlobToRegexp(t *testing.T) {

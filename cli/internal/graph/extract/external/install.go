@@ -20,7 +20,7 @@ const MaxExtractorBytes = 512 << 20
 
 // InstallOptions describes one extractor installation.
 type InstallOptions struct {
-	ProjectRoot string       // where .gofi/graph/extractors/ lives
+	ProjectRoot string       // where .gofi/extractors/ lives
 	Language    string       // "java", "rust", ...
 	From        string       // local file path, or an https:// URL
 	SHA256      string       // expected digest in hex; empty skips the check

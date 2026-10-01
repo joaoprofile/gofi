@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // project lays out a temporary project with its own code under src/ and a
@@ -89,7 +90,7 @@ func TestScopesIncludeTheDeclaredSurfaces(t *testing.T) {
 	if want := filepath.Join(root, "frontend"); front.Root != want {
 		t.Errorf("front-end scope scans %s, want the declared %s", front.Root, want)
 	}
-	if want := filepath.Join(graph.Dir(root, ""), "frontend"); front.Dir != want {
+	if want := filepath.Join(graph.Dir(root), "frontend"); front.Dir != want {
 		t.Errorf("front-end graph goes to %s, want %s", front.Dir, want)
 	}
 	// mobile: is declared but the folder was never created.
@@ -180,7 +181,7 @@ func TestBuildFindsTheExtractorAtTheProjectRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, scope, ok := Load(root, "").Find("ext:src.App")
+	n, scope, ok := findIn(Load(root, ""), "ext:src.App")
 	if !ok {
 		t.Fatal("the surface symbol is in no scope")
 	}
@@ -258,11 +259,11 @@ func TestBuildWritesEveryScopeAndAnIndex(t *testing.T) {
 			t.Errorf("scope %s: %v", s.Scope.Name, err)
 		}
 	}
-	if _, err := os.Stat(IndexPath(root, "")); err != nil {
+	if _, err := os.Stat(IndexPath(root)); err != nil {
 		t.Fatalf("index: %v", err)
 	}
 
-	ix, err := LoadIndex(root, "")
+	ix, err := LoadIndex(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +323,7 @@ func TestBuildKeepsAScopeWhoseSourcesAreGone(t *testing.T) {
 	if _, err := Build(t.Context(), options(root)); err != nil {
 		t.Fatal(err)
 	}
-	before, err := os.ReadFile(IndexPath(root, ""))
+	before, err := os.ReadFile(IndexPath(root))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,14 +335,14 @@ func TestBuildKeepsAScopeWhoseSourcesAreGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after, err := os.ReadFile(IndexPath(root, ""))
+	after, err := os.ReadFile(IndexPath(root))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(after) != string(before) {
 		t.Errorf("the index changed in a clone without the SDK checkout:\n%s\nwant\n%s", after, before)
 	}
-	if _, _, ok := Load(root, "").Find("func:example.com/sdk/errs.New"); !ok {
+	if _, _, ok := findIn(Load(root, ""), "func:example.com/sdk/errs.New"); !ok {
 		t.Error("the committed SDK graph stopped resolving once its sources were gone")
 	}
 }
@@ -356,7 +357,7 @@ func TestBuildThatGraphsNothingWritesNoIndex(t *testing.T) {
 	if _, err := Build(t.Context(), opt); err == nil {
 		t.Fatal("scanning a directory that does not exist succeeded")
 	}
-	if _, err := os.Stat(IndexPath(root, "")); !os.IsNotExist(err) {
+	if _, err := os.Stat(IndexPath(root)); !os.IsNotExist(err) {
 		t.Errorf("a failed build wrote an index: %v", err)
 	}
 }
@@ -370,8 +371,8 @@ func TestBuildDropsAScopeWhoseGraphIsGone(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(root, SDKDirPrefix+graph.LangGo)); err != nil {
 		t.Fatal(err)
 	}
-	sdkDir, _ := LoadIndex(root, "")
-	dir := filepath.Join(graph.Dir(root, ""), filepath.FromSlash(mustScope(t, sdkDir, ScopeSDK).Dir))
+	sdkDir, _ := LoadIndex(root)
+	dir := filepath.Join(graph.Dir(root), filepath.FromSlash(mustScope(t, sdkDir, ScopeSDK).Dir))
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +380,7 @@ func TestBuildDropsAScopeWhoseGraphIsGone(t *testing.T) {
 	if _, err := Build(t.Context(), options(root)); err != nil {
 		t.Fatal(err)
 	}
-	ix, err := LoadIndex(root, "")
+	ix, err := LoadIndex(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,10 +405,10 @@ func TestWorkspaceResolvesAcrossScopes(t *testing.T) {
 	}
 
 	w := Load(root, "")
-	if _, _, ok := w.Find("func:example.com/app/app.Run"); !ok {
+	if _, _, ok := findIn(w, "func:example.com/app/app.Run"); !ok {
 		t.Error("Run was not found in the project scope")
 	}
-	n, scope, ok := w.Find("func:example.com/sdk/errs.New")
+	n, scope, ok := findIn(w, "func:example.com/sdk/errs.New")
 	if !ok {
 		t.Fatal("New was not found in any scope")
 	}
@@ -417,12 +418,12 @@ func TestWorkspaceResolvesAcrossScopes(t *testing.T) {
 	if n.Doc == "" {
 		t.Error("the resolved node lost its documentation")
 	}
-	if _, _, ok := w.Find("example.com/app/app.Missing"); ok {
+	if _, _, ok := findIn(w, "example.com/app/app.Missing"); ok {
 		t.Error("an unknown symbol resolved")
 	}
 }
 
-// A graph written by `gofi graph build` has no index, and reading it must not
+// A graph written by a standalone `gofi index code --lang` has no index, and reading it must not
 // depend on knowing that.
 func TestLoadWithoutAnIndex(t *testing.T) {
 	root := project(t)
@@ -431,15 +432,30 @@ func TestLoadWithoutAnIndex(t *testing.T) {
 	if _, err := Build(t.Context(), opt); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(IndexPath(root, "")); err != nil {
+	if err := os.Remove(IndexPath(root)); err != nil {
 		t.Fatal(err)
 	}
 
 	w := Load(root, "")
-	if _, _, ok := w.Find("func:example.com/app/app.Run"); !ok {
+	if _, _, ok := findIn(w, "func:example.com/app/app.Run"); !ok {
 		t.Error("Run was not found without an index")
 	}
 	if _, err := w.Graph(ScopeSDK); err == nil {
 		t.Error("a scope that was never built resolved")
 	}
+}
+
+// findIn locates a node by ID across every scope, project first, and names the
+// scope that holds it.
+func findIn(w *Workspace, id string) (*model.Node, string, bool) {
+	for _, s := range w.Index.Scopes {
+		g, err := w.Graph(s.Name)
+		if err != nil {
+			continue
+		}
+		if n := g.Get(id); n != nil {
+			return n, s.Name, true
+		}
+	}
+	return nil, "", false
 }

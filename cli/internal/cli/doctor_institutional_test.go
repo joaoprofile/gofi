@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/doctor"
+	"github.com/gofi-labs/gofi/cli/internal/doctor"
 )
 
 func TestInstitutionalFreshnessCheck(t *testing.T) {

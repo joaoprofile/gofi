@@ -1,7 +1,7 @@
 # Pattern — Formulários
 
 Formulários são onde a UX mais falha. Regras operacionais (complementam
-[Field](../components/field.md) e [ux-principles.md](../../../../knowledge/ui/ux-principles.md)).
+[Field](../components/field.md) e [ux-principles.md](../../../../expertise/ui-design/ux-principles.md)).
 
 ## Estrutura
 - **Form-as-page** para formulários longos: título, seções com headings, ações fixas

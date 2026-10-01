@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/settings"
-	"github.com/joaoprofile/gofi-cli/internal/tui/styles"
-	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/settings"
+	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
 )
 
 // newSettingsCmd builds `gofi settings`: the CLI own configuration, while

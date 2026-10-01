@@ -9,8 +9,9 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/settings"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/settings"
+	palette "github.com/gofi-labs/gofi/cli/internal/tui/styles"
 )
 
 const (
@@ -66,12 +67,12 @@ func newStyles(opts Options) styles {
 		return styles{}
 	}
 	return styles{
-		title:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")),
-		meta:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
-		heading: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")),
-		command: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),
-		flag:    lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
-		example: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
+		title:   lipgloss.NewStyle().Bold(true).Foreground(palette.Accent),
+		meta:    lipgloss.NewStyle().Foreground(palette.Dim),
+		heading: lipgloss.NewStyle().Bold(true).Foreground(palette.Good),
+		command: lipgloss.NewStyle().Bold(true).Foreground(palette.Accent),
+		flag:    lipgloss.NewStyle().Foreground(palette.Accent),
+		example: lipgloss.NewStyle().Foreground(palette.Amber),
 	}
 }
 

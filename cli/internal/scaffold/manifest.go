@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 	"gopkg.in/yaml.v3"
 )
 
@@ -61,11 +62,6 @@ func (m Manifest) merge(projectRoot string) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
-// managedTrees are the .claude entries an update refreshes from upstream.
-// memory/, institutional/ and knowledge/ are absent on purpose: those are
-// preserved wholesale by the install itself.
-var managedTrees = []string{"CLAUDE.md", "skills", "templates", "scripts", "sdk"}
-
 // tunedTrees are the managed trees a project is expected to adjust — the
 // per-language and per-surface docs, where design tokens and house rules live.
 // A file there that the CLI has no record of writing is assumed to be the
@@ -81,17 +77,11 @@ const (
 	SDKDir    = "sdk"
 )
 
-// PreservedFiles lists the managed files an update would keep instead of
-// overwriting, so the plan can say so before anything is written.
-func PreservedFiles(projectRoot string) []string {
-	return PreservedFilesIn(projectRoot, managedTrees)
-}
-
 // PreservedFilesIn narrows that report to the given .claude entries, so a
 // skills-only update does not warn about files it was never going to write.
 func PreservedFilesIn(projectRoot string, trees []string) []string {
 	baseline := LoadManifest(projectRoot)
-	claude := filepath.Join(projectRoot, ".claude")
+	claude := filepath.Join(projectRoot, layout.Home())
 	var kept []string
 	for _, tree := range trees {
 		root := filepath.Join(claude, tree)
@@ -225,7 +215,7 @@ func relSlash(root, target string) string {
 
 func underAny(rel string, trees []string) bool {
 	for _, t := range trees {
-		if strings.HasPrefix(rel, ".claude/"+t+"/") {
+		if strings.HasPrefix(rel, layout.Home()+"/"+t+"/") {
 			return true
 		}
 	}

@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
 )
 
 // projectOwnedFrontend is a surface that brought its own stack — the shape
@@ -26,7 +26,7 @@ func baseWizardResult() *wizard.Result {
 		Language:     config.LanguageGo, SourcePath: "backend",
 		WebPath: "frontend", WebDS: "acme-ui",
 		AIHost: config.AIHostClaudeVSCode, AIModel: config.ModelOpus48,
-		Agents: config.AllAgents(), AgentsRef: config.DefaultAgentsRef,
+		AgentsRef: config.DefaultAgentsRef,
 	}
 }
 

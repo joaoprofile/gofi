@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Workspace reads back the graphs a project has. Scopes are opened on demand:
@@ -22,12 +22,12 @@ type Workspace struct {
 	graphs map[string]*model.Graph
 }
 
-// Load opens the graphs of a project. A project built by `gofi graph build`
+// Load opens the graphs of a project. A project built by a single-tree scan
 // rather than by a workspace build has no index; it is read as the single scope
 // it is, so a caller never has to know which command produced the graph.
 func Load(projectRoot, language string) *Workspace {
 	lang := (graph.BuildOptions{Language: language}).Lang()
-	ix, err := LoadIndex(projectRoot, language)
+	ix, err := LoadIndex(projectRoot)
 	if err != nil {
 		ix = &Index{
 			Schema:   model.SchemaVersion,
@@ -59,29 +59,11 @@ func (w *Workspace) graph(scope string) (*model.Graph, error) {
 	if !ok {
 		return nil, fmt.Errorf("escopo %q nao existe neste projeto", scope)
 	}
-	path := filepath.Join(graph.Dir(w.root, w.lang), filepath.FromSlash(info.Dir), graph.GraphFile)
+	path := filepath.Join(graph.Dir(w.root), filepath.FromSlash(info.Dir), graph.GraphFile)
 	g, err := model.Load(path)
 	if err != nil {
 		return nil, fmt.Errorf("escopo %s: %w", scope, err)
 	}
 	w.graphs[scope] = g
 	return g, nil
-}
-
-// Find locates a node by ID across every scope and reports which one holds it.
-// Scopes are searched in index order, project first, so a symbol the project
-// declares wins over one of the same name in the SDK.
-func (w *Workspace) Find(id string) (*model.Node, string, bool) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for _, s := range w.Index.Scopes {
-		g, err := w.graph(s.Name)
-		if err != nil {
-			continue
-		}
-		if n := g.Get(id); n != nil {
-			return n, s.Name, true
-		}
-	}
-	return nil, "", false
 }

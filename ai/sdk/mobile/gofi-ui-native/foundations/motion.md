@@ -1,6 +1,6 @@
 # Motion — mobile
 
-Durações de [design-tokens.md](../../../../knowledge/ui/design-tokens.md)
+Durações de [design-tokens.md](../../../../expertise/ui-design/design-tokens.md)
 (`t.motion`). Use **Reanimated**/Animated; anime `transform`/`opacity`.
 
 ## Durações

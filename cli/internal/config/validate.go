@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/gofi-labs/gofi/cli/internal/host"
 )
 
 var (
@@ -18,7 +20,6 @@ var (
 	// my_app and v2 are all real.
 	segRe      = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	sourceRe   = regexp.MustCompile(`^github\.com/[^/]+/[^@]+@[^@]+$`)
-	validHosts = map[string]bool{AIHostClaudeVSCode: true}
 	validLangs = map[string]bool{
 		LanguageGo:     true,
 		LanguageRust:   true,
@@ -31,11 +32,6 @@ var (
 	// package load so adding a new Model* const + entry in AllModels() is
 	// enough — no separate list to keep in sync.
 	validModels = buildValidModels()
-	validAgents = map[string]bool{
-		AgentPD: true, AgentSpec: true, AgentEng: true, AgentUI: true,
-		AgentOps: true, AgentQA: true, AgentDoc: true, AgentStatus: true,
-		AgentFull: true,
-	}
 )
 
 // ValidSurfacePath reports whether p can name where a surface's code lives.
@@ -101,24 +97,24 @@ func (c *GofiConfig) Validate() error {
 	if err := validateOps(c.Ops); err != nil {
 		return err
 	}
-	if !validHosts[c.AI.Host] {
-		return fmt.Errorf("ai.host: %q invalid (expected claude-vscode)", c.AI.Host)
+	if _, ok := host.Get(c.AI.Host); !ok {
+		return fmt.Errorf("ai.host: %q invalid (expected one of %s)", c.AI.Host, strings.Join(host.IDs(), ", "))
 	}
-	if !validModels[c.AI.Model] {
+	// The model list is Claude's; on another host the model is the team's
+	// choice in that host's own terms.
+	if host.IsClaude(c.AI.Host) && !validModels[c.AI.Model] {
 		return fmt.Errorf("ai.model: %q invalid", c.AI.Model)
 	}
-	if len(c.Agents) == 0 {
-		return fmt.Errorf("agents: at least one agent required")
+	for tier := range c.AI.Tiers {
+		if !slices.Contains(host.Tiers, host.Tier(tier)) {
+			return fmt.Errorf("ai.tiers: %q is not a tier (expected light, standard or deep)", tier)
+		}
 	}
-	seen := map[string]bool{}
-	for _, a := range c.Agents {
-		if !validAgents[a] {
-			return fmt.Errorf("agents: %q invalid", a)
-		}
-		if seen[a] {
-			return fmt.Errorf("agents: %q duplicated", a)
-		}
-		seen[a] = true
+	if c.AI.Intake != "" && !slices.Contains(IntakeModes, c.AI.Intake) {
+		return fmt.Errorf("ai.intake: %q invalid (expected %s)", c.AI.Intake, strings.Join(IntakeModes, ", "))
+	}
+	if c.AI.Guard != "" && !slices.Contains(GuardModes, c.AI.Guard) {
+		return fmt.Errorf("ai.guard: %q invalid (expected %s)", c.AI.Guard, strings.Join(GuardModes, ", "))
 	}
 	if !sourceRe.MatchString(c.Sources.Agents) {
 		return fmt.Errorf("sources.agents: %q is not github.com/<org>/<repo>@<tag>", c.Sources.Agents)
@@ -138,9 +134,6 @@ func (c *GofiConfig) Validate() error {
 		if !sourceRe.MatchString(url) {
 			return fmt.Errorf("sources.ui.%s: %q is not github.com/<org>/<repo>@<tag>", ds, url)
 		}
-	}
-	if err := c.Training.Validate(); err != nil {
-		return err
 	}
 	if err := c.Test.Validate(); err != nil {
 		return err
@@ -288,29 +281,6 @@ func validateOps(ops *Ops) error {
 	}
 	if ops.Path != "" && !slugRe.MatchString(ops.Path) {
 		return fmt.Errorf("ops.path: %q is not a valid slug", ops.Path)
-	}
-	return nil
-}
-
-func (t *Training) Validate() error {
-	scopes := map[string][]TrainingItem{
-		"shared": t.Shared,
-		"pd":     t.PD,
-		"spec":   t.Spec,
-		"eng":    t.Eng,
-		"qa":     t.QA,
-	}
-	for name, items := range scopes {
-		seen := map[string]bool{}
-		for _, it := range items {
-			if !slugRe.MatchString(it.Topic) {
-				return fmt.Errorf("training.%s[].topic: %q is not a valid slug", name, it.Topic)
-			}
-			if seen[it.Topic] {
-				return fmt.Errorf("training.%s[].topic: %q duplicated", name, it.Topic)
-			}
-			seen[it.Topic] = true
-		}
 	}
 	return nil
 }

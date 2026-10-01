@@ -76,7 +76,7 @@ func TestNormalize(t *testing.T) {
 		{"PT", "pt", true},
 		{"pt_BR", "pt", true},
 		{"pt-BR.UTF-8", "pt", true},
-		{"fr_FR@euro", "fr", true},
+		{"fr_FR@euro", "", false},
 		{" en ", "en", true},
 		{"es", "", false},
 		{"", "", false},
@@ -96,9 +96,9 @@ func TestDetectFromEnv(t *testing.T) {
 	t.Setenv("LC_MESSAGES", "")
 	t.Setenv("LANGUAGE", "")
 
-	t.Setenv("LANG", "fr_FR.UTF-8")
-	if got := DetectFromEnv(); got != LangFR {
-		t.Errorf("LANG=fr_FR.UTF-8 → %q, want %q", got, LangFR)
+	t.Setenv("LANG", "pt_BR.UTF-8")
+	if got := DetectFromEnv(); got != LangPT {
+		t.Errorf("LANG=pt_BR.UTF-8 → %q, want %q", got, LangPT)
 	}
 
 	// GOFI_LANG outranks the locale.
@@ -140,11 +140,11 @@ func TestTranslatesAndFallsBack(t *testing.T) {
 
 func TestTFormatsArgs(t *testing.T) {
 	defer SetLanguage(DefaultLang)
-	SetLanguage(LangFR)
+	SetLanguage(LangPT)
 	if got := TIn(LangEN, "settings.saved", "/tmp/gofi.json"); got != "Saved /tmp/gofi.json" {
 		t.Errorf("TIn = %q", got)
 	}
-	if got := T("settings.saved", "/tmp/gofi.json"); got != "Enregistré dans /tmp/gofi.json" {
+	if got := T("settings.saved", "/tmp/gofi.json"); got != TIn(LangPT, "settings.saved", "/tmp/gofi.json") || got == "Saved /tmp/gofi.json" {
 		t.Errorf("T = %q", got)
 	}
 }

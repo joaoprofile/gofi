@@ -1,7 +1,7 @@
 # GOFI Design System — Mobile (React Native)
 
 Ponto de entrada para construir interfaces **mobile nativas**. Mesma marca e os
-**mesmos tokens** do web ([design-tokens.md](../../../knowledge/ui/design-tokens.md))
+**mesmos tokens** do web ([design-tokens.md](../../../expertise/ui-design/design-tokens.md))
 — muda a **forma** (objeto TS, não CSS), os componentes (RN-nativos, sem DOM) e os
 padrões (navegação por stack/tab, safe-area, gestos, toque).
 

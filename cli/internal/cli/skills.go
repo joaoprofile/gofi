@@ -6,9 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
 )
 
 func newUpdateSkillsCmd() *cobra.Command {
@@ -58,26 +60,32 @@ func runSkillsUpdate(autoConfirm, force bool) error {
 	// explicitly is often the person who just edited a skill and wants it back.
 	// The plan below says plainly when nothing would change, which is the better
 	// answer anyway.
+	t, err := skillsTarget(cfg, force)
+	if err != nil {
+		return err
+	}
+	return runTarget(cfg, t, autoConfirm)
+}
+
+// skillsTarget plans the skills update.
+func skillsTarget(cfg *config.GofiConfig, force bool) (*targetPlan, error) {
 	plan, err := planSkills(cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ok, err := confirmUpdate("Update the skills?", plan.scope(force), autoConfirm)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		fmt.Println("skills left as they are.")
-		return nil
-	}
-
-	sha, err := plan.install(cfg, force)
-	if err != nil {
-		return fmt.Errorf("skills update: %w", err)
-	}
-	fmt.Printf("\nSkills updated — .claude/skills/ now at %s.\n", short(sha))
-	noteDrift(cfg)
-	return nil
+	return &targetPlan{
+		name:  "skills",
+		title: "Update the skills?",
+		scope: plan.scope(force),
+		apply: func() error {
+			sha, err := plan.install(cfg, force)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\nSkills updated — %s/ now at %s.\n", layout.Skills().Dir, short(sha))
+			return nil
+		},
+	}, nil
 }
 
 // skillsPlan is a computed skills update, held between the question and the
@@ -92,6 +100,11 @@ type skillsPlan struct {
 // planSkills computes the plan and prints the file-by-file detail, which always
 // precedes the scope block — the block summarises, the list is the evidence.
 func planSkills(cfg *config.GofiConfig) (*skillsPlan, error) {
+	// The model each skill names follows this project's host and ai.tiers —
+	// set here, from the config the plan is for, not left to whoever ran first.
+	if h, ok := host.Get(cfg.AI.Host); ok {
+		scaffold.SetSkillModels(h, cfg.AI.Tiers)
+	}
 	ref := cfg.Sources.Agents
 	srcDir, _, err := fetchSource(cfg.Project.Root, ref)
 	if err != nil {
@@ -105,7 +118,7 @@ func planSkills(cfg *config.GofiConfig) (*skillsPlan, error) {
 		changes: changes,
 		edited:  scaffold.PreservedFilesIn(cfg.Project.Root, []string{scaffold.SkillsDir}),
 	}
-	printUpdatePlan(p.changes, p.edited)
+	printUpdatePlan("skill", layout.Skills().Dir, p.changes, p.edited)
 	return p, nil
 }
 
@@ -121,13 +134,14 @@ func (p *skillsPlan) scope(force bool) updateScope {
 	s := updateScope{
 		Keeps: p.edited,
 		Force: force,
+		Hint:  keepsHint,
 		LeavesAlone: []string{
-			".gofi.yaml", "CLAUDE.md", "templates/", "scripts/", "sdk/",
+			".gofi.yaml", "AGENTS.md", "templates/", "sdk/",
 			"knowledge/", "memory/", "institutional/", "go.work",
 		},
 	}
 	if len(p.changes) > 0 || force {
-		s.write(".claude/skills/", planNote(added, changed))
+		s.write(layout.Skills().Dir+"/", planNote(added, changed))
 	}
 	return s
 }

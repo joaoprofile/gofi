@@ -1,7 +1,7 @@
-// Command gen packages gofi-ai/ into the .vsix embedded in the gofi binary.
+// Command gen packages vscode/ into the .vsix embedded in the gofi binary.
 //
 // Run it via `go generate ./internal/extensions` from the cli module after
-// changing anything under gofi-ai/.
+// changing anything under vscode/.
 package main
 
 import (
@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/joaoprofile/gofi-cli/internal/vsix"
+	"github.com/gofi-labs/gofi/cli/internal/vsix"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 # Motion
 
-Durações/easing em [design-tokens.md](../../../../knowledge/ui/design-tokens.md).
+Durações/easing em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md).
 O movimento serve a **feedback e continuidade**, nunca à decoração.
 
 ## Durações

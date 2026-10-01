@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // maxDepth bounds how far below the root a surface is looked for. Two levels
