@@ -59,7 +59,7 @@ MAIL_PASSWORD_FILE=/run/secrets/mail                        # X_FILE alternative
 | Provider | Como habilita | Identidade |
 |---|---|---|
 | `env`, `file` | embutidos | — |
-| `awssm` | `import _ "github.com/gofi-labs/gofi-sdk-go/base/secrets/awssm"` | cadeia padrão AWS (`AWS_REGION`, IRSA / EKS Pod Identity, roles) |
+| `awssm` | `import _ "github.com/joaoprofile/gofi-sdk-go/base/secrets/awssm"` | cadeia padrão AWS (`AWS_REGION`, IRSA / EKS Pod Identity, roles) |
 | `ocivault` | `ocivault.Register(ocivault.Config{Credentials: cloudoci.Config{AuthMode: cloudoci.AuthWorkloadIdentity}})` no `main`, **antes** do `Build` | OCI não tem cadeia implícita: modo explícito (`api_key`, `instance_principal`, `resource_principal`, `workload_identity`) |
 
 - `#chave` extrai um campo de segredo JSON; chave ausente = erro

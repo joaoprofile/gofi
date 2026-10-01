@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/detect"
-	"github.com/gofi-labs/gofi/cli/internal/gitops"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/toolchain"
-	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/detect"
+	"github.com/joaoprofile/gofi/cli/internal/gitops"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/toolchain"
+	"github.com/joaoprofile/gofi/cli/internal/tui/wizard"
 )
 
 // forceToolchain overrides the preflight so pipeline tests don't depend on the
@@ -113,7 +113,7 @@ func goWizardResult(target string) *wizard.Result {
 		Language:       "go",
 		SourcePath:     "src",
 		Module:         "github.com/acme/my-svc",
-		AgentsRef:      "github.com/gofi-labs/gofi@main",
+		AgentsRef:      "github.com/joaoprofile/gofi@main",
 		CreateSpecsDir: true,
 		CreatePrdDir:   true,
 	}
@@ -529,10 +529,10 @@ func TestExecutePipeline_GoWithSDKOverride(t *testing.T) {
 		"boilerplates/model.md":       "override model boilerplate",
 		"sdk-docs/overview.md":        "override sdk overview",
 		"knowledge/error-handling.md": "override error handling",
-		"go.mod":                      "module github.com/gofi-labs/gofi\n\ngo 1.25\n",
-		"sqln/go.mod":                 "module github.com/gofi-labs/gofi/sqln\n\ngo 1.25\n",
+		"go.mod":                      "module github.com/joaoprofile/gofi\n\ngo 1.25\n",
+		"sqln/go.mod":                 "module github.com/joaoprofile/gofi/sqln\n\ngo 1.25\n",
 		"sqln/sqln.go":                "// Package sqln is the SQL layer.\npackage sqln\n\n// Open opens the connection.\nfunc Open() error { return nil }\n",
-		"iam/go.mod":                  "module github.com/gofi-labs/gofi/iam\n\ngo 1.25\n",
+		"iam/go.mod":                  "module github.com/joaoprofile/gofi/iam\n\ngo 1.25\n",
 		"iam/iam.go":                  "package iam\n",
 	} {
 		full := filepath.Join(sdkDir, rel)

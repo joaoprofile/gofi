@@ -51,6 +51,6 @@ keywords: [naming, nomes, snake_case, camelCase, PascalCase, tags db, tags json,
 - DTOs em inglês: `CreateUserRequest`, `UpdateOrderRequest`
 
 ## Imports
-- Agrupar em blocos, nesta ordem: stdlib → gofi (`github.com/gofi-labs/gofi-sdk-go/...`) → externos → internos do projeto
+- Agrupar em blocos, nesta ordem: stdlib → gofi (`github.com/joaoprofile/gofi-sdk-go/...`) → externos → internos do projeto
 - Import em branco (driver SQL, provider de mensageria/bucket/segredo) só no `main.go`, com comentário dizendo a variável que ele habilita (`// DATABASE_DRIVER=postgres`)
-- Alias **somente** quando há colisão de nomes entre pacotes (ex.: `iamconfig "github.com/gofi-labs/gofi-sdk-go/iam/config"`, componente `iam` × pacote `iam`)
+- Alias **somente** quando há colisão de nomes entre pacotes (ex.: `iamconfig "github.com/joaoprofile/gofi-sdk-go/iam/config"`, componente `iam` × pacote `iam`)

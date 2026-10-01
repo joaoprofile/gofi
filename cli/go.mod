@@ -1,4 +1,4 @@
-module github.com/gofi-labs/gofi/cli
+module github.com/joaoprofile/gofi/cli
 
 go 1.26.0
 

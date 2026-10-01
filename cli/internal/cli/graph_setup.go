@@ -4,11 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/graph"
-	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // graphOptions turns the project's configuration into a workspace build.

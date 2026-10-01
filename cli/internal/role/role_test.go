@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 )
 
 func TestParse(t *testing.T) {

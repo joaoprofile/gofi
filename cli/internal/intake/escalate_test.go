@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 )
 
 // A failed audit sends the implementation back one tier up, then audits again

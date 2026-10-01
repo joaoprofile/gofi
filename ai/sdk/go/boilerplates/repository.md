@@ -24,9 +24,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gofi-labs/gofi-sdk-go/sqln"
-	"github.com/gofi-labs/gofi-sdk-go/sqln/connection"
-	"github.com/gofi-labs/gofi-sdk-go/sqln/criteria"
+	"github.com/joaoprofile/gofi-sdk-go/sqln"
+	"github.com/joaoprofile/gofi-sdk-go/sqln/connection"
+	"github.com/joaoprofile/gofi-sdk-go/sqln/criteria"
 
 	"<module>/domain/{contexto}/model"
 )

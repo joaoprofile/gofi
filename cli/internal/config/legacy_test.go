@@ -33,7 +33,7 @@ ai:
   model: claude-opus-4-8
 agents: [gofi-eng]
 sources:
-  agents: github.com/gofi-labs/gofi@main
+  agents: github.com/joaoprofile/gofi@main
 `
 
 func write(t *testing.T, body string) string {

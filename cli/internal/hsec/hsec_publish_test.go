@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 const fakeToken = "11111111-2222-3333-4444-555555555555"

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // blockNote is what an implementation is told to do when the spec leaves a

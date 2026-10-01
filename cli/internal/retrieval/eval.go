@@ -1,6 +1,6 @@
 package retrieval
 
-import "github.com/gofi-labs/gofi/cli/internal/docs"
+import "github.com/joaoprofile/gofi/cli/internal/docs"
 
 // Evaluation is how well the engine answers a golden set.
 type Evaluation struct {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/audit"
+	"github.com/joaoprofile/gofi/cli/internal/audit"
 )
 
 // The block is the promise the whole update family rests on: before writing

@@ -259,7 +259,7 @@ func defaultCoverageReport(language string) string {
 // AgentsRepo is the gofi monorepo: the CLI and the AI harness content it
 // installs (skills, knowledge, sdk docs, templates, memory, under ai/) are
 // released together, under the same tag.
-const AgentsRepo = "github.com/gofi-labs/gofi"
+const AgentsRepo = "github.com/joaoprofile/gofi"
 
 // DefaultAgentsRef is the source pin of a development build, which has no
 // release tag to point at. Released builds pin their own tag; see AgentsRefFor.
@@ -283,7 +283,7 @@ func AgentsRefFor(version string) string {
 // fetched into .gofi/gofi-sdk-go/ as the toolchain checkout (go.work). The web
 // and mobile design systems ship as npm packages (gofi-ui / gofi-ui-native),
 // installed by the create step — not as git sources.
-const DefaultSDKGoRef = "github.com/gofi-labs/gofi-sdk-go@main"
+const DefaultSDKGoRef = "github.com/joaoprofile/gofi-sdk-go@main"
 
 // DefaultSourceRoot is the historical source folder name. It is the back-compat
 // fallback used when migrating older configs and when a config omits a path —

@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
 )
 
 // replaceSession closes the conversation and opens another — a new one, or

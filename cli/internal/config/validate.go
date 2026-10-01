@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 )
 
 var (

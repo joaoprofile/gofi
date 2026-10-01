@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/sonar"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/sonar"
 )
 
 func newSonarCmd() *cobra.Command {

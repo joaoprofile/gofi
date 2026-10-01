@@ -12,11 +12,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/detect"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/detect"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/tui/flow"
 )
 
 // Environment slugs — the surfaces a project can include.

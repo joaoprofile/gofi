@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/graph"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 func write(t *testing.T, root, rel, body string) {

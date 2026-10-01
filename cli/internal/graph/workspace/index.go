@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 // IndexFile lists the scopes a project has. It is the entry point for a reader

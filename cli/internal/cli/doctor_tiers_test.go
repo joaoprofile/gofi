@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/doctor"
-	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/doctor"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 )
 
 func tieredProject(t *testing.T) string {

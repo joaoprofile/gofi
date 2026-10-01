@@ -22,9 +22,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/gofi-labs/gofi/cli/internal/cli.Version={{.Version}}
-      - -X github.com/gofi-labs/gofi/cli/internal/cli.Commit={{.ShortCommit}}
-      - -X github.com/gofi-labs/gofi/cli/internal/cli.BuildDate={{.Date}}
+      - -X github.com/joaoprofile/gofi/cli/internal/cli.Version={{.Version}}
+      - -X github.com/joaoprofile/gofi/cli/internal/cli.Commit={{.ShortCommit}}
+      - -X github.com/joaoprofile/gofi/cli/internal/cli.BuildDate={{.Date}}
 
 archives:
   - id: default

@@ -464,9 +464,9 @@ import (
 
     "<module>/services/domain/integration/token"
     {ctx}Bridge "<module>/services/domain/{ctx}/bridge"
-    "github.com/gofi-labs/gofi-sdk-go/base/errs"
-    "github.com/gofi-labs/gofi-sdk-go/netx"
-    "github.com/gofi-labs/gofi-sdk-go/obs/logging"
+    "github.com/joaoprofile/gofi-sdk-go/base/errs"
+    "github.com/joaoprofile/gofi-sdk-go/netx"
+    "github.com/joaoprofile/gofi-sdk-go/obs/logging"
 )
 
 // 1. URL/path constants + tuning constants

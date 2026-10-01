@@ -25,7 +25,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
 // DefaultExecutable is the Claude Code binary looked up on PATH.

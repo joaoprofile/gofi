@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/help"
+	"github.com/joaoprofile/gofi/cli/internal/help"
 )
 
 func TestRoot_AllCommandsHaveHelp(t *testing.T) {

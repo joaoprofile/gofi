@@ -4,7 +4,7 @@ import "embed"
 
 // embeddedFS carries the backend scaffold templates (golang/) and the starters.
 // Agents, SDK content, prompts and templates are fetched from
-// github.com/gofi-labs/gofi at install time — there is no embedded
+// github.com/joaoprofile/gofi at install time — there is no embedded
 // fallback for that content.
 //
 //go:embed all:embedded

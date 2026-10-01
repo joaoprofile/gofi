@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/vsix"
+	"github.com/joaoprofile/gofi/cli/internal/vsix"
 )
 
 // repoRoot walks up from the test's directory to the repo root, identified by

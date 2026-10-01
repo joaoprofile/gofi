@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/intake"
-	"github.com/gofi-labs/gofi/cli/internal/runs"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/runs"
 )
 
 // askSession records the turns and models it got, and ends each turn with

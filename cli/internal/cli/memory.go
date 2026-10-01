@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/gofi-labs/gofi/cli/internal/guard"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // MemoryWriteRule is the Claude Code permission rule that lets an agent write

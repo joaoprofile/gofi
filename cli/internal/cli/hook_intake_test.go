@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/guard"
 )
 
 // intakeProject is a configured project with the shipped contracts and one

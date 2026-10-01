@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 // tree writes a fixture where keys are slash-separated paths relative to a

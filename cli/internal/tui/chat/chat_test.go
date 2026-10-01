@@ -11,8 +11,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gofi-labs/gofi/cli/internal/approval"
-	"github.com/gofi-labs/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/approval"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
 // fakeSession records what reached the engine and replays a scripted turn.

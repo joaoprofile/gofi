@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/scaffold"
-	"github.com/gofi-labs/gofi/cli/internal/sdkdoc"
-	"github.com/gofi-labs/gofi/cli/internal/sources"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/scaffold"
+	"github.com/joaoprofile/gofi/cli/internal/sdkdoc"
+	"github.com/joaoprofile/gofi/cli/internal/sources"
 )
 
 // fetchSource resolves and downloads a generic github.com/<org>/<repo>@<ref>

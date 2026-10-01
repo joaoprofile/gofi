@@ -55,9 +55,9 @@ import (
     "net/http"
     "strings"
 
-    "github.com/gofi-labs/gofi-sdk-go/iam/core"
-    "github.com/gofi-labs/gofi-sdk-go/iam/types"
-    "github.com/gofi-labs/gofi-sdk-go/netx"
+    "github.com/joaoprofile/gofi-sdk-go/iam/core"
+    "github.com/joaoprofile/gofi-sdk-go/iam/types"
+    "github.com/joaoprofile/gofi-sdk-go/netx"
 )
 
 const sessionCookie = "sid"

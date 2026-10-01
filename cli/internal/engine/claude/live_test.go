@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
 // TestLive talks to the real Claude Code. It costs a request, so it runs only

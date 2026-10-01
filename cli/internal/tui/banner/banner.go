@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
 )
 
 // Banner is what a header says. Every field is optional. The mascot carries

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/guard"
 )
 
 // claudeSettingsFile is the project's shared Claude Code settings, the file

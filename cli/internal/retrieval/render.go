@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 )
 
 // RenderContext draws what is filed under a context as a tree.

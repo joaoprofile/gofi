@@ -12,11 +12,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/scaffold"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/scaffold"
 )
 
 func newUpdateAgentsCmd() *cobra.Command {

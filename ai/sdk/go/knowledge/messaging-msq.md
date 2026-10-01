@@ -14,9 +14,9 @@ Referência gerada: `.claude/sdk/go/api/msq.md` (fachada), `msq-types.md`
 retry e DLQ, um por broker): `.claude/sdk/go/api/examples.md` § Kafka / RabbitMQ /
 Amazon SQS.
 
-Imports: `github.com/gofi-labs/gofi-sdk-go/msq` (tudo que o código de aplicação
+Imports: `github.com/joaoprofile/gofi-sdk-go/msq` (tudo que o código de aplicação
 usa é re-exportado aqui — `msq.Message`, `msq.ConsumeConfig`, `msq.Ack`…) e
-`github.com/gofi-labs/gofi-sdk-go/gofi/component/messaging`.
+`github.com/joaoprofile/gofi-sdk-go/gofi/component/messaging`.
 
 ---
 
@@ -45,10 +45,10 @@ producer/consumer não mudam. Env sem o import correspondente falha no `Build`
 
 ```go
 import (
-    "github.com/gofi-labs/gofi-sdk-go/gofi"
-    "github.com/gofi-labs/gofi-sdk-go/gofi/component/messaging"
-    "github.com/gofi-labs/gofi-sdk-go/msq"
-    _ "github.com/gofi-labs/gofi-sdk-go/msq/provider/kafka" // MESSAGING_PROVIDER=kafka
+    "github.com/joaoprofile/gofi-sdk-go/gofi"
+    "github.com/joaoprofile/gofi-sdk-go/gofi/component/messaging"
+    "github.com/joaoprofile/gofi-sdk-go/msq"
+    _ "github.com/joaoprofile/gofi-sdk-go/msq/provider/kafka" // MESSAGING_PROVIDER=kafka
 )
 
 mq := messaging.New() // MESSAGING_* → broker
@@ -197,7 +197,7 @@ dos eventos. Não duplicar spans/logs de envio/consumo no handler.
 
 ## `msq/worker` — não confundir com worker do projeto
 
-`github.com/gofi-labs/gofi-sdk-go/msq/worker` é peça de baixo nível usada
+`github.com/joaoprofile/gofi-sdk-go/msq/worker` é peça de baixo nível usada
 pelos providers: `worker.New(n)` (pool limitado: `Enqueue`/`Wait`/`Close`),
 `worker.Backoff{Min, Max}` (`Next`/`Reset`), `worker.Gate`
 (`Pause`/`Resume`/`Wait`) e `worker.Sleep(ctx, d)`. Use-os ao escrever loop de

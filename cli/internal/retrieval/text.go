@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 )
 
 // tokens turns text into the terms it is ranked by: identifiers split at their

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/leancall"
+	"github.com/joaoprofile/gofi/cli/internal/leancall"
 )
 
 // liveModel is the real light tier, through the lean call.

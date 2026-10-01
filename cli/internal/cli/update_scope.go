@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/tui/flow"
 )
 
 // updateScope is the answer every `gofi update <target>` owes the user before

@@ -17,7 +17,7 @@ package docs
 import (
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // Corpora are the document trees gofi indexes, in the layout gofi init creates.

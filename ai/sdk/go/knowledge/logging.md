@@ -8,7 +8,7 @@ keywords: [logging, slog, obs/logging, LOG_LEVEL, Info, Debug, Warn, Error, Fata
 # Logging — Níveis e Disciplina (Go)
 
 API: `.claude/sdk/go/api/obs-logging.md`. Import:
-`github.com/gofi-labs/gofi-sdk-go/obs/logging`.
+`github.com/joaoprofile/gofi-sdk-go/obs/logging`.
 
 ## O que o SDK já resolve
 

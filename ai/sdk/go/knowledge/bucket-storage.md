@@ -20,7 +20,7 @@ Referência gerada: `.claude/sdk/go/api/base-bucket.md` (+ `base-bucket-s3.md`,
 
 ## Abstração do SDK (o que você importa)
 
-Domínio e wrapper importam só **`github.com/gofi-labs/gofi-sdk-go/base/bucket`**.
+Domínio e wrapper importam só **`github.com/joaoprofile/gofi-sdk-go/base/bucket`**.
 
 ```go
 type PutInput struct {
@@ -72,10 +72,10 @@ parâmetro. **Nunca** ler env dentro do domínio.
 ```go
 // wire.go — package main
 import (
-    "github.com/gofi-labs/gofi-sdk-go/base/bucket"
-    _ "github.com/gofi-labs/gofi-sdk-go/base/bucket/s3" // ou .../oci — o do BUCKET_PROVIDER
-    "github.com/gofi-labs/gofi-sdk-go/base/environment"
-    "github.com/gofi-labs/gofi-sdk-go/gofi/config"
+    "github.com/joaoprofile/gofi-sdk-go/base/bucket"
+    _ "github.com/joaoprofile/gofi-sdk-go/base/bucket/s3" // ou .../oci — o do BUCKET_PROVIDER
+    "github.com/joaoprofile/gofi-sdk-go/base/environment"
+    "github.com/joaoprofile/gofi-sdk-go/gofi/config"
 )
 
 func buildBucketStore(ctx context.Context, env *environment.Environment) bucket.Store {

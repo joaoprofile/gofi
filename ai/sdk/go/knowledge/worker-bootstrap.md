@@ -57,9 +57,9 @@ import (
     "sync"
     "time"
 
-    "github.com/gofi-labs/gofi-sdk-go/base/cronjob"
-    "github.com/gofi-labs/gofi-sdk-go/gofi"
-    "github.com/gofi-labs/gofi-sdk-go/obs/logging"
+    "github.com/joaoprofile/gofi-sdk-go/base/cronjob"
+    "github.com/joaoprofile/gofi-sdk-go/gofi"
+    "github.com/joaoprofile/gofi-sdk-go/obs/logging"
 
     reportsvc "<module>/domain/{contexto}/service"
 )

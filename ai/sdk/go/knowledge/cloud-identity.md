@@ -23,7 +23,7 @@ portanto, uma decisão só — vale para bucket, fila, secrets e assinatura.
 ## AWS — cadeia padrão primeiro
 
 ```go
-import cloudaws "github.com/gofi-labs/gofi-sdk-go/base/cloud/aws"
+import cloudaws "github.com/joaoprofile/gofi-sdk-go/base/cloud/aws"
 
 awsCfg, err := cloudaws.Load(ctx, cloudaws.Config{}) // zero value = cadeia padrão
 ```
@@ -42,7 +42,7 @@ MinIO, R2.
 ## OCI — modo sempre explícito
 
 ```go
-import cloudoci "github.com/gofi-labs/gofi-sdk-go/base/cloud/oci"
+import cloudoci "github.com/joaoprofile/gofi-sdk-go/base/cloud/oci"
 
 cfg := cloudoci.Config{AuthMode: cloudoci.AuthWorkloadIdentity, Region: region}
 provider, err := cloudoci.ConfigurationProvider(cfg) // common.ConfigurationProvider do SDK OCI

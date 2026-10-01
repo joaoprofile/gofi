@@ -16,9 +16,9 @@ API: `.claude/sdk/go/api/gofi-component-database.md`, `sqln-connection.md`,
 
 ```go
 import (
-    "github.com/gofi-labs/gofi-sdk-go/gofi"
-    "github.com/gofi-labs/gofi-sdk-go/gofi/component/database"
-    _ "github.com/gofi-labs/gofi-sdk-go/sqln/driver/postgres" // DATABASE_DRIVER=postgres
+    "github.com/joaoprofile/gofi-sdk-go/gofi"
+    "github.com/joaoprofile/gofi-sdk-go/gofi/component/database"
+    _ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres" // DATABASE_DRIVER=postgres
 )
 
 svc, err := gofi.New("{servico}").

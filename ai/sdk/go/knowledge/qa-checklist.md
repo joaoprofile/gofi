@@ -333,8 +333,8 @@ Ver `structure.md`.
   `domain/` e `.migrations/` em `pathService`; `go.work` na raiz com
   `use ./src`. **MINOR**
 - [ ] Imports do SDK com os paths de módulo da v0.8.2
-  (`github.com/gofi-labs/gofi-sdk-go/gofi`, `.../sqln`, `.../netx`, ...).
-  Path antigo do orquestrador na raiz (`github.com/gofi-labs/gofi-sdk-go` sem
+  (`github.com/joaoprofile/gofi-sdk-go/gofi`, `.../sqln`, `.../netx`, ...).
+  Path antigo do orquestrador na raiz (`github.com/joaoprofile/gofi-sdk-go` sem
   sufixo): **BLOCKER** (não resolve)
 - [ ] Separação de camadas: service não conhece `http.ResponseWriter`/
   `http.Request`; repository não conhece DTOs. **MAJOR**

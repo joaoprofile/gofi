@@ -15,7 +15,7 @@ Layout obrigatório para um contexto de domínio em projetos gofi/Go.
 go.work                        ← raiz do projeto: use ./src + módulos do SDK em ./.gofi/gofi-sdk-go/...
 .gofi/gofi-sdk-go/             ← checkout do SDK na versão fixada (não editar)
 {pathService}                  ← ex: ./src/   (raiz do módulo Go)
-  go.mod                       ← require github.com/gofi-labs/gofi-sdk-go/<módulo> (um por módulo usado)
+  go.mod                       ← require github.com/joaoprofile/gofi-sdk-go/<módulo> (um por módulo usado)
   .env                         ← só desenvolvimento; nunca com segredo real no git
   .migrations/
   {projectName}/               ← pathCmd, ex: ./src/web-api/ — package main
@@ -52,7 +52,7 @@ go.work                        ← raiz do projeto: use ./src + módulos do SDK 
 ## Módulos e imports do SDK
 
 - O SDK é **multi-módulo**: cada biblioteca, provider e componente é importado
-  pelo caminho `github.com/gofi-labs/gofi-sdk-go/<módulo>` (`gofi`,
+  pelo caminho `github.com/joaoprofile/gofi-sdk-go/<módulo>` (`gofi`,
   `gofi/component/database`, `sqln`, `netx`, `msq`, `msq/provider/kafka`,
   `obs/logging`, `base/errs`, `iam`…). Lista: `.claude/sdk/go/api/INDEX.md`.
 - `go.work` na raiz aponta para `./src` e para cada módulo do checkout em

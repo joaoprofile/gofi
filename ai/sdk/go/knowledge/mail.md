@@ -10,7 +10,7 @@ keywords: [mail, email, smtp, template, bulk, notification, MAIL_HOST]
 Referência gerada: `.claude/sdk/go/api/base-mail.md`; env → config em
 `gofi-config.md` § `config.Mail` / `config.NewMailer`.
 
-Import: `github.com/gofi-labs/gofi-sdk-go/base/mail`. SMTP puro (qualquer
+Import: `github.com/joaoprofile/gofi-sdk-go/base/mail`. SMTP puro (qualquer
 provedor): HTML + texto, anexos, templates, TLS/STARTTLS, retry com backoff,
 reuso de conexão em bulk.
 
@@ -22,8 +22,8 @@ reuso de conexão em bulk.
 import (
     "errors"
 
-    "github.com/gofi-labs/gofi-sdk-go/base/mail"
-    "github.com/gofi-labs/gofi-sdk-go/gofi/config"
+    "github.com/joaoprofile/gofi-sdk-go/base/mail"
+    "github.com/joaoprofile/gofi-sdk-go/gofi/config"
 )
 
 func buildMailer(env *environment.Environment) mail.Mailer {

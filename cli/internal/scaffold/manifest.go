@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"gopkg.in/yaml.v3"
 )
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 )
 
 // A role whose contract elicits runs a cheaper phase first: it writes the open

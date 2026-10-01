@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 // ErrNotInProject is returned when no .gofi.yaml is found walking up from cwd.

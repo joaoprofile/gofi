@@ -23,9 +23,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
-	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
 )
 
 // AreaCode is the area of every code symbol. Documents keep the areas of

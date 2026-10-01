@@ -70,7 +70,7 @@ package loader
 import (
     "context"
 
-    "github.com/gofi-labs/gofi-sdk-go/base/errs"
+    "github.com/joaoprofile/gofi-sdk-go/base/errs"
 )
 
 type Loader interface {
@@ -112,8 +112,8 @@ import (
     "context"
     "errors"
 
-    "github.com/gofi-labs/gofi-sdk-go/base/errs"
-    "github.com/gofi-labs/gofi-sdk-go/sqln"
+    "github.com/joaoprofile/gofi-sdk-go/base/errs"
+    "github.com/joaoprofile/gofi-sdk-go/sqln"
     "golang.org/x/sync/errgroup"
 )
 
@@ -251,7 +251,7 @@ a otimização SQL e voltar a chamar o service.
 // loader/errors.go
 package loader
 
-import "github.com/gofi-labs/gofi-sdk-go/base/errs"
+import "github.com/joaoprofile/gofi-sdk-go/base/errs"
 
 var (
     ErrLoaderEntityIDInvalid = errs.RegisterValidation("LOADER_ENTITY_ID_INVALID", "invalid entity id")

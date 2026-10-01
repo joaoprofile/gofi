@@ -9,7 +9,7 @@ keywords: [helpers, money, currency, bucket, object-storage, presign, mail, smtp
 
 Índice; detalhe no arquivo apontado. `helpers` e `money` são pacotes **do
 projeto** (`services/common/…`); `bucket`, `mail`, `cloud` e `obs` são do SDK
-(`github.com/gofi-labs/gofi-sdk-go/...`, referência em `.claude/sdk/go/api/`).
+(`github.com/joaoprofile/gofi-sdk-go/...`, referência em `.claude/sdk/go/api/`).
 
 - **Helpers reaproveitáveis ficam em `services/common/helpers/` (genérico) ou no
   domínio (model-bound).**

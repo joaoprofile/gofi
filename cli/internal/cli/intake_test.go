@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
 )
 
 // `gofi intake --json` answers in the versioned schema, from the contracts

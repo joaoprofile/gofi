@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gofi-labs/gofi/cli/internal/sdkdoc"
+	"github.com/joaoprofile/gofi/cli/internal/sdkdoc"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	}
 	// The shipped copy points at the examples in the SDK repository itself:
 	// there is no checkout in a project that reads it.
-	examples, err := sdkdoc.WriteExamples(src, out, "https://github.com/gofi-labs/gofi-sdk-go/tree/main", version)
+	examples, err := sdkdoc.WriteExamples(src, out, "https://github.com/joaoprofile/gofi-sdk-go/tree/main", version)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gen:", err)
 		os.Exit(1)

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
 // line is the part of one stream-json output line the chat reads. Unknown

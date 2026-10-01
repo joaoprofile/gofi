@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/analyze"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 // These limits keep the report deliberately small: it exists to be read in full

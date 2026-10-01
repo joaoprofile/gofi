@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/guard"
 )
 
 // Matcher selects the tools that ask first: the ones that can change

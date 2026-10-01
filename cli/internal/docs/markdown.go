@@ -3,8 +3,8 @@ package docs
 import (
 	"bytes"
 	"fmt"
-	"github.com/gofi-labs/gofi/cli/internal/expertise"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/expertise"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"os"
 	"path/filepath"
 	"sort"

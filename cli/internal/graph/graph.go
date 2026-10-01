@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
-	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
-	"github.com/gofi-labs/gofi/cli/internal/graph/report"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/graph/analyze"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract/external"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/report"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
 // Languages gofi reads with an extractor compiled into the binary. Everything

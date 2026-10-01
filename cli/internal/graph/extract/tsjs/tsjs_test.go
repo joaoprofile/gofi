@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 func build(t *testing.T, root, lang string) *model.Graph {

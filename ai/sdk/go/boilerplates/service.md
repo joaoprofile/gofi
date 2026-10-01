@@ -19,7 +19,7 @@ Regras de erro: `.claude/sdk/go/knowledge/error-handling.md`. Validação:
 //gofi:context {contexto}
 package service
 
-import "github.com/gofi-labs/gofi-sdk-go/base/errs"
+import "github.com/joaoprofile/gofi-sdk-go/base/errs"
 
 var (
 	ErrEntityNotFound   = errs.RegisterNotFound("ENTITY_NOT_FOUND", "entity not found [%s]")
@@ -47,8 +47,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/gofi-labs/gofi-sdk-go/base/errs"
-	"github.com/gofi-labs/gofi-sdk-go/sqln"
+	"github.com/joaoprofile/gofi-sdk-go/base/errs"
+	"github.com/joaoprofile/gofi-sdk-go/sqln"
 
 	"<module>/common/enums"
 	"<module>/domain/{contexto}/model"
@@ -178,7 +178,7 @@ func (s *entityService) GetByDynamicQuery(ctx context.Context, tenantID string, 
 - Service **não valida** o filtro — a allowlist (`sqln.FilterMapping`) é aplicada no repository por `sqln.BuildQuery`/`NewPageRequestFilter`; o service só traduz `sqln.ErrInvalidFilter` para 400
 - Service **não transforma** `*sqln.Filters` — passa direto ao repository
 - Tenant é **argumento explícito** (vem das claims no handler), nunca `f.Tenant`
-- Imports: `"errors"`, `"github.com/gofi-labs/gofi-sdk-go/sqln"`
+- Imports: `"errors"`, `"github.com/joaoprofile/gofi-sdk-go/sqln"`
 
 ## Variante — Service com split CRUD + Auth/IAM
 
@@ -207,10 +207,10 @@ import (
 	"errors"
 
 	"<module>/domain/{contexto}/model"
-	"github.com/gofi-labs/gofi-sdk-go/base/errs"
-	"github.com/gofi-labs/gofi-sdk-go/iam/core"
-	"github.com/gofi-labs/gofi-sdk-go/iam/port"
-	"github.com/gofi-labs/gofi-sdk-go/iam/types"
+	"github.com/joaoprofile/gofi-sdk-go/base/errs"
+	"github.com/joaoprofile/gofi-sdk-go/iam/core"
+	"github.com/joaoprofile/gofi-sdk-go/iam/port"
+	"github.com/joaoprofile/gofi-sdk-go/iam/types"
 )
 
 // On the interface: Login, Refresh, Logout (LogoutAll follows Logout with s.iam.LogoutAll).

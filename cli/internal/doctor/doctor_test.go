@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 func mockLookup(found map[string]string) func(string) (string, error) {

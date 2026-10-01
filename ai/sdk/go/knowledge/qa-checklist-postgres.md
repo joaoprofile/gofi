@@ -73,7 +73,7 @@ em escopo `fast`, confirme com `--deep` ou declare a limitação.
   Ausente: **MAJOR**; bulk sem consumidor declarado na spec: **MINOR** (YAGNI)
 
 ### Driver e conexão PostgreSQL (ver `database-connection.md`)
-- [ ] `main` importa `_ "github.com/gofi-labs/gofi-sdk-go/sqln/driver/postgres"`
+- [ ] `main` importa `_ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"`
   junto com `database.New()`. Ausente: **MAJOR** (o `Build` falha)
 - [ ] Produção com `DATABASE_SSL_MODE` explícito (`require` ou mais forte) —
   vazio vira `disable` no driver. Vazio no manifesto de produção: **MAJOR**

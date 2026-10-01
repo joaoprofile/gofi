@@ -2,7 +2,7 @@ package docs
 
 import (
 	"fmt"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"os"
 	"path/filepath"
 	"sort"

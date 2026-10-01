@@ -1,6 +1,6 @@
 # sqln/driver/mysql
 
-`import "github.com/gofi-labs/gofi-sdk-go/sqln/driver/mysql"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/mysql"` · SDK v0.8.2
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -12,7 +12,7 @@ type Driver struct{}
 
 MySQL driver. To enable it, blank-import this package:
 
-	import _ "github.com/gofi-labs/gofi-sdk-go/sqln/driver/mysql"
+	import _ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/mysql"
 
 Requires the go-sql-driver/mysql driver in go.mod:
 

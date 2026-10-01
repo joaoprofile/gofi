@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
-	"github.com/gofi-labs/gofi/cli/internal/graph/extract"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
-	"github.com/gofi-labs/gofi/cli/internal/graph/report"
+	"github.com/joaoprofile/gofi/cli/internal/graph/analyze"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/report"
 )
 
 // The graph is committed to the repository and rebuilt on every commit, so any

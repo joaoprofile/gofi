@@ -22,8 +22,8 @@ package handler
 import (
 	"net/http"
 
-	"github.com/gofi-labs/gofi-sdk-go/iam/port"
-	"github.com/gofi-labs/gofi-sdk-go/netx"
+	"github.com/joaoprofile/gofi-sdk-go/iam/port"
+	"github.com/joaoprofile/gofi-sdk-go/netx"
 
 	authhandler "<module>/domain/{contexto-auth}/handler"
 	"<module>/domain/{contexto}/model"
@@ -156,7 +156,7 @@ completas: `.claude/sdk/go/knowledge/dynamic-filter.md`):
 
 ```go
 import (
-	"github.com/gofi-labs/gofi-sdk-go/sqln"
+	"github.com/joaoprofile/gofi-sdk-go/sqln"
 
 	"<module>/common/enums"
 )

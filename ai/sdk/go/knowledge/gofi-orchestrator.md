@@ -12,8 +12,8 @@ em `.claude/sdk/go/api/examples.md`: `netx/api` (HTTP), `sqln/search` (job sem
 HTTP), `obs` (Runners próprios), `msq/*/consumer` (consumer sem HTTP),
 `iam/login` (IAM + rotas registradas depois do `Build`).
 
-Import: `github.com/gofi-labs/gofi-sdk-go/gofi` e
-`github.com/gofi-labs/gofi-sdk-go/gofi/component/<nome>`.
+Import: `github.com/joaoprofile/gofi-sdk-go/gofi` e
+`github.com/joaoprofile/gofi-sdk-go/gofi/component/<nome>`.
 
 ## Ciclo de vida
 

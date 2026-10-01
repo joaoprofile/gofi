@@ -3,8 +3,8 @@ package extract_test
 import (
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/graph/extract"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
 )
 
 // The context tag is what lets an agent go from a context name in

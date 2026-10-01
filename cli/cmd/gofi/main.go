@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gofi-labs/gofi/cli/internal/cli"
+	"github.com/joaoprofile/gofi/cli/internal/cli"
 )
 
 func main() {

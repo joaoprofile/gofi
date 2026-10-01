@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
 )
 
 func TestARunIsRecordedStepByStep(t *testing.T) {

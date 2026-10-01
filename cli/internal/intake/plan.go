@@ -3,8 +3,8 @@ package intake
 import (
 	"fmt"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/role"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 // Phase is one step of the plan: a role, the tier it runs at, and why it is

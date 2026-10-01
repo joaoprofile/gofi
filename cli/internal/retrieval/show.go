@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/docs"
-	"github.com/gofi-labs/gofi/cli/internal/graph/model"
-	"github.com/gofi-labs/gofi/cli/internal/graph/query"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/graph/model"
+	"github.com/joaoprofile/gofi/cli/internal/graph/query"
 )
 
 // Show answers "what is it?" for any reference: the kind comes from the

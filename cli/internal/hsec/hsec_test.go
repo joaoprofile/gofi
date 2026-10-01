@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/config"
 )
 
 func TestSeveritiesBelow(t *testing.T) {

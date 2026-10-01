@@ -3,7 +3,7 @@ pack: event-driven
 title: Arquitetura orientada a eventos
 summary: decider/executor, idempotência, retry transitório vs permanente, naming de types do envelope
 applies_when:
-  imports: [github.com/gofi-labs/gofi-sdk-go/msq]
+  imports: [github.com/joaoprofile/gofi-sdk-go/msq]
   symbols: ["*Consumer", "*Producer", "*Executor", "*Decider"]
   intents: [consumir, publicar, integrar, agendar, sincronizar]
   entities: [evento, mensagem, tópico, fila]

@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"path"
 
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/role"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 // skillModel turns a role's tier into the model its installed SKILL.md names.

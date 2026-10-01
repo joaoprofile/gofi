@@ -7,11 +7,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/doctor"
-	"github.com/gofi-labs/gofi/cli/internal/host"
-	"github.com/gofi-labs/gofi/cli/internal/layout"
-	"github.com/gofi-labs/gofi/cli/internal/role"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/doctor"
+	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 // claudeModelAliases are the model names Claude Code resolves on its own, as

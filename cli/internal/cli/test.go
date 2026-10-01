@@ -10,10 +10,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/gofi-labs/gofi/cli/internal/config"
-	"github.com/gofi-labs/gofi/cli/internal/i18n"
-	"github.com/gofi-labs/gofi/cli/internal/runner"
-	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/runner"
+	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
 )
 
 func newTestCmd() *cobra.Command {
