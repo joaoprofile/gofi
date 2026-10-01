@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // ErrNotInProject is returned when no .gofi.yaml is found walking up from cwd.
@@ -18,17 +18,35 @@ func findProjectRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	ceilings := ceilingDirs()
 	dir := cwd
 	for {
 		if _, err := os.Stat(filepath.Join(dir, config.FileName)); err == nil {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
-		if parent == dir {
+		if parent == dir || ceilings[dir] {
 			return "", ErrNotInProject
 		}
 		dir = parent
 	}
+}
+
+// EnvCeilingDirs names folders the search for .gofi.yaml does not climb
+// above, as GIT_CEILING_DIRECTORIES does for git: a colon-separated list.
+// The tests set it, so a command run from the package's folder can never
+// reach a .gofi.yaml further up — this repository's own, which names a real
+// project elsewhere on the machine.
+const EnvCeilingDirs = "GOFI_CEILING_DIRS"
+
+func ceilingDirs() map[string]bool {
+	out := map[string]bool{}
+	for _, d := range filepath.SplitList(os.Getenv(EnvCeilingDirs)) {
+		if d != "" {
+			out[filepath.Clean(d)] = true
+		}
+	}
+	return out
 }
 
 // declaredRoot is the workspace folder .gofi.yaml names, which is where the rest
@@ -61,4 +79,14 @@ func loadProjectConfig() (*config.GofiConfig, string, error) {
 		return nil, root, err
 	}
 	return cfg, root, nil
+}
+
+// projectRootFromCfg is the project root a loaded config names, or the working
+// directory when it names none.
+func projectRootFromCfg(cfg *config.GofiConfig) string {
+	if cfg.Project.Root != "" {
+		return cfg.Project.Root
+	}
+	cwd, _ := os.Getwd()
+	return cwd
 }

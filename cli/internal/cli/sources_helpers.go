@@ -7,9 +7,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
-	"github.com/joaoprofile/gofi-cli/internal/sources"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/sdkdoc"
+	"github.com/gofi-labs/gofi/cli/internal/sources"
 )
 
 // fetchSource resolves and downloads a generic github.com/<org>/<repo>@<ref>
@@ -158,13 +162,52 @@ func installSDKLayer(agentsFS fs.FS, projectRoot, language, sdkRef string, mode 
 	if !docsInstalled {
 		if _, err := scaffold.InstallSDKContent(agentsFS, "ai/sdk/"+language, projectRoot, language, mode); err != nil {
 			if errors.Is(err, scaffold.ErrNoSDKLayout) {
-				fmt.Fprintf(os.Stderr, "warning: gofi/ai/sdk/%s/ has no SDK layout (boilerplates/, sdk-docs/, knowledge/); skipping docs install\n", language)
+				fmt.Fprintf(os.Stderr, "warning: gofi/ai/sdk/%s/ has no SDK layout (boilerplates/, api/, knowledge/); skipping docs install\n", language)
 				return nil
 			}
 			return fmt.Errorf("install sdk content: %w", err)
 		}
 	}
+	return generateSDKReference(projectRoot, language, sdkRef)
+}
+
+// generateSDKReference writes the API reference and the examples index from
+// the SDK checkout the project pinned — the code's own doc comments and
+// signatures, so the reference always describes the SDK the build compiles
+// against. Without a checkout the reference that came with the gofi release
+// stands. Only Go has a generator; other languages keep their docs as shipped.
+func generateSDKReference(projectRoot, language, sdkRef string) error {
+	if language != config.LanguageGo {
+		return nil
+	}
+	checkoutRel := ".gofi/gofi-sdk-" + language
+	checkout := filepath.Join(projectRoot, checkoutRel)
+	if fi, err := os.Stat(checkout); err != nil || !fi.IsDir() {
+		return nil
+	}
+	out := layout.SDK().Abs(projectRoot, language, "api")
+	// A branch moves; the commit the checkout resolved to is what the
+	// reference actually describes.
+	version := sdkVersion(sdkRef)
+	if sha := readInstalledSDKSha(projectRoot, language); len(sha) >= 7 {
+		version += " (" + sha[:7] + ")"
+	}
+	if _, err := sdkdoc.Generate(checkout, out, version); err != nil {
+		return fmt.Errorf("generate the SDK reference: %w", err)
+	}
+	if _, err := sdkdoc.WriteExamples(checkout, out, checkoutRel, version); err != nil {
+		return fmt.Errorf("index the SDK examples: %w", err)
+	}
 	return nil
+}
+
+// sdkVersion is the part of a source ref after the @: the tag or branch the
+// reference describes.
+func sdkVersion(ref string) string {
+	if _, v, ok := strings.Cut(ref, "@"); ok {
+		return v
+	}
+	return ref
 }
 
 // installDSLayer fills .claude/sdk/<surface>/ with each front-end surface's
@@ -311,7 +354,7 @@ func seedInstitutionalFromRepo(projectRoot, projectName, institutionalRef string
 	data := scaffold.TemplateData{ProjectName: projectName}
 	if _, err := scaffold.InstallInstitutionalMirror(os.DirFS(dir), projectName, projectRoot, projectName, data); err != nil {
 		if errors.Is(err, scaffold.ErrNoInstitutionalSubdir) {
-			fmt.Fprintf(os.Stderr, "warning: institutional repo has no %q/ folder yet; keeping local starter. Run 'gofi institutional update' after adding it.\n", projectName)
+			fmt.Fprintf(os.Stderr, "warning: institutional repo has no %q/ folder yet; keeping local starter. Run 'gofi update institutional' after adding it.\n", projectName)
 			return nil
 		}
 		return fmt.Errorf("mirror institutional: %w", err)

@@ -1,6 +1,6 @@
 # Tokens — forma mobile (objeto TS)
 
-Valores de [design-tokens.md](../../../../knowledge/ui/design-tokens.md) (fonte
+Valores de [design-tokens.md](../../../../expertise/ui-design/design-tokens.md) (fonte
 única). No RN a lib `gofi-ui-native` entrega os tokens como um **objeto TS tipado**,
 montado por `makeTheme(brand, mode)` e exposto via `<ThemeProvider>` + `useTheme()`.
 
@@ -77,5 +77,5 @@ const { mode, setMode, toggleMode } = useThemeControls();
   `colorAction` clareia um passo no dark (`actionDark`).
 - As cores são **do projeto** (`.gofi.yaml` → `ui.brand`), aplicadas no bootstrap
   (passadas a `makeTheme`/`<ThemeProvider>`); omitir → padrão neutro — ver modelo de
-  marca em [design-tokens.md](../../../../knowledge/ui/design-tokens.md).
+  marca em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md).
 </content>

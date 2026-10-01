@@ -1,6 +1,6 @@
 # Espaçamento e layout — mobile
 
-Escala 4/8 ([design-tokens.md](../../../../knowledge/ui/design-tokens.md)),
+Escala 4/8 ([design-tokens.md](../../../../expertise/ui-design/design-tokens.md)),
 exposta como `t.space[n]`. Layout por **Flexbox** (default do RN).
 
 ## Regras

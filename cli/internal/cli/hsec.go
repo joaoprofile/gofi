@@ -10,14 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/hsec"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/hsec"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
 )
 
 func newHsecCmd() *cobra.Command {
@@ -254,13 +255,14 @@ func runHsecInstall(autoConfirm bool) error {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return errors.New("hsec install requires --yes when stdin is not a TTY")
 		}
-		ok := false
-		if err := huh.NewConfirm().
-			Title("Install horusec via the official script?").
-			Description("Will run: curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest").
-			Affirmative("Install").
-			Negative("Cancel").
-			Value(&ok).Run(); err != nil {
+		ok, err := flow.YesNo(
+			i18n.T("hsec.install.confirm"),
+			i18n.T("hsec.install.confirm_help", "curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest"),
+			i18n.T("hsec.install.yes"),
+			i18n.T("hsec.install.no"),
+			true,
+		)
+		if err != nil && !errors.Is(err, flow.ErrCancelled) {
 			return err
 		}
 		if !ok {
@@ -311,8 +313,8 @@ func runHsecList() error {
 	})
 
 	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(int(os.Stdout.Fd()))
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.Dim)
 
 	header := fmt.Sprintf("%d finding(s), %d false positive(s), %d risk accept(s)", len(findings), len(res.Suppressed), len(res.RiskAccepted))
 	if useColor {
@@ -367,13 +369,13 @@ func severityRank(s string) int {
 func severityStyle(s string) lipgloss.Style {
 	switch s {
 	case "CRITICAL":
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))
+		return lipgloss.NewStyle().Bold(true).Foreground(styles.Bad)
 	case "HIGH":
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
+		return lipgloss.NewStyle().Bold(true).Foreground(styles.Amber)
 	case "MEDIUM":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+		return lipgloss.NewStyle().Foreground(styles.Amber)
 	case "LOW":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		return lipgloss.NewStyle().Foreground(styles.Dim)
 	}
 	return lipgloss.NewStyle()
 }

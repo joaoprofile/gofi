@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // countsForDegree reports whether a relation counts towards degree. Structural

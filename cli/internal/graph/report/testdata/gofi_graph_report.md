@@ -1,10 +1,10 @@
 # Mapa do codigo — sample
 
-Gerado por gofi graph (go, modo `fast`).
+Gerado por gofi index (go, modo `fast`).
 Fonte de verdade: `gofi_graph.json`. Este relatorio e o resumo navegavel dele.
 
 > Leia este arquivo **antes** de varrer o repositorio. Ele diz onde olhar.
-> Para detalhe de qualquer simbolo use `gofi graph explain <no>` em vez de abrir arquivos.
+> Para detalhe de qualquer simbolo use `gofi show <simbolo>` em vez de abrir arquivos.
 
 ## Resumo
 
@@ -58,10 +58,10 @@ Funcoes que se chamam em circulo (recursao mutua). Costumam ser o ponto mais dif
 ## Como consultar sem abrir arquivos
 
 ```sh
-gofi graph explain <no>          # tudo sobre um simbolo: origem, vizinhos, doc
-gofi graph explain <termo> <termo> # duas ou mais palavras = busca; substitui o grep -r
-gofi graph explain <A> --to <B>  # como A alcanca B, aresta por aresta
-gofi graph open                  # abre a visualizacao HTML do grafo
+gofi show <simbolo>             # tudo sobre um simbolo: origem, vizinhos, doc
+gofi find --in code <palavras>  # busca por palavras; substitui o grep -r
+gofi path <A> <B>               # como A alcanca B, aresta por aresta
+gofi index open                 # abre a visualizacao HTML do grafo
 ```
 
 Os nomes aceitam forma curta: `NewServer`, `api.NewServer` ou o ID completo funcionam.

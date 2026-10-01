@@ -1,57 +1,35 @@
-# Value Objects Aninhados — Padrão gofi/sqln
+---
+name: value-objects
+description: Mapeamento linha→struct do sqln (tags db) — por nome ou por posição, value objects aninhados, coluna JSON, arrays
+sdk: v0.8.2
+keywords: [mapping, db-tag, value-object, scan, nested-struct, sql.Scanner, jsonb, array]
+---
 
-## Contexto
+# Mapeamento de linhas e Value Objects — `sqln/mapping`
 
-O mapper em `gofi/sqln/mapping/mapper.go` expande recursivamente structs aninhadas com tag `db` — transformando value objects no domínio Go em colunas simples na query SQL, sem precisar implementar `sql.Scanner` manualmente.
+API: `.claude/sdk/go/api/sqln-mapping.md`. Todo `sqln.Find*` escaneia em `T`
+por este mapper; `mapping.GetMappedCols(&T{})` expõe os destinos (útil em
+teste).
 
-Use quando:
-- Um grupo de atributos faz sentido como VO no domínio (`Money`, `Address`, `Pricing`, `Coordinates`)
-- O banco guarda os valores em **colunas separadas** (uma coluna por sub-campo)
-- Não há necessidade de (de)serializar o VO inteiro como um blob
+## Como o mapper decide
 
-## Regras do mapper
+1. **Folhas** de `T` = campos com tag `db`, na ordem de declaração; struct
+   aninhada com tag `db` é expandida (ver VO abaixo). `time.Time`, tipos que
+   implementam `sql.Scanner` e `[]byte` são folha única; outros slices são
+   lidos como **array PostgreSQL** (via pgx).
+2. **Por nome**, quando as colunas do resultado cobrem **todas** as folhas:
+   nome da coluna (ou alias) = nome da tag, sem diferenciar maiúsculas. Ordem
+   das colunas não importa e colunas extras são ignoradas.
+3. **Por posição** (fallback) quando algum nome falta, ou quando duas folhas
+   têm a mesma tag, ou quando alguma folha tem `db:"-"`: coluna *i* → folha
+   *i*, e a contagem precisa bater.
 
-1. **Tag `db` no campo externo é obrigatória** — sem ela o campo inteiro é ignorado
-2. **Ordem dos sub-campos internos define o mapeamento posicional** com as colunas do `SELECT` — não há "resolução por nome"
-3. **Múltiplos níveis suportados** — `A.B.C.valor` funciona enquanto houver tag `db` em cada nível
-4. **`time.Time` e `sql.Scanner` não recursam** — são tratados como primitivos (o driver sabe escanear)
-5. **Slices com tag `db`** usam `pq.Array` automaticamente — não recursam
-6. **Sem tag `db` em sub-campo** → esse sub-campo é ignorado pelo scan
-7. **`db:"-"` NÃO exclui o campo do scan** — o critério de inclusão é
-   `f.Tag.Lookup("db")` (a *presença* da tag, qualquer valor, inclusive `"-"`),
-   não o valor. Um campo **computado/derivado** (preenchido pelo service após o
-   scan — ex.: `SupportedTypes []string` resolvido por capability, flags
-   calculadas, agregados montados em memória) deve ter **apenas a tag `json`,
-   sem `db` nenhuma**. Pôr `db:"-"` nele faz o mapper contá-lo como coluna
-   (e, se for slice, vira destino `pq.Array`), gerando em runtime
-   `sql: expected N destination arguments in Scan, not N+1` quando o `SELECT`
-   tem N colunas. Regra: *campo que o banco não devolve = sem tag `db`*.
+**Regra:** escreva o `SELECT` para casar **por nome** — cada folha com
+coluna ou alias de mesmo nome (`c.slug AS category` para `db:"category"`).
+Assim reordenar colunas ou juntar tabelas não quebra o scan. Posição é só
+fallback; não dependa dele.
 
-## Exemplo — VO em colunas separadas (padrão recursivo)
-
-```go
-type Pricing struct {
-    Price float64 `json:"price" db:"price"`
-}
-
-type Product struct {
-    ID    int64   `json:"id"      db:"id"`
-    Name  string  `json:"name"    db:"name"`
-    Price Pricing `json:"pricing" db:"price"`  // tag externa é marcador de presença
-}
-```
-
-Query:
-```sql
-SELECT id, name, price FROM product
-```
-
-Scan mapping:
-- coluna 0 `id` → `Product.ID`
-- coluna 1 `name` → `Product.Name`
-- coluna 2 `price` → `Product.Price.Price` (recursa em `Pricing`)
-
-## Exemplo — VO multi-campo em múltiplas colunas
+## Value Object em colunas separadas (recursivo)
 
 ```go
 type Address struct {
@@ -63,18 +41,17 @@ type Address struct {
 type Customer struct {
     ID      int64   `json:"id"      db:"id"`
     Name    string  `json:"name"    db:"name"`
-    Address Address `json:"address" db:"address"`  // marcador
+    Address Address `json:"address" db:"address"` // tag externa = marcador; não é coluna
 }
 ```
 
-Query **deve** selecionar as colunas na ordem dos sub-campos:
-```sql
-SELECT id, name, street, city, zip_code FROM customer
-```
+`SELECT c.id, c.name, c.street, c.city, c.zip_code FROM customer c` — as
+folhas são `id, name, street, city, zip_code` (nomes das tags **internas**).
+Vários níveis funcionam desde que cada nível tenha tag `db`.
 
-## Exemplo — VO armazenado em coluna única (JSON/bytes)
+## Value Object em coluna única (JSON/bytes)
 
-Quando o VO é serializado inteiro (ex: JSONB no PostgreSQL), **não use struct aninhada recursiva** — implemente `sql.Scanner` e `driver.Valuer`. O mapper trata o campo como primitivo.
+Implemente `sql.Scanner` + `driver.Valuer`; o mapper trata como folha única:
 
 ```go
 type Metadata map[string]any
@@ -87,83 +64,45 @@ func (m *Metadata) Scan(src any) error {
     return json.Unmarshal(b, m)
 }
 
-func (m Metadata) Value() (driver.Value, error) {
-    return json.Marshal(m)
-}
-
-type Product struct {
-    ID       int64    `json:"id"       db:"id"`
-    Metadata Metadata `json:"metadata" db:"metadata"`  // coluna única JSONB
-}
+func (m Metadata) Value() (driver.Value, error) { return json.Marshal(m) }
 ```
 
-## Armadilhas comuns
+## Armadilhas
 
-- **Colunas fora de ordem no `SELECT`** — como o mapeamento é posicional, reordenar `SELECT price, name, id` quebra o scan. Sempre alinhar a ordem do `SELECT` com a ordem dos sub-campos da struct
-- **Esquecer a tag `db` externa** — o mapper pula o campo e os valores do VO ficam zero sem erro de scan
-- **Struct para coluna JSONB SEM `sql.Scanner` → 0 folhas, aridade off-by-one (armadilha campeã).**
-  Um campo cujo tipo é **struct** com tag `db` (destinado a uma coluna JSONB
-  única), mas cujos sub-campos têm só `json` (**sem** `db`), e que **não**
-  implementa `sql.Scanner`: o mapper tenta **recursar** (struct ≠ `time.Time` ≠
-  `sql.Scanner` → nested-scannable), não encontra folha `db` nenhuma e o campo
-  contribui **0 destinos de scan**. O `SELECT` lista a coluna JSONB, mas os
-  destinos ficam **1 a menos** → `sql: expected N destination arguments in Scan,
-  not N-1`, em **runtime**, em **toda** leitura do tipo (o `INSERT`/`UPDATE`
-  continua funcionando porque passa `.ToJSON()`/`[]byte` explícito — o bug só
-  aparece na primeira query que escaneia a struct inteira). Regra: **coluna JSONB
-  = tipo com `Scan`/`Value`** (vira folha única, aridade casa), **nunca** struct
-  recursiva com sub-campos sem `db`. Ver §"VO armazenado em coluna única".
-- **Mix de strategies** — se o VO implementa `sql.Scanner`, ele não recursa, mesmo que tenha sub-campos com `db`. Escolha uma estratégia por VO
-- **Adicionar sub-campo no meio** — muda a ordem posicional e quebra queries existentes. Ao estender um VO, adicione o novo sub-campo **no fim** e ajuste todos os `SELECT` correspondentes
+- **Struct para coluna JSONB sem `sql.Scanner`** (sub-campos só com `json`):
+  o mapper tenta recursar, acha **zero** folhas e o campo some do scan →
+  `sql: expected N destination arguments in Scan, not N-1` em runtime, em
+  toda leitura do tipo (a escrita segue funcionando). Coluna JSON = tipo com
+  `Scan`/`Value`.
+- **Campo calculado** (preenchido pelo service depois do scan): só tag
+  `json`, **sem** `db`. `db:"-"` **não** exclui — a presença da tag conta
+  como folha (e, por não ter nome, derruba o casamento por nome).
+- **Sem tag `db` no campo externo** do VO → o VO inteiro é ignorado sem erro.
+- **Tag duplicada** (duas folhas `db:"id"` em VOs diferentes) → cai para
+  posição. Dê nomes únicos (alias no SQL + tag distinta).
+- `Scan` de `NULL` em campo não-ponteiro falha só nas linhas com `NULL`: use
+  `*T`/`sql.Null*` ou `COALESCE` onde a coluna aceita nulo.
+- Tipo primitivo (`FindFromCriteria[bool]`, `[int64]`) escaneia a **primeira
+  coluna** direto — selecione exatamente uma coluna compatível.
 
-## O contrato posicional é do TIPO, não do repo
+## Mudou a struct? Raio de alcance
 
-`FindFromCriteria[T]` escaneia via `rows.Scan(GetMappedCols(&T)...)`
-(`mapping/mapper.go`). `GetMappedCols` gera **um destino por folha `db`-tagueada
-de `T`, na ordem de declaração** — VO aninhado expande in-place. A string do
-`Select(...)` é só a cláusula SQL: **não** participa do mapeamento e **não**
-realinha por nome. Logo, **toda** query que escaneia em `T` carrega um contrato
-implícito: a lista de colunas do `SELECT` precisa bater com as folhas de `T` em
-**contagem E ordem**.
+Todo repositório que escaneia o mesmo `model.{Tipo}` é afetado. Antes de
+fechar:
 
-Consequências ao **mudar a struct** (campo novo, remoção, reordenação):
-
-- **Aridade:** `SELECT` com menos/mais colunas que folhas → driver retorna
-  `sql: expected N destination arguments in Scan, not M`. Erro de runtime, não
-  de compilação — só aparece quando a query roda.
-- **Desalinhamento silencioso:** mesma contagem, ordem trocada → cada coluna cai
-  no campo errado. Sem erro se os tipos forem compatíveis (string↔*string);
-  `Scan` de `NULL` num campo não-pointer ou de não-JSON num `sql.Scanner`
-  (JSON map) estoura só em linhas específicas.
-- **Raio de alcance = todos os repos que escaneiam `T`.** Quando o **mesmo**
-  `model.{Type}` é materializado por mais de um repository (o repo dono +
-  repos de outros contextos que leem a mesma tabela), **cada** `SELECT` que cai
-  em `T` tem que ser atualizado junto. Um deles ficar para trás = quebra só
-  naquele caminho (ex.: contexto consumidor quebra, o dono continua passando).
-
-Regras ao estender/alterar uma struct escaneada:
-
-1. Adicione o campo **na posição certa** da struct e replique a **mesma ordem**
-   em **todos** os `SELECT` que escaneiam `T` — não só no repo que você abriu.
-2. Localize os consumidores antes de fechar:
-   `grep -rn "FindFromCriteria\[.*{Type}\]"` + `grep -rn "{Type}SelectFields"`
-   + `grep -rn "model.{Type}\b"`.
-3. Campo que vem de tabela joinada (ex.: nome resolvido de outra tabela) exige
-   o `.Join(...)` correspondente em **cada** query — senão a coluna não existe
-   no resultset e a aridade quebra.
-4. `go build` + `go test` de **todos** os pacotes consumidores, não só do que
-   você editou.
-5. **`go build`/`go test` (sem DB) NÃO pega quebra de scan** — ela é de runtime.
-   Ao mexer numa struct escaneada, valide a **contagem de folhas** explicitamente:
-   `len(mapping.GetMappedCols(&T{}))` (do pacote `gofi/sqln/mapping`) tem que ser
-   **igual** ao nº de colunas de **cada** `*SelectFields` que cai em `T`. Um
-   teste de 3 linhas contando folhas trava a regressão; senão, exercite a query
-   real contra um banco. Confira folha-a-folha o **mapeamento de cada campo**
-   (struct aninhada = `Scanner` **ou** sub-campos `db`), não só a contagem visível
-   de campos da struct.
+1. Localize os consumidores (`gofi show {Tipo}`,
+   `gofi find --regex "Find(FromCriteria|WithFilter)?\[.*{Tipo}\]" --in code`,
+   `gofi find --text "{Tipo}SelectFields" --in code`).
+2. Cada `SELECT` que cai em `T` precisa trazer a coluna nova com o nome da
+   tag (e o `Join` que a produz).
+3. `go build`/`go test` sem banco **não** pegam quebra de scan: exercite a
+   query contra um banco (teste de integração) ou compare
+   `len(mapping.GetMappedCols(&T{}))` com as colunas de cada
+   `*SelectFields`.
 
 ## Onde documentar
 
-- **Spec** §3.3 Value Objects Aninhados — tabela com sub-campos, estratégia de persistência, justificativa
-- **entity.go** — struct do VO como tipo separado, referenciada pela entidade raiz
-- **migration** — colunas do VO na ordem esperada pela struct
+- Spec §3.3 Value Objects — sub-campos, estratégia (colunas separadas vs
+  coluna única), justificativa.
+- `model/entity.go` — VO como tipo próprio, referenciado pela entidade raiz.
+- Migration — colunas do VO com os nomes das tags.

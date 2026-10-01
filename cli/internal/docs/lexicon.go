@@ -45,7 +45,7 @@ func (l Lexicon) Has(term string) bool {
 // the file stays a document a person can read and annotate.
 func ReadLexicon(root, name string) Lexicon {
 	lex := Lexicon{Alias: map[string]string{}}
-	b, err := os.ReadFile(filepath.Join(root, LexiconDir, name+".md"))
+	b, err := os.ReadFile(filepath.Join(root, LexiconDir(), name+".md"))
 	if err != nil {
 		return lex
 	}
@@ -119,7 +119,7 @@ func WriteLexicon(root, name, title, note string, terms []string) error {
 	for _, t := range terms {
 		b.WriteString("- " + t + "\n")
 	}
-	dir := filepath.Join(root, LexiconDir)
+	dir := filepath.Join(root, LexiconDir())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

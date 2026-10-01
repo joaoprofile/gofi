@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -69,21 +67,5 @@ func TestBackfillOnACurrentConfigChangesNothing(t *testing.T) {
 	Backfill(cfg)
 	if seeded := Backfill(cfg); len(seeded) != 0 {
 		t.Errorf("a second pass should be a no-op, got %v", seeded)
-	}
-}
-
-// Load migrates in memory, so the parsed struct always reports the current
-// version — only the raw file says whether it still has to be rewritten.
-func TestFileVersionReadsTheFileNotTheMigration(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, FileName)
-	if err := os.WriteFile(path, []byte("version: 1\nproject:\n  name: x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := FileVersion(path); got != 1 {
-		t.Errorf("FileVersion = %d, want 1", got)
-	}
-	if got := FileVersion(filepath.Join(dir, "nao-existe.yaml")); got != 0 {
-		t.Errorf("a missing file should read as 0, got %d", got)
 	}
 }

@@ -47,7 +47,7 @@ type Migrator struct {
 // Stamp writes the format marker. Everything else keys off it.
 func (m *Migrator) Stamp() (*MigrateResult, error) {
 	res := &MigrateResult{Step: "stamp"}
-	for _, corpus := range Corpora {
+	for _, corpus := range Corpora() {
 		err := walkCorpus(m.Root, corpus, func(path string, fm Frontmatter, body []string) {
 			if _, ok := fm["formato"]; ok {
 				res.Skipped++
@@ -132,7 +132,7 @@ func (m *Migrator) Lexicon() (*MigrateResult, error) {
 	if m.Apply {
 		if len(tables) > 0 {
 			if err := WriteLexicon(m.Root, LexEntities, "Entidades",
-				"Tabelas reais do schema. **Derivado** — regenere com `gofi docs migrate lexicon`. "+
+				"Tabelas reais do schema. **Derivado** — regenere com `gofi index migrate lexicon`. "+
 					"É o léxico que liga documento a símbolo de código.", tables); err != nil {
 				return res, err
 			}
@@ -150,7 +150,7 @@ func (m *Migrator) Lexicon() (*MigrateResult, error) {
 			{LexSynonyms, "Sinônimos", "Ponte entre a língua da pergunta e a do identificador. " +
 				"**Cresce a cada busca que falha:** registre aqui o par que faltou.", "Equivale a"},
 		} {
-			path := filepath.Join(m.Root, LexiconDir, seed.name+".md")
+			path := filepath.Join(m.Root, LexiconDir(), seed.name+".md")
 			if _, err := os.Stat(path); err == nil {
 				continue // hand-kept: never overwrite
 			}

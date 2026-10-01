@@ -54,7 +54,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Protocol is the wire format this package speaks. The major version is the

@@ -1,5 +1,6 @@
 // Package spinner runs a sequence of named steps, showing a rotating dot
-// glyph while each one executes. Falls back to plain "→ name…" lines when
+// glyph while each one executes; a finished step stays as a ✓ line, a failed
+// one as a ✗ line with the reason nested under it. Falls back to plain "→ name…" lines when
 // stdout is not a TTY (CI, pipes).
 package spinner
 
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
 	"golang.org/x/term"
 )
 
@@ -60,9 +62,10 @@ func runStep(out io.Writer, s Step, tty bool) error {
 	done := make(chan error, 1)
 	go func() { done <- s.Fn() }()
 
-	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	okStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
-	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	muted := lipgloss.NewStyle().Foreground(styles.Dim)
+	spin := lipgloss.NewStyle().Foreground(styles.Accent)
+	okStyle := lipgloss.NewStyle().Foreground(styles.Good).Bold(true)
+	failStyle := lipgloss.NewStyle().Foreground(styles.Bad).Bold(true)
 
 	tick := time.NewTicker(FrameInterval)
 	defer tick.Stop()
@@ -73,14 +76,14 @@ func runStep(out io.Writer, s Step, tty bool) error {
 		case err := <-done:
 			fmt.Fprint(out, "\r\x1b[2K") // clear current line
 			if err != nil {
-				fmt.Fprintf(out, "  %s %s — %s\n", failStyle.Render("✗"), s.Name, muted.Render(err.Error()))
+				fmt.Fprintf(out, "  %s %s\n%s%s\n", failStyle.Render("✗"), s.Name, muted.Render("    ⎿  "), err.Error())
 			} else {
 				fmt.Fprintf(out, "  %s %s\n", okStyle.Render("✓"), s.Name)
 			}
 			return err
 		case <-tick.C:
 			frame := string(Frames[i%len(Frames)])
-			fmt.Fprintf(out, "\r  %s %s", muted.Render(frame), s.Name)
+			fmt.Fprintf(out, "\r  %s %s", spin.Render(frame), muted.Render(s.Name))
 			i++
 		}
 	}

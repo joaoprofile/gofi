@@ -1,11 +1,21 @@
 package cli
 
-import "context"
+import (
+	"context"
 
-// The init pipeline installs the GOFI AI extension into every editor on
-// PATH. That is right for a user running `gofi init` and wrong for a test run,
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/intake"
+)
+
+// The init pipeline and `gofi install` install the GOFI AI extension into
+// every editor on PATH. That is right for a user and wrong for a test run,
 // which must not mutate the developer's editors — so the whole package runs
 // against a stub.
 func init() {
 	installExtensionsOnInit = func(context.Context) string { return "" }
+	installExtensionsNow = func(context.Context) installOutcome {
+		return installOutcome{installDone, "stub"}
+	}
+	// Nor may a test spend a model call.
+	lightModelFor = func(*config.GofiConfig) intake.Model { return nil }
 }

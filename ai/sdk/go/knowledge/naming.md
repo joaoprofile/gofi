@@ -1,3 +1,10 @@
+---
+name: naming
+description: Convenções de nome em Go — arquivos, pacotes, tipos, receivers, erros, SQL, tags db/json, códigos de moeda/país, endpoints, imports do SDK
+sdk: v0.8.2
+keywords: [naming, nomes, snake_case, camelCase, PascalCase, tags db, tags json, currencyCode, countryCode, imports, ErrContextAction]
+---
+
 # Naming Conventions — Go
 
 ## Arquivos
@@ -44,5 +51,6 @@
 - DTOs em inglês: `CreateUserRequest`, `UpdateOrderRequest`
 
 ## Imports
-- Sempre agrupar em 3 blocos: stdlib → gofi → externos → internos do projeto
-- Alias **somente** quando há colisão de nomes entre pacotes
+- Agrupar em blocos, nesta ordem: stdlib → gofi (`github.com/gofi-labs/gofi-sdk-go/...`) → externos → internos do projeto
+- Import em branco (driver SQL, provider de mensageria/bucket/segredo) só no `main.go`, com comentário dizendo a variável que ele habilita (`// DATABASE_DRIVER=postgres`)
+- Alias **somente** quando há colisão de nomes entre pacotes (ex.: `iamconfig "github.com/gofi-labs/gofi-sdk-go/iam/config"`, componente `iam` × pacote `iam`)

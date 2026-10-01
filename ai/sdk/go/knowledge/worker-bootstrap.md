@@ -1,237 +1,274 @@
-# Background worker bootstrap — wrapper owns lifecycle
+---
+name: worker-bootstrap
+description: Background worker (cron, ticker, listener) como gofi.Runner dono do próprio ciclo de vida — main só declara no With; Start monta dependências, Run bloqueia, Stop drena
+sdk: v0.8.2
+keywords: [worker, cron, cronjob, Runner, gofi.Runner, background, ciclo de vida, Start, Run, Stop, feature flag, multi-worker, timezone, tzdata]
+---
 
-> **Quando aplicar:** qualquer estrutura em `pathCmd` que represente um
-> **trabalho de longa duração** com ciclo de vida (start + stop):
-> consumer Kafka, cron scheduler, worker tick, listener TCP, watcher
-> de filesystem, etc. Para o caso específico de consumer Kafka (que tem
-> `*msq.ConsumerManager` e ordenação `Register → Dispatcher`), ver também
-> `consumer-bootstrap.md`.
+# Background worker bootstrap — o worker é um `gofi.Runner`
+
+> **Quando aplicar:** qualquer estrutura em `pathCmd` que represente trabalho
+> de longa duração: cron, loop com ticker, listener, watcher. Consumer de
+> mensageria tem página própria (`consumer-bootstrap.md`). Mecânica do
+> orquestrador: `gofi-orchestrator.md` § Runner. API de agendamento:
+> `cronjob.md`. Exemplo executável: `examples/obs` (`runner.go`,
+> `job/archive.go`) — `.claude/sdk/go/api/examples.md`.
 
 ## Regra inviolável
 
-**O wrapper do worker é dono do próprio ciclo de vida.** O constructor
-(`New{Worker}` ou o builder de `wire.go`) **executa toda a inicialização
-em si mesmo** — registro, scheduling, warm-up, primeira execução
-(`Bootstrap`/`runOnce`), tudo. O wrapper expõe **apenas** `Close()`
-para shutdown.
-
-`main.go` enxerga **exclusivamente** o par:
+**O wrapper do worker é dono do próprio ciclo de vida e implementa
+`gofi.Runner`.** O gofi chama `Start` no `Build` (depois de banco, cache e
+broker), roda `Run` no `ListenAndServe` e chama `Stop` no shutdown —
+**antes** de fechar os recursos. O `main.go` só **declara** o worker:
 
 ```go
-worker := build{Worker}(ctx, …)
-defer worker.Close()
+svc, err := gofi.New("{servico}").
+    With(
+        database.New(),
+        newReportCron(cfg),   // the whole worker is this line
+        httpserver.New(":8080"),
+    ).
+    Build()
 ```
 
-Nada de `worker.Schedule(...)`, `worker.Bootstrap(...)`, `worker.Start(...)`,
-`worker.Register(...)` em `main`. **Cada método público chamado do `main.go`
-além de `Close()` é red flag** — significa que o ciclo de vida vazou.
+Nada de `go worker.Loop(ctx)`, `worker.Schedule(...)`, `worker.Start(...)`,
+`defer worker.Close()` no `main`. **Cada chamada a método do worker no
+`main.go` é red flag** — o ciclo de vida vazou e o shutdown não espera o
+worker (banco fecha com job no meio).
+
+| Método | Responsabilidade |
+|---|---|
+| `Start(ctx, rt)` | Monta dependências (banco já aberto), valida config (agenda, fuso), pega recursos compartilhados (`cache.Shared(rt)`). Erro aqui falha o `Build`. **Não** executa trabalho longo — bloqueia o boot. |
+| `Run()` | Feature flag, primeira execução síncrona (se o domínio exige), agendamento; **bloqueia até `Stop`**. Retornar cedo derruba o serviço. |
+| `Stop(ctx)` | Cancela e espera a execução em curso terminar (limitado por `ctx`). Idempotente. |
 
 ---
 
-## Template canônico
+## Template canônico — cron
 
-### Wrapper (`pathCmd/{worker}.go`)
+### Wrapper (`pathCmd/{worker}_cron.go`)
 
 ```go
 package main
 
 import (
     "context"
+    "log/slog"
+    "sync"
+    "time"
 
-    "github.com/joaoprofile/gofi/base/cronjob"
+    "github.com/gofi-labs/gofi-sdk-go/base/cronjob"
+    "github.com/gofi-labs/gofi-sdk-go/gofi"
+    "github.com/gofi-labs/gofi-sdk-go/obs/logging"
 
-    fooSvcPkg "{module}/services/domain/{ctx}/service"
+    reportsvc "<module>/domain/{contexto}/service"
 )
 
-type {Worker}Cron struct {
-    svc    fooSvcPkg.FooService
-    handle *cronjob.JobHandle  // ou *msq.ConsumerManager, *time.Ticker, etc.
+const reportRunTimeout = 10 * time.Minute
+
+type reportCron struct {
+    cfg    Config
+    svc    reportsvc.ReportService
+    ctx    context.Context
+    cancel context.CancelFunc
+    done   chan struct{}
 }
 
-func New{Worker}Cron(ctx context.Context, svc fooSvcPkg.FooService, cfg Config) *{Worker}Cron {
-    w := &{Worker}Cron{svc: svc}
+func newReportCron(cfg Config) *reportCron {
+    ctx, cancel := context.WithCancel(context.Background())
+    return &reportCron{cfg: cfg, ctx: ctx, cancel: cancel, done: make(chan struct{})}
+}
 
-    w.runOnce(ctx) // bootstrap: primeira execução síncrona, se o domínio exige
+func (w *reportCron) Name() string      { return "{contexto} report cron" }
+func (w *reportCron) Stage() gofi.Stage { return gofi.StageServer }
 
-    if !cfg.{Worker}CronEnabled {
-        logging.Info("{worker} cron: disabled by config")
-        return w
+func (w *reportCron) schedule() cronjob.ScheduleConfig {
+    return cronjob.ScheduleConfig{
+        Mode:         cronjob.Fixed,
+        Hour:         w.cfg.ReportHour,
+        Minute:       w.cfg.ReportMinute,
+        LocationName: w.cfg.ReportLocation,
     }
+}
 
-    w.handle = cronjob.ScheduleJob(ctx, cronjob.ScheduleConfig{
-        Mode:   cronjob.Fixed,
-        Hour:   cfg.{Worker}CronHour,
-        Minute: cfg.{Worker}CronMinute,
-    }, func() {
-        w.runOnce(context.Background())
+// Start runs during Build, after database and cache: wire and validate here.
+func (w *reportCron) Start(_ context.Context, _ *gofi.Runtime) error {
+    if err := validSchedule(w.schedule()); err != nil { // ScheduleJob panics on bad config
+        return err
+    }
+    w.svc = buildReportService()
+    return nil
+}
+
+// Run blocks until Stop; a disabled worker just waits.
+func (w *reportCron) Run() error {
+    defer close(w.done)
+    if !w.cfg.ReportEnabled {
+        logging.Debug("{contexto} report cron: disabled by config")
+        <-w.ctx.Done()
+        return nil
+    }
+    var running sync.Mutex
+    cronjob.ScheduleJob(w.ctx, w.schedule(), func() {
+        running.Lock()
+        defer running.Unlock()
+        if w.ctx.Err() != nil {
+            return // late tick after Stop
+        }
+        w.runOnce()
     })
-
-    return w
+    <-w.ctx.Done()
+    running.Lock() // wait for the run in progress before gofi closes the database
+    defer running.Unlock()
+    return nil
 }
 
-func (w *{Worker}Cron) Close() {
-    if w.handle != nil {
-        w.handle.Stop()
+func (w *reportCron) Stop(ctx context.Context) error {
+    w.cancel()
+    select {
+    case <-w.done:
+        return nil
+    case <-ctx.Done():
+        return ctx.Err()
     }
 }
 
-func (w *{Worker}Cron) runOnce(parent context.Context) {
-    ctx, cancel := context.WithTimeout(parent, runTimeout)
+func (w *reportCron) runOnce() {
+    ctx, cancel := context.WithTimeout(context.WithoutCancel(w.ctx), reportRunTimeout)
     defer cancel()
-    w.svc.Run(ctx)
+    if err := w.svc.Generate(ctx); err != nil {
+        logging.FromContext(ctx).Error("{contexto} report cron: failed", slog.Any("error", err))
+    }
 }
 ```
 
-### `wire.go` — builder recebe `cfg` por valor
+`validSchedule`: `cronjob.md` § Config inválida.
+
+### `wire.go` — builder recebe o que precisa por parâmetro
 
 ```go
-func build{Worker}Cron(ctx context.Context, cfg Config) *{Worker}Cron {
-    repo := fooRepoPkg.NewFooRepository()
-    svc  := fooSvcPkg.NewFooService(repo)
-    return New{Worker}Cron(ctx, svc, cfg)
+func buildReportService() reportsvc.ReportService {
+    return reportsvc.NewReportService(reportrepo.NewReportRepository())
 }
 ```
 
-> Construção do service e do repo são detalhes internos do builder.
-> Não há `buildFooService` separado consumido apenas como entrada do
-> wrapper — inline a construção (menos uma indireção, menos uma função
-> exportada por engano).
+> Service e repo consumidos só pelo worker são montados **dentro** do builder
+> — sem `buildFooService` exposto só para alimentar o wrapper. Builder
+> separado só para dependência realmente compartilhada (mesmo repo no worker e
+> no handler HTTP).
 
-### `main.go` — duas linhas por worker
+### Loop com ticker, listener, watcher
 
-```go
-{worker}Cron := build{Worker}Cron(ctx, cfg)
-defer {worker}Cron.Close()
-```
+Mesma forma. `Run` executa o loop com `w.ctx` e retorna quando ele é
+cancelado (`examples/obs/job/archive.go`: `time.NewTicker` + `select` em
+`ctx.Done()`). Quando não há `Start` a fazer, o adapter genérico `newRunner(name,
+loop)` de `gofi-orchestrator.md` § Runner basta.
+
+### Várias réplicas
+
+Job que não pode duplicar: no `Start`, `rdb, err := cache.Shared(rt)` e
+`Locker: cronjob.RedisLocker{Client: rdb}` + `Name` estável no
+`ScheduleConfig` (`cronjob.md` § Várias réplicas).
 
 ---
 
 ## Multi-worker no mesmo serviço
 
-Cada worker tem seu próprio handle e seu próprio par no `main.go`:
+Cada worker é um Runner próprio, uma linha no `With`:
 
 ```go
-partitionCron := buildPartitionCron(ctx, cfg)
-defer partitionCron.Close()
-
-archiveCron := buildArchiveCron(ctx, cfg)
-defer archiveCron.Close()
-
-bulkConsumer := buildBulkConsumer(ctx, service.Messaging(), cfg.BulkConcurrency)
-defer bulkConsumer.Close()
+With(
+    database.New(),
+    newPartitionCron(cfg),
+    newArchiveCron(cfg),
+    newOrderConsumer(mq, cfg), // consumer-bootstrap.md
+    httpserver.New(":8080"),
+)
 ```
 
-Cron desabilitado por config (`cfg.XxxCronEnabled == false`) ainda
-retorna wrapper válido — só com `handle == nil`. `Close()` é no-op
-nesse caso. Isso mantém o par `build → defer Close` válido em todos
-os cenários (com/sem feature flag).
+Worker desligado por config (`cfg.XxxEnabled == false`) continua declarado:
+`Run` só espera o `Stop`. Mantém o `main` uniforme em todos os ambientes.
 
 ---
 
 ## Anti-padrões
 
-### ❌ `Bootstrap` / `Schedule` / `Start` públicos chamados de `main`
+### ❌ Ciclo de vida fora do gofi
 
 ```go
-// ANTI-PADRÃO
-cron := NewPartitionCron(svc)
-cron.Bootstrap(ctx)        // método público só pro main chamar
-cron.Schedule(ctx, cfg)    // idem
+// ANTI-PATTERN
+cron := buildPartitionCron(ctx, cfg)
+defer cron.Close()          // runs after gofi shutdown: database already closed
+go cron.Loop(ctx)           // nobody waits for the loop to finish
 ```
 
-Problemas:
-- `main.go` carrega ordem de inicialização (`Bootstrap` antes de `Schedule`?) — detalhe que pertence ao worker.
-- Esquecer de chamar `Schedule` deixa o cron silenciosamente inerte.
-- Adicionar passo de inicialização (warm-up de cache, registro em service registry, etc.) obriga editar `main.go` em vez do wrapper.
-- Acopla o `main.go` ao ciclo de vida específico desse worker.
+### ❌ `Bootstrap` / `Schedule` / `Start` públicos chamados do `main`
 
-### ❌ Builder retorna pares de objetos
+`main` passa a carregar ordem de inicialização do worker; esquecer
+`Schedule` deixa o cron inerte em silêncio; passo novo de inicialização
+obriga editar o `main`.
 
-```go
-// ANTI-PADRÃO
-svc := buildPartitionService(ctx)        // exposto só pra montar o cron
-cron := NewPartitionCron(svc)
-```
-
-Service só consumido pelo wrapper não precisa de função builder dedicada.
-Inline dentro de `build{Worker}Cron`. Builders separados são para
-**dependências realmente compartilhadas** (mesmo repo usado por 2
-workers + handler HTTP, por exemplo).
-
-### ❌ `handle` exposto / retornado de `Schedule`
+### ❌ `Run` que retorna na hora
 
 ```go
-// ANTI-PADRÃO
-handle := cron.Schedule(ctx, cfg)
-defer handle.Stop()  // main lida com o tipo da SDK direto
-```
-
-`*cronjob.JobHandle` (ou `*msq.ConsumerManager`) é detalhe de
-implementação do worker. `main.go` opera no tipo do wrapper, não no
-tipo da SDK. Wrapper encapsula `Stop()` dentro de `Close()`.
-
-### ❌ Feature-flag verificada em `main`
-
-```go
-// ANTI-PADRÃO
-if cfg.PartitionCronEnabled {
-    cron := buildPartitionCron(ctx, cfg)
-    defer cron.Close()
+// ANTI-PATTERN
+func (w *reportCron) Run() error {
+    cronjob.ScheduleJob(w.ctx, w.schedule(), w.job)
+    return nil // ListenAndServe reads "runner finished" and stops the service
 }
 ```
 
-Decisão "está habilitado?" pertence ao wrapper. `main.go` sempre chama
-`build → defer Close`; quando desabilitado, o wrapper retorna no-op
-(handle nil, Close vazio). Isso preserva uniformidade e simetria com
-outros workers.
+### ❌ Trabalho longo no `Start`
+
+Primeira execução, warm-up pesado ou carga inicial no `Start` seguram o
+`Build` (e o `/readyz`). Vão no começo do `Run`.
+
+### ❌ Feature flag no `main`
+
+```go
+// ANTI-PATTERN
+if cfg.PartitionEnabled {
+    components = append(components, newPartitionCron(cfg))
+}
+```
+
+A decisão "está habilitado?" pertence ao worker.
+
+### ❌ Handle do SDK exposto
+
+`*cronjob.JobHandle`, ticker, manager: campo privado do wrapper, nunca
+retornado ao `main`.
 
 ---
 
 ## Cron com horário fixo — tz de negócio explícito + `tzdata` embutido
 
-Quando um worker roda em **horário fixo diário** (modo `cronjob.Fixed` com
-`Hour`/`Minute`, vs `cronjob.Interval`), duas armadilhas valem regra:
-
 1. **Fuso é decisão de negócio, não do container.** "À noite" / "meia-noite"
-   significa meia-noite no fuso de operação (ex.: o fuso de negócio do
-   produto), **não** no fuso do container — que em produção quase sempre é
-   **UTC**. Use `LocationName` explícito (IANA, configurável por env) no
-   `ScheduleConfig`; **nunca** confie em `time.Local`/tz default do host. Um
-   `Hour: 0` interpretado em UTC dispara às 21h do dia anterior no horário de
-   um fuso `-03`, silenciosamente.
-
-2. **`time.LoadLocation` com nome IANA exige `tzdata` disponível — embuta no
-   binário.** `cronjob.ScheduleJob` faz `time.LoadLocation(cfg.LocationName)`
-   e **PANICA no boot** se o tz database não estiver presente. Imagens
-   slim/`scratch`/`distroless` normalmente **não têm** tzdata. Solução
-   robusta e portável: o `main.go` do binário cron importa em branco:
-
-   ```go
-   import _ "time/tzdata" // embute o tz database no binário; LoadLocation(IANA) nunca panica por falta de tzdata no container
-   ```
-
-   Custo ~450KB no binário, zero dependência de tzdata do SO. Preferível a
-   depender de pacote `tzdata` instalado na imagem.
-
-3. **Escalonar horários** quando há N workers do mesmo tipo (um por dimensão)
-   que disparam "à noite": minutos distintos (ex.: `:05`, `:20`, `:35`) por
-   env, para não saturar broker/DB no mesmo instante.
-
-4. **Runner genérico ganha modo fixed sem quebrar callers de intervalo:**
-   adicione campos opcionais (`Daily bool` + `Hour`/`Minute`/`Location`) ao
-   `Config`; quando `Daily`, monta `cronjob.Fixed`, senão mantém
-   `cronjob.Interval` (default). Callers existentes que só setam `Interval`
-   seguem inalterados (backward-compatible).
+   significa no fuso de operação. `LocationName` explícito (IANA, por env) em
+   todo `cronjob.Fixed`; sem ele vale `time.Local`, que no gofi é UTC por
+   padrão — `Hour: 0` vira meia-noite UTC.
+2. **`tzdata` já vem embutido.** `base/timezone` (importado pelo `Build`)
+   embute o banco IANA, então `LoadLocation` não falha por imagem slim.
+   Binário que agenda com fuso **sem** usar `gofi.New` importa
+   `_ "time/tzdata"` no `main`.
+3. **Nome inválido panica em `ScheduleJob`** — valide no `Start`/`LoadConfig`
+   (`cronjob.md`).
+4. **Escalonar horários** quando há N workers do mesmo tipo à mesma hora:
+   minutos distintos por env.
+5. **Runner genérico com modo fixed sem quebrar intervalo:** campos opcionais
+   (`Daily bool` + `Hour`/`Minute`/`Location`) no `Config`; `Daily` monta
+   `cronjob.Fixed`, senão `cronjob.Interval` (default).
 
 ---
 
 ## Checklist (gofi-eng)
 
-- [ ] Wrapper `{Worker}` em `pathCmd` tem campo opaco (`handle *cronjob.JobHandle`, `manager *msq.ConsumerManager`, etc.) — nunca exposto
-- [ ] Constructor faz **toda** a inicialização (bootstrap síncrono, schedule, registro, dispatcher) — nada vaza pro `main`
-- [ ] Feature flag (`cfg.XxxEnabled`) tratada dentro do constructor, com no-op quando desabilitado
-- [ ] Wrapper expõe **apenas** `Close()` para shutdown — `Bootstrap`/`Schedule`/`Start`/`Register` são privados ou inexistentes
-- [ ] `wire.go`/`build{Worker}(ctx, …)` inline construção de service+repo quando consumidos só pelo wrapper
-- [ ] `main.go` tem o par `{worker} := build{Worker}(ctx, …)` + `defer {worker}.Close()` — **uma chamada de método pública pós-`build` é red flag**
-- [ ] Cada worker no serviço tem seu próprio par (1:1)
-- [ ] Cron com horário fixo: `LocationName` IANA explícito (fuso de negócio, não tz do container) + binário importa `_ "time/tzdata"` (senão `LoadLocation` panica no boot em imagem slim)
+- [ ] Worker implementa `gofi.Runner` (`Name`, `Stage`, `Start`, `Run`, `Stop`) e entra no `With` — **zero** chamada a método do worker no `main.go`
+- [ ] `Start` monta dependências e valida config (agenda, fuso); nada de trabalho longo
+- [ ] `Run` bloqueia até `Stop` (inclusive desligado por feature flag)
+- [ ] `Stop` cancela e espera a execução em curso (`done` + `ctx` do `Stop`)
+- [ ] Execução usa ctx próprio com timeout (`context.WithoutCancel` + `WithTimeout`), nunca `context.Background()` solto
+- [ ] Handle do SDK (`*cronjob.JobHandle`, ticker) é campo privado
+- [ ] Service/repo consumidos só pelo worker montados dentro do builder
+- [ ] Um Runner por worker; feature flag decidida dentro dele
+- [ ] Cron com horário fixo: `LocationName` IANA explícito vindo de config e validado; `Locker` quando não pode duplicar entre réplicas

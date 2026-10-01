@@ -18,35 +18,6 @@ func TestInit(t *testing.T) {
 	}
 }
 
-func TestAddAndCommit(t *testing.T) {
-	dir := t.TempDir()
-	if err := Init(dir); err != nil {
-		t.Fatalf("Init: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hi"), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if err := AddAndCommit(dir, "first"); err != nil {
-		t.Fatalf("AddAndCommit: %v", err)
-	}
-
-	repo, err := git.PlainOpen(dir)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	head, err := repo.Head()
-	if err != nil {
-		t.Fatalf("head: %v", err)
-	}
-	commit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		t.Fatalf("commit obj: %v", err)
-	}
-	if commit.Message != "first" {
-		t.Errorf("expected message 'first', got %q", commit.Message)
-	}
-}
-
 func TestAddRemote(t *testing.T) {
 	dir := t.TempDir()
 	if err := Init(dir); err != nil {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 const header = `{"rec":"header","schema":"gofi-graph/v1","language":"java","module":"com.acme.app","tool":"gofi-graph-java 0.1.0","mode":"deep"}`

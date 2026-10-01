@@ -26,7 +26,7 @@ import (
 
 // GofiAIDir is the folder holding the GOFI AI sources, relative to the repo
 // root. The generator and the freshness test both resolve against it.
-const GofiAIDir = "gofi-ai"
+const GofiAIDir = "vscode"
 
 // zipEpoch is a fixed timestamp for every entry. Real modification times would
 // make the artefact differ on every checkout, and the staleness test compares

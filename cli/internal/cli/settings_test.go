@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/settings"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/settings"
 )
 
 // isolateSettings points gofi.json at a temp file and restores the process-wide
@@ -124,7 +124,7 @@ func TestParseSettingArgs(t *testing.T) {
 		expectErr bool
 	}{
 		{args: []string{"language", "pt"}, key: "language", val: "pt"},
-		{args: []string{"language=fr"}, key: "language", val: "fr"},
+		{args: []string{"language=en"}, key: "language", val: "en"},
 		{args: []string{"language"}, expectErr: true},
 	}
 	for _, c := range cases {

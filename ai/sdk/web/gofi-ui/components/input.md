@@ -33,7 +33,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 - `id` ligado ao `<label htmlFor>`. `aria-invalid` quando inválido.
 - O `type` certo aciona o teclado mobile e o autofill certos (`email`, `tel`).
 - `autoComplete` apropriado. Senha: um botão "mostrar/ocultar" com `aria-label`.
-- Autofill no dark-mode: ver [theming-dark-mode.md](../../../../knowledge/ui/theming-dark-mode.md).
+- Autofill no dark-mode: ver [theming-dark-mode.md](../../../../expertise/ui-design/theming-dark-mode.md).
 
 ## Do / Don't
 - ✅ Máscara/formatação só na exibição; valor cru no state.

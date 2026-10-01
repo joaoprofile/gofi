@@ -1,7 +1,12 @@
 package docs
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"github.com/gofi-labs/gofi/cli/internal/expertise"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -14,7 +19,6 @@ import (
 )
 
 var (
-	reDocPath     = regexp.MustCompile(`(?:specs|prd)/[a-z0-9_]+/[a-z0-9_.-]+\.md`)
 	reWikilink    = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
 	reCreateTable = regexp.MustCompile(`(?i)CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_][a-z0-9_]*)`)
 	// The directive a package carries to say which context it belongs to. It is
@@ -34,11 +38,14 @@ type Builder struct {
 	// out to git grep once per entity, so it is the slow half of a build; the
 	// git hook path turns it off.
 	WithCode bool
-	// Scope, when set, limits the build to what one commit touched (see
-	// StagedScope). Nil is a full build.
-	Scope *Scope
+	// IndexOnly writes only the index the tools read, and leaves the markdown
+	// indexes alone. A read that finds the index missing rebuilds it this way:
+	// a query must not rewrite files the project versions.
+	IndexOnly bool
 	// Written lists the files the last Build actually changed or removed.
 	Written []string
+	// Fingerprint identifies the documents the last Build read.
+	Fingerprint string
 }
 
 // Build writes every derived artifact: the JSON the tool reads, and the
@@ -49,14 +56,15 @@ type Builder struct {
 // which is worse than no index at all: without one an agent knows it does not
 // know, with a stale one it points confidently at the wrong place.
 //
-// A scoped build that has nothing to index returns nils and touches nothing.
+// Files are written only when their content changes, so an unchanged corpus
+// leaves the working tree untouched.
 func (b *Builder) Build() (*Index, *Graph, []Drift, error) {
-	b.Written = nil
-	if b.Scope != nil && b.Scope.idle(b.WithCode) {
-		return nil, nil, nil, nil
-	}
+	b.Written, b.Fingerprint = nil, ""
 	docs, bodies, err := b.scan()
 	if err != nil {
+		return nil, nil, nil, err
+	}
+	if b.Fingerprint, err = fingerprint(b.Root, docs); err != nil {
 		return nil, nil, nil, err
 	}
 	idx := &Index{Schema: IndexSchema, Docs: docs}
@@ -66,33 +74,53 @@ func (b *Builder) Build() (*Index, *Graph, []Drift, error) {
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return nil, nil, nil, err
 	}
-	s := b.Scope
-	if s == nil || s.Documents || (b.WithCode && s.Anything) {
-		if err := b.writeJSON(filepath.Join(out, IndexFile), idx); err != nil {
-			return nil, nil, nil, err
-		}
-		if err := b.writeJSON(filepath.Join(out, GraphFile), g); err != nil {
-			return nil, nil, nil, err
-		}
+	if err := b.writeJSON(filepath.Join(out, IndexFile), idx); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := b.writeJSON(filepath.Join(out, GraphFile), g); err != nil {
+		return nil, nil, nil, err
 	}
 
+	if b.IndexOnly {
+		return idx, g, nil, nil
+	}
 	var drift []Drift
 	for _, corpus := range []string{"specs", "prd"} {
-		if s != nil && !s.touchesCorpus(corpus) {
-			continue
-		}
-		d, err := writeIndexes(b.Root, corpus, s, &b.Written)
+		d, err := writeIndexes(b.Root, corpus, &b.Written)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		drift = append(drift, d...)
 	}
-	if s == nil || s.Knowledge {
-		if err := writeKnowledgeIndex(b.Root, b.Language, &b.Written); err != nil {
-			return nil, nil, nil, err
-		}
+	if err := writeKnowledgeIndex(b.Root, b.Language, &b.Written); err != nil {
+		return nil, nil, nil, err
 	}
 	return idx, g, drift, nil
+}
+
+// Fingerprint identifies the documents an index is built from. It changes when
+// one is added, removed or edited, and only then, so comparing it with the one
+// a build recorded tells whether the index still describes the corpus. The code
+// the documents link to is not part of it: that is the code index's to track.
+func Fingerprint(root string) (string, error) {
+	docs, _, err := (&Builder{Root: root}).scan()
+	if err != nil {
+		return "", err
+	}
+	return fingerprint(root, docs)
+}
+
+func fingerprint(root string, docs []Doc) (string, error) {
+	h := sha256.New()
+	for _, d := range docs {
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(d.Path)))
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00", d.Path, len(raw))
+		h.Write(raw)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16], nil
 }
 
 // walkCorpus visits every indexable document of one corpus.
@@ -101,6 +129,14 @@ func (b *Builder) Build() (*Index, *Graph, []Drift, error) {
 // from these very documents, so indexing it would make the index describe
 // itself, and diagrams/ holds PlantUML lifted out of the specs.
 func walkCorpus(root, corpus string, visit func(path string, fm Frontmatter, body []string)) error {
+	return walkCorpusAt(root, corpus, func(path string, fm Frontmatter, body []string, _ int) {
+		visit(path, fm, body)
+	})
+}
+
+// walkCorpusAt is walkCorpus that also passes the line the body starts after,
+// for the callers that record line numbers.
+func walkCorpusAt(root, corpus string, visit func(path string, fm Frontmatter, body []string, offset int)) error {
 	base := filepath.Join(root, corpus)
 	if _, err := os.Stat(base); err != nil {
 		return nil
@@ -113,11 +149,15 @@ func walkCorpus(root, corpus string, visit func(path string, fm Frontmatter, bod
 		if d.Name() == IndexMarkdown || strings.Contains(path, sep+"diagrams"+sep) {
 			return nil
 		}
-		fm, body, err := ParseFile(path)
-		if err != nil || len(fm) == 0 {
+		raw, err := os.ReadFile(path)
+		if err != nil {
 			return nil
 		}
-		visit(path, fm, body)
+		fm, body := Parse(string(raw))
+		if len(fm) == 0 {
+			return nil
+		}
+		visit(path, fm, body, bodyOffset(string(raw), body))
 		return nil
 	})
 }
@@ -127,8 +167,8 @@ func walkCorpus(root, corpus string, visit func(path string, fm Frontmatter, bod
 func (b *Builder) scan() ([]Doc, map[string][]string, error) {
 	var docs []Doc
 	bodies := map[string][]string{}
-	for _, corpus := range Corpora {
-		err := walkCorpus(b.Root, corpus, func(path string, fm Frontmatter, body []string) {
+	for _, corpus := range Corpora() {
+		err := walkCorpusAt(b.Root, corpus, func(path string, fm Frontmatter, body []string, offset int) {
 			rel := relPath(b.Root, path)
 			docs = append(docs, Doc{
 				Path:     rel,
@@ -137,7 +177,42 @@ func (b *Builder) scan() ([]Doc, map[string][]string, error) {
 				Status:   fm.Get("status"),
 				Title:    titleOf(body),
 				Facets:   facetsOf(fm),
-				Sections: sectionsOf(body),
+				Sections: sectionsOf(body, offset),
+			})
+			bodies[rel] = body
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	// The libraries after the corpora, so a file both reach — context memory
+	// sits inside .claude/memory — is indexed once, under its corpus.
+	for _, lib := range Libraries() {
+		err := walkLibrary(b.Root, lib, func(path string, fm Frontmatter, body []string, offset int) {
+			rel := relPath(b.Root, path)
+			if _, done := bodies[rel]; done {
+				return
+			}
+			title := fm.Get("title")
+			if title == "" {
+				title = titleOf(body)
+			}
+			if title == "" {
+				title = stemOf(rel)
+			}
+			kind := fm.Get("tipo")
+			if kind == "" {
+				kind = lib.Area
+			}
+			docs = append(docs, Doc{
+				Path:      rel,
+				Context:   fm.Get("contexto"),
+				Kind:      kind,
+				Status:    fm.Get("status"),
+				Title:     title,
+				Facets:    facetsOf(fm),
+				Sections:  sectionsOf(body, offset),
+				Overrides: overridesOf(fm, lib.Area),
 			})
 			bodies[rel] = body
 		})
@@ -147,6 +222,41 @@ func (b *Builder) scan() ([]Doc, map[string][]string, error) {
 	}
 	sort.Slice(docs, func(i, j int) bool { return docs[i].Path < docs[j].Path })
 	return docs, bodies, nil
+}
+
+// walkLibrary visits every markdown file of a reference tree. Unlike a corpus,
+// a file needs no frontmatter to be indexed. What is skipped: the INDEX.md this
+// tool generates (it lists the same files, and would shadow them in every
+// search — a hand-written one, like the institutional manifest, stays), a
+// skill's SKILL.md, which the engine loads by itself when the skill is invoked,
+// and a pack's PACK.md, which the router reads and which only lists the
+// sections the search already finds.
+func walkLibrary(root string, lib Library, visit func(path string, fm Frontmatter, body []string, offset int)) error {
+	base := filepath.Join(root, filepath.FromSlash(lib.Dir))
+	if _, err := os.Stat(base); err != nil {
+		return nil
+	}
+	sep := string(os.PathSeparator)
+	return filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+		if strings.Contains(path, sep+"diagrams"+sep) || (lib.Area == AreaSkills && d.Name() == "SKILL.md") ||
+			(lib.Area == AreaExpertise && d.Name() == expertise.ManifestFile) {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		content := string(raw)
+		if d.Name() == IndexMarkdown && (strings.Contains(content, generatedMark) || relPath(root, path) == KnowledgeIndex()) {
+			return nil
+		}
+		fm, body := Parse(content)
+		visit(path, fm, body, bodyOffset(content, body))
+		return nil
+	})
 }
 
 func kindOf(fm Frontmatter, corpus string) string {
@@ -180,12 +290,13 @@ func facetsOf(fm Frontmatter) string {
 	return strings.Join(terms, " ")
 }
 
-// sectionsOf records every ## and ### with the line range it spans.
+// sectionsOf records every ## and ### with the line range it spans, counted
+// in lines of the file: offset is where the body starts (see bodyOffset).
 //
 // Headings are the best retrieval surface a spec has: they are written in
 // natural language, which is the language the question arrives in. Keywords are
 // labels; headings are sentences.
-func sectionsOf(body []string) []Section {
+func sectionsOf(body []string, offset int) []Section {
 	var marks []int
 	for i, l := range body {
 		if strings.HasPrefix(l, "## ") || strings.HasPrefix(l, "### ") {
@@ -200,8 +311,8 @@ func sectionsOf(body []string) []Section {
 		}
 		secs = append(secs, Section{
 			Heading: strings.TrimSpace(strings.TrimLeft(body[i], "# ")),
-			Start:   i + 1,
-			End:     end + 1,
+			Start:   offset + i + 1,
+			End:     offset + end,
 		})
 	}
 	return secs
@@ -212,9 +323,16 @@ func sectionsOf(body []string) []Section {
 func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 	g := &Graph{Schema: GraphSchema, Nodes: map[string]Node{}}
 	byStem := map[string]string{}
+	byPath := map[string]bool{}
 	contexts := map[string]bool{}
 	for _, d := range docs {
-		byStem[stemOf(d.Path)] = d.Path
+		byPath[d.Path] = true
+		// A stem names one document only while it is unique: knowledge repeats
+		// names across languages (sdk/go/knowledge/structure.md and
+		// sdk/web/knowledge/structure.md), and a link must not pick one at random.
+		if _, taken := byStem[stemOf(d.Path)]; !taken {
+			byStem[stemOf(d.Path)] = d.Path
+		}
 		if d.Context != "" {
 			contexts[d.Context] = true
 		}
@@ -236,6 +354,9 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 		t = strings.Trim(t, "`")
 		if i := strings.Index(t, "|"); i >= 0 {
 			t = strings.TrimSpace(t[:i])
+		}
+		if byPath[t] {
+			return t
 		}
 		if contexts[t] {
 			return PrefixCtx + t
@@ -260,7 +381,7 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 			continue
 		}
 		g.Nodes[d.Path] = Node{
-			Kind: NodeDoc, Context: d.Context, Corpus: corpusOf(d.Path),
+			Kind: NodeDoc, Context: d.Context, Corpus: sourceOf(d.Path),
 			Status: d.Status, Version: fm.Get("versao"),
 		}
 		if d.Context != "" {
@@ -276,7 +397,7 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 			}
 		}
 		body := strings.Join(bodies[d.Path], "\n")
-		for _, m := range uniq(reDocPath.FindAllString(body, -1)) {
+		for _, m := range uniq(docPathRe().FindAllString(body, -1)) {
 			add(d.Path, resolve(m), EdgeCites)
 		}
 		for _, m := range reWikilink.FindAllStringSubmatch(body, -1) {
@@ -509,7 +630,7 @@ func (b *Builder) walkFiles() []string {
 }
 
 func skipPath(p string) bool {
-	for _, pre := range []string{".claude/", ".gofi/", "specs/", "prd/"} {
+	for _, pre := range []string{layout.Home() + "/", ".gofi/", "specs/", "prd/"} {
 		if strings.HasPrefix(p, pre) {
 			return true
 		}
@@ -528,8 +649,20 @@ func valuesOf(fm Frontmatter, field string) []string {
 	return nil
 }
 
+// sourceOf is the corpus or library directory a document was indexed from.
+func sourceOf(path string) string {
+	if isLibrary(path) {
+		for _, l := range Libraries() {
+			if strings.HasPrefix(path, l.Dir+"/") {
+				return l.Dir
+			}
+		}
+	}
+	return corpusOf(path)
+}
+
 func corpusOf(path string) string {
-	for _, c := range Corpora {
+	for _, c := range Corpora() {
 		if strings.HasPrefix(path, c+"/") {
 			return c
 		}
@@ -592,4 +725,43 @@ func readJSON(path string, v any) error {
 		return err
 	}
 	return json.Unmarshal(b, v)
+}
+
+// docPathRe matches a document path a text cites: a spec or PRD, or anything
+// under the project's agent folder. Compiled for the folder in use, and again
+// only if that changes.
+func docPathRe() *regexp.Regexp {
+	docPath.Lock()
+	defer docPath.Unlock()
+	if docPath.re == nil || docPath.home != layout.Home() {
+		docPath.home = layout.Home()
+		docPath.re = regexp.MustCompile(`(?:specs|prd)/[a-z0-9_]+/[a-z0-9_.-]+\.md|` + regexp.QuoteMeta(docPath.home) + `/[A-Za-z0-9_./{}<>-]+\.md`)
+	}
+	return docPath.re
+}
+
+var docPath struct {
+	sync.Mutex
+	home string
+	re   *regexp.Regexp
+}
+
+// overridesOf reads what a team's learning corrects. Targets are written
+// relative to the agents folder, the way the learning protocol shows them
+// (expertise/<pack>/<file>.md#<section>); the index keeps them relative to the
+// project root, like every other path. Outside knowledge/ the field means
+// nothing and is dropped.
+func overridesOf(fm Frontmatter, area string) []string {
+	if area != AreaKnowledge {
+		return nil
+	}
+	var out []string
+	for _, t := range fm.List("overrides") {
+		t = strings.Trim(t, `"'`)
+		if t == "" {
+			continue
+		}
+		out = append(out, layout.Home()+"/"+strings.TrimPrefix(t, layout.Home()+"/"))
+	}
+	return out
 }

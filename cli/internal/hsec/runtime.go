@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // Pinned pair for the isolated runtime: horusec v2.8.0 reads the daemon

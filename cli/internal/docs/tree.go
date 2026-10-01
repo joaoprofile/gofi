@@ -69,15 +69,18 @@ type Gap struct {
 
 // ContextTree is everything reachable from one context.
 type ContextTree struct {
-	Name      string            `json:"contexto"`
-	Packages  []Package         `json:"pacotes,omitempty"`
-	Gaps      []Gap             `json:"lacunas,omitempty"`
-	Specs     []DocRef          `json:"specs,omitempty"`
-	PRDs      []DocRef          `json:"prd,omitempty"`
-	Memory    []DocRef          `json:"memoria,omitempty"`
-	Entities  []EntityRef       `json:"tabelas,omitempty"`
-	Neighbors []NeighborContext `json:"vizinhos,omitempty"`
-	Unlinked  []UnlinkedMention `json:"mencoes_sem_link,omitempty"`
+	Name     string    `json:"contexto"`
+	Packages []Package `json:"pacotes,omitempty"`
+	Gaps     []Gap     `json:"lacunas,omitempty"`
+	Specs    []DocRef  `json:"specs,omitempty"`
+	PRDs     []DocRef  `json:"prd,omitempty"`
+	Memory   []DocRef  `json:"memoria,omitempty"`
+	// References are library documents filed under the context — an
+	// institutional chunk or a knowledge note that declares contexto.
+	References []DocRef          `json:"referencias,omitempty"`
+	Entities   []EntityRef       `json:"tabelas,omitempty"`
+	Neighbors  []NeighborContext `json:"vizinhos,omitempty"`
+	Unlinked   []UnlinkedMention `json:"mencoes_sem_link,omitempty"`
 }
 
 // Tree assembles the neighbourhood of a context.
@@ -121,11 +124,13 @@ func (e *Explorer) Tree(name string) (*ContextTree, bool) {
 		}
 		sort.Strings(ref.Entities)
 		sort.Strings(ref.Cites)
-		switch corpusOfPath(p) {
-		case "specs":
+		switch {
+		case AreaOf(p) == AreaSpecs:
 			t.Specs = append(t.Specs, ref)
-		case "prd":
+		case AreaOf(p) == AreaPRD:
 			t.PRDs = append(t.PRDs, ref)
+		case isLibrary(p):
+			t.References = append(t.References, ref)
 		default:
 			t.Memory = append(t.Memory, ref)
 		}
@@ -381,17 +386,6 @@ func (e *Explorer) unlinked(paths []string, out, in map[string][]Link) []Unlinke
 }
 
 func isReference(kind string) bool { return referenceKinds[kind] }
-
-func corpusOfPath(p string) string {
-	switch {
-	case len(p) > 6 && p[:6] == "specs/":
-		return "specs"
-	case len(p) > 4 && p[:4] == "prd/":
-		return "prd"
-	default:
-		return "memory"
-	}
-}
 
 func keys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))

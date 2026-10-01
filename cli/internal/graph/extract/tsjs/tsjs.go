@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // scanner assembles the graph from the parsed files.

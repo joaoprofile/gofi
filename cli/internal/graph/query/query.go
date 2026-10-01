@@ -8,7 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 )
 
 // Resolve finds nodes from a free-form term. It accepts a full ID, the short
@@ -79,25 +80,6 @@ func Explain(g *model.Graph, term string, limit int) string {
 	return b.String()
 }
 
-// Query finds symbols by term and shows the neighbourhood of each one.
-func Query(g *model.Graph, term string, limit, maxNodes int) string {
-	candidates := Resolve(g, term)
-	if len(candidates) == 0 {
-		return fmt.Sprintf("nada encontrado para %q\n", term)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%d resultado(s) para %q\n\n", len(candidates), term)
-	for i, n := range candidates {
-		if i >= maxNodes {
-			fmt.Fprintf(&b, "... +%d resultados. Refine o termo ou use explain.\n", len(candidates)-maxNodes)
-			break
-		}
-		b.WriteString(describe(g, n, limit))
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
 func describe(g *model.Graph, n *model.Node, limit int) string {
 	var b strings.Builder
 	short := func(id string) string { return model.ShortID(id, g.Module) }
@@ -110,7 +92,7 @@ func describe(g *model.Graph, n *model.Node, limit int) string {
 	fmt.Fprintf(&b, "  %s · %s · entrada %d / saida %d · comunidade C%d\n",
 		n.Kind, loc, n.InDeg, n.OutDeg, n.Community)
 	if n.Context != "" {
-		fmt.Fprintf(&b, "  contexto: %s (specs/%s/, .claude/memory/contexts/%s.md)\n", n.Context, n.Context, n.Context)
+		fmt.Fprintf(&b, "  contexto: %s (specs/%s/, %s)\n", n.Context, n.Context, layout.Contexts().Path(n.Context+".md"))
 	}
 	if n.Sig != "" {
 		fmt.Fprintf(&b, "  sig: %s\n", n.Sig)
@@ -218,22 +200,4 @@ func Path(g *model.Graph, from, to string) string {
 	}
 	fmt.Fprintf(&out, "\n%d salto(s)\n", len(path))
 	return out.String()
-}
-
-// Stats returns the numeric summary of the graph.
-func Stats(g *model.Graph) string {
-	s := g.Stats
-	var b strings.Builder
-	fmt.Fprintf(&b, "modulo      %s\n", g.Module)
-	fmt.Fprintf(&b, "modo        %s\n", g.Mode)
-	fmt.Fprintf(&b, "arquivos    %d (%d linhas)\n", s.Files, s.LOC)
-	fmt.Fprintf(&b, "pacotes     %d\n", s.Packages)
-	fmt.Fprintf(&b, "tipos       %d\n", s.Types)
-	fmt.Fprintf(&b, "funcoes     %d\n", s.Funcs)
-	fmt.Fprintf(&b, "metodos     %d\n", s.Methods)
-	fmt.Fprintf(&b, "nos         %d\n", s.Nodes)
-	fmt.Fprintf(&b, "arestas     %d (%d chamadas)\n", s.Edges, s.CallEdges)
-	fmt.Fprintf(&b, "comunidades %d\n", s.Communities)
-	fmt.Fprintf(&b, "ciclos      %d\n", len(g.Cycles))
-	return b.String()
 }

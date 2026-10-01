@@ -16,7 +16,6 @@ import (
 const (
 	LangEN = "en"
 	LangPT = "pt"
-	LangFR = "fr"
 )
 
 // DefaultLang is used when nothing else resolves.
@@ -37,7 +36,6 @@ func Supported() []Language {
 	return []Language{
 		{Code: LangEN, Name: "English", Native: "English"},
 		{Code: LangPT, Name: "Portuguese", Native: "Português"},
-		{Code: LangFR, Name: "French", Native: "Français"},
 	}
 }
 
@@ -67,7 +65,7 @@ func IsSupported(code string) bool {
 	return ok
 }
 
-// Normalize reduces a locale ("pt_BR", "pt-BR.UTF-8", "FR") to a supported
+// Normalize reduces a locale ("pt_BR", "pt-BR.UTF-8", "PT") to a supported
 // language code. Returns false when the language is not one we ship.
 func Normalize(locale string) (string, bool) {
 	s := strings.TrimSpace(locale)
@@ -131,7 +129,6 @@ func Current() string {
 var catalogs = map[string]map[string]string{
 	LangEN: catalogEN,
 	LangPT: catalogPT,
-	LangFR: catalogFR,
 }
 
 // T translates key into the active language, formatted with args when given.

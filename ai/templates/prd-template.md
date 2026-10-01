@@ -18,7 +18,7 @@ atualizado: {YYYY-MM-DD}
 > schema, `operacoes` e `marketplaces` do `.claude/lexicon/`. Termo novo entra no
 > léxico **antes** de entrar aqui — é o que impede o índice de voltar a ser uma
 > nuvem de tags onde cada termo aparece uma vez e não discrimina nada.
-> `gofi docs validate` reprova termo fora do léxico.
+> `gofi index check` reprova termo fora do léxico.
 >
 > **`keywords` é o resto**, com teto de 12: o que não coube nas facetas.
 
@@ -129,7 +129,7 @@ Descreva o fluxo de forma narrativa (alto nível).
 > Formato obrigatório: PlantUML (` ```plantuml `, normalmente
 > `activity` ou `sequence`). **Não** usar Mermaid, ASCII art ou link
 > para draw.io/Miro. Detalhes e exemplos em
-> `.claude/knowledge/shared/diagram-conventions.md`.
+> `.claude/expertise/diagramming/conventions.md`.
 
 ```plantuml
 @startuml

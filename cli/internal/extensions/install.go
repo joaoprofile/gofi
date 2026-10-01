@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/vsix"
+	"github.com/gofi-labs/gofi/cli/internal/vsix"
 )
 
 // Editor is one VSCode-family CLI that can install a .vsix.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // `gofi skills update` must land the skills and nothing else — it is the same
@@ -14,8 +14,8 @@ import (
 func TestRunSkillsUpdate_WritesOnlySkills(t *testing.T) {
 	root := setupProject(t)
 
-	claudeMD := filepath.Join(root, ".claude", "CLAUDE.md")
-	writeFile(t, claudeMD, "ours")
+	agentsMD := filepath.Join(root, "AGENTS.md")
+	writeFile(t, agentsMD, "ours")
 	skill := filepath.Join(root, ".claude", "skills", "gofi-pd", "SKILL.md")
 	writeFile(t, skill, "edited by us")
 
@@ -23,8 +23,8 @@ func TestRunSkillsUpdate_WritesOnlySkills(t *testing.T) {
 		t.Fatalf("skills update: %v", err)
 	}
 
-	if got := readFile(t, claudeMD); got != "ours" {
-		t.Errorf("CLAUDE.md was rewritten: %q", got)
+	if got := readFile(t, agentsMD); got != "ours" {
+		t.Errorf("AGENTS.md was rewritten: %q", got)
 	}
 	// Without --force an edited skill is the team's.
 	if got := readFile(t, skill); got != "edited by us" {
@@ -37,7 +37,7 @@ func TestRunSkillsUpdate_WritesOnlySkills(t *testing.T) {
 	if got := readFile(t, skill); got == "edited by us" {
 		t.Error("--force should have put the upstream skill back")
 	}
-	if got := readFile(t, claudeMD); got != "ours" {
+	if got := readFile(t, agentsMD); got != "ours" {
 		t.Errorf("--force reached outside skills/: %q", got)
 	}
 }

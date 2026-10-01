@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 )
 
 // corpusFixture writes a miniature project: two specs, one PRD and one context
@@ -209,48 +212,6 @@ func TestWikilinkResolvesToContext(t *testing.T) {
 	}
 	if !found {
 		t.Error("[[account]] should resolve to the account context node")
-	}
-}
-
-func TestSearchBridgesLanguagesThroughSynonyms(t *testing.T) {
-	root := corpusFixture(t)
-	idx, _ := build(t, root)
-	s := NewSearcher(root, idx)
-	// "purge" only appears as an operacoes facet; the question uses the
-	// Portuguese word. Without the bridge this finds nothing.
-	got := s.Search("expurgo", 5)
-	if len(got) == 0 || got[0].Doc.Path != "specs/churn/sdd-churn.md" {
-		t.Fatalf("expected the churn spec first, got %v", got)
-	}
-}
-
-func TestSearchStemsPlurals(t *testing.T) {
-	root := corpusFixture(t)
-	idx, _ := build(t, root)
-	// The heading says DELETE; the question says "deletes".
-	if got := NewSearcher(root, idx).Search("ordem dos deletes", 5); len(got) == 0 {
-		t.Error("plural in the question should still match the singular heading")
-	}
-}
-
-// TestTieBreakPrefersTheAuthoritativeDocument pins the fix for a real defect:
-// scores tie constantly, and with a stable sort the winner was decided by
-// whichever corpus the walker happened to reach first. Ordering the corpus
-// differently silently changed results — recall moved 15 points on the same
-// question set with no change to the ranking code.
-func TestTieBreakPrefersTheAuthoritativeDocument(t *testing.T) {
-	root := corpusFixture(t)
-	idx, _ := build(t, root)
-	got := NewSearcher(root, idx).Search("rebate", 5)
-	if len(got) < 2 {
-		t.Fatalf("both tie documents should match, got %v", got)
-	}
-	if got[0].Score != got[1].Score {
-		t.Fatalf("fixture no longer produces a tie (%d vs %d); the test is not "+
-			"exercising the tiebreak anymore", got[0].Score, got[1].Score)
-	}
-	if got[0].Doc.Path != "specs/tie/sdd-tie.md" {
-		t.Errorf("spec should outrank prd on a tie, got %q first", got[0].Doc.Path)
 	}
 }
 
@@ -541,67 +502,6 @@ func TestBuildIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestFacetsBreakTiesBetweenSiblingSpecs(t *testing.T) {
-	root := corpusFixture(t)
-	// Two specs of one context, so authority cannot separate them. One carries
-	// the whole question in its curated facets; the other only has a heading
-	// that happens to share a word. Weighting headings above facets makes them
-	// tie, and index order then decides — which is how the document that
-	// answers the question ended up below one that merely mentions a word.
-	write := func(rel, body string) {
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("specs/back/sdd-back-templates.md", `---
-tipo: spec
-formato: 2
-contexto: back
-submodulo: templates
-versao: "1.0"
-status: aprovado
-operacoes: [scraper-template, scraping]
-keywords: [templates]
----
-# Templates
-
-## 3. Operações
-
-Corpo.
-`)
-	// Alphabetically first, so index order would put it ahead.
-	write("specs/back/sdd-back-audit.md", `---
-tipo: spec
-formato: 2
-contexto: back
-submodulo: audit
-versao: "1.0"
-status: aprovado
-keywords: [audit]
----
-# Audit
-
-## Templates de auditoria
-
-Corpo.
-`)
-	idx, _, _, err := (&Builder{Root: root}).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-	hits := NewSearcher(root, idx).Search("templates de scraping", 3)
-	if len(hits) == 0 {
-		t.Fatal("expected hits")
-	}
-	if got := hits[0].Doc.Path; got != "specs/back/sdd-back-templates.md" {
-		t.Errorf("the document whose facets carry the question must rank first, got %q", got)
-	}
-}
-
 func TestBuildSweepsTheIndexOfAnEmptiedFolder(t *testing.T) {
 	root := corpusFixture(t)
 	b := &Builder{Root: root}
@@ -691,7 +591,7 @@ func TestFolderNamedAfterASubmoduleIsNotDrift(t *testing.T) {
 	// A folder whose name no submodule explains is a typo.
 	write("specs/shops/sdd-shops.md", "shopping", "n/a")
 
-	drift, err := WriteIndexes(root, "specs")
+	drift, err := writeIndexes(root, "specs", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,5 +610,57 @@ func TestFolderNamedAfterASubmoduleIsNotDrift(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, "specs", dir, IndexMarkdown)); err != nil {
 			t.Errorf("folder %s holds documents and must have an index", dir)
 		}
+	}
+}
+
+// A project on the open skills convention keeps its content in .agents/: the
+// index reads it from there, and cites it by that path.
+func TestIndexFollowsTheProjectHome(t *testing.T) {
+	t.Cleanup(func() { layout.SetHome(layout.DefaultHome) })
+	layout.SetHome(".agents")
+	root := t.TempDir()
+	p := filepath.Join(root, ".agents", "knowledge", "shared", "retry.md")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("# Retry\n\n## Quando repetir\n\nSó erro transitório.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, _, _, err := (&Builder{Root: root}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Docs) != 1 || idx.Docs[0].Path != ".agents/knowledge/shared/retry.md" {
+		t.Errorf("docs = %+v", idx.Docs)
+	}
+	if AreaOf(".agents/knowledge/shared/retry.md") != AreaKnowledge {
+		t.Error("area not resolved under .agents/")
+	}
+}
+
+// Pack content is searchable, and ranks after the project's own knowledge:
+// where the two disagree, the team's learning holds.
+func TestExpertiseIsIndexedAfterKnowledge(t *testing.T) {
+	root := t.TempDir()
+	put := func(rel, body string) {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(".claude/expertise/messaging-kafka/consumers.md", "# Consumers\n\n## Group id\n\nPasse só o prefixo.\n")
+	idx, _, _, err := (&Builder{Root: root}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Docs) != 1 || AreaOf(idx.Docs[0].Path) != AreaExpertise {
+		t.Fatalf("docs = %+v", idx.Docs)
+	}
+	ki, ei := slices.Index(Areas, AreaKnowledge), slices.Index(Areas, AreaExpertise)
+	if ki < 0 || ei < ki {
+		t.Errorf("expertise must come after knowledge in authority: %v", Areas)
 	}
 }

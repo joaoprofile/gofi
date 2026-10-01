@@ -7,9 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
 )
 
 func newUpdateSDKCmd() *cobra.Command {
@@ -17,9 +18,17 @@ func newUpdateSDKCmd() *cobra.Command {
 		Use:   "sdk",
 		Short: i18n.T("cmd.update.sdk.short"),
 		Long: `Refresh the backend SDK: the checkout under .gofi/gofi-sdk-<lang>/ from
-'sources.sdk.<lang>', and the docs under .claude/sdk/<lang>/ from that same
-override — or from 'sources.agents' when the override ships no docs layout.
-go.work is realigned with the new checkout.
+'sources.sdk.<lang>', and everything the agents read about it under the
+agents folder's sdk/<lang>/:
+
+  api/          the API reference, generated from the checkout's source — one
+                section per exported symbol, at the version the project pinned
+  api/examples.md  the SDK's runnable examples, pointing at the checkout
+  knowledge/    the SDK's conventions and pitfalls (curated)
+  boilerplates/ project layer skeletons (curated)
+
+The reference is generated, never hand-written, so it cannot drift from the
+code. go.work is realigned with the new checkout.
 
 The two travel together on purpose: the docs the agents read and the code the
 toolchain compiles against have to describe the same release.
@@ -48,11 +57,19 @@ func runSDKUpdate(autoConfirm, force bool) error {
 	if err != nil {
 		return fmt.Errorf("read .gofi.yaml: %w", err)
 	}
-
-	language := backendLang(cfg)
-	if language == "" {
+	if backendLang(cfg) == "" {
 		return errors.New("this project has no backend language — there is no SDK to update (see 'gofi update ds' for the front-end design system)")
 	}
+	t, err := sdkTarget(cfg, force)
+	if err != nil {
+		return err
+	}
+	return runTarget(cfg, t, autoConfirm)
+}
+
+// sdkTarget plans the SDK update: the checkout, the docs and go.work.
+func sdkTarget(cfg *config.GofiConfig, force bool) (*targetPlan, error) {
+	language := backendLang(cfg)
 	agentsRef := cfg.Sources.Agents
 	sdkRef := cfg.Sources.SDK[language]
 
@@ -65,12 +82,13 @@ func runSDKUpdate(autoConfirm, force bool) error {
 	scope := updateScope{
 		Keeps: scaffold.PreservedFilesIn(cfg.Project.Root, []string{scaffold.SDKDir}),
 		Force: force,
+		Hint:  keepsHint,
 		LeavesAlone: []string{
-			".claude/skills/", ".claude/sdk/<surface>/", ".gofi.yaml",
+			layout.Skills().Dir + "/", layout.SDK().Path("<surface>") + "/", ".gofi.yaml",
 			"knowledge/", "memory/", "institutional/", "the graph",
 		},
 	}
-	scope.write(".claude/sdk/"+language+"/", "docs ← "+src)
+	scope.write(layout.SDK().Path(language)+"/", "docs ← "+src)
 	if sdkRef != "" {
 		scope.write(".gofi/gofi-sdk-"+language+"/", "checkout ← "+sdkRef)
 	}
@@ -79,38 +97,41 @@ func runSDKUpdate(autoConfirm, force bool) error {
 	}
 	printTunedFiles(scope.Keeps)
 
-	ok, err := confirmUpdate("Update the SDK?", scope, autoConfirm)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		fmt.Println("sdk left as it is.")
-		return nil
-	}
-
 	mode := scaffold.InstallUpdate
 	if force {
 		mode = scaffold.InstallReset
 	}
-	if err := installSDKFromSource(cfg.Project.Root, language, agentsRef, sdkRef, mode); err != nil {
-		return fmt.Errorf("sdk update: %w", err)
-	}
-	// The checkout may have gained or lost submodules, and a go.work still
-	// pointing at the old shape breaks the build rather than the docs.
-	if language == config.LanguageGo {
-		if err := scaffold.EnsureGoWorkSDK(cfg.Project.Root, language); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not align go.work with local SDK: %v\n", err)
-		}
-	}
-	// A project scaffolded before v2.4 still carries the flat SDK dirs beside
-	// the new tree, and this is the target that owns that layout.
-	if removed := scaffold.CleanLegacySDKLayout(cfg.Project.Root); len(removed) > 0 {
-		fmt.Printf("Removed %d legacy SDK dir(s) (migrated to .claude/sdk/).\n", len(removed))
-	}
-
-	fmt.Println("\nSDK update complete.")
-	noteDrift(cfg)
-	return nil
+	return &targetPlan{
+		name:  "sdk",
+		title: "Update the SDK?",
+		scope: scope,
+		apply: func() error {
+			if err := installSDKFromSource(cfg.Project.Root, language, agentsRef, sdkRef, mode); err != nil {
+				return err
+			}
+			// The checkout may have gained or lost submodules, and a go.work
+			// still pointing at the old shape breaks the build rather than the
+			// docs.
+			if language == config.LanguageGo {
+				if err := scaffold.EnsureGoWorkSDK(cfg.Project.Root, language); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not align go.work with local SDK: %v\n", err)
+				}
+			}
+			if retired, err := scaffold.RetireHandWrittenSDKDocs(cfg.Project.Root, language); err != nil {
+				return err
+			} else if len(retired) > 0 {
+				fmt.Printf("Replaced the hand-written %s with the reference generated from the SDK (%d file(s) backed up in .gofi/backup/).\n",
+					layout.SDK().Path(language, "sdk-docs")+"/", len(retired))
+			}
+			// A project scaffolded before v2.4 still carries the flat SDK dirs
+			// beside the new tree, and this is the target that owns that layout.
+			if removed := scaffold.CleanLegacySDKLayout(cfg.Project.Root); len(removed) > 0 {
+				fmt.Printf("Removed %d legacy SDK dir(s) (migrated to %s/).\n", len(removed), layout.SDK().Dir)
+			}
+			fmt.Println("\nSDK update complete.")
+			return nil
+		},
+	}, nil
 }
 
 // printTunedFiles lists the files a target will keep, which is the evidence

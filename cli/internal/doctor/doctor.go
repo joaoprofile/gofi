@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // Status is the outcome of a single check.

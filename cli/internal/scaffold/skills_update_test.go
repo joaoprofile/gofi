@@ -13,7 +13,7 @@ import (
 func upstreamAfterInit() fstest.MapFS {
 	return fstest.MapFS{
 		"ai/skills/gofi-pd.md":                   {Data: []byte("new pd skill")},
-		"ai/claude/CLAUDE.md":                    {Data: []byte("# CLAUDE — updated")},
+		"ai/AGENTS.md":                           {Data: []byte("# AGENTS — updated")},
 		"ai/templates/sdd-template.md":           {Data: []byte("new spec template")},
 		"ai/knowledge/shared/memory-protocol.md": {Data: []byte("# memory protocol v2")},
 		"ai/knowledge/shared/brand-new.md":       {Data: []byte("added upstream")},
@@ -22,7 +22,7 @@ func upstreamAfterInit() fstest.MapFS {
 
 // The whole point of the skills-only update: once a project exists, everything
 // but .claude/skills/ is configured by hand, so an update must not carry a
-// single upstream byte into CLAUDE.md, templates/ or knowledge/ — not even a
+// single upstream byte into AGENTS.md, templates/ or knowledge/ — not even a
 // file the project never received.
 func TestInstallSkillsContent_WritesNothingOutsideSkills(t *testing.T) {
 	root := t.TempDir()
@@ -33,11 +33,11 @@ func TestInstallSkillsContent_WritesNothingOutsideSkills(t *testing.T) {
 	}
 
 	mustContain(t, filepath.Join(root, ".claude/skills/gofi-pd/SKILL.md"), "new pd skill")
-	mustContain(t, filepath.Join(root, ".claude/CLAUDE.md"), "# CLAUDE")
+	mustContain(t, filepath.Join(root, "AGENTS.md"), "# AGENTS")
 	mustContain(t, filepath.Join(root, ".claude/templates/sdd-template.md"), "# SDD")
 	mustContain(t, filepath.Join(root, ".claude/knowledge/shared/memory-protocol.md"), "# memory protocol")
-	if b, err := os.ReadFile(filepath.Join(root, ".claude/CLAUDE.md")); err == nil && strings.Contains(string(b), "updated") {
-		t.Error("CLAUDE.md was refreshed; the update must leave it alone")
+	if b, err := os.ReadFile(filepath.Join(root, "AGENTS.md")); err == nil && strings.Contains(string(b), "updated") {
+		t.Error("AGENTS.md was refreshed; the update must leave it alone")
 	}
 	if _, err := os.Stat(filepath.Join(root, ".claude/knowledge/shared/brand-new.md")); err == nil {
 		t.Error("a knowledge file the project never had still arrived; the update must not seed it")
@@ -97,7 +97,7 @@ func TestPreservedFilesIn_SkillsOnly(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".claude/skills/gofi-pd/SKILL.md"), []byte("ours"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".claude/CLAUDE.md"), []byte("ours too"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("ours too"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

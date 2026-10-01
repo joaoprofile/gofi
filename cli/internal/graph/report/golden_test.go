@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/analyze"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
-	"github.com/joaoprofile/gofi-cli/internal/graph/report"
+	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/report"
 )
 
 // The graph is committed to the repository and rebuilt on every commit, so any
@@ -70,7 +70,7 @@ func TestGoldenGraphJSON(t *testing.T) {
 }
 
 func TestGoldenReportMarkdown(t *testing.T) {
-	checkGolden(t, "gofi_graph_report.md", []byte(report.Markdown(build(t), "")))
+	checkGolden(t, "gofi_graph_report.md", []byte(report.Markdown(build(t))))
 }
 
 // The graph is committed, so two developers scanning the same commit have to

@@ -1,87 +1,108 @@
+---
+name: logging
+description: Logging com obs/logging — o que o Build já configura, níveis (Info só início/fim de fluxo), FromContext para correlação com trace, Fatal só no main e armadilhas de logger derivado cedo
+sdk: v0.8.2
+keywords: [logging, slog, obs/logging, LOG_LEVEL, Info, Debug, Warn, Error, Fatal, FromContext, trace_id, níveis, loop]
+---
+
 # Logging — Níveis e Disciplina (Go)
 
-Infra já resolvida pelo SDK (`gofi/obs/logging`, `obs/logging/logging.go`):
-o nível default é **Info** e só vira **Debug** quando `LOG_LEVEL=debug`. Em
-prod, `logging.Debug(...)` é filtrado no handler — **não chega no Loki**. Logs
-fazem Tee `console + OTLP→Loki`, JSON fora de `dev`, e `FromContext` injeta
-`trace_id`/`span_id`. O problema nunca é a infra, é **escolher o nível certo** e
-**não logar dentro de loop**.
+API: `.claude/sdk/go/api/obs-logging.md`. Import:
+`github.com/gofi-labs/gofi-sdk-go/obs/logging`.
+
+## O que o SDK já resolve
+
+- **`Build` inicializa o logger global** (`config.InitLogging`): nível de
+  `LOG_LEVEL` (`debug`\|`info`\|`warn`\|`error`; vazio = Info), texto quando
+  `APP_ENVIRONMENT=dev`, JSON em qualquer outro, `service` = nome do
+  `gofi.New`.
+- Com `observability.New()`, os logs vão também para o collector (OTLP),
+  **no mesmo nível** do console: `Debug` filtrado não sai de lugar nenhum.
+- `logging.FromContext(ctx)` devolve `*slog.Logger` com `trace_id`/`span_id`
+  do span em `ctx`.
+- `ListenAndServe`/`Shutdown` fazem flush (`logging.Shutdown`) no fim.
+- Antes do `Build`, `logging.*` cai no `slog.Default()` (com aviso) — não
+  quebra, mas sai sem formato nem export.
+
+O problema nunca é a infra: é **escolher o nível certo** e **não logar dentro
+de loop**.
 
 ## A regra (única, auditável)
 
 | Nível | Quando | Cardinalidade |
 |------|--------|---------------|
 | **INFO** | **Só início e fim de fluxo de negócio importante.** O *fim* carrega o resultado agregado (contadores, outcome). | ~1–2 por request/job. **Nunca dentro de loop.** |
-| **DEBUG** | Todo o resto diagnóstico: por-item, por-stage, por-página, payloads, `message received`, timings/profiling. | Livre — some em prod automaticamente. |
+| **DEBUG** | Todo o resto diagnóstico: por item, por etapa, por página, payloads, `message received`, timings. | Livre — some fora de `LOG_LEVEL=debug`. |
 | **WARN** | Degradação tolerada (fallback usado, best-effort que falhou mas seguiu). | Baixa. |
 | **ERROR** | Falha que precisa de atenção. Sempre com `slog.Any("error", err)`. | Por falha real. |
-| **FATAL** | **Só no bootstrap** (`prepare` de stmt, wiring, `main`). Nunca em request/consumer/processor. | Boot. |
+| **FATAL** | **Nunca** fora do `main`. `logging.Fatal` faz `os.Exit(1)` **sem** flush — perde os logs pendentes do OTLP e pula o fechamento dos recursos. | — |
 
 > "Info que não diz nada" = qualquer Info que dispara por iteração, por página,
-> por mensagem recebida, ou por etapa de profiling. **Rebaixa pra Debug.** Se
-> em prod o Loki recebe a mesma linha N vezes por job, está errado.
+> por mensagem recebida ou por etapa de profiling. **Rebaixa para Debug.**
 
 ## O que é "fluxo importante"
 
-- **Consumer Kafka** (`wb_*`, `*_consumer.go`): start/end da **mensagem de
-  negócio** — não por retry/parse/filtro descartado.
-- **Scheduler processor** (`domain/*/scheduler/processor`): start/end do **run
-  inteiro** (tick) com totais. Cada página = Debug. Se o tick não produziu
-  trabalho (`published == 0`), o resumo também é Debug.
-- **Application / Orchestrator** (`manage`, `pricing apply`, `synchronization
-  apply`): start/end da operação com outcome.
-- **Bootstrap** (`main.go`/`wire.go`): `service started` / `consumer
-  registered` — 1 linha, não por-runner.
+- **Consumer**: start/end da **mensagem de negócio** — não por retry, parse
+  ou filtro descartado.
+- **Job / cron**: start/end da **execução inteira** com totais. Cada página =
+  Debug. Execução que não produziu trabalho: o resumo também é Debug.
+- **Operação de aplicação/orquestração**: start/end com outcome.
+- **Bootstrap**: o SDK já loga `service started` / `shutdown started` — não
+  repetir; no máximo 1 linha própria de configuração relevante.
 
 ## Padrão de implementação
 
 ```go
-func (c *consumer) Handle(ctx context.Context, msg Message) error {
-    log := logging.FromContext(ctx) // correlaciona o log com o trace
+func (c *orderConsumer) handle(ctx context.Context, msg *msq.Message) (msq.Result, error) {
+    log := logging.FromContext(ctx) // correlates with the process span
 
-    log.Debug("pricing apply: message received", slog.String("key", msg.Key)) // diagnóstico
-    if !relevant(msg) {
-        log.Debug("pricing apply: skipped (filter)", slog.String("source", msg.Source))
-        return nil // descartado != fluxo; nunca Info
-    }
-
-    log.Info("pricing apply: started", // START do fluxo real
-        slog.String("source", msg.Source), slog.String("accountId", msg.AccountID))
-
-    n, err := c.app.Apply(ctx, msg)
+    log.Debug("{contexto} consumer: message received", slog.String("key", msg.Key))
+    order, err := msq.UnpackMessage[OrderCreated](msg)
     if err != nil {
-        log.Error("pricing apply: failed", slog.Any("error", err))
-        return err
+        log.Debug("{contexto} consumer: skipped (malformed)", slog.Any("error", err))
+        return msq.Ignore, err
     }
 
-    log.Info("pricing apply: completed", // END com resultado agregado
-        slog.Int("itemsUpdated", n), slog.String("outcome", "success"))
-    return nil
+    log.Info("{contexto} consumer: started", slog.String("orderId", order.ID))
+    n, err := c.svc.Apply(ctx, *order)
+    if err != nil {
+        return msq.Nack, err // the msq pipeline logs the nack/dead-letter with the error
+    }
+    log.Info("{contexto} consumer: completed", slog.Int("itemsUpdated", n), slog.String("outcome", "success"))
+    return msq.Ack, nil
 }
 ```
 
-Dentro de loop de paginação → **sempre** `log.Debug("...: page processed", ...)`.
-O resumo (`total_read`, `published`) vai num único Info no fim do run.
+Loop de paginação → `log.Debug("...: page processed", ...)`; o resumo
+(`total_read`, `published`) vai num único Info no fim.
 
 ## Convenções
 
-- **Mensagem:** `"<contexto>: <evento>"` minúsculo, estável (vira chave de busca
-  no Loki). Ex.: `"meli order consumer: started"`.
-- **Sempre `logging.FromContext(ctx)`** nos pontos de fluxo — sem isso o log não
-  correlaciona com o trace (`trace_id`/`span_id`). Os shortcuts globais
-  (`logging.Info` direto) só pra bootstrap, onde não há `ctx` de request.
-- **Erro sempre** em `slog.Any("error", err)` — nunca interpolar no `msg`.
-- **IDs e valores free-form** vão pelo log (`slog.String`), **nunca** pela
-  métrica (cardinalidade — ver `observability-otel.md`).
-- **Lifecycle de infra** (abrir/fechar conexão, pool stats, cache connected) é
-  **Debug**, não Info. Se só interessa quando quebra, logue **só no erro**.
+- **Mensagem:** `"<contexto>: <evento>"` minúsculo e estável (é chave de
+  busca).
+- **Sempre `logging.FromContext(ctx)`** nos pontos de fluxo. Os atalhos
+  globais (`logging.Info` direto) só onde não há `ctx` de request/mensagem.
+- **Derive o logger na chamada, não na construção.** Logger derivado (`With`,
+  `FromContext`) **antes** do `Build` não recebe o export OTLP anexado depois.
+  Nada de `log *slog.Logger` guardado em struct montada antes do `Build`.
+- **Erro sempre** em `slog.Any("error", err)` — nunca interpolado no `msg`.
+- **IDs e valores livres** vão no log (`slog.String`), **nunca** em atributo de
+  métrica (`observability-otel.md`).
+- **Lifecycle de infra** (conexão aberta/fechada, cache conectado) é do SDK;
+  código do projeto não loga isso.
+- **Erro já logado pelo SDK não é relogado:** `netx.RespondError` loga a causa
+  do `AppError`; o componente de mensageria loga `Nack` (Warn), dead-letter e
+  erro de consumer/producer.
+- `fmt.Println`/`log.Printf` em código de produção: proibido (exceção: `main`
+  reportando erro do `Build`/`ListenAndServe`, antes/depois do logger).
 
 ## Anti-padrões (rejeitados em review)
 
-- ❌ `logging.Info` dentro de `for {}` de paginação → use `Debug`.
-- ❌ `logging.Info("auth_perf", "stage", ..., "elapsed", ...)` por etapa →
-  profiling é `Debug` (ou métrica de duração).
-- ❌ `logging.Info` em todo `message received` / `skipped (filter)` → `Debug`.
-- ❌ `logging.Info` de "conexão fechada / cache connected" no shutdown/boot →
-  `Debug`, ou só `Error` se falhar.
-- ❌ `logging.Fatal` fora de bootstrap (em consumer/handler/processor).
+- ❌ `logging.Info` dentro de `for` de paginação → `Debug`.
+- ❌ `logging.Info` por etapa de profiling → `Debug` ou métrica de duração.
+- ❌ `logging.Info` em todo `message received` / `skipped` → `Debug`.
+- ❌ `logging.Fatal` / `os.Exit` / `log.Fatal` fora do `main` — em
+  construtor, repository, handler, consumer, job: devolva `error`.
+- ❌ `slog.Logger` derivado e guardado antes do `Build`.
+- ❌ Logar de novo o erro que `netx.RespondError` ou o pipeline do `msq` já
+  logam.

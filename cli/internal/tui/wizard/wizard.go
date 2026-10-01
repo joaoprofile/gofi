@@ -1,4 +1,5 @@
-// Package wizard implements the interactive `gofi init` flow with huh forms.
+// Package wizard implements the interactive `gofi init` and
+// `gofi config --wizard` dialogue.
 package wizard
 
 import (
@@ -9,12 +10,13 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
-	"github.com/charmbracelet/huh"
-
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/detect"
-	"github.com/joaoprofile/gofi-cli/internal/tui/styles"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/detect"
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
 )
 
 // Environment slugs — the surfaces a project can include.
@@ -67,7 +69,7 @@ type Result struct {
 	seededWeb    bool
 	seededMobile bool
 
-	Agents    []string
+	// GitRemote is the origin init adds; git keeps it, not .gofi.yaml.
 	GitRemote string
 
 	// SDKURLs carries an optional override URL per backend language (Go's SDK is
@@ -114,25 +116,41 @@ func (r *Result) Has(env string) bool { return slices.Contains(r.Environments, e
 
 var slugRe = regexp.MustCompile(`^[a-z][a-z0-9-]+$`)
 
-// ErrCancelled is returned when the user picks "Cancel" on the final confirm
-// step. It is a clean abort, not a true error.
+// ErrCancelled is returned when the user quits or picks "Cancel" on the
+// review. It is a clean abort, not a true error.
 var ErrCancelled = errors.New("init cancelled")
 
-// Run displays the interactive wizard and returns the user's choices, or an
-// error if the user cancels (Ctrl+C) or input fails validation.
+// Meta describes the invocation the wizard runs for: the version shown in the
+// header and, for `gofi init <name>`, the name and folder the user already
+// typed on the command line.
+type Meta struct {
+	Version string
+	Name    string
+	Root    string
+}
+
+// Run displays the interactive wizard and returns the user's choices, or
+// ErrCancelled when the user quits or declines the review.
 //
-// When initial != nil, its values pre-populate the form (edit mode used by
+// When initial != nil, its values pre-populate the questions (edit mode used by
 // `gofi config --wizard`); when nil, fresh defaults are used, refined by found
 // — what a scan of the target folder recognised, so a repository that already
 // exists is described back to the user instead of being asked about.
-func Run(initial *config.GofiConfig, found detect.Result) (*Result, error) {
+func Run(initial *config.GofiConfig, found detect.Result, meta Meta) (*Result, error) {
 	r := newDefaultResult()
+	r.AgentsRef = config.AgentsRefFor(meta.Version)
 	if initial != nil {
 		seedFromConfig(r, initial)
 	} else {
 		seedFromDetect(r, found)
 	}
 	r.Detected = found
+	if meta.Name != "" {
+		r.Name = meta.Name
+	}
+	if meta.Root != "" {
+		r.Root = meta.Root
+	}
 
 	configureRemote := r.GitRemote != ""
 	proceed := true
@@ -141,169 +159,224 @@ func Run(initial *config.GofiConfig, found detect.Result) (*Result, error) {
 	// systems are npm packages (gofi-ui / gofi-ui-native), not git sources.
 	sdkGo := r.SDKURLs[config.LanguageGo]
 
-	has := func(env string) bool { return slices.Contains(r.Environments, env) }
-	backGo := func() bool { return has(EnvBack) && r.Language == config.LanguageGo }
-	needsModule := func() bool { return has(EnvBack) && r.Language != config.LanguageRust }
+	cwd, _ := os.Getwd()
+	header := flow.Header{
+		Title:    "init",
+		Version:  meta.Version,
+		Subtitle: i18n.T("wizard.subtitle.init"),
+		Dir:      cwd,
+	}
+	if initial != nil {
+		header.Title = "config"
+		header.Subtitle = i18n.T("wizard.subtitle.config")
+	}
 
-	form := huh.NewForm(
-		// 1 — Project identity
-		huh.NewGroup(
-			huh.NewNote().
-				Title("Project").
-				Description("Identity and location of the monorepo."),
-			huh.NewInput().
-				Title("Project name").
-				Description("Lowercase letters, digits, hyphens. Must start with a letter.").
-				Validate(validateSlug).
-				Value(&r.Name),
-			huh.NewInput().
-				Title("Root path").
-				Description("Workspace folder — where .gofi.yaml, .claude/ and the surfaces live. Blank = current folder. ~ is expanded.").
-				Value(&r.Root),
-		),
-		// 2 — Skills repository
-		huh.NewGroup(
-			huh.NewNote().
-				Title("Skills repository").
-				Description("The gofi monorepo the CLI fetches skills, SDK docs and templates from (under ai/)."),
-			huh.NewInput().
-				Title("Repository").
-				Description("github.com/<org>/<repo>@<ref>").
-				Value(&r.AgentsRef),
-		),
-		// 2b — Institutional repository (optional)
-		huh.NewGroup(
-			huh.NewNote().
-				Title("Institutional base (optional)").
-				Description("Org repo with business/product knowledge, maintained by the company independent of any product. Multi-product layout: a <project-name>/ folder per product. Blank = manage institutional/ by hand in this project's git."),
-			huh.NewInput().
-				Title("Institutional repository").
-				Description("github.com/<org>/<repo>@<ref> — or blank").
-				Value(&r.InstitutionalRef),
-		),
-		// 3 — Environments (multi-select)
-		huh.NewGroup(
-			huh.NewNote().
-				Title("Environments").
-				Description("Which surfaces to create in this monorepo. Pick any combination."),
-			huh.NewMultiSelect[string]().
-				Title("Surfaces").
-				Description("Space to toggle. At least one is required.").
-				Options(
-					huh.NewOption("Backend", EnvBack).Selected(has(EnvBack)),
-					huh.NewOption("Web (front-end)", EnvWeb).Selected(has(EnvWeb)),
-					huh.NewOption("Mobile", EnvMobile).Selected(has(EnvMobile)),
-				).
-				Validate(validateEnvironments).
-				Value(&r.Environments),
-		),
-		// 4 — Backend config
-		huh.NewGroup(
-			huh.NewNote().Title("Backend").
-				Description(surfaceNote("Language and source folder.", found.Backend, "existing backend code")),
-			huh.NewSelect[string]().
-				Title("Language").
-				Description("Every language gets a project skeleton. Only Go ships a gofi SDK; the others carry conventions only.").
-				Options(
-					huh.NewOption("Go", config.LanguageGo),
-					huh.NewOption("Rust", config.LanguageRust),
-					huh.NewOption("Node.js", config.LanguageNodeJS),
-					huh.NewOption("Java", config.LanguageJava),
-					huh.NewOption("C#", config.LanguageCSharp),
-				).
-				Value(&r.Language),
-			huh.NewInput().
-				Title("Backend path").
-				Description("Source folder inside the root, e.g. backend, services/api, src. Use . when the code is at the root. Blank = backend.").
-				Validate(validateSurfacePath).
-				Value(&r.SourcePath),
-		).WithHideFunc(func() bool { return !has(EnvBack) }),
-		// 5 — Web config (always Vite + React + TS + gofi-ui)
-		huh.NewGroup(
-			huh.NewNote().Title("Web").
-				Description(surfaceNote("Vite + React + TypeScript, with gofi-ui installed.", found.Web, "an existing web app")),
-			huh.NewInput().
-				Title("Web path").
-				Description("App folder inside the root, e.g. frontend, apps/web. Blank = frontend.").
-				Validate(validateSurfacePath).
-				Value(&r.WebPath),
-		).WithHideFunc(func() bool { return !has(EnvWeb) }),
-		// 6 — Mobile config (always Expo + gofi-ui-native)
-		huh.NewGroup(
-			huh.NewNote().Title("Mobile").
-				Description(surfaceNote("React Native (Expo) + TypeScript, with gofi-ui-native installed.", found.Mobile, "an existing mobile app")),
-			huh.NewInput().
-				Title("Mobile path").
-				Description("App folder inside the root, e.g. mobile, apps/mobile. Blank = mobile.").
-				Validate(validateSurfacePath).
-				Value(&r.MobilePath),
-		).WithHideFunc(func() bool { return !has(EnvMobile) }),
-		// 7 — Go SDK source (only Go backend)
-		huh.NewGroup(
-			huh.NewNote().Title("Source · Go SDK").Description("Repo for the Go SDK (gofi-sdk-go), wired into go.work."),
-			huh.NewInput().Title("gofi-sdk-go").Description("github.com/<org>/<repo>@<ref>").Value(&sdkGo),
-		).WithHideFunc(func() bool { return !backGo() }),
-		// 8 — AI host + model
-		huh.NewGroup(
-			huh.NewNote().Title("AI host").Description("Where the agents run. Claude Code on VSCode in v1."),
-			huh.NewSelect[string]().
-				Title("AI host").
-				Options(huh.NewOption("Claude Code (VSCode)", config.AIHostClaudeVSCode)).
-				Value(&r.AIHost),
-			huh.NewSelect[string]().
-				Title("Claude model").
-				Description("Recorded in .gofi.yaml; change later in .claude/settings.json.").
-				Options(modelOptions()...).
-				Value(&r.AIModel),
-		),
-		// 9 — Agents
-		huh.NewGroup(
-			huh.NewNote().Title("Agents").Description("Which gofi agents to activate as skills."),
-			huh.NewMultiSelect[string]().
-				Title("Agents to activate").
-				Description("Space to toggle. At least one is required.").
-				Options(buildAgentOptions(r.Agents)...).
-				Validate(validateAgents).
-				Value(&r.Agents),
-		),
-		// 10 — Doc folders
-		huh.NewGroup(
-			huh.NewNote().Title("Folders").Description("ops/ is always created. Choose specs/ and prd/."),
-			huh.NewConfirm().Title("Create specs/ folder?").Description("Where /gofi-spec writes specs.").Affirmative("Yes").Negative("No").Value(&r.CreateSpecsDir),
-			huh.NewConfirm().Title("Create prd/ folder?").Description("Where /gofi-pd writes PRDs.").Affirmative("Yes").Negative("No").Value(&r.CreatePrdDir),
-		),
-		// 11 — Git remote
-		huh.NewGroup(
-			huh.NewConfirm().Title("Configure git remote now?").Description("You can also set it later with `gofi remote add <url>`.").Affirmative("Yes").Negative("Skip").Value(&configureRemote),
-		),
-		huh.NewGroup(
-			huh.NewInput().Title("Git remote URL").Description("https://, git@ or github.com/org/repo.").Value(&r.GitRemote),
-		).WithHideFunc(func() bool { return !configureRemote }),
-		// 12 — Backend module identifier (last). Skipped for Rust, whose crate is
-		// named after the project, so there is nothing extra to ask.
-		huh.NewGroup(
-			huh.NewNote().Title("Backend module").Description(moduleNote(found.Backend)),
-			huh.NewInput().
-				TitleFunc(func() string { t, _ := moduleQuestion(r.Language); return t }, &r.Language).
-				DescriptionFunc(func() string { _, d := moduleQuestion(r.Language); return d }, &r.Language).
-				Validate(func(s string) error { return validateModule(r.Language, s) }).
-				Value(&r.Module),
-		).WithHideFunc(func() bool { return !needsModule() }),
-		// 13 — Review
-		huh.NewGroup(
-			huh.NewNote().Title("Review").Description("Confirm to apply. Cancel keeps everything untouched."),
-			huh.NewConfirm().Title("Apply this configuration?").Description("Creates the selected surfaces, .gofi.yaml, .claude/, specs/ prd/ ops/.").Affirmative("Apply").Negative("Cancel").Value(&proceed),
-		),
-	).WithTheme(styles.FormTheme()).WithAccessible(!styles.Enabled())
-
-	if err := form.Run(); err != nil {
+	steps := buildSteps(r, found, &sdkGo, &configureRemote, &proceed, initial != nil)
+	if err := flow.Run(header, steps); err != nil {
+		if errors.Is(err, flow.ErrCancelled) {
+			return nil, ErrCancelled
+		}
 		return nil, err
 	}
 	if !proceed {
 		return nil, ErrCancelled
 	}
+	if err := r.finalize(sdkGo, configureRemote); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
 
-	// post-processing
+// buildSteps lays out the questions in the order they are asked. Surface
+// questions hide themselves when the surface is not selected, and the review
+// comes last so it can show everything that was answered.
+func buildSteps(r *Result, found detect.Result, sdkGo *string, configureRemote, proceed *bool, editing bool) []flow.Step {
+	has := func(env string) bool { return slices.Contains(r.Environments, env) }
+	backGo := func() bool { return has(EnvBack) && r.Language == config.LanguageGo }
+	needsModule := func() bool { return has(EnvBack) && r.Language != config.LanguageRust }
+
+	return []flow.Step{
+		{
+			Kind:     flow.Input,
+			Title:    i18n.T("wizard.name.title"),
+			Help:     i18n.T("wizard.name.help"),
+			Text:     &r.Name,
+			Validate: validateSlug,
+		},
+		{
+			Kind:        flow.Input,
+			Title:       i18n.T("wizard.root.title"),
+			Help:        i18n.T("wizard.root.help"),
+			Placeholder: currentDir(),
+			Text:        &r.Root,
+		},
+		{
+			Kind:  flow.MultiSelect,
+			Title: i18n.T("wizard.surfaces.title"),
+			Help:  i18n.T("wizard.surfaces.help"),
+			Options: []flow.Option{
+				{Label: "Backend", Value: EnvBack, Hint: surfaceHint(found.Backend)},
+				{Label: "Web", Value: EnvWeb, Hint: surfaceHint(found.Web)},
+				{Label: "Mobile", Value: EnvMobile, Hint: surfaceHint(found.Mobile)},
+			},
+			Choices:       &r.Environments,
+			ValidateMulti: validateEnvironments,
+		},
+		{
+			Kind:  flow.Select,
+			Title: i18n.T("wizard.lang.title"),
+			HelpFunc: func() string {
+				return surfaceNote(i18n.T("wizard.lang.help"), found.Backend, "wizard.found.back")
+			},
+			Options: []flow.Option{
+				{Label: "Go", Value: config.LanguageGo, Hint: i18n.T("wizard.lang.sdk")},
+				{Label: "Rust", Value: config.LanguageRust},
+				{Label: "Node.js", Value: config.LanguageNodeJS},
+				{Label: "Java", Value: config.LanguageJava},
+				{Label: "C#", Value: config.LanguageCSharp},
+			},
+			Choice: &r.Language,
+			Skip:   func() bool { return !has(EnvBack) },
+		},
+		{
+			Kind:        flow.Input,
+			Title:       i18n.T("wizard.backpath.title"),
+			Help:        i18n.T("wizard.backpath.help"),
+			Placeholder: config.DefaultBackendPath,
+			Text:        &r.SourcePath,
+			Validate:    validateSurfacePath,
+			Skip:        func() bool { return !has(EnvBack) },
+		},
+		{
+			Kind:      flow.Input,
+			TitleFunc: func() string { t, _ := moduleQuestion(r.Language); return t },
+			HelpFunc: func() string {
+				_, d := moduleQuestion(r.Language)
+				return moduleNote(found.Backend) + " " + d
+			},
+			Text:     &r.Module,
+			Validate: func(s string) error { return validateModule(r.Language, s) },
+			Skip:     func() bool { return !needsModule() },
+		},
+		{
+			Kind:        flow.Input,
+			Title:       i18n.T("wizard.webpath.title"),
+			Help:        surfaceNote(i18n.T("wizard.webpath.help"), found.Web, "wizard.found.web"),
+			Placeholder: config.DefaultFrontendPath,
+			Text:        &r.WebPath,
+			Validate:    validateSurfacePath,
+			Skip:        func() bool { return !has(EnvWeb) },
+		},
+		{
+			Kind:        flow.Input,
+			Title:       i18n.T("wizard.mobilepath.title"),
+			Help:        surfaceNote(i18n.T("wizard.mobilepath.help"), found.Mobile, "wizard.found.mobile"),
+			Placeholder: config.DefaultMobilePath,
+			Text:        &r.MobilePath,
+			Validate:    validateSurfacePath,
+			Skip:        func() bool { return !has(EnvMobile) },
+		},
+		{
+			Kind:    flow.Select,
+			Title:   i18n.T("wizard.host.title"),
+			Help:    i18n.T("wizard.host.help"),
+			Options: hostOptions(),
+			Choice:  &r.AIHost,
+		},
+		{
+			Kind:    flow.Select,
+			Title:   i18n.T("wizard.model.title"),
+			Help:    i18n.T("wizard.model.help"),
+			Options: modelOptions(),
+			Choice:  &r.AIModel,
+			// The model list is Claude's; other hosts pick theirs in their own
+			// terms, in ai.tiers or the host's settings.
+			Skip: func() bool { return !host.IsClaude(r.AIHost) },
+		},
+		{
+			Kind:  flow.Confirm,
+			Title: i18n.T("wizard.specs.title"),
+			Help:  i18n.T("wizard.specs.help"),
+			Bool:  &r.CreateSpecsDir,
+		},
+		{
+			Kind:  flow.Confirm,
+			Title: i18n.T("wizard.prd.title"),
+			Help:  i18n.T("wizard.prd.help"),
+			Bool:  &r.CreatePrdDir,
+		},
+		{
+			Kind:     flow.Confirm,
+			Title:    i18n.T("wizard.remote.title"),
+			Help:     i18n.T("wizard.remote.help"),
+			Negative: i18n.T("wizard.remote.later"),
+			Bool:     configureRemote,
+			// Editing, there is nothing to add: the repository has its remote.
+			Skip: func() bool { return editing },
+		},
+		{
+			Kind:     flow.Input,
+			Title:    i18n.T("wizard.remoteurl.title"),
+			Help:     i18n.T("wizard.remoteurl.help"),
+			Text:     &r.GitRemote,
+			Validate: flow.Required,
+			Skip:     func() bool { return editing || !*configureRemote },
+		},
+		{
+			Kind:  flow.Input,
+			Title: i18n.T("wizard.skills.title"),
+			Help:  i18n.T("wizard.skills.help"),
+			Text:  &r.AgentsRef,
+		},
+		{
+			Kind:  flow.Input,
+			Title: i18n.T("wizard.sdk.title"),
+			Help:  i18n.T("wizard.sdk.help"),
+			Text:  sdkGo,
+			Skip:  func() bool { return !backGo() },
+		},
+		{
+			Kind:        flow.Input,
+			Title:       i18n.T("wizard.inst.title"),
+			Help:        i18n.T("wizard.inst.help"),
+			Placeholder: i18n.T("wizard.inst.none"),
+			Text:        &r.InstitutionalRef,
+		},
+		{
+			Kind: flow.Confirm,
+			TitleFunc: func() string {
+				switch {
+				case editing:
+					return i18n.T("wizard.review.config")
+				case r.Detected.Any():
+					return i18n.T("wizard.review.adopt")
+				}
+				return i18n.T("wizard.review.create")
+			},
+			HelpFunc: func() string {
+				c := *r
+				_ = c.finalize(*sdkGo, *configureRemote)
+				return c.Summary()
+			},
+			Affirmative: i18n.T("wizard.review.apply"),
+			Negative:    i18n.T("wizard.review.cancel"),
+			Bool:        proceed,
+			Echo: func() string {
+				if !*proceed {
+					return i18n.T("wizard.review.cancelled")
+				}
+				c := *r
+				_ = c.finalize(*sdkGo, *configureRemote)
+				return c.Summary()
+			},
+		},
+	}
+}
+
+// finalize trims the answers and fills what a blank answer stands for, so the
+// Result describes exactly what will be written. The review calls it on a copy
+// to show the same values the pipeline will use.
+func (r *Result) finalize(sdkGo string, configureRemote bool) error {
 	r.Name = strings.TrimSpace(r.Name)
 	r.Root = strings.TrimSpace(r.Root)
 	r.SourcePath = strings.TrimSpace(r.SourcePath)
@@ -348,20 +421,96 @@ func Run(initial *config.GofiConfig, found detect.Result) (*Result, error) {
 	if r.Root == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("resolve current directory: %w", err)
+			return fmt.Errorf("resolve current directory: %w", err)
 		}
 		r.Root = cwd
 	}
 	expanded, err := expandPath(r.Root)
 	if err != nil {
-		return nil, fmt.Errorf("expand root path: %w", err)
+		return fmt.Errorf("expand root path: %w", err)
 	}
 	r.Root = expanded
 
 	if !configureRemote {
 		r.GitRemote = ""
 	}
-	return r, nil
+	return nil
+}
+
+// Summary lists what the project will be created with, one "key  value" row
+// per line. Call it on a finalized Result.
+func (r *Result) Summary() string {
+	type row struct{ k, v string }
+	dsLabel := func(ds string) string {
+		if ds == "" {
+			return i18n.T("wizard.sum.no_ds")
+		}
+		return ds
+	}
+	rows := []row{{i18n.T("wizard.sum.name"), r.Name}, {i18n.T("wizard.sum.root"), r.Root}}
+	if r.Has(EnvBack) {
+		b := r.Language + " (" + r.SourcePath + "/)"
+		if r.Module != "" && r.Language != config.LanguageRust {
+			b += "  " + r.Module
+		}
+		rows = append(rows, row{i18n.T("wizard.sum.backend"), b})
+	}
+	if r.Has(EnvWeb) {
+		rows = append(rows, row{i18n.T("wizard.sum.web"), "react (" + r.WebPath + "/)  " + dsLabel(r.WebDS)})
+	}
+	if r.Has(EnvMobile) {
+		rows = append(rows, row{i18n.T("wizard.sum.mobile"), "expo (" + r.MobilePath + "/)  " + dsLabel(r.MobileDS)})
+	}
+	var folders []string
+	if r.CreateSpecsDir {
+		folders = append(folders, "specs/")
+	}
+	if r.CreatePrdDir {
+		folders = append(folders, "prd/")
+	}
+	folders = append(folders, "ops/")
+	rows = append(rows,
+		row{i18n.T("wizard.sum.folders"), strings.Join(folders, " ")},
+		row{i18n.T("wizard.sum.model"), r.AIModel},
+		row{i18n.T("wizard.sum.skills"), r.AgentsRef},
+	)
+	if v := r.SDKURLs[config.LanguageGo]; v != "" && r.Has(EnvBack) && r.Language == config.LanguageGo {
+		rows = append(rows, row{i18n.T("wizard.sum.gosdk"), v})
+	}
+	inst := i18n.T("wizard.sum.manual")
+	if r.InstitutionalRef != "" {
+		inst = r.InstitutionalRef
+	}
+	rows = append(rows, row{i18n.T("wizard.sum.institutional"), inst})
+	if r.GitRemote != "" {
+		rows = append(rows, row{i18n.T("wizard.sum.remote"), r.GitRemote})
+	}
+
+	width := 0
+	for _, x := range rows {
+		width = max(width, utf8.RuneCountInString(x.k))
+	}
+	lines := make([]string, len(rows))
+	for i, x := range rows {
+		lines[i] = x.k + strings.Repeat(" ", width-utf8.RuneCountInString(x.k)+2) + x.v
+	}
+	return strings.Join(lines, "\n")
+}
+
+func currentDir() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "current folder"
+	}
+	return cwd
+}
+
+// surfaceHint marks a surface option that a scan of the root already found.
+func surfaceHint(s detect.Surface) string {
+	if !s.Found() {
+		return ""
+	}
+	return i18n.T("wizard.surface.found", displayPath(s.Path))
 }
 
 // collectSources turns the Go SDK override input into the SDK map, dropping an
@@ -377,7 +526,7 @@ func collectSources(sdkGo string) map[string]string {
 
 func newDefaultResult() *Result {
 	return &Result{
-		AIHost:         config.AIHostClaudeVSCode,
+		AIHost:         host.ClaudeCode.ID,
 		AIModel:        config.DefaultModel,
 		Environments:   []string{EnvBack},
 		Language:       config.LanguageGo,
@@ -387,7 +536,6 @@ func newDefaultResult() *Result {
 		WebDS:          config.DSWeb,
 		MobilePath:     config.DefaultMobilePath,
 		MobileDS:       config.DSMobile,
-		Agents:         config.AllAgents(),
 		AgentsRef:      config.DefaultAgentsRef,
 		SDKURLs:        map[string]string{config.LanguageGo: config.DefaultSDKGoRef},
 		CreateSpecsDir: true,
@@ -433,25 +581,25 @@ func seedFromDetect(r *Result, found detect.Result) {
 // supplying one.
 func moduleNote(s detect.Surface) string {
 	if s.Found() && s.Module != "" {
-		return fmt.Sprintf("Read from %s at %s — change it only if it is wrong.", s.Marker, displayPath(s.Path))
+		return i18n.T("wizard.module.read", s.Marker, displayPath(s.Path))
 	}
-	return "The identifier the backend manifest is built around."
+	return i18n.T("wizard.module.note")
 }
 
 // surfaceNote describes a surface group's header: what was found and the file
 // that proved it, so the user can judge the guess before accepting it.
-func surfaceNote(base string, s detect.Surface, what string) string {
+func surfaceNote(base string, s detect.Surface, foundKey string) string {
 	if !s.Found() {
 		return base
 	}
-	return fmt.Sprintf("Found %s at %s (%s) — gofi will adopt it, not overwrite it.", what, displayPath(s.Path), s.Marker)
+	return i18n.T(foundKey, displayPath(s.Path), s.Marker)
 }
 
 // displayPath renders a surface path for a prompt, naming the root explicitly
 // because a bare "." reads like a typo.
 func displayPath(p string) string {
 	if p == "." {
-		return "the workspace root"
+		return i18n.T("wizard.path.root")
 	}
 	return "./" + p
 }
@@ -496,87 +644,49 @@ func seedFromConfig(r *Result, cfg *config.GofiConfig) {
 		r.Environments = envs
 	}
 
-	if len(cfg.Agents) > 0 {
-		r.Agents = append([]string(nil), cfg.Agents...)
-	}
 	if cfg.Sources.Agents != "" {
 		r.AgentsRef = cfg.Sources.Agents
 	}
 	for lang, url := range cfg.Sources.SDK {
 		r.SDKURLs[lang] = url
 	}
-	if cfg.Git.Remote != "" {
-		r.GitRemote = cfg.Git.Remote
-	}
 }
 
 // modelOptions renders the picker from config.Models(), so the wizard offers
-// exactly what the extension's /model does. Labels are padded to a common width
-// so the notes line up regardless of how many models the table carries.
-func modelOptions() []huh.Option[string] {
+// exactly what the extension's /model does.
+func modelOptions() []flow.Option {
 	models := config.Models()
-	width := 0
+	out := make([]flow.Option, 0, len(models))
 	for _, m := range models {
-		if len(m.Label) > width {
-			width = len(m.Label)
-		}
-	}
-	out := make([]huh.Option[string], 0, len(models))
-	for _, m := range models {
-		label := m.Label
 		note := m.Note
 		if m.ID == config.DefaultModel {
 			if note == "" {
-				note = "default"
+				note = i18n.T("wizard.model.default")
 			} else {
-				note += " (default)"
+				note += " (" + i18n.T("wizard.model.default") + ")"
 			}
 		}
-		if note != "" {
-			label = fmt.Sprintf("%-*s — %s", width, label, note)
-		}
-		out = append(out, huh.NewOption(label, m.ID))
+		out = append(out, flow.Option{Label: m.Label, Value: m.ID, Hint: note})
 	}
 	return out
 }
 
-// buildAgentOptions returns the nine agent options, marking each selected when
-// present in the current selection (used to seed the wizard from a config).
-func buildAgentOptions(selected []string) []huh.Option[string] {
-	type entry struct{ slug, label string }
-	all := []entry{
-		{config.AgentPD, "gofi-pd     — Product Discovery"},
-		{config.AgentSpec, "gofi-spec   — Specification Architect"},
-		{config.AgentEng, "gofi-eng    — Context Engineer"},
-		{config.AgentUI, "gofi-ui     — UI/UX Engineer"},
-		{config.AgentOps, "gofi-ops    — Platform & Delivery"},
-		{config.AgentQA, "gofi-qa     — Quality Auditor"},
-		{config.AgentDoc, "gofi-doc    — Documentation Generator"},
-		{config.AgentStatus, "gofi-status — Context Index"},
-		{config.AgentFull, "gofi-full   — Full-Cycle Orchestrator"},
-	}
-	sel := map[string]bool{}
-	for _, s := range selected {
-		sel[s] = true
-	}
-	out := make([]huh.Option[string], 0, len(all))
-	for _, e := range all {
-		opt := huh.NewOption(e.label, e.slug)
-		if sel[e.slug] {
-			opt = opt.Selected(true)
-		}
-		out = append(out, opt)
+// hostOptions offers the hosts, each saying what it gets: the folder gofi
+// creates for it and how much of gofi it can run.
+func hostOptions() []flow.Option {
+	out := make([]flow.Option, 0, len(host.All))
+	for _, h := range host.All {
+		out = append(out, flow.Option{Label: h.Label, Value: h.ID, Hint: i18n.T("wizard.host."+h.ID, h.Home+"/")})
 	}
 	return out
 }
 
 func validateSlug(s string) error {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return errors.New("required")
+	if err := flow.Required(s); err != nil {
+		return err
 	}
-	if !slugRe.MatchString(s) {
-		return errors.New("must match ^[a-z][a-z0-9-]+$")
+	if !slugRe.MatchString(strings.TrimSpace(s)) {
+		return errors.New(i18n.T("wizard.err.slug"))
 	}
 	return nil
 }
@@ -590,7 +700,7 @@ func validateSurfacePath(s string) error {
 		return nil
 	}
 	if !config.ValidSurfacePath(s) {
-		return errors.New("must be a relative folder path (e.g. src, services/api) or . for the root")
+		return errors.New(i18n.T("wizard.err.path"))
 	}
 	return nil
 }
@@ -601,31 +711,31 @@ func validateSurfacePath(s string) error {
 func moduleQuestion(language string) (title, desc string) {
 	switch language {
 	case config.LanguageJava:
-		return "Base package", "e.g. com.acme.myservice — becomes the Maven groupId and the src/main/java tree."
+		return i18n.T("wizard.module.java.title"), i18n.T("wizard.module.java.help")
 	case config.LanguageCSharp:
-		return "Root namespace", "e.g. Acme.MyService — becomes the namespace in Program.cs."
+		return i18n.T("wizard.module.csharp.title"), i18n.T("wizard.module.csharp.help")
 	case config.LanguageNodeJS:
-		return "Package name", "e.g. @acme/my-service — goes into package.json."
+		return i18n.T("wizard.module.nodejs.title"), i18n.T("wizard.module.nodejs.help")
 	default:
-		return "Module path", "e.g. github.com/org/repo — goes into go.mod."
+		return i18n.T("wizard.module.go.title"), i18n.T("wizard.module.go.help")
 	}
 }
 
 func validateModule(language, s string) error {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return errors.New("required")
+	if err := flow.Required(s); err != nil {
+		return err
 	}
+	s = strings.TrimSpace(s)
 	switch language {
 	case config.LanguageJava, config.LanguageCSharp:
 		if !strings.Contains(s, ".") {
-			return errors.New("must be dotted (e.g. com.acme.myservice)")
+			return errors.New(i18n.T("wizard.err.dotted"))
 		}
 	case config.LanguageNodeJS:
 		// npm accepts a bare name as readily as a scoped one.
 	default:
 		if !strings.Contains(s, "/") {
-			return errors.New("must look like a module path (e.g. github.com/org/repo)")
+			return errors.New(i18n.T("wizard.err.module"))
 		}
 	}
 	return nil
@@ -633,14 +743,7 @@ func validateModule(language, s string) error {
 
 func validateEnvironments(envs []string) error {
 	if len(envs) == 0 {
-		return errors.New("select at least one surface")
-	}
-	return nil
-}
-
-func validateAgents(agents []string) error {
-	if len(agents) == 0 {
-		return errors.New("select at least one agent")
+		return errors.New(i18n.T("wizard.err.surfaces"))
 	}
 	return nil
 }

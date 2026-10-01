@@ -4,7 +4,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
 )
 
 // The active settings for this process: one Use call at startup decides the

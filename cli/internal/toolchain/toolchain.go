@@ -1,8 +1,10 @@
 // Package toolchain runs a lightweight preflight before `gofi init` creates
 // the selected surfaces. It DETECTS the required toolchains (Go for a Go
-// backend, Node.js LTS for web/mobile) and produces human-facing guidance —
-// it never installs anything. Surfaces whose toolchain is missing are skipped
-// by the caller, which keeps the rest of init flowing.
+// backend, Node.js LTS for web/mobile, Claude Code for the agents) and produces
+// human-facing guidance — it never installs anything. Surfaces whose toolchain
+// is missing are skipped by the caller, which keeps the rest of init flowing;
+// Claude Code is the exception, because without it there are no agents to
+// scaffold for.
 package toolchain
 
 import (
@@ -14,8 +16,9 @@ import (
 
 // Needs declares which toolchains the surfaces selected in the wizard require.
 type Needs struct {
-	Go   bool // a Go backend was selected
-	Node bool // a web and/or mobile surface was selected
+	Go     bool // a Go backend was selected
+	Node   bool // a web and/or mobile surface was selected
+	Claude bool // the agents run on Claude Code
 }
 
 // Check is the outcome of probing one toolchain.
@@ -29,9 +32,10 @@ type Check struct {
 
 // Preflight is the result of a detection pass.
 type Preflight struct {
-	Checks []Check
-	GoOK   bool // Go usable (or not needed)
-	NodeOK bool // Node usable (or not needed)
+	Checks   []Check
+	GoOK     bool // Go usable (or not needed)
+	NodeOK   bool // Node usable (or not needed)
+	ClaudeOK bool // Claude Code at MinClaudeCode or later (or not needed)
 }
 
 const (
@@ -40,6 +44,14 @@ const (
 	// minNodeMajor is the lowest Node major we treat as usable; current LTS
 	// lines are 18/20/22 (even majors). Odd majors are "Current", not LTS.
 	minNodeMajor = 18
+
+	// MinClaudeCode is the oldest Claude Code gofi works with: the first that
+	// reads AGENTS.md, where a project's instructions live. An older one starts
+	// every session without them — the agents would work, and work wrong.
+	MinClaudeCode = "2.1.277"
+	// ClaudeExecutable is the command gofi runs Claude Code as.
+	ClaudeExecutable = "claude"
+	claudeInstall    = "instale o Claude Code — npm install -g @anthropic-ai/claude-code"
 )
 
 // runner runs a command and returns its combined stdout. Injectable for tests.
@@ -54,7 +66,13 @@ func defaultRunner(name string, args ...string) (string, error) {
 func Detect(needs Needs) Preflight { return detect(needs, defaultRunner) }
 
 func detect(needs Needs, run runner) Preflight {
-	p := Preflight{GoOK: !needs.Go, NodeOK: !needs.Node}
+	p := Preflight{GoOK: !needs.Go, NodeOK: !needs.Node, ClaudeOK: !needs.Claude}
+
+	if needs.Claude {
+		c := claudeCode(run, ClaudeExecutable)
+		p.ClaudeOK = c.OK
+		p.Checks = append(p.Checks, c)
+	}
 
 	if needs.Go {
 		c := Check{Name: "Go"}
@@ -123,4 +141,54 @@ func probeNode(run runner) (version string, major int, ok bool) {
 		return "", 0, false
 	}
 	return m[1] + "." + m[2] + "." + m[3], maj, true
+}
+
+// ClaudeCode checks the Claude Code at executable (ClaudeExecutable when
+// empty) against MinClaudeCode.
+func ClaudeCode(executable string) Check {
+	if executable == "" {
+		executable = ClaudeExecutable
+	}
+	return claudeCode(defaultRunner, executable)
+}
+
+var claudeVersionRe = regexp.MustCompile(`([0-9]+)\.([0-9]+)\.([0-9]+)`)
+
+func claudeCode(run runner, executable string) Check {
+	c := Check{Name: "Claude Code"}
+	out, err := run(executable, "--version")
+	m := claudeVersionRe.FindString(out)
+	if err != nil || m == "" {
+		c.Hint = claudeInstall + " (mínimo " + MinClaudeCode + ")"
+		return c
+	}
+	c.Version = m
+	if compareVersions(m, MinClaudeCode) < 0 {
+		c.Hint = "Claude Code " + m + " é anterior ao mínimo " + MinClaudeCode + " — atualize com `claude update`"
+		return c
+	}
+	c.OK = true
+	return c
+}
+
+// compareVersions orders dotted numeric versions: 2.1.300 is after 2.1.277,
+// which a string comparison gets wrong.
+func compareVersions(a, b string) int {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := range max(len(pa), len(pb)) {
+		var x, y int
+		if i < len(pa) {
+			x, _ = strconv.Atoi(pa[i])
+		}
+		if i < len(pb) {
+			y, _ = strconv.Atoi(pb[i])
+		}
+		if x != y {
+			if x < y {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
 }

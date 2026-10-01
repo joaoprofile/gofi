@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/workspace"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
 )
 
 // configuredProject writes a valid .gofi.yaml next to the sources goProject
@@ -19,7 +19,6 @@ func configuredProject(t *testing.T) string {
 	cfg, root := goProject(t)
 	cfg.Version = config.CurrentVersion
 	cfg.AI = config.AI{Host: config.AIHostClaudeVSCode, Model: config.ModelOpus5}
-	cfg.Agents = []string{config.AgentEng}
 	cfg.Sources = config.Sources{Agents: config.DefaultAgentsRef}
 	cfg.Test = config.DefaultTestSection(config.LanguageGo, cfg.Backend.Path)
 
@@ -34,28 +33,27 @@ func runGraphBuildIn(t *testing.T, dir string, args ...string) string {
 	t.Chdir(dir)
 
 	var out bytes.Buffer
-	cmd := newGraphCmd()
+	cmd := newIndexCmd()
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs(append([]string{"build", "--no-html"}, args...))
+	cmd.SetArgs(append([]string{"code", "--no-html"}, args...))
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("graph build: %v\n%s", err, out.String())
+		t.Fatalf("index code: %v\n%s", err, out.String())
 	}
 	return out.String()
 }
 
-// The git hook runs a bare `gofi graph build --update` from the repository
-// root. Scanning that root directly finds no go.mod, because every project
+// A bare `gofi index code` runs from the repository root. Scanning that root directly finds no go.mod, because every project
 // gofi init produces keeps its code under the folder backend.path names.
 func TestGraphBuildFollowsTheConfiguredLayout(t *testing.T) {
 	root := configuredProject(t)
 
 	out := runGraphBuildIn(t, root)
 
-	if _, err := os.Stat(workspace.IndexPath(root, config.LanguageGo)); err != nil {
+	if _, err := os.Stat(workspace.IndexPath(root)); err != nil {
 		t.Fatalf("no workspace index written: %v\n%s", err, out)
 	}
-	if _, err := os.Stat(filepath.Join(graph.Dir(root, config.LanguageGo), graph.GraphFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(graph.Dir(root), graph.GraphFile)); err != nil {
 		t.Fatalf("project scope not graphed: %v\n%s", err, out)
 	}
 }
@@ -76,10 +74,10 @@ func TestGraphBuildFollowsTheDeclaredRoot(t *testing.T) {
 
 	runGraphBuildIn(t, elsewhere)
 
-	if _, err := os.Stat(workspace.IndexPath(real, config.LanguageGo)); err != nil {
+	if _, err := os.Stat(workspace.IndexPath(real)); err != nil {
 		t.Errorf("the declared project was not graphed: %v", err)
 	}
-	if _, err := os.Stat(graph.Dir(elsewhere, config.LanguageGo)); !os.IsNotExist(err) {
+	if _, err := os.Stat(graph.Dir(elsewhere)); !os.IsNotExist(err) {
 		t.Errorf("a graph was written to the folder the copy sat in: %v", err)
 	}
 }
@@ -99,7 +97,7 @@ func TestGraphBuildIgnoresAStaleDeclaredRoot(t *testing.T) {
 
 	runGraphBuildIn(t, root)
 
-	if _, err := os.Stat(workspace.IndexPath(root, config.LanguageGo)); err != nil {
+	if _, err := os.Stat(workspace.IndexPath(root)); err != nil {
 		t.Errorf("a stale declared root stopped the project being graphed: %v", err)
 	}
 }
@@ -128,61 +126,143 @@ func TestGraphBuildRefusesABrokenConfig(t *testing.T) {
 	t.Chdir(root)
 
 	var out bytes.Buffer
-	cmd := newGraphCmd()
+	cmd := newIndexCmd()
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"build", "--no-html"})
+	cmd.SetArgs([]string{"code", "--no-html"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatalf("a broken .gofi.yaml was ignored and something got graphed:\n%s", out.String())
 	}
-	if _, err := os.Stat(graph.Dir(root, config.LanguageGo)); !os.IsNotExist(err) {
+	if _, err := os.Stat(graph.Dir(root)); !os.IsNotExist(err) {
 		t.Errorf("a graph was written despite the unreadable layout: %v", err)
 	}
 }
 
-// An explicit path is the developer overriding the declared layout, and has to
-// keep working — it is how a subdirectory or a sibling repository gets graphed.
-func TestGraphBuildPathArgumentOverridesTheLayout(t *testing.T) {
-	root := configuredProject(t)
-
-	runGraphBuildIn(t, root, filepath.Join(root, "src"))
-
-	if _, err := os.Stat(workspace.IndexPath(root, config.LanguageGo)); !os.IsNotExist(err) {
-		t.Errorf("an explicit path went through the workspace build: %v", err)
-	}
-}
-
-// The hook is also run from wherever the commit happened, which is rarely the
+// The command is run from wherever the developer is, which is rarely the
 // repository root.
 func TestGraphBuildWorksFromASubdirectory(t *testing.T) {
 	root := configuredProject(t)
 
 	runGraphBuildIn(t, filepath.Join(root, "src", "app"))
 
-	if _, err := os.Stat(workspace.IndexPath(root, config.LanguageGo)); err != nil {
+	if _, err := os.Stat(workspace.IndexPath(root)); err != nil {
 		t.Fatalf("no workspace index written: %v", err)
 	}
 }
 
-// --update is the hook's whole reason to be cheap: the second run must not
-// rewrite a graph nothing invalidated.
+// Indexing is incremental by default: the second run must not rewrite a graph
+// nothing invalidated.
 func TestGraphBuildUpdateSkipsAnUnchangedProject(t *testing.T) {
 	root := configuredProject(t)
 	runGraphBuildIn(t, root)
 
-	path := filepath.Join(graph.Dir(root, config.LanguageGo), graph.GraphFile)
+	path := filepath.Join(graph.Dir(root), graph.GraphFile)
 	before, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	runGraphBuildIn(t, root, "--update")
+	runGraphBuildIn(t, root)
 
 	after, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !after.ModTime().Equal(before.ModTime()) {
-		t.Error("--update rescanned a project nothing changed")
+		t.Error("the incremental build rescanned a project nothing changed")
+	}
+}
+
+// Another language reads the backend tree as one more scope of the project's
+// own index: find, show and path reach it with no flag, and the scopes built
+// before are neither rebuilt nor dropped.
+func TestIndexLangAddsAScope(t *testing.T) {
+	root := configuredProject(t)
+	runGraphBuildIn(t, root)
+	project := filepath.Join(graph.Dir(root), graph.GraphFile)
+	before, err := os.ReadFile(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, filepath.Join(root, "src", "web", "App.ts"), "export function renderApp() {}\n")
+	runGraphBuildIn(t, root, "--lang", "typescript")
+
+	ix, err := workspace.LoadIndex(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{workspace.ScopeProject, "typescript"} {
+		if _, ok := ix.Scope(name); !ok {
+			t.Errorf("scope %s missing from the index: %+v", name, ix.Scopes)
+		}
+	}
+	if ix.Language != config.LanguageGo {
+		t.Errorf("index language = %q, want the project's", ix.Language)
+	}
+	if after, _ := os.ReadFile(project); !bytes.Equal(before, after) {
+		t.Error("the project graph was rewritten by a build of another language")
+	}
+	g, err := workspace.Load(root, config.LanguageGo).Graph("typescript")
+	if err != nil || g.Language != "typescript" {
+		t.Fatalf("typescript scope not readable: %v", err)
+	}
+}
+
+// A project indexed by an older release is moved to the current layout on the
+// next build, and the side graphs no index lists are dropped, not carried.
+func TestIndexMovesTheOldLayout(t *testing.T) {
+	root := configuredProject(t)
+	runGraphBuildIn(t, root)
+	legacy := filepath.Join(root, ".gofi", "graph")
+	if err := os.Rename(graph.Dir(root), legacy); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(legacy, "java", workspace.IndexFile), `{"scopes":[{"dir":"."}]}`)
+	writeFile(t, filepath.Join(legacy, "extractors", "gofi-graph-java"), "bin")
+	writeFile(t, filepath.Join(root, ".gofi", "docs", "index.json"), "{}")
+
+	out := runGraphBuildIn(t, root)
+
+	for _, gone := range []string{legacy, filepath.Join(root, ".gofi", "docs")} {
+		if _, err := os.Stat(gone); !os.IsNotExist(err) {
+			t.Errorf("%s left behind\n%s", gone, out)
+		}
+	}
+	for _, kept := range []string{
+		workspace.IndexPath(root),
+		filepath.Join(root, ".gofi", "extractors", "gofi-graph-java"),
+	} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Errorf("%s not moved: %v\n%s", kept, err, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(graph.Dir(root), "java")); !os.IsNotExist(err) {
+		t.Error("an unlisted side graph was carried into the new layout")
+	}
+}
+
+func TestIndexStatusFollowsTheSources(t *testing.T) {
+	root := configuredProject(t)
+	runGraphBuildIn(t, root)
+	cfg, err := config.Load(filepath.Join(root, config.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := indexStatus(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Code.State != workspace.Fresh || st.Code.Built == nil {
+		t.Fatalf("code after a build: %s, recorded %v", st.Code.State, st.Code.Built)
+	}
+	if st.Docs.State != workspace.Missing {
+		t.Errorf("docs never built reported %s", st.Docs.State)
+	}
+
+	writeFile(t, filepath.Join(root, "src", "app", "more.go"), "package app\n\nfunc More() {}\n")
+	if st, _ = indexStatus(cfg, root); st.Code.State != workspace.Stale || st.Current() {
+		t.Errorf("an edit left the code %s", st.Code.State)
 	}
 }

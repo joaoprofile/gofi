@@ -1,54 +1,57 @@
-# Repository Close() — Ciclo de vida dos Prepared Statements
+---
+name: repository-close
+description: Ciclo de vida no repository — sem Close de conexão nem prepared statements em campo; quem fecha o pool é o componente database
+sdk: v0.8.2
+keywords: [repository, close, lifecycle, prepared-statement, sql.Stmt, shutdown]
+---
+
+# Repository — ciclo de vida (sem `Close()` de recurso)
 
 ## Regra
 
-Todo repository que prepara `*sql.Stmt` no construtor **deve** expor `Close() error` na interface e implementação.
+O repository **não é dono de recurso de banco**: não guarda `*sql.Stmt` nem
+`*sql.DB` em campo e, portanto, **não expõe `Close()`** na interface. O pool é
+aberto e fechado pelo componente `database` do gofi (`Shutdown`) —
+`database-connection.md`.
 
 ## Por quê
 
-`*sql.Stmt` mantém uma conexão aberta com o banco de dados. Sem `Close()`, os statements ficam abertos indefinidamente — causando leaks de conexão em cenários de shutdown ou hot-reload.
+- Escrita usa `statement.Statement.Execute` (sem prepared statement nomeado;
+  entra na tx do `ctx`). Não há statement a liberar.
+- O construtor não toca o banco (a conexão global só existe depois do
+  `Build`), então também não há nada aberto na construção.
+- `Close()` vazio na interface é contrato morto: todo mock precisa
+  implementá-lo e ninguém o chama.
 
-## Padrão
+## Única exceção — `*sql.Stmt` local num bulk
 
-**Interface (obrigatório):**
+Prepared statement só existe **dentro** de uma transação, num laço de bulk, e
+morre ali:
+
 ```go
-type PersonRepository interface {
-    Save(ctx context.Context, p model.Person) error
-    Update(ctx context.Context, id int64, req model.UpdatePersonRequest) error
-    // ... demais métodos
-    Close() error  // sempre o último método da interface
-}
-```
-
-**Implementação — fechar em sequência, retornar primeiro erro:**
-```go
-func (r *personRepository) Close() error {
-    if err := r.stmCreate.Close(); err != nil {
+return r.tx.Execute(ctx, func(ctx context.Context) error {
+    stmt, err := r.stm.Prepare(ctx, {ctx}InsertItemQuery) // preparado na tx do ctx
+    if err != nil {
         return err
     }
-    if err := r.stmUpdate.Close(); err != nil {
-        return err
+    defer stmt.Close()
+    for _, it := range items {
+        if _, err := stmt.ExecContext(ctx, itemArgs(it)...); err != nil {
+            return err
+        }
     }
-    return r.stmDelete.Close()
-    // um bloco por statement preparado no construtor
-}
+    return nil
+})
 ```
 
-**Mock de teste — sempre retorna nil:**
-```go
-func (m *mockPersonRepository) Close() error { return nil }
-```
+## Legado
 
-## Onde chamar Close()
-
-No `main.go`, usar `defer` ou chamar no shutdown do serviço:
-```go
-personRepo := repository.NewPersonRepository(context.Background())
-defer personRepo.Close()
-```
+Repository antigo com `stmXxx *sql.Stmt` preparados no construtor + `Close()`:
+ao tocar no arquivo, migre para `r.stm.Execute` e remova `Close()` da
+interface, do mock e do wiring (`defer repo.Close()` no `main`).
 
 ## Checklist
 
-- [ ] `Close() error` na interface do repository
-- [ ] `Close()` na implementação — um `.Close()` por `*sql.Stmt`
-- [ ] Mock de teste implementa `Close() error { return nil }`
+- [ ] Nenhum campo `*sql.Stmt`/`*sql.DB` no struct do repository
+- [ ] Sem `Close()` na interface do repository
+- [ ] `Prepare` só dentro de `r.tx.Execute`, com `defer stmt.Close()`

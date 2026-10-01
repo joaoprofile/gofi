@@ -24,8 +24,8 @@ func sampleData() TemplateData {
 
 func TestInstallGo(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := InstallGo(dir, sampleData()); err != nil {
-		t.Fatalf("InstallGo: %v", err)
+	if _, err := InstallBackend("go", dir, sampleData()); err != nil {
+		t.Fatalf("InstallBackend: %v", err)
 	}
 
 	mustExist(t, dir,
@@ -69,8 +69,8 @@ func TestInstallGo_KeepsExistingFiles(t *testing.T) {
 		}
 	}
 
-	if _, err := InstallGo(dir, data); err != nil {
-		t.Fatalf("InstallGo: %v", err)
+	if _, err := InstallBackend("go", dir, data); err != nil {
+		t.Fatalf("InstallBackend: %v", err)
 	}
 
 	for rel, body := range existing {
@@ -83,7 +83,7 @@ func TestInstallGo_KeepsExistingFiles(t *testing.T) {
 // TestInstallBackend_EveryLanguage locks the shape each scaffold produces: the
 // manifest, the entrypoint and the domain/ + .migrations/ folders the gofi
 // conventions expect, under the source root the user chose.
-func TestInstallBackend_EveryLanguage(t *testing.T) {
+func TestInstallBackend_Go(t *testing.T) {
 	cases := []struct {
 		language string
 		module   string
@@ -97,56 +97,6 @@ func TestInstallBackend_EveryLanguage(t *testing.T) {
 			files:    []string{"go.work", "backend/go.mod", "backend/my-svc/main.go"},
 			dirs:     []string{"backend/domain", "backend/.migrations"},
 			contains: map[string]string{"backend/go.mod": "module github.com/acme/my-svc"},
-		},
-		{
-			language: "rust",
-			module:   "",
-			files: []string{
-				"backend/Cargo.toml",
-				"backend/my-svc/Cargo.toml",
-				"backend/my-svc/src/main.rs",
-				"backend/my-svc/src/domain/mod.rs",
-			},
-			dirs: []string{"backend/.migrations"},
-			contains: map[string]string{
-				"backend/Cargo.toml":         `members = ["my-svc"]`,
-				"backend/my-svc/Cargo.toml":  `name = "my-svc"`,
-				"backend/my-svc/src/main.rs": "mod domain;",
-			},
-		},
-		{
-			language: "java",
-			module:   "com.acme.mysvc",
-			files: []string{
-				"backend/pom.xml",
-				"backend/src/main/java/com/acme/mysvc/Application.java",
-			},
-			dirs: []string{
-				"backend/src/main/java/com/acme/mysvc/domain",
-				"backend/src/test/java/com/acme/mysvc",
-				"backend/.migrations",
-			},
-			contains: map[string]string{
-				"backend/pom.xml": "<groupId>com.acme</groupId>",
-				"backend/src/main/java/com/acme/mysvc/Application.java": "package com.acme.mysvc;",
-			},
-		},
-		{
-			language: "csharp",
-			module:   "Acme.MySvc",
-			files:    []string{"backend/my-svc/my-svc.csproj", "backend/my-svc/Program.cs"},
-			dirs:     []string{"backend/my-svc/Domain", "backend/.migrations"},
-			contains: map[string]string{
-				"backend/my-svc/my-svc.csproj": "<RootNamespace>Acme.MySvc</RootNamespace>",
-				"backend/my-svc/Program.cs":    "namespace Acme.MySvc;",
-			},
-		},
-		{
-			language: "nodejs",
-			module:   "@acme/my-svc",
-			files:    []string{"backend/package.json", "backend/tsconfig.json", "backend/src/main.ts"},
-			dirs:     []string{"backend/src/domain", "backend/.migrations"},
-			contains: map[string]string{"backend/package.json": `"name": "@acme/my-svc"`},
 		},
 	}
 
@@ -216,7 +166,7 @@ func fixtureFS() fs.FS {
 		"ai/skills/gofi-spec.md":                   {Data: []byte("# spec skill")},
 		"ai/skills/gofi-eng.md":                    {Data: []byte("# eng skill")},
 		"ai/skills/gofi-qa.md":                     {Data: []byte("# qa skill")},
-		"ai/claude/CLAUDE.md":                      {Data: []byte("# CLAUDE")},
+		"ai/AGENTS.md":                             {Data: []byte("# AGENTS")},
 		"ai/templates/sdd-template.md":             {Data: []byte("# SDD")},
 		"ai/templates/prd-template.md":             {Data: []byte("# PRD")},
 		"ai/memory/project.md.tmpl":                {Data: []byte("# Memory — {{.ProjectName}}")},
@@ -251,7 +201,7 @@ func TestInstallAgentsContent_AllAgents(t *testing.T) {
 	dir := t.TempDir()
 	installAgentsFromFixture(t, dir, sampleData())
 	mustExist(t, dir,
-		".claude/CLAUDE.md",
+		"AGENTS.md",
 		".claude/skills/gofi-pd/SKILL.md",
 		".claude/skills/gofi-spec/SKILL.md",
 		".claude/skills/gofi-eng/SKILL.md",
@@ -259,10 +209,6 @@ func TestInstallAgentsContent_AllAgents(t *testing.T) {
 		".claude/templates/sdd-template.md",
 		".claude/memory/project.md",
 		".claude/knowledge/shared",
-		".claude/knowledge/pd",
-		".claude/knowledge/spec",
-		".claude/knowledge/eng",
-		".claude/knowledge/qa",
 	)
 	mustContain(t, filepath.Join(dir, ".claude/memory/project.md"), "my-svc")
 	mustExist(t, dir,
@@ -320,32 +266,22 @@ func TestInstallAgentsContent_UpdateDeliversNewKnowledge(t *testing.T) {
 	)
 }
 
-func TestInstallAgentsContent_FilterAgents(t *testing.T) {
+// Every skill is installed — they are gofi's, and a role is the planner's to
+// pick — and knowledge/ starts as the team's: shared/ and nothing per role.
+func TestInstallAgentsContent_EverySkillNoRoleFolders(t *testing.T) {
 	dir := t.TempDir()
-	data := sampleData()
-	data.Agents = []string{"gofi-spec", "gofi-eng"}
-	installAgentsFromFixture(t, dir, data)
-	// All skills are always installed, regardless of the selected agent set.
+	installAgentsFromFixture(t, dir, sampleData())
 	for _, kept := range []string{"gofi-pd/SKILL.md", "gofi-spec/SKILL.md", "gofi-eng/SKILL.md", "gofi-qa/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(dir, ".claude/skills", kept)); err != nil {
 			t.Errorf("expected %s to be installed: %v", kept, err)
 		}
 	}
-	// All upstream knowledge is seeded regardless of selection: ui/ ships
-	// content even though gofi-ui is not selected here.
-	mustExist(t, dir,
-		".claude/knowledge/shared/memory-protocol.md",
-		".claude/knowledge/eng/rbac-helper.md",
-		".claude/knowledge/ui/design-tokens.md",
-	)
-	// A selected agent without upstream content still gets an empty placeholder.
-	if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge/spec")); err != nil {
-		t.Errorf("expected placeholder knowledge/spec for selected agent: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge/shared")); err != nil {
+		t.Errorf("knowledge/shared must exist: %v", err)
 	}
-	// Unselected agents without upstream content get nothing.
-	for _, dropped := range []string{"pd", "qa"} {
-		if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge", dropped)); !os.IsNotExist(err) {
-			t.Errorf("expected knowledge/%s NOT to exist for unselected agent (got err=%v)", dropped, err)
+	for _, role := range []string{"pd", "spec", "qa"} {
+		if _, err := os.Stat(filepath.Join(dir, ".claude/knowledge", role)); !os.IsNotExist(err) {
+			t.Errorf("knowledge/%s appears only when the role records something (err=%v)", role, err)
 		}
 	}
 }
@@ -392,8 +328,8 @@ func TestPathPlaceholderSubstitution(t *testing.T) {
 	dir := t.TempDir()
 	data := sampleData()
 	data.ProjectName = "weird-name-99"
-	if _, err := InstallGo(dir, data); err != nil {
-		t.Fatalf("InstallGo: %v", err)
+	if _, err := InstallBackend("go", dir, data); err != nil {
+		t.Fatalf("InstallBackend: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "src/weird-name-99/main.go")); err != nil {
 		t.Fatalf("expected src/weird-name-99/main.go: %v", err)
@@ -407,8 +343,8 @@ func TestInstallGo_CustomSourceRoot(t *testing.T) {
 	dir := t.TempDir()
 	data := sampleData()
 	data.SourceRoot = "services"
-	if _, err := InstallGo(dir, data); err != nil {
-		t.Fatalf("InstallGo: %v", err)
+	if _, err := InstallBackend("go", dir, data); err != nil {
+		t.Fatalf("InstallBackend: %v", err)
 	}
 
 	// Files land under <SourceRoot>/, not src/.
@@ -436,8 +372,8 @@ func TestInstallGo_NestedAndRootSourceRoot(t *testing.T) {
 		dir := t.TempDir()
 		data := sampleData()
 		data.SourceRoot = "services/api"
-		if _, err := InstallGo(dir, data); err != nil {
-			t.Fatalf("InstallGo: %v", err)
+		if _, err := InstallBackend("go", dir, data); err != nil {
+			t.Fatalf("InstallBackend: %v", err)
 		}
 		mustExist(t, dir, "services/api/go.mod", "services/api/my-svc/main.go", "services/api/domain")
 		mustContain(t, filepath.Join(dir, "go.work"), "use ./services/api")
@@ -446,8 +382,8 @@ func TestInstallGo_NestedAndRootSourceRoot(t *testing.T) {
 		dir := t.TempDir()
 		data := sampleData()
 		data.SourceRoot = "."
-		if _, err := InstallGo(dir, data); err != nil {
-			t.Fatalf("InstallGo: %v", err)
+		if _, err := InstallBackend("go", dir, data); err != nil {
+			t.Fatalf("InstallBackend: %v", err)
 		}
 		mustExist(t, dir, "go.mod", "my-svc/main.go", "domain")
 		if _, err := os.Stat(filepath.Join(dir, "src")); !os.IsNotExist(err) {
@@ -474,5 +410,22 @@ func mustContain(t *testing.T, file, substr string) {
 	}
 	if !strings.Contains(string(b), substr) {
 		t.Errorf("%s does not contain %q\ngot:\n%s", file, substr, string(b))
+	}
+}
+
+// gofi init on a repository that already has an AGENTS.md keeps it: the team's
+// text becomes the project's block of the AGENTS.md gofi installs.
+func TestInstallAgentsContent_AdoptsAnExistingAgentsFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Nosso repo\n\nUse pnpm.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	installAgentsFromFixture(t, dir, sampleData())
+	b, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "Use pnpm.") {
+		t.Errorf("the repository's AGENTS.md was lost: %s", b)
 	}
 }

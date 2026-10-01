@@ -1,213 +1,204 @@
-# Kafka consumer bootstrap — wrapper owns ConsumerManager lifecycle
+---
+name: consumer-bootstrap
+description: Consumer de mensageria como gofi.Component dono do próprio ConsumerManager — Start monta dependências, registra e inicia; o gofi drena no shutdown; main só declara
+sdk: v0.8.2
+keywords: [consumer, ConsumerManager, NewConsumerManager, Register, Start, Dispatcher, Concurrency, messaging, msq, Component, drain, shutdown, wire]
+---
 
-> **Especialização** do princípio geral de
-> `.claude/sdk/go/knowledge/worker-bootstrap.md` (wrapper de background worker
-> é dono do ciclo de vida; `main.go` só vê `build → defer Close`). Esta
-> página cobre o caso específico de consumer Kafka, que tem
-> `*msq.ConsumerManager` e exige ordem `Register → Dispatcher` no
-> constructor — esses dois detalhes não generalizam para outros workers.
->
-> **Quando aplicar:** o serviço (`pathCmd`) tem **um ou mais** consumers Kafka
-> (via `gofi/msq`). Esta regra define como o `wire.go` / `main.go` montam o
-> consumer e quem possui o `ConsumerManager`.
+# Consumer bootstrap — o consumer é um componente gofi
+
+> **Especialização** de `worker-bootstrap.md` (worker dono do ciclo de vida;
+> `main.go` só declara). Aqui o dono é um `gofi.Component` que possui o
+> próprio `*msq.ConsumerManager`. Pipeline, retry, DLQ, `Result`, key e group:
+> `messaging-msq.md`. Nomes de grupo: `kafka-consumer-naming.md`. Exemplo
+> executável: `examples/msq/kafka/consumer` (e `rabbitmq`, `sqs`) —
+> `.claude/sdk/go/api/examples.md`.
 
 ## Regra inviolável
 
-**O struct consumer possui o próprio `*msq.ConsumerManager`.** O `main.go` **não**
-declara `consumerManager` em variável local nem chama `Dispatcher` / `Close` no
-manager diretamente. O ciclo de vida do manager (criação + `Register(...)` +
-`Dispatcher(n)` + `Close`) vive **dentro** do wrapper consumer; `main.go`
-enxerga apenas `buildXxxConsumer(...)` e `defer xxx.Close()`.
+**O consumer é um componente declarado no `With` e cria o próprio
+`ConsumerManager` no `Start`.** O `main.go` não declara manager, não chama
+`Register`/`Start`/`Dispatcher`/`Close`:
 
-**Cada consumer tem seu próprio manager** (1 wrapper = 1 manager dedicado).
-Não compartilhar um `ConsumerManager` entre múltiplos consumers — concorrência
-(`Dispatcher(n)`) é decisão por workload, e Close compartilhado borra a
-fronteira de propriedade.
+```go
+mq := messaging.New() // MESSAGING_* + import _ ".../msq/provider/<nome>"
 
-> **Atenção à ordem `Register` → `Dispatcher`**: `Dispatcher(n)` aplica a
-> concorrência nas entries **já registradas** e em seguida **chama
-> `start()` internamente**. Registrar depois de `Dispatcher` significa
-> consumer iniciado sem entries. Por isso o constructor sempre faz
-> `Register(...)` antes de `Dispatcher(n)`, e **não há método `Start`
-> separado** — o start é implícito.
+svc, err := gofi.New("{servico}").
+    With(database.New(), mq, newOrderConsumer(mq, cfg)).
+    Build()
+```
+
+Por que componente e não código depois do `Build`:
+
+- `Start` roda no `Build` **depois** de banco e broker (estágio maior): o
+  repositório e `mq.Broker()` já existem.
+- Falha ao criar o consumer **falha o `Build`**, com rollback do que abriu.
+- Manager criado de `mq.Broker()` é **drenado pelo gofi** no shutdown
+  (espera os handlers em voo) **antes** de fechar broker, cache e banco. Não
+  existe `Close` do consumer.
+- Serviço só-consumer usa `svc.ListenAndServe()` normalmente: sem Runner, ele
+  espera o sinal e depois drena.
+
+**Um consumer = um manager.** Não compartilhar manager entre consumers:
+concorrência e back-pressure são por workload.
 
 ---
 
 ## Template canônico
 
-### Wrapper consumer (`pathCmd/{topic}_consumer.go`)
+### Wrapper (`pathCmd/{topic}_consumer.go`)
 
 ```go
 package main
 
 import (
     "context"
+    "time"
 
-    "github.com/joaoprofile/gofi/msq"
+    "github.com/gofi-labs/gofi-sdk-go/gofi"
+    "github.com/gofi-labs/gofi-sdk-go/gofi/component/messaging"
+    "github.com/gofi-labs/gofi-sdk-go/msq"
 
-    "{module}/services/common/kafka"
-    fooSvcPkg "{module}/services/domain/{ctx}/service"
+    ordersvc "<module>/domain/{contexto}/service"
 )
 
-const {topic}ConsumerGroup = "{ctx}"
+const (
+    orderTopic = "{topic}"
+    orderGroup = "{grupo}" // kafka-consumer-naming.md
+)
 
-type {Topic}Consumer struct {
-    fooSvc  fooSvcPkg.FooService
-    manager *msq.ConsumerManager
+type orderConsumer struct {
+    mq  *messaging.Component
+    cfg Config
+    svc ordersvc.OrderService
 }
 
-func New{Topic}Consumer(broker msq.Messaging, concurrency int, fooSvc fooSvcPkg.FooService) *{Topic}Consumer {
-    mgr := msq.NewConsumerManager(broker)
-    c := &{Topic}Consumer{fooSvc: fooSvc, manager: mgr}
-    mgr.Register(kafka.SyncConsumer({topic}ConsumerGroup), c.handle)
-    mgr.Dispatcher(concurrency)
-    return c
+func newOrderConsumer(mq *messaging.Component, cfg Config) *orderConsumer {
+    return &orderConsumer{mq: mq, cfg: cfg}
 }
 
-func (c *{Topic}Consumer) Close() { c.manager.Close() }
+func (c *orderConsumer) Name() string      { return "{contexto} consumer" }
+func (c *orderConsumer) Stage() gofi.Stage { return gofi.StageServer }
 
-func (c *{Topic}Consumer) handle(ctx context.Context, msg *msq.Message) (msq.Result, error) {
-    // decodificar → despachar p/ service → classificar erro (Ack/Nack) — ver msq.md
+// Start runs during Build, after database and messaging.
+func (c *orderConsumer) Start(_ context.Context, _ *gofi.Runtime) error {
+    if !c.cfg.OrderConsumerEnabled {
+        return nil
+    }
+    c.svc = buildOrderService()
+
+    cc := msq.DefaultConsumeConfig(orderTopic)
+    cc.GroupID = orderGroup
+    cc.Concurrency = c.cfg.OrderConcurrency
+    cc.MaxRetries = 3
+    cc.RetryBackoff = time.Second
+    cc.DeadLetterTopic = orderTopic + "-dlq"
+
+    // A manager built from the service broker is drained by gofi on shutdown.
+    return msq.NewConsumerManager(c.mq.Broker()).Register(cc, c.handle).Start()
+}
+
+func (c *orderConsumer) handle(ctx context.Context, msg *msq.Message) (msq.Result, error) {
+    // decode -> call the service -> classify the error (Ack/Nack/Ignore): messaging-msq.md
 }
 ```
 
-### `wire.go` — builder recebe broker + cfg
+### `wire.go` — builder recebe o que precisa por parâmetro
 
 ```go
-func build{Topic}Consumer(ctx context.Context, broker msq.Messaging, concurrency int) *{Topic}Consumer {
-    fooRepo := fooRepoPkg.NewFooRepository(ctx)
-    fooSvc  := fooSvcPkg.NewFooService(fooRepo)
-    return New{Topic}Consumer(broker, concurrency, fooSvc)
+func buildOrderService() ordersvc.OrderService {
+    return ordersvc.NewOrderService(orderrepo.NewOrderRepository())
 }
 ```
 
-> O builder **recebe** `broker` e `concurrency` por parâmetro — não lê
-> `service.Messaging()` nem `cfg.XxxConcurrency` do escopo do `main.go`.
-> Mantém `wire.go` testável e o `main.go` como único composition root.
-
-### `main.go` — duas linhas por consumer
-
-```go
-{topic}Consumer := build{Topic}Consumer(ctx, service.Messaging(), cfg.{Topic}Concurrency)
-defer {topic}Consumer.Close()
-```
-
-**Não existe** `consumerManager := msq.NewConsumerManager(...)` em `main.go`.
-**Não existe** `consumerManager.Dispatcher(...)` em `main.go`. **Não existe**
-`xxxConsumer.Register(consumerManager)` em `main.go` — registro é interno ao
-constructor. Como `Dispatcher(n)` chama `start()` internamente, o consumer
-já está consumindo ao retornar de `buildXxxConsumer`; nenhum `Start`
-adicional é necessário.
+> O wrapper recebe o `*messaging.Component` (não o broker): o broker só existe
+> depois do `Start` do componente de mensageria. `main.go` continua sendo o
+> único lugar que conhece todos os componentes.
 
 ---
 
 ## Multi-consumer no mesmo serviço
 
-Cada consumer tem seu próprio manager. `main.go` repete o par
-`build → defer Close` por consumer:
+Um componente por consumer, uma linha no `With` cada:
 
 ```go
-bulkConsumer := buildBulkIngestConsumer(ctx, service.Messaging(), cfg.BulkConcurrency)
-defer bulkConsumer.Close()
-
-decisionConsumer := buildDecisionExecutorConsumer(ctx, service.Messaging(), cfg.DecisionConcurrency)
-defer decisionConsumer.Close()
+With(database.New(), mq, newOrderConsumer(mq, cfg), newPaymentConsumer(mq, cfg))
 ```
 
-Vantagem: cada workload tem dispatcher próprio (concorrência independente,
-back-pressure isolada, falha de um não bloqueia o outro no shutdown).
+Cada um tem manager e concorrência próprios — um workload saturado não
+segura o outro. DLQ consumido para log/alerta/replay é outro `Register` (no
+mesmo componente do tópico de origem ou num próprio).
 
 ---
 
-## Anti-padrões
+## Concorrência (`Concurrency` / `Dispatcher`)
 
-### ❌ `ConsumerManager` em variável de `main.go`
-
-```go
-// ANTI-PADRÃO
-consumerManager := msq.NewConsumerManager(service.Messaging())
-consumerManager.Dispatcher(cfg.XxxConcurrency)
-defer consumerManager.Close()
-
-xxxConsumer := buildXxxConsumer(ctx)
-xxxConsumer.Register(consumerManager)   // wrapper depende de manager externo
-defer xxxConsumer.Close()               // duplo defer, ordem frágil
-```
-
-Problemas:
-- Lifecycle dividido: `main` cria/fecha manager, wrapper cria/fecha o resto — ordem de `defer` importa.
-- Concorrência (`Dispatcher(n)`) é decisão do workload, não do bootstrap genérico — vaza pro `main`.
-- Adicionar um segundo consumer obriga compartilhar o manager OU duplicar a cerimônia — ambos ruins.
-- Em código real esse layout induz bug clássico: usar `consumerManager` antes de declará-lo (Go bloqueia, mas o pattern convida ao erro).
-
-### ❌ Builder que lê `service.Messaging()` global
-
-```go
-// ANTI-PADRÃO — wire.go chamando service global
-func buildXxxConsumer(ctx context.Context) *XxxConsumer {
-    broker := globalService.Messaging() // dependência implícita
-    ...
-}
-```
-
-Builder deve receber `broker` por parâmetro. Único lugar que conhece o
-`service` é `main.go`.
-
-### ❌ `Register(manager *msq.ConsumerManager)` público no wrapper
-
-```go
-// ANTI-PADRÃO
-func (c *XxxConsumer) Register(manager *msq.ConsumerManager) {
-    manager.Register(kafka.SyncConsumer(group), c.handle)
-}
-```
-
-Expõe ao `main.go` o detalhe de que existe um manager. O registro é
-**responsabilidade interna do constructor** — feito uma única vez quando
-o wrapper é criado. O wrapper não deve poder ser "registrado" em mais de um
-manager nem re-registrado.
-
-### ❌ Um `ConsumerManager` para N consumers
-
-```go
-// ANTI-PADRÃO
-mgr := msq.NewConsumerManager(broker)
-mgr.Dispatcher(cfg.SharedConcurrency)
-mgr.Register(topicA, consumerA.handle)
-mgr.Register(topicB, consumerB.handle)
-defer mgr.Close()
-```
-
-Concorrência fica compartilhada (workload A satura → B sofre); shutdown
-compartilhado (Close de um implica Close do outro). Manter 1:1 wrapper↔manager.
-
----
-
-## Concorrência (`Dispatcher`)
-
-`Dispatcher(n)` define quantas mensagens são processadas em paralelo dentro
-desse manager. Valor vem de `cfg.{Topic}Concurrency` (env var do serviço,
-ver `env-vars-standard.md`). Spec só declara o **default** quando é decisão
-de domínio (ex: "bulk import precisa de N=8 para throughput X"); caso contrário,
-o eng escolhe um default razoável (1–4) e expõe via env.
+- `ConsumeConfig.Concurrency` define os handlers em paralelo daquela entry;
+  `Start()` usa esse valor. **`msq.DefaultConsumeConfig` já seta 20.**
+- `Dispatcher(n)` só aplica `n` a entries com `Concurrency <= 0` — com
+  `DefaultConsumeConfig` não muda nada. Prefira `Concurrency` + `Start()`.
+- Kafka ignora `Concurrency`: paralelismo = partições atribuídas.
+- Valor vem do `Config` do serviço (`{CONTEXTO}_CONSUMER_CONCURRENCY`, ver
+  `env-vars-standard.md`). A spec só fixa default quando é decisão de domínio;
+  senão o eng escolhe (1–4 para trabalho pesado em banco) e expõe por env.
+- `Start()`/`Dispatcher()` devolvem os erros de criação juntos — **sempre**
+  retornar do `Start` do componente.
 
 ---
 
 ## Shutdown
 
-`defer xxxConsumer.Close()` no `main.go` garante que ao receber sinal de
-término o manager dreina mensagens em voo e fecha as conexões com o broker.
-**Não chamar `Close` no `handle`** — Close é responsabilidade do owner
-(main, via defer). Handler só decide `Ack` / `Nack` / `Ignore`.
+No SIGINT/SIGTERM o gofi para os Runners e fecha os recursos em ordem
+reversa: o componente de mensageria **drena** todo manager criado do seu
+broker (handlers em voo terminam; `HandlerTimeout` limita cada tentativa) e só
+então fecha o broker; banco e cache fecham depois. Handler **nunca** fecha
+nada — só decide `msq.Ack` / `msq.Nack` / `msq.Ignore`.
+
+---
+
+## Anti-padrões
+
+### ❌ Manager no `main.go`
+
+```go
+// ANTI-PATTERN
+mgr := msq.NewConsumerManager(mq.Broker())
+mgr.Register(cfg, handler.Handle)
+if err := mgr.Start(); err != nil { log.Fatal(err) } // skips Shutdown
+defer mgr.Close()
+```
+
+Ciclo de vida dividido; `log.Fatal` depois do `Build` pula o fechamento; o
+`main` carrega detalhe de workload (tópico, grupo, concorrência).
+
+### ❌ Consumer criado com `mq.Broker()` antes do `Build`
+
+`Broker()` é `nil` até o componente de mensageria iniciar.
+
+### ❌ Manager sobre broker próprio fora do gofi
+
+`msq.NewConsumerManager(kafka.New(...))` num serviço gofi cria um pipeline que
+o shutdown não drena. Use o broker de `messaging.New(...)`. Com
+`messaging.FromBroker(b)` o broker entra sem o pipeline e sem ser fechado pelo
+gofi — o chamador drena os managers (`mgr.Close()`) e fecha o broker.
+
+### ❌ `Register` público no wrapper / um manager para N consumers
+
+Registro é interno ao `Start`, uma vez. Manager compartilhado mistura
+concorrência e shutdown de workloads diferentes.
+
+### ❌ Ignorar o erro de `Start()`
+
+Consumer que não subiu passa despercebido até o backlog crescer.
 
 ---
 
 ## Checklist (gofi-eng)
 
-- [ ] `{topic}_consumer.go` tem campo `manager *msq.ConsumerManager`
-- [ ] Constructor cria `msq.NewConsumerManager(broker)` + `Register(...)` + `Dispatcher(concurrency)` — **nessa ordem**, tudo dentro
-- [ ] `Close()` delega para `c.manager.Close()`
-- [ ] `wire.go` recebe `broker msq.Messaging` e `concurrency int` por parâmetro
-- [ ] `main.go` tem o par `build → defer Close` por consumer — **zero** `consumerManager` em scope, **zero** chamada a `Start` separada (Dispatcher já inicia)
-- [ ] Cada consumer no serviço tem manager próprio (1:1)
-- [ ] Testes que invocam só `handle` constroem `&{Topic}Consumer{...}` direto (struct literal no `package main` de teste), sem passar pelo constructor — evita dependência de broker real no test
+- [ ] `{topic}_consumer.go` implementa `gofi.Component` (`Name`, `Stage`, `Start`) e entra no `With` depois do `messaging.New()`
+- [ ] `Start` monta o service (via `wire.go`), cria `msq.NewConsumerManager(mq.Broker())`, `Register(...)` e `Start()` — e devolve o erro
+- [ ] `main.go` sem `ConsumerManager`, sem `Register`/`Start`/`Dispatcher`/`Close`
+- [ ] Concorrência em `ConsumeConfig.Concurrency`, vinda de config
+- [ ] `GroupID` explícito e, em evento que não pode sumir, `DeadLetterTopic` (`messaging-msq.md`)
+- [ ] Um manager por consumer
+- [ ] Teste de `handle` monta `&orderConsumer{svc: fakeService}` direto (sem broker) e chama `handle` com `msq.NewMessageWithTopic`

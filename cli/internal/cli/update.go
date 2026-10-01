@@ -1,17 +1,15 @@
 package cli
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
-	"github.com/joaoprofile/gofi-cli/internal/audit"
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/audit"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
 )
 
 func newUpdateCmd() *cobra.Command {
@@ -21,33 +19,46 @@ func newUpdateCmd() *cobra.Command {
 		Long: `Everything a project can pull from upstream lives here, one target each:
 
   gofi update skills          the agents themselves, .claude/skills/
+  gofi update agents          the agent instructions, AGENTS.md (and the move off CLAUDE.md)
+  gofi update expertise       the expertise packs — DDD, persistence, messaging, APIs…
+  gofi update templates       the PRD and spec templates, .claude/templates/
   gofi update sdk             the SDK checkout and .claude/sdk/<lang>/
   gofi update ds              the design system docs, .claude/sdk/<surface>/
-  gofi update graph           the code graph and its git hooks
   gofi update institutional   the business base, from the org repo
   gofi update audit           report what drifted; change nothing
 
-There is no target-less update, on purpose. "Update the project" is not a
-decision anyone can review; "update the skills" is. Name what you mean.
+Without a target, every target of the gofi zone runs — skills, agents,
+expertise, templates, and sdk and ds when the project has them — planned
+together and confirmed once. The project zone is never written: .gofi.yaml,
+knowledge/, memory/, institutional/, lexicon/, specs/, prd/ and the project
+block of AGENTS.md. The institutional mirror replaces a folder the project
+owns, so it stays a target of its own.
 
-Nothing else moves. After 'gofi init' the project is yours: .gofi.yaml,
-CLAUDE.md, templates/, scripts/, knowledge/, memory/ and go.work are changed by
-hand, in your own git. Every target prints what it will write, what it keeps
-because you edited it, and what it leaves alone — then asks.
+Every run prints what it will write, what it keeps because you edited it, and
+what it leaves alone — then asks when something could be lost.
 
 Drift no target can repair is reported by 'gofi update audit', each finding
 naming the command that closes it, or saying plainly that none does.`,
-		Example: `gofi update skills
-gofi update skills --yes
+		Example: `gofi update
+gofi update --yes
+gofi update skills
 gofi update sdk --force
-gofi update graph
 gofi update audit`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			yes, _ := cmd.Flags().GetBool("yes")
+			force, _ := cmd.Flags().GetBool("force")
+			return runUpdateAll(yes, force)
+		},
 	}
+	cmd.Flags().BoolP("yes", "y", false, "skip the confirmation prompt")
+	cmd.Flags().Bool("force", false, "overwrite the gofi files you edited (backed up to .gofi/backup/)")
 	cmd.AddCommand(
 		newUpdateSkillsCmd(),
+		newUpdateAgentsCmd(),
+		newUpdateExpertiseCmd(),
+		newUpdateTemplatesCmd(),
 		newUpdateSDKCmd(),
 		newUpdateDSCmd(),
-		newUpdateGraphCmd(),
 		newUpdateInstitutionalCmd(),
 		newUpdateAuditCmd(),
 	)
@@ -75,66 +86,6 @@ command does and the fix is yours to make by hand.`,
 	}
 }
 
-func newUpdateGraphCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "graph",
-		Short: i18n.T("cmd.update.graph.short"),
-		Long: `Rebuild the code graph and reinstall the git hooks that keep it in step with
-the code.
-
-The graph is the one target that refreshes something nobody authored: it is
-derived from the code, so a stale one is simply wrong, and the agents read it as
-if it were current. That is also why it is the one target with nothing to
-preserve.
-
-It is rebuilt in the mode graph.deep declares, never forced to deep, and the
-mode is printed: in fast an absent edge is not proof of an absent call, and that
-is what the agents read it under. For the full toolbox — scoping, --deep,
-queries, opening the report — use 'gofi graph'.`,
-		Example: `gofi update graph
-gofi update graph --yes`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			yes, _ := cmd.Flags().GetBool("yes")
-			return runUpdateGraph(cmd.Context(), yes)
-		},
-	}
-	cmd.Flags().BoolP("yes", "y", false, "skip the confirmation prompt")
-	return cmd
-}
-
-func runUpdateGraph(ctx context.Context, autoConfirm bool) error {
-	cfg, err := config.Load(config.FileName)
-	if err != nil {
-		return fmt.Errorf("read .gofi.yaml: %w", err)
-	}
-	if !graphEnabled(cfg) {
-		return errors.New("the graph is disabled for this project (graph.enabled in .gofi.yaml)")
-	}
-
-	ok, err := confirmUpdate("Rebuild the graph?", graphScope(cfg), autoConfirm)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		fmt.Println("graph left as it is.")
-		return nil
-	}
-	syncGraph(ctx, cfg)
-	noteDrift(cfg)
-	return nil
-}
-
-// graphScope is what `gofi update graph` promises before it runs.
-func graphScope(cfg *config.GofiConfig) updateScope {
-	s := updateScope{LeavesAlone: []string{"everything else — the graph is derived, not authored"}}
-	s.write(".gofi/graph/", "rebuilt from the code")
-	if cfg.Graph.HooksOn() {
-		s.write("git hooks", "pre-commit, post-checkout, post-merge")
-	}
-	s.write(".gitignore", "the .gofi/ rules the graph needs to reach git")
-	return s
-}
-
 // runAuditOnly reports drift without touching the project, which is the only
 // way to ask "is this project old?" without also answering it.
 func runAuditOnly() error {
@@ -152,35 +103,12 @@ func runAuditOnly() error {
 	return nil
 }
 
-// syncGraph rebuilds the code graph and reinstalls the hooks that keep it in
-// step with the code. Shared by `gofi update graph` and `gofi init`.
-//
-// Everything an update used to repair on its own (the .gofi.yaml schema, the
-// legacy .claude/ dirs, go.work) is reported by `gofi update audit` instead,
-// with the command that fixes it.
-func syncGraph(ctx context.Context, cfg *config.GofiConfig) {
-	// A project scaffolded before the graph existed ignores all of .gofi/, which
-	// would keep the graph out of git for good — the one .gitignore line the
-	// graph cannot do without.
-	if graphEnabled(cfg) {
-		if err := ensureGofiIgnored(cfg.Project.Root); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %v\n", err)
-		}
-	}
-	if note := buildGraphQuietly(ctx, cfg, cfg.Project.Root); note != "" {
-		fmt.Println(note)
-	}
-	if note := installGraphHooksQuietly(cfg, cfg.Project.Root); note != "" {
-		fmt.Println(note)
-	}
-}
-
 // runAudit inspects what no update target rewrites: .gofi.yaml, specs/, prd/
 // and the preserved .claude/knowledge/ tree.
 func runAudit(cfg *config.GofiConfig) []audit.Finding {
 	opts := audit.Options{GraphEnabled: graphEnabled(cfg)}
-	// The upstream tree is what reveals which knowledge/shared files never
-	// reached the project. It comes from the same cache the update just used,
+	// The upstream tree is what reveals which expertise packs never reached
+	// the project. It comes from the same cache the update just used,
 	// so asking again is cheap; when it cannot be fetched the check is skipped
 	// rather than guessed.
 	if srcDir, _, err := fetchSource(cfg.Project.Root, cfg.Sources.Agents); err == nil {
@@ -263,18 +191,20 @@ func printAudit(findings []audit.Finding) {
 // skills. New + modified entries are listed; unchanged files are omitted.
 // edited lists the skills that carry local changes — the evidence behind the
 // KEEPS line of the scope block that follows.
-func printUpdatePlan(plan []scaffold.Change, edited []string) {
+// printUpdatePlan lists what an update of one gofi-owned tree would write —
+// what names the tree ("skill", "expertise"), dir is where it lives.
+func printUpdatePlan(what, dir string, plan []scaffold.Change, edited []string) {
 	fmt.Println()
 	if len(plan) == 0 {
-		fmt.Println("No skill would change in .claude/skills/.")
+		fmt.Println("No " + what + " file would change in " + dir + "/.")
 	} else {
-		fmt.Printf("The following %d skill file(s) would change:\n\n", len(plan))
+		fmt.Printf("The following %d %s file(s) would change:\n\n", len(plan), what)
 		for _, c := range plan {
 			fmt.Printf("  %-9s %s\n", c.Kind, c.RelPath)
 		}
 	}
 	if len(edited) > 0 {
-		fmt.Printf("\n%d skill file(s) carry your edits:\n\n", len(edited))
+		fmt.Printf("\n%d %s file(s) carry your edits:\n\n", len(edited), what)
 		for _, f := range edited {
 			fmt.Printf("  %s\n", f)
 		}

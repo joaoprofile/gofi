@@ -1,5 +1,10 @@
 package config
 
+import (
+	"regexp"
+	"strings"
+)
+
 // DefaultTestSection returns the test runner config seeded into a freshly
 // created .gofi.yaml. Tasks differ per language; hooks are empty by default.
 //
@@ -251,18 +256,34 @@ func defaultCoverageReport(language string) string {
 	return ""
 }
 
-// DefaultAgentsRef is the source pin used as the wizard default in `gofi init`
-// when the user does not customise the URL. Points at the gofi monorepo, whose
-// AI harness content (skills, knowledge, sdk docs, templates, memory) lives
-// under ai/. Pinned to @main until tagged releases exist; users bump via
-// `gofi update`.
-const DefaultAgentsRef = "github.com/joaoprofile/gofi@main"
+// AgentsRepo is the gofi monorepo: the CLI and the AI harness content it
+// installs (skills, knowledge, sdk docs, templates, memory, under ai/) are
+// released together, under the same tag.
+const AgentsRepo = "github.com/gofi-labs/gofi"
+
+// DefaultAgentsRef is the source pin of a development build, which has no
+// release tag to point at. Released builds pin their own tag; see AgentsRefFor.
+const DefaultAgentsRef = AgentsRepo + "@main"
+
+var releaseVersion = regexp.MustCompile(`^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$`)
+
+// AgentsRefFor is the source pin `gofi init` writes for a CLI of that version:
+// the content released with it, so a project is reproducible and moves only
+// when `gofi update` is asked to. A development build ("dev", a commit) falls
+// back to DefaultAgentsRef.
+func AgentsRefFor(version string) string {
+	m := releaseVersion.FindStringSubmatch(strings.TrimSpace(version))
+	if m == nil {
+		return DefaultAgentsRef
+	}
+	return AgentsRepo + "@v" + m[1]
+}
 
 // DefaultSDKGoRef is the default Go SDK source: the dedicated gofi-sdk-go repo,
 // fetched into .gofi/gofi-sdk-go/ as the toolchain checkout (go.work). The web
 // and mobile design systems ship as npm packages (gofi-ui / gofi-ui-native),
 // installed by the create step — not as git sources.
-const DefaultSDKGoRef = "github.com/joaoprofile/gofi-sdk-go@main"
+const DefaultSDKGoRef = "github.com/gofi-labs/gofi-sdk-go@main"
 
 // DefaultSourceRoot is the historical source folder name. It is the back-compat
 // fallback used when migrating older configs and when a config omits a path —

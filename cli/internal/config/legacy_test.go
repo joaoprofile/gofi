@@ -33,7 +33,7 @@ ai:
   model: claude-opus-4-8
 agents: [gofi-eng]
 sources:
-  agents: github.com/joaoprofile/gofi@main
+  agents: github.com/gofi-labs/gofi@main
 `
 
 func write(t *testing.T, body string) string {
@@ -81,18 +81,6 @@ func TestFoldedBrandSurvivesARoundTrip(t *testing.T) {
 	}
 }
 
-func TestLegacyShapesNamesWhatWasFolded(t *testing.T) {
-	notes := LegacyShapes(write(t, brandBlockConfig))
-	if len(notes) != 1 || !strings.Contains(notes[0], "ui.web.brand") {
-		t.Errorf("notes = %v, want one naming ui.web.brand", notes)
-	}
-	if n := LegacyShapes(write(t, strings.Replace(brandBlockConfig,
-		"brand:\n      surface: \"#dcebfb\"\n      onBrand: \"#0e3a6b\"\n      action: \"#025cb2\"",
-		"brand: blue", 1))); len(n) != 0 {
-		t.Errorf("a config already in the current shape has nothing to report, got %v", n)
-	}
-}
-
 // withBackoffice is the v1 shape that has no named block in the current schema:
 // a third surface alongside web. It has to survive the migration under its own
 // name, because dropping a surface a team declared is losing their work.
@@ -133,18 +121,5 @@ func TestThirdSurfaceSurvivesARoundTrip(t *testing.T) {
 	}
 	if s := again.Surfaces["backoffice"]; s == nil || s.Path != "frontend/backoffice" {
 		t.Errorf("surfaces: must round-trip, got %+v", again.Surfaces)
-	}
-}
-
-func TestLegacyShapesNamesTheMovedSurface(t *testing.T) {
-	notes := LegacyShapes(write(t, withBackoffice(brandBlockConfig)))
-	var found bool
-	for _, n := range notes {
-		if strings.Contains(n, "surfaces.backoffice") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("the move must be named to the user, notes = %v", notes)
 	}
 }

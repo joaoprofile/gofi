@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
 )
 
 const (

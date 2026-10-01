@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/analyze"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 const fixture = "testdata/sample"

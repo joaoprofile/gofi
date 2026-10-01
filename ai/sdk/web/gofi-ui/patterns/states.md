@@ -2,7 +2,7 @@
 
 **Toda tela com dados** entrega os quatro. Entregar só o "happy path" é um
 bug, não simplificação. (Princípios 1–3 de
-[ux-principles.md](../../../../knowledge/ui/ux-principles.md).)
+[ux-principles.md](../../../../expertise/ui-design/ux-principles.md).)
 
 ## Os estados
 | Estado | Regra | Componente |

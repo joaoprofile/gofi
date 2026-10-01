@@ -5,12 +5,11 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
-	"github.com/joaoprofile/gofi-cli/internal/graph/workspace"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -88,9 +87,6 @@ func TestGraphSkippedWithNothingToScan(t *testing.T) {
 	if note := buildGraphQuietly(t.Context(), cfg, root); note != "" {
 		t.Errorf("note = %q, want silence", note)
 	}
-	if note := installGraphHooksQuietly(cfg, root); note != "" {
-		t.Errorf("hooks note = %q, want silence", note)
-	}
 }
 
 // An Angular or React repository with no backend is a code base like any other:
@@ -115,7 +111,7 @@ func TestGraphForAFrontOnlyProject(t *testing.T) {
 		t.Fatal("no note reported")
 	}
 
-	g, err := model.Load(filepath.Join(graph.Dir(root, ""), "frontend", graph.GraphFile))
+	g, err := model.Load(filepath.Join(graph.Dir(root), "frontend", graph.GraphFile))
 	if err != nil {
 		t.Fatalf("front-end graph: %v", err)
 	}
@@ -138,18 +134,13 @@ func TestGraphIsStaleAfterTheFrontEndMoves(t *testing.T) {
 	if note := buildGraphQuietly(t.Context(), cfg, root); note == "" {
 		t.Fatal("no graph built")
 	}
-	if stale, err := graphIsStale(cfg, root); err != nil || stale {
-		t.Fatalf("fresh graph reported stale=%v (%v)", stale, err)
+	if state := codeState(t, cfg, root); state != workspace.Fresh {
+		t.Fatalf("fresh graph reported %s", state)
 	}
 
-	touched := filepath.Join(root, "web", "src", "Next.tsx")
-	writeFile(t, touched, "export const Next = () => null\n")
-	future := time.Now().Add(time.Hour)
-	if err := os.Chtimes(touched, future, future); err != nil {
-		t.Fatal(err)
-	}
-	if stale, err := graphIsStale(cfg, root); err != nil || !stale {
-		t.Errorf("a new front-end file did not make the graph stale (%v)", err)
+	writeFile(t, filepath.Join(root, "web", "src", "Next.tsx"), "export const Next = () => null\n")
+	if state := codeState(t, cfg, root); state != workspace.Stale {
+		t.Errorf("a new front-end file left the graph %s", state)
 	}
 }
 
@@ -159,7 +150,7 @@ func TestBuildGraphQuietlyWritesTheGraph(t *testing.T) {
 	if note := buildGraphQuietly(t.Context(), cfg, root); note == "" {
 		t.Fatal("no note reported")
 	}
-	if _, err := os.Stat(filepath.Join(graph.Dir(root, config.LanguageGo), graph.GraphFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(graph.Dir(root), graph.GraphFile)); err != nil {
 		t.Fatalf("graph not written: %v", err)
 	}
 }
@@ -182,18 +173,23 @@ func TestGraphIsStaleAfterTheCodeMoves(t *testing.T) {
 	if note := buildGraphQuietly(t.Context(), cfg, root); note == "" {
 		t.Fatal("no graph built")
 	}
-	if stale, err := graphIsStale(cfg, root); err != nil || stale {
-		t.Fatalf("fresh graph reported stale=%v (%v)", stale, err)
+	if state := codeState(t, cfg, root); state != workspace.Fresh {
+		t.Fatalf("fresh graph reported %s", state)
 	}
 
-	newer := filepath.Join(root, "src", "app", "more.go")
-	if err := os.WriteFile(newer, []byte("package app\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "src", "app", "more.go"), []byte("package app\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chtimes(newer, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
+	if state := codeState(t, cfg, root); state != workspace.Stale {
+		t.Errorf("new source left the graph %s", state)
+	}
+}
+
+func codeState(t *testing.T, cfg *config.GofiConfig, root string) workspace.Freshness {
+	t.Helper()
+	st, err := indexStatus(cfg, root)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if stale, err := graphIsStale(cfg, root); err != nil || !stale {
-		t.Errorf("new source did not make the graph stale (%v)", err)
-	}
+	return st.Code.State
 }

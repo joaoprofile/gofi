@@ -1,6 +1,6 @@
 # Cor — uso e acessibilidade
 
-Valores em [design-tokens.md](../../../../knowledge/ui/design-tokens.md). Este
+Valores em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md). Este
 arquivo cobre **quando** usar cada papel.
 
 ## O duplo papel da cor de marca (regra central)

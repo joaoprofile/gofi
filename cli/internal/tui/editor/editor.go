@@ -1,6 +1,6 @@
 // Package editor invokes the user's terminal editor on a temporary file and
-// returns the saved contents. Used by `gofi train` to let the user paste a
-// markdown buffer or edit an existing topic in place.
+// returns the saved contents. Used by `gofi config` to edit .gofi.yaml in
+// place.
 package editor
 
 import (

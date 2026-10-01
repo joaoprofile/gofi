@@ -2,6 +2,7 @@ package docs
 
 import (
 	"fmt"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,9 +23,9 @@ type Finding struct {
 
 // Required frontmatter, by corpus. Context memory has no tipo: the folder says it.
 var required = map[string][]string{
-	"specs":                   {"tipo", "formato", "contexto", "versao", "status"},
-	"prd":                     {"tipo", "formato", "contexto", "versao", "status"},
-	".claude/memory/contexts": {"formato", "contexto", "versao", "status"},
+	"specs":               {"tipo", "formato", "contexto", "versao", "status"},
+	"prd":                 {"tipo", "formato", "contexto", "versao", "status"},
+	layout.Contexts().Dir: {"formato", "contexto", "versao", "status"},
 }
 
 // known is every field the format defines.
@@ -93,7 +94,7 @@ func Validate(root string) []Finding {
 					}
 				}
 			}
-			if corpus == ".claude/memory/contexts" {
+			if corpus == layout.Contexts().Dir {
 				if n := len(body) + len(fm) + 2; n > MemoryLineCap {
 					add(rel, fmt.Sprintf("%d linhas (teto %d) — transbordar o histórico "+
 						"antigo para history.md", n, MemoryLineCap), false)

@@ -2,55 +2,14 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/docs"
-	"github.com/joaoprofile/gofi-cli/internal/githooks"
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/workspace"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 )
-
-// gofiHookBodies is what the managed git hooks run.
-//
-// One block, every derived artifact — the code graph and the document index.
-// githooks.Install replaces the whole marked block, so two installers writing
-// their own body would silently delete each other's: installing the document
-// hooks would take the code graph out of the very hook that keeps it fresh.
-// Both 'gofi graph hooks' and 'gofi docs hooks' install this same block. --update turns each of
-// them into a hash comparison when nothing changed, and every failure is
-// swallowed on purpose: a commit, a checkout or a merge must not break because
-// a derived file could not be rebuilt.
-//
-// --fast is what keeps this affordable. A hook runs on every commit, checkout
-// and merge, and the type-checker is the expensive half of the scan, so the
-// hooks stay syntactic even in a project that declares `graph: deep: true`:
-// exactness is worth waiting for, but not on every commit. Deep is then the
-// deliberate build — `gofi update`, or `gofi graph build --deep` run by whoever
-// is about to conclude something the fast graph cannot support.
-//
-// pre-commit stages what it rebuilt, so the graph travels in the same commit as
-// the code. Its document pass is scoped to what the commit stages: rebuilding
-// every INDEX.md rewrote contexts nobody touched and left them dirty in every
-// developer's tree. post-checkout and post-merge rebuild only the graph — the
-// document indexes are tracked Markdown, and rewriting them after a checkout
-// or a pull is exactly the dirt a developer did not cause.
-func gofiHookBodies() map[string]string {
-	const guard = `command -v gofi >/dev/null 2>&1 || exit 0
-gofi graph build --update --fast >/dev/null 2>&1 || true`
-	preCommit := guard + `
-gofi docs build --staged --with-code >/dev/null 2>&1 || true
-git add -- ` + graph.OutDir + " " + docs.OutDir + " >/dev/null 2>&1 || true"
-	return map[string]string{
-		"pre-commit":    preCommit,
-		"post-checkout": guard,
-		"post-merge":    guard,
-	}
-}
 
 // graphOptions turns the project's configuration into a workspace build.
 func graphOptions(cfg *config.GofiConfig, root string) workspace.Options {
@@ -108,15 +67,24 @@ func graphEnabled(cfg *config.GofiConfig) bool {
 
 // buildGraphQuietly is the `gofi init` and `gofi update` path: best effort, one
 // line of output, never fatal. A project scaffold must not fail because a
-// derived file could not be produced — `gofi graph build` says why later.
+// derived file could not be produced — `gofi index code` says why later.
 func buildGraphQuietly(ctx context.Context, cfg *config.GofiConfig, root string) string {
 	if !graphEnabled(cfg) {
 		return ""
 	}
-	res, err := workspace.Build(ctx, graphOptions(cfg, root))
+	// An update run on a project from an older release must not rebuild beside
+	// the old layout: the extractors it needs are still there.
+	if m, err := layout.Migrate(root, backendLang(cfg)); err == nil && !m.Empty() {
+		_ = ensureGofiIgnored(root)
+	}
+	opt := graphOptions(cfg, root)
+	res, err := workspace.Build(ctx, opt)
 	if err != nil {
 		return i18n.T("graph.setup.failed", err)
 	}
+	// The manifest is a record, not the build: failing to write it leaves a
+	// status check less informed, never a graph missing.
+	_ = recordCodeBuild(root, opt, res.Index)
 	var nodes, edges int
 	names := make([]string, 0, len(res.Built()))
 	for _, s := range res.Built() {
@@ -134,92 +102,5 @@ func buildGraphQuietly(ctx context.Context, cfg *config.GofiConfig, root string)
 	// syntactic guesses as certainty.
 	return i18n.T("graph.setup.done", nodes, edges, strings.Join(names, ", "),
 		(graph.BuildOptions{Deep: cfg.Graph.UseDeep()}).Mode(),
-		relativeTo(root, graph.Dir(root, backendLang(cfg))))
-}
-
-// installGraphHooksQuietly keeps the graph in step with the code without the
-// developer having to remember. Best effort for the same reason as the build:
-// a project outside git, or one whose hooks directory is not writable, is still
-// a working project.
-func installGraphHooksQuietly(cfg *config.GofiConfig, root string) string {
-	if !graphEnabled(cfg) || !cfg.Graph.HooksOn() {
-		return ""
-	}
-	results, err := githooks.Install(root, gofiHookBodies())
-	if err != nil {
-		return i18n.T("graph.hooks.failed", err)
-	}
-	changed := make([]string, 0, len(results))
-	for _, r := range results {
-		if r.Action != githooks.Unchanged {
-			changed = append(changed, r.Hook)
-		}
-	}
-	if len(changed) == 0 {
-		return ""
-	}
-	return i18n.T("graph.hooks.done", strings.Join(changed, ", "))
-}
-
-// graphIsStale reports whether the graph on disk is older than the newest
-// source file. It is what `gofi doctor` uses to tell a developer their agents
-// are reading a map of code that has since moved.
-//
-// Every scanned folder counts, not just the backend: a front end edited all
-// week would otherwise report a graph that is current while every component in
-// it has moved.
-func graphIsStale(cfg *config.GofiConfig, root string) (bool, error) {
-	fi, err := os.Stat(filepath.Join(graph.Dir(root, backendLang(cfg)), graph.GraphFile))
-	if err != nil {
-		return false, err
-	}
-	stale := false
-	var errs []error
-	for _, src := range scannedDirs(cfg, root) {
-		if stale {
-			break
-		}
-		err := filepath.WalkDir(src, func(_ string, d os.DirEntry, err error) error {
-			if err != nil || stale {
-				return nil
-			}
-			if d.IsDir() {
-				if name := d.Name(); name == ".git" || name == ".gofi" || name == "node_modules" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			info, err := d.Info()
-			if err == nil && info.ModTime().After(fi.ModTime()) {
-				stale = true
-			}
-			return nil
-		})
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return stale, errors.Join(errs...)
-}
-
-// scannedDirs are the folders the graph is built from, as absolute paths.
-func scannedDirs(cfg *config.GofiConfig, root string) []string {
-	var out []string
-	if backendLang(cfg) != "" {
-		src := root
-		if cfg.Backend != nil && cfg.Backend.Path != "" {
-			src = filepath.Join(root, cfg.Backend.Path)
-		}
-		out = append(out, src)
-	}
-	for _, s := range graphSurfaces(cfg) {
-		dir := filepath.Join(root, s.Dir)
-		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			out = append(out, dir)
-		}
-	}
-	if len(out) == 0 {
-		out = append(out, root)
-	}
-	return out
+		relativeTo(root, graph.Dir(root)))
 }

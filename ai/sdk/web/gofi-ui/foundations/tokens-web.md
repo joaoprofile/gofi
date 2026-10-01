@@ -1,6 +1,6 @@
 # Tokens — forma web (Tailwind CSS v4)
 
-Os valores vêm de [design-tokens.md](../../../../knowledge/ui/design-tokens.md)
+Os valores vêm de [design-tokens.md](../../../../expertise/ui-design/design-tokens.md)
 (fonte única). Este arquivo é a **forma** que eles assumem no web: a lib `gofi-ui`
 compila tudo em `theme.css` e o consumo é por **utilitários Tailwind v4** — você
 escreve `className`, **não** `style` inline.
@@ -126,6 +126,6 @@ do `.gofi.yaml`) como vars `--brand`/`--action`/`--tx-on-brand`/`--accent`. A li
 aceita cores arbitrárias; sem `brand` no projeto, valem os defaults neutros.
 Nenhum componente gerencia tema/marca localmente — ver [color.md](color.md) e o
 modelo de marca em
-[design-tokens.md](../../../../knowledge/ui/design-tokens.md). Armadilhas (autofill,
-literais) em [theming-dark-mode.md](../../../../knowledge/ui/theming-dark-mode.md).
+[design-tokens.md](../../../../expertise/ui-design/design-tokens.md). Armadilhas (autofill,
+literais) em [theming-dark-mode.md](../../../../expertise/ui-design/theming-dark-mode.md).
 </content>

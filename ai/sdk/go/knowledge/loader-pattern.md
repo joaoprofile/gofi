@@ -1,3 +1,10 @@
+---
+name: loader-pattern
+description: Loader — snapshot de várias tabelas para motor de decisão, com sqln.Find, errgroup ou transação read-only
+sdk: v0.8.2
+keywords: [loader, snapshot, decider, errgroup, sqln, Find, read-only-transaction, replica]
+---
+
 # Loader pattern — snapshot consistente para motores de decisão
 
 Pattern Go para carregar **snapshot consistente** de múltiplas tabelas em
@@ -10,7 +17,7 @@ Aplicar **quando todas** as condições abaixo se aplicam:
 
 1. **Motor de decisão** (decider) sobre estado local — não chama sistema
    externo durante a decisão. Ver
-   `.claude/knowledge/shared/event-driven-executor-pattern.md`.
+   `.claude/expertise/event-driven/executor-pattern.md`.
 2. **Snapshot lê 3+ tabelas relacionadas** que devem ser **consistentes
    entre si** durante a avaliação (mudanças concomitantes devem afetar só
    o próximo ciclo).
@@ -40,11 +47,11 @@ por transação), motor de ranking (decidir posição por item).
 ## Layout canônico
 
 ```
-services/domain/{ctx}/loader/
+{pathService}/domain/{ctx}/loader/
   contract.go       — interface Loader + struct {Ctx}EvaluationContext
-  loader.go         — prepared stmts no constructor + Load + List* + Close
+  loader.go         — Load + List* (sqln.Find*)
   queries.go        — SQL bruto (constantes string)
-  snapshot.go       — DTOs (ProductSnapshot, PriceSnapshot, etc.)
+  snapshot.go       — DTOs do loader ({Entidade}Snapshot, ...)
   errors.go         — erros próprios do loader
   loader_test.go    — testes
 ```
@@ -57,26 +64,23 @@ services/domain/{ctx}/loader/
 ## Interface canônica
 
 ```go
-// services/domain/{ctx}/loader/contract.go
+// loader/contract.go
 package loader
 
 import (
     "context"
-    "github.com/joaoprofile/gofi/base/errs"
+
+    "github.com/gofi-labs/gofi-sdk-go/base/errs"
 )
 
 type Loader interface {
-    // Load carrega snapshot completo de 1 entidade em uma chamada.
-    // Retorna Err{Ctx}NotEligible se o gate falha (status != ENABLED, etc.).
+    // Load carrega o snapshot completo de 1 entidade.
+    // Devolve Err{Ctx}NotEligible quando o gate falha.
     Load(ctx context.Context, entityID int64) (*{Ctx}EvaluationContext, errs.AppError)
 
-    // List{ByDimension} lista entidades elegíveis por dimensão (marketplace,
-    // tenant, etc.). Consumida pelo Processor ou pelo orchestrator que itera.
-    // Pode haver mais de 1 método List* — um por dimensão de iteração.
+    // ListBy{Dimension} lista entidades elegíveis por dimensão de iteração
+    // (tenant, canal, ...). Um método por dimensão.
     ListBy{Dimension}(ctx context.Context, dim {DimType}) ([]int64, errs.AppError)
-
-    // Close libera os prepared statements.
-    Close() error
 }
 ```
 
@@ -84,114 +88,92 @@ type Loader interface {
 
 ```go
 type {Ctx}EvaluationContext struct {
-    // Identidade + tenancy (campos do gate / chaves)
-    EntityID  int64
-    TenantIDs ...
+    EntityID int64  `db:"entity_id"`
+    TenantID string `db:"tenant_id"`
 
-    // Snapshots single-row (carregados pelo snapshot query monolítico)
-    {Tabela1} {Tabela1}Snapshot
-    {Tabela2} *{Tabela2}Snapshot   // ponteiro quando LEFT JOIN (pode ser nil)
-    ...
+    // single-row (query monolítica com JOINs 1:1) — VO aninhado com tag db
+    {Tabela1} {Tabela1}Snapshot `db:"t1"`
+    {Tabela2} {Tabela2}Snapshot `db:"t2"` // LEFT JOIN: folhas *T (NULL); ponteiro para struct não é expandido
 
-    // Snapshots many (carregados por sub-queries paralelas via errgroup)
-    {ListaN} [] {ListaN}Item
-    ...
+    // many (sub-queries) — sem tag db
+    {ListaN} []{ListaN}Item
 }
 ```
 
 ---
 
-## Implementação canônica — prepared stmts + errgroup
+## Implementação canônica — `sqln.Find` + errgroup
 
 ```go
-// services/domain/{ctx}/loader/loader.go
+// loader/loader.go
 package loader
 
 import (
     "context"
-    "database/sql"
     "errors"
-    "log/slog"
 
-    "github.com/joaoprofile/gofi/base/errs"
-    "github.com/joaoprofile/gofi/obs/logging"
-    "github.com/joaoprofile/gofi/sqln"
+    "github.com/gofi-labs/gofi-sdk-go/base/errs"
+    "github.com/gofi-labs/gofi-sdk-go/sqln"
     "golang.org/x/sync/errgroup"
 )
 
-type {ctx}Loader struct {
-    stmSnapshot     *sql.Stmt
-    stmListByDim    *sql.Stmt
-    stmManyA        *sql.Stmt
-    stmManyB        *sql.Stmt
-    // ... 1 stmt por query
-}
+type {ctx}Loader struct{}
 
-func NewLoader(ctx context.Context) Loader {
-    stmSnapshot, err := sqln.NewStatement().Prepare(ctx, snapshotQuery)
-    if err != nil {
-        logging.Fatal("{ctx} loader: prepare snapshot", slog.Any("error", err))
-    }
-    // ... preparar cada stmt; Fatal em qualquer falha (config-time error)
-    return &{ctx}Loader{
-        stmSnapshot:  stmSnapshot,
-        stmListByDim: stmListByDim,
-        // ...
-    }
-}
+func NewLoader() Loader { return &{ctx}Loader{} } // não toca o banco
 
 func (l *{ctx}Loader) Load(ctx context.Context, entityID int64) (*{Ctx}EvaluationContext, errs.AppError) {
     if entityID <= 0 {
         return nil, ErrLoaderEntityIDInvalid.New()
     }
 
-    // 1) snapshot principal (query monolítica com JOINs)
-    ec, appErr := l.loadSnapshot(ctx, entityID)
-    if appErr.Exists() {
-        return nil, appErr
-    }
-
-    // 2) sub-queries em paralelo via errgroup
-    g, gctx := errgroup.WithContext(ctx)
-
-    g.Go(func() error {
-        items, e := l.loadManyA(gctx, entityID)
-        if e.Exists() {
-            return &e
-        }
-        ec.ManyA = items
-        return nil
-    })
-
-    g.Go(func() error {
-        items, e := l.loadManyB(gctx, ec.TenantID)
-        if e.Exists() {
-            return &e
-        }
-        ec.ManyB = items
-        return nil
-    })
-
-    if err := g.Wait(); err != nil {
-        var appErr *errs.AppError
-        if errors.As(err, &appErr) {
-            return nil, *appErr
-        }
+    // 1) snapshot principal — tags db dos *Snapshot casam com os aliases do SELECT
+    ec, err := sqln.Find[{Ctx}EvaluationContext](ctx, snapshotQuery, entityID).UniqueResult()
+    if err != nil {
         return nil, ErrLoaderSnapshotFailed.Wrap(err)
     }
+    if ec == nil {
+        return nil, Err{Ctx}NotEligible.New() // gate no WHERE não passou
+    }
 
+    // 2) sub-queries independentes em paralelo
+    g, gctx := errgroup.WithContext(ctx)
+    g.Go(func() (err error) {
+        ec.ManyA, err = sqln.Find[ManyAItem](gctx, manyAQuery, entityID).List()
+        return err
+    })
+    g.Go(func() (err error) {
+        ec.ManyB, err = sqln.Find[ManyBItem](gctx, manyBQuery, ec.TenantID).List()
+        return err
+    })
+    if err := g.Wait(); err != nil {
+        return nil, ErrLoaderSnapshotFailed.Wrap(err)
+    }
     return ec, errs.AppError{}
 }
-
-func (l *{ctx}Loader) Close() error {
-    for _, stmt := range []*sql.Stmt{l.stmSnapshot, l.stmListByDim, l.stmManyA, l.stmManyB} {
-        if stmt != nil {
-            _ = stmt.Close()
-        }
-    }
-    return nil
-}
 ```
+
+- Sem prepared statement e sem `Close()`: `sqln.Find` executa direto e o
+  driver faz cache do describe por conexão — o laço sobre N entidades não
+  paga prepare repetido.
+- Campos many do `EvaluationContext` (preenchidos depois) ficam **sem** tag
+  `db` (`value-objects.md`).
+
+### Consistência do snapshot
+
+- **Queries paralelas não compartilham snapshot**: cada uma lê o commit mais
+  recente no seu momento. Aceitável quando o decider tolera mudança
+  concorrente só no próximo ciclo (caso comum).
+- **Réplica:** fora de transação `sqln.Find` lê da réplica
+  (`DATABASE_READ_HOST`) — decisão tomada logo após uma escrita pode ver dado
+  anterior.
+- Quando a decisão exige **um snapshot único** (ou ler o primário), carregue
+  tudo **sequencialmente** dentro de uma transação read-only:
+  ```go
+  snap := transaction.New(transaction.Options{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+  err := snap.Execute(ctx, func(ctx context.Context) error { /* mesmas sqln.Find, em sequência */ })
+  ```
+  Uma `*sql.Tx` não aceita queries concorrentes — não misture com errgroup.
+  Declare na spec qual dos dois o motor exige.
 
 ### Como decidir: snapshot monolítico (JOINs) vs sub-queries paralelas?
 
@@ -201,7 +183,7 @@ func (l *{ctx}Loader) Close() error {
 | **Tamanho do row resultado** | Pequeno (< 200 colunas no SELECT) | Qualquer |
 | **JOIN explode linhas?** | Não (cada JOIN reduz a 1 linha — INNER/LEFT por PK) | Sim |
 | **Dependência** | Independente do resultado do snapshot | Pode depender (ex.: usar `tenantID` do snapshot) |
-| **Pode ser nulo** | LEFT JOIN + `sql.NullXxx` no Scan | Sub-query devolve `[]` vazio |
+| **Pode ser nulo** | LEFT JOIN + ponteiro/`sql.Null*` no snapshot | Sub-query devolve `[]` vazio |
 
 **Regra prática:** se a tabela tem **uma linha por entidade** (1:1, 0..1),
 vai pro JOIN. Se tem **N linhas por entidade** (campanhas elegíveis,
@@ -210,19 +192,14 @@ queries enxutas e paraleliza bem.
 
 ### Carregamento condicional
 
-Quando uma sub-query só faz sentido em **alguns casos** (ex.: `loadGroupMembers`
-do pricing só roda se `GroupType == 'RELATION'`), inclui o `if` antes de
-disparar o `g.Go`:
+Quando uma sub-query só faz sentido em **alguns casos** (ex.: membros de um
+grupo só quando a entidade é de um tipo agrupado), o `if` vem antes do `g.Go`:
 
 ```go
-if ec.Product.GroupType == groupTypeRelation {
-    g.Go(func() error {
-        members, e := l.loadGroupMembers(gctx, ec.ConfigID)
-        if e.Exists() {
-            return &e
-        }
-        ec.GroupMembers = members
-        return nil
+if ec.{Tabela1}.GroupType == groupTypeRelation {
+    g.Go(func() (err error) {
+        ec.GroupMembers, err = sqln.Find[GroupMember](gctx, groupMembersQuery, ec.ConfigID).List()
+        return err
     })
 }
 ```
@@ -271,17 +248,16 @@ a otimização SQL e voltar a chamar o service.
 ## Erros próprios do Loader
 
 ```go
-// services/domain/{ctx}/loader/errors.go
+// loader/errors.go
 package loader
 
-import "github.com/joaoprofile/gofi/base/errs"
+import "github.com/gofi-labs/gofi-sdk-go/base/errs"
 
 var (
-    ErrLoaderEntityIDInvalid    = errs.RegisterValidation("LOADER_ENTITY_ID_INVALID")
-    Err{Ctx}NotEligible         = errs.RegisterNotFound("{CTX}_NOT_ELIGIBLE")  // gate falhou
-    ErrLoaderSnapshotFailed     = errs.RegisterOperation("LOADER_SNAPSHOT_FAILED")
-    ErrLoader{Many}Failed       = errs.RegisterOperation("LOADER_{MANY}_FAILED")
-    ErrLoaderList{Dim}Failed    = errs.RegisterOperation("LOADER_LIST_{DIM}_FAILED")
+    ErrLoaderEntityIDInvalid = errs.RegisterValidation("LOADER_ENTITY_ID_INVALID", "invalid entity id")
+    Err{Ctx}NotEligible      = errs.RegisterNotFound("{CTX}_NOT_ELIGIBLE", "entity not eligible") // gate falhou
+    ErrLoaderSnapshotFailed  = errs.RegisterOperation("LOADER_SNAPSHOT_FAILED", "failed to load snapshot")
+    ErrLoaderList{Dim}Failed = errs.RegisterOperation("LOADER_LIST_{DIM}_FAILED", "failed to list entities")
 )
 ```
 
@@ -372,7 +348,6 @@ func (m *mockLoader) Load(ctx context.Context, id int64) (*loader.EvaluationCont
     return m.loadFn(ctx, id)
 }
 func (m *mockLoader) ListBy{Dim}(...) {...}
-func (m *mockLoader) Close() error { return nil }
 ```
 
 Application test não toca em SQL — só verifica o pipeline sobre o
@@ -387,14 +362,14 @@ Application test não toca em SQL — só verifica o pipeline sobre o
   importação circular (`loader` → `service` → `loader`) e perde a
   garantia de snapshot consistente (cada chamada do service abre nova
   query).
-- **Não usar prepared statements.** `sqln.NewStatement().Execute(ctx, sql, args...)`
-  inline em cada `Load` prepara + executa + descarta — round-trip extra
-  por chamada. Em loop sobre N entidades, custa N preparações desnecessárias.
+- **`rows.Scan` manual / `*sql.Stmt` em campo.** Use `sqln.Find[T]` com tags
+  `db`; statement preparado em campo quebra com PgBouncer e não ganha
+  round-trip (`persistence-rules.md`).
 - **Sub-queries sequenciais.** Se 4 sub-queries são independentes, sequencial
   custa `t1 + t2 + t3 + t4`; paralelo custa `max(t1,t2,t3,t4)`. `errgroup`
   é gratuito.
-- **`Close()` ausente.** Prepared stmts não-fechados vazam slot no pool de
-  conexões do Postgres. Binário cron reinicia → conexões zombie.
+- **errgroup dentro de transação.** `*sql.Tx` não aceita queries
+  concorrentes; snapshot transacional é sequencial.
 - **Snapshot incompleto que força query extra no service.** Se o service
   precisa de algo que não está no `EvaluationContext`, adicione ao snapshot
   (mais um campo no SELECT) — não chame outro repo no meio do pipeline.
@@ -412,11 +387,12 @@ Application test não toca em SQL — só verifica o pipeline sobre o
 
 ## Referência cruzada
 
-- `.claude/knowledge/shared/event-driven-executor-pattern.md` — quando
+- `.claude/expertise/event-driven/executor-pattern.md` — quando
   aplicar split decider/executor (Loader é peça do decider).
 - `.claude/sdk/go/knowledge/repository-aggregate-pattern.md` — diferença
   entre Loader (read-only, snapshot) e Aggregate Repository (write,
   transação multi-tabela).
 - `.claude/sdk/go/knowledge/postgres-index-strategy.md` — índices nas
   tabelas que o snapshot lê precisam suportar o JOIN do `snapshotQuery`.
-- Precedente: `services/domain/pricing/loader/` (real, ~300 linhas).
+- `.claude/sdk/go/knowledge/transactions.md` — transação read-only para
+  snapshot único.

@@ -13,7 +13,6 @@ func baseConfig() *GofiConfig {
 		Project: Project{Name: "my-svc", Root: "/tmp/x"},
 		Backend: &Backend{Language: LanguageGo, Path: "src"},
 		AI:      AI{Host: AIHostClaudeVSCode, Model: ModelOpus48},
-		Agents:  []string{AgentPD, AgentUI, AgentOps, AgentDoc, AgentStatus},
 		Sources: Sources{Agents: DefaultAgentsRef},
 		Test:    DefaultTestSection(LanguageGo, "src"),
 		Hsec:    DefaultHsec(),

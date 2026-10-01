@@ -1,7 +1,14 @@
+---
+name: postgres-index-strategy
+description: Índices PostgreSQL por perfil de acesso da tabela e por tipo de filtro que o sqln gera; fillfactor e autovacuum
+sdk: v0.8.2
+keywords: [postgres, index, btree, gin, pg_trgm, fillfactor, autovacuum, ILIKE, ANY]
+---
+
 # Estratégia de Índices — PostgreSQL
 
 Aplicado quando o contexto materializa entidades em PostgreSQL via
-`gofi/sqln`. Cobre: classificação de perfil de acesso por tabela, padrões
+`sqln` (driver `sqln/driver/postgres`). Cobre: classificação de perfil de acesso por tabela, padrões
 de índice por tipo de filtro e tuning de `fillfactor`/autovacuum.
 
 A spec **declara** o perfil de cada tabela em §3 (modelo de dados) ou §4
@@ -62,6 +69,10 @@ demais valores. Combina com índices do filtro adicional via `BitmapAnd`.
 | `boolean` | `=` | Geralmente NÃO indexar (baixa cardinalidade). Exceção: partial pelo valor minoritário. |
 | `enum`/`status` poucos valores | `=`, `IN` | Composite `(tenant, status)` ou partial pelo valor dominante |
 | Sort field | `ORDER BY` | Composite com a coluna de sort no fim, com `DESC` se aplicável |
+
+SQL que o `sqln` gera no PostgreSQL: `criteria.Contains` e o `LIKE` do
+filtro dinâmico viram `ILIKE '%termo%'` (substring → GIN trigram);
+`criteria.In`/`IN` viram `col = ANY($n)` com array (btree atende como `IN`).
 
 Substring (`LIKE '%x%'`) **não usa** btree — sempre GIN trigram. Trigrama
 em strings com menos de 3 caracteres não funciona; o planner cai pra seq

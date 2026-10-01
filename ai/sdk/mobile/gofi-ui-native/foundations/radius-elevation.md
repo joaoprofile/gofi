@@ -1,6 +1,6 @@
 # Raio e elevação — mobile
 
-Raio de [design-tokens.md](../../../../knowledge/ui/design-tokens.md) via `t.radius`.
+Raio de [design-tokens.md](../../../../expertise/ui-design/design-tokens.md) via `t.radius`.
 Geometria arredondada e generosa; card de marca usa `xl` (24).
 
 ## Raio por componente

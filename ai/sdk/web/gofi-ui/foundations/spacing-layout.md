@@ -1,6 +1,6 @@
 # Espaçamento e layout
 
-Escala 4/8 em [design-tokens.md](../../../../knowledge/ui/design-tokens.md).
+Escala 4/8 em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md).
 
 ## Escala — sem valores avulsos
 

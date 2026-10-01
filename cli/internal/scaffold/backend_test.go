@@ -4,7 +4,7 @@ import (
 	"io/fs"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
 )
 
 // TestBackendScaffolds_MatchConfigLanguages locks the pairing backend.go claims
@@ -28,13 +28,12 @@ func TestBackendScaffolds_MatchConfigLanguages(t *testing.T) {
 			t.Errorf("%s: embedded/%s: %v", language, dir, err)
 		}
 	}
-	// Python is the one language config accepts with no skeleton to write.
+	// Only a language with a gofi SDK gets a skeleton; the others are accepted
+	// by config and adopted or started by hand.
 	for language := range known {
-		if language == config.LanguagePython {
-			continue
-		}
-		if !HasBackendScaffold(language) {
-			t.Errorf("HasBackendScaffold(%q) = false, want true", language)
+		want := language == config.LanguageGo
+		if HasBackendScaffold(language) != want {
+			t.Errorf("HasBackendScaffold(%q) = %v, want %v", language, !want, want)
 		}
 	}
 	if HasBackendScaffold(config.LanguagePython) {

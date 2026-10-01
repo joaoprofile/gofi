@@ -39,7 +39,9 @@ type TemplateData struct {
 	Date        string
 	AIHost      string
 	AIModel     string
-	Agents      []string
+	// Agents is every skill gofi ships (Skills), kept for the memory template
+	// of earlier releases, which lists them.
+	Agents []string
 }
 
 // WithModuleParts returns a copy of d with PackagePath, GroupID and ArtifactID

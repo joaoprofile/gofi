@@ -1,254 +1,237 @@
-# HTTP Auth Middleware — função simples, cookies + Bearer, env-driven
+---
+name: http-auth-middleware
+description: Middleware de autenticação HTTP sobre o iam — função netx.Middleware, Bearer ou cookie de sessão, sempre IAMService.ValidateToken, claims com chave própria
+sdk: v0.8.2
+keywords: [auth, middleware, UseAuth, ValidateToken, Bearer, cookie, sessão, BFF, vault, RefreshToken, ClaimsFromContext, CrossOriginProtection, 401]
+---
+
+# HTTP Auth Middleware — função, Bearer ou cookie de sessão, `ValidateToken` sempre
+
+Setup do serviço iam, login, refresh e logout: `iam.md`. Gate de permissão:
+`rbac.md`. Programa completo de referência: exemplo `examples/iam/login`
+(`auth.go`) — `.claude/sdk/go/api/examples.md`.
 
 ## Regra
 
-Middleware HTTP de autenticação é **função**, não struct. Lê config via
-`environment.Instance().Auth()`. Aceita o access token por **`Authorization:
-Bearer`** ou pelo cookie `access_token` — sem forkar serviço browser vs.
-máquina. Cookie helpers (`setRefreshCookie`, `clearRefreshCookie`,
-`readRefreshCookie`, `cookieSecure`) vivem no **mesmo arquivo** do middleware,
-não duplicados no handler.
+1. Middleware de autenticação é **função** que devolve `netx.Middleware`,
+   fechada sobre o `*core.IAMService`. Nada de struct + construtor + `AsHandler()`.
+2. Registrado com `UseAuth(...)` do componente `httpserver` — roda **só** nas
+   rotas declaradas com `netx.PrivateRoutes`. **`UseAuth` antes de `Handlers`**
+   (ver `http-server.md` §"Ordem de registro").
+3. Toda credencial termina em **`svc.ValidateToken(ctx, token)`**: assinatura +
+   expiração + sessão ativa no `SessionPort`. É isso que torna o logout
+   imediato. Nunca parse o JWT à mão no middleware.
+4. Aceita `Authorization: Bearer <jwt>` (apps, CLIs, serviço-a-serviço) **ou**
+   cookie de sessão opaco (browser/BFF). Header tem prioridade.
+5. Falha → `netx.Error(w, http.StatusUnauthorized, errUnauthenticated)` (JSON
+   no mesmo formato dos demais erros), mensagem genérica — nunca o motivo.
+6. Claims vão para o contexto com **chave do próprio pacote**; o mesmo arquivo
+   exporta `ClaimsFromContext` e `WithClaims` (este último serve aos testes).
 
 ## Por quê
 
-- **Struct + constructor inflam o tipo do bootstrap** — `main.go` passa a
-  carregar `*AuthMiddleware`, `MiddlewareConfig`, `NewAuthMiddleware` e
-  `AsHandler()` quando uma única função já basta. Função é mais leve, e
-  alinha com a assinatura `netx.Middleware = func(http.Handler) http.Handler`.
-- **`MiddlewareConfig{JWTSigningKey, JWTIssuer}` duplica `environment.Auth()`.**
-  Quem builda o middleware tem que ler env e enfiar no struct — mais um
-  ponto onde alguém pode chamar `os.Getenv` à mão e divergir do padrão.
-- **Cookie `secure bool` passado como parâmetro a cada `setRefreshCookie`/
-  `clearRefreshCookie` chamado pelo handler** vira lixo: o handler precisa
-  carregar `Config{CookieSecure: ...}`, e a verdade já mora em
-  `APP_ENVIRONMENT`. Centralizar em `cookieSecure()` = `!environment.
-  IsLocalEnvironment()` elimina o parâmetro.
-- **Suporte a cookie de access via wrapper** é gratuito: ler `access_token`
-  cookie e setar `Authorization: Bearer` antes de validar permite que browser
-  use cookie HttpOnly (proteção contra XSS) sem o servidor ter dois fluxos
-  de extração de token.
+- **`iammw.AuthMiddleware` (`iam/middleware`) responde 401 em `text/plain`**
+  (`http.Error`), aceita só Bearer e guarda as claims numa chave privada —
+  handler test não consegue injetar claims sem montar um `IAMService` real.
+  Serve a um resource server puro; para API com browser, escreva a função.
+- **`ValidateToken` checa a sessão**, não só a assinatura: token de sessão
+  revogada (logout, logout-all, rotação de refresh) é rejeitado antes de expirar.
+- **Claims de domínio já vêm no token**: `types.Claims.Extra` (JSON `ext`) faz
+  round-trip Issue → Parse. Não existe mais motivo para re-parse do JWT com
+  struct própria (ver `iam.md` §"Claims de domínio").
+- **JavaScript nunca vê token no modo sessão**: o cookie `HttpOnly` carrega só
+  um id aleatório; os tokens ficam no servidor. XSS não rouba credencial.
 
 ## Padrão
 
-### Assinatura — variante standalone (sem iamcore)
-
-Usada quando o projeto **não tem** `iamcore.IAMService` wired (Fase inicial,
-ou contexto que prefere parse local).
-
 ```go
-// Função, devolve netx.Middleware. Constrói uma vez (fora do closure)
-// a AuthConfig lida do environment singleton.
-func AuthMiddleware(sessionRepo repository.SessionRepository) netx.Middleware {
-    cfg := environment.Instance().Auth()
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            promoteCookieToBearer(r)
-            claims, err := authenticate(r, cfg, sessionRepo)
-            if err != nil {
-                netx.Error(w, http.StatusUnauthorized, err)
-                return
-            }
-            ctx := context.WithValue(r.Context(), claimsCtxKey, claims)
-            // Demais valores de contexto cross-domain (ex: auth.ACCOUNT_AUTH)
-            next.ServeHTTP(w, r.WithContext(ctx))
-        })
-    }
-}
-```
+// handler/middleware.go of the context that manages authentication
+// (imported elsewhere as authhandler "<module>/domain/{contexto-auth}/handler")
+package handler
 
-### Assinatura — variante delegada ao SDK (preferida quando há `iamcore.IAMService`)
+import (
+    "context"
+    "errors"
+    "net/http"
+    "strings"
 
-Quando o projeto constrói `iamSvc := iam.New(...)` com adapters de
-`SessionPort` e `TokenPort`, o middleware **delega** validação ao SDK e
-ainda assim **preserva o `*model.Claims` rico** com um passo de
-enriquecimento (re-parse). Use quando o JWT carrega custom claims
-(`name`/`<TenantID>`/`<ParentID>`/role) que `iam/types.Claims` não modela.
-
-```go
-func AuthMiddleware(iamSvc *iamcore.IAMService) netx.Middleware {
-    cfg := environment.Instance().Auth()
-    sdkInner := iammw.AuthMiddleware(iamSvc) // valida assinatura + sessão via SDK
-
-    enrich := func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            token, err := extractBearer(r)
-            if err != nil { netx.Error(w, http.StatusUnauthorized, err); return }
-            claims, err := parseRichClaims(token, cfg) // mesma chave; só desserialização
-            if err != nil { netx.Error(w, http.StatusUnauthorized, err); return }
-            ctx := context.WithValue(r.Context(), claimsCtxKey, claims)
-            ctx = context.WithValue(ctx, auth.ACCOUNT_AUTH, claimsToAccountAuth(claims))
-            next.ServeHTTP(w, r.WithContext(ctx))
-        })
-    }
-
-    return func(next http.Handler) http.Handler {
-        chained := sdkInner(enrich(next))
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            promoteCookieToBearer(r) // antes do SDK — o cookie vira Bearer header
-            chained.ServeHTTP(w, r)
-        })
-    }
-}
-```
-
-**Pipeline real**: `promoteCookieToBearer → sdkInner (iamSvc.ValidateToken: signature+session+revocation) → enrich (re-parse para *model.Claims rico) → next handler`.
-
-**Por que duas passadas no token?** O SDK só conhece `iam/types.Claims`
-(minimal). Como `iam/provider/jwt.iamClaims` é struct fechado sem campo
-`Extra`, a desserialização do SDK descarta `name`/`companyId`/`managerId`/
-`role` silenciosamente. Reparsear com a mesma chave (HMAC verify trivial)
-mantém o `*model.Claims` rico sem alterar o SDK. Migração para emissão
-via SDK (Fase 2b) exige PR ao gofi-sdk-go estendendo `iamClaims` com
-custom claims.
-
-### Wrapper cookie → Bearer
-
-```go
-const cookieAccessToken = "access_token"
-
-func promoteCookieToBearer(r *http.Request) {
-    if r.Header.Get("Authorization") != "" {
-        return // header tem prioridade — cliente máquina não é afetado
-    }
-    c, err := r.Cookie(cookieAccessToken)
-    if err != nil || c.Value == "" {
-        return
-    }
-    r.Header.Set("Authorization", "Bearer "+c.Value)
-}
-```
-
-### Cookie helpers — sem `secure bool`
-
-```go
-const (
-    cookieRefreshToken = "<refresh-cookie-name>"
-    refreshCookiePath  = "<refresh-cookie-path>" // ex: "/v1/auth/refresh"
+    "github.com/gofi-labs/gofi-sdk-go/iam/core"
+    "github.com/gofi-labs/gofi-sdk-go/iam/types"
+    "github.com/gofi-labs/gofi-sdk-go/netx"
 )
 
-// cookieSecure devolve false em dev/test (browser aceita sobre http://localhost)
-// e true em stage/prod. Lê APP_ENVIRONMENT via o singleton — nunca os.Getenv.
+const sessionCookie = "sid"
+
+var errUnauthenticated = errors.New("not authenticated")
+
+type claimsKey struct{}
+
+// Middleware guards netx.PrivateRoutes; register it with UseAuth before Handlers.
+func Middleware(svc *core.IAMService, v *Vault) netx.Middleware {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            claims, err := authenticate(r, svc, v)
+            if err != nil {
+                netx.Error(w, http.StatusUnauthorized, errUnauthenticated)
+                return
+            }
+            next.ServeHTTP(w, r.WithContext(WithClaims(r.Context(), claims)))
+        })
+    }
+}
+
+func authenticate(r *http.Request, svc *core.IAMService, v *Vault) (*types.Claims, error) {
+    if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+        return svc.ValidateToken(r.Context(), token)
+    }
+    if c, err := r.Cookie(sessionCookie); err == nil && v != nil {
+        return v.Claims(r.Context(), svc, c.Value)
+    }
+    return nil, errUnauthenticated
+}
+
+func WithClaims(ctx context.Context, c *types.Claims) context.Context {
+    return context.WithValue(ctx, claimsKey{}, c)
+}
+
+// ClaimsFromContext returns nil outside a private route.
+func ClaimsFromContext(ctx context.Context) *types.Claims {
+    c, _ := ctx.Value(claimsKey{}).(*types.Claims)
+    return c
+}
+```
+
+### Modo sessão (BFF) — vault + renovação transparente
+
+O login em modo sessão guarda o `*types.Session` devolvido por `SelectTenant`
+num vault do servidor, sob id aleatório de 32 bytes, e manda só o id no cookie.
+A cada request:
+
+```go
+func (v *Vault) Claims(ctx context.Context, svc *core.IAMService, id string) (*types.Claims, error) {
+    s, ok := v.get(id)
+    if !ok {
+        return nil, errUnauthenticated
+    }
+    claims, err := svc.ValidateToken(ctx, s.AccessToken)
+    if !errors.Is(err, core.ErrTokenExpired) {
+        return claims, err
+    }
+    // Access expirado: renova com o refresh guardado — uma vez só por id.
+    s, err = v.renew(id, s, func(old *types.Session) (*types.Session, error) {
+        return svc.RefreshToken(ctx, old.RefreshToken)
+    })
+    if err != nil {
+        return nil, err
+    }
+    return svc.ValidateToken(ctx, s.AccessToken)
+}
+```
+
+- **`renew` serializa por id** (mutex; com várias instâncias, lock distribuído —
+  `session-store.md`): requests concorrentes com o mesmo token expirado
+  reaproveitam o resultado. Refresh token usado duas vezes é tratado pelo iam
+  como **roubo** — revoga todas as sessões do usuário.
+- **Vault compartilhado entre instâncias** (Redis) em produção; em memória só
+  com uma réplica. `types.Session.RefreshToken` tem tag `json:"-"`: ao
+  serializar o vault, grave `AccessToken`/`RefreshToken` em campos próprios.
+- Implementação completa (put/get/delete/renew): `examples/iam/login/auth.go`.
+
+### Cookie helpers — no mesmo arquivo, sem `secure bool`
+
+```go
+// cookieSecure is false only in local/test environments (http://localhost).
 func cookieSecure() bool { return !environment.IsLocalEnvironment() }
 
-func setRefreshCookie(w http.ResponseWriter, value string, expiresAt time.Time) {
+func setSessionCookie(w http.ResponseWriter, id string, expiresAt time.Time) {
     http.SetCookie(w, &http.Cookie{
-        Name:     cookieRefreshToken,
-        Value:    value,
-        Path:     refreshCookiePath,
-        Expires:  expiresAt,
-        MaxAge:   maxAgeUntil(expiresAt),
-        HttpOnly: true,
-        Secure:   cookieSecure(),
-        SameSite: http.SameSiteStrictMode,
+        Name: sessionCookie, Value: id, Path: "/", Expires: expiresAt,
+        HttpOnly: true, Secure: cookieSecure(), SameSite: http.SameSiteLaxMode,
     })
 }
 
-func clearRefreshCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter) {
     http.SetCookie(w, &http.Cookie{
-        Name:     cookieRefreshToken,
-        Value:    "",
-        Path:     refreshCookiePath,
-        MaxAge:   -1,
-        HttpOnly: true,
-        Secure:   cookieSecure(),
-        SameSite: http.SameSiteStrictMode,
+        Name: sessionCookie, Path: "/", MaxAge: -1,
+        HttpOnly: true, Secure: cookieSecure(), SameSite: http.SameSiteLaxMode,
     })
 }
-
-func readRefreshCookie(r *http.Request) string {
-    c, err := r.Cookie(cookieRefreshToken)
-    if err != nil {
-        return ""
-    }
-    return c.Value
-}
-
-func maxAgeUntil(t time.Time) int {
-    secs := int(time.Until(t).Seconds())
-    if secs < 1 {
-        return 1
-    }
-    return secs
-}
 ```
 
-### Claims do contexto
+- Cookie de sessão **exige** `netx.WSConfig{CrossOriginProtection: true}` no
+  servidor (rejeita POST cross-site por `Sec-Fetch-Site`/`Origin` — CSRF).
+- Os campos `Cookie*` de `iamconfig.SecurityConfig` são só defaults
+  declarativos: o SDK **não** escreve cookie nenhum. Quem seta é o handler.
 
-Continua devolvendo `*model.Claims` rico (com campos de domínio — `Name`,
-`<TenantID>`, `<ParentID>` etc.), **não** o `*types.Claims` minimal do SDK.
-Custom claims do domínio vivem no JWT emitido pelo `auth_service`:
+### Revogação de acesso ao tenant por request (opcional)
+
+Quando remover acesso precisa valer antes do token expirar, acrescente após
+`ValidateToken`:
 
 ```go
-func ClaimsFromContext(r *http.Request) (*model.Claims, bool) {
-    c, ok := r.Context().Value(claimsCtxKey).(*model.Claims)
-    return c, ok
+if err := svc.Tenant().AssertAccess(r.Context(), claims.UserID, claims.TenantID, claims.Module); err != nil {
+    netx.Error(w, http.StatusForbidden, errForbidden)
+    return
 }
 ```
 
-### Revogação de sessão
+(É o que `iammw.TenantMiddleware` faz — mas ele lê a chave de claims do
+`iammw`, não a sua.) Custa uma consulta ao `TenantPort` por request.
 
-Permanece no middleware — `sessionRepo.Get(ctx, sessionID)` + check em
-`session.RevokedAt != nil`. Mantém o controle local enquanto não há
-`iamcore.IAMService` wired no projeto.
-
-## Wiring no `main.go` / `auth.go`
+## Wiring
 
 ```go
-// Apenas o sessionRepo é necessário. JWT_SECRET/JWT_ISSUER vêm do env.
-func buildAuthMiddleware(sessionRepo authRepoPkg.SessionRepository) netx.Middleware {
-    return authHandlerPkg.AuthMiddleware(sessionRepo)
+identity := iamc.New(iamc.Config{User: users, Tenant: users, RBAC: rbac}) // gofi/component/iam
+server := httpserver.New(":8080", &netx.WSConfig{CrossOriginProtection: true})
+
+svc, err := gofi.New("<service>").With(identity, server).Build()
+if err != nil {
+    log.Fatal(err)
 }
 
-// Handler também perde a referência ao middleware — handlers nunca dependem
-// do AuthMiddleware, só do contexto que ele injeta.
-func buildAuthHandler(cfg Config, svc authSvcPkg.AuthService) *authHandlerPkg.AuthHandler {
-    return authHandlerPkg.NewAuthHandler(svc, authHandlerPkg.Config{ /* sem CookieSecure */ })
-}
+// identity.Service() é nil antes do Build: auth e rotas entram depois dele.
+vault := authhandler.NewVault()
+server.UseAuth(authhandler.Middleware(identity.Service(), vault)). // antes de Handlers
+    Handlers(authHandler, entityHandler)
 
-// main.go usa direto, sem .AsHandler():
-authMw := buildAuthMiddleware(authRepos.session)
-api.HttpServer().UseAuth(authMw)
+if err := svc.ListenAndServe(); err != nil {
+    log.Fatal(err)
+}
 ```
+
+Handlers **não** recebem o middleware; só leem `authhandler.ClaimsFromContext(r.Context())`.
 
 ## Anti-padrões
 
 ```go
-// ❌ Struct + constructor + MiddlewareConfig redundante com environment.Auth()
-type AuthMiddleware struct {
-    cfg         MiddlewareConfig
-    sessionRepo repository.SessionRepository
-}
-func NewAuthMiddleware(cfg MiddlewareConfig, sessionRepo repository.SessionRepository) *AuthMiddleware { ... }
-func (m *AuthMiddleware) AsHandler() netx.Middleware { ... }
+// ❌ Handlers antes de UseAuth — as rotas privadas já registradas ficam SEM auth
+server.Handlers(h).UseAuth(mw)
 
-// ❌ Handler tem ponteiro para o middleware
-type AuthHandler struct { svc Service; mw *AuthMiddleware; cfg Config }
+// ❌ Rota que exige login declarada com PublicRoutes
+netx.PublicRoutes("/v1", netx.GET("/me").To(h.me))
 
-// ❌ Cookie helper recebe `secure bool` — flag duplica APP_ENVIRONMENT
-func setRefreshCookie(w http.ResponseWriter, value string, expiresAt time.Time, secure bool)
-func clearRefreshCookie(w http.ResponseWriter, secure bool)
+// ❌ Parse manual do JWT no middleware (pula a checagem de sessão revogada)
+tok, _ := jwt.Parse(raw, keyFunc)
 
-// ❌ Config do handler carrega CookieSecure replicando env
-type Config struct { CookieSecure bool; ... }
+// ❌ Re-parse do token para recuperar claims de domínio — use Claims.Extra
 
-// ❌ Handler lê cookie direto em vez de usar readRefreshCookie helper
-cookie, err := r.Cookie("iam_rt")
-if err != nil || cookie.Value == "" { ... }
+// ❌ Token (access ou refresh) em cookie legível por JS ou em localStorage
 
-// ❌ os.Getenv em qualquer ponto do middleware ou wiring (sempre environment.Instance())
-secret := os.Getenv("JWT_SECRET")
+// ❌ Resposta revelando o motivo ("token expired", "session revoked") — 401 genérico
+
+// ❌ Struct AuthMiddleware + NewAuthMiddleware + AsHandler(); ponteiro do middleware no handler
+
+// ❌ os.Getenv no middleware; Secure do cookie vindo de parâmetro/Config do handler
 ```
 
 ## Checklist
 
-- [ ] `AuthMiddleware(repos…) netx.Middleware` — função, não struct
-- [ ] `cfg := environment.Instance().Auth()` capturado **fora** do closure
-- [ ] `promoteCookieToBearer(r)` antes da extração — header tem prioridade
-- [ ] `cookieSecure()` interno; helpers de cookie **sem** parâmetro `secure bool`
-- [ ] Cookie helpers no mesmo arquivo do middleware (não duplicar no handler)
-- [ ] Revogação preservada (`sessionRepo.Get` + check `RevokedAt`) enquanto não há iamcore wired
-- [ ] `ClaimsFromContext` continua devolvendo `*model.Claims` rico
-- [ ] Handler **não tem** field para o middleware; só consome contexto
-- [ ] `Config` do handler **não tem** `CookieSecure`
-- [ ] `main.go` usa `api.HttpServer().UseAuth(authMw)` direto, sem `.AsHandler()`
-- [ ] Zero `os.Getenv` no middleware e no wiring
+- [ ] `Middleware(svc, …) netx.Middleware` — função, fechada sobre `*core.IAMService`
+- [ ] Toda credencial passa por `svc.ValidateToken`; Bearer tem prioridade sobre cookie
+- [ ] 401 via `netx.Error`, mensagem genérica
+- [ ] `ClaimsFromContext` + `WithClaims` com chave própria, no mesmo arquivo
+- [ ] Modo sessão: cookie `HttpOnly` só com id opaco; renovação serializada por id; vault compartilhado com >1 réplica
+- [ ] `CrossOriginProtection: true` quando há cookie de sessão
+- [ ] `cookieSecure()` interno (`!environment.IsLocalEnvironment()`)
+- [ ] `UseAuth` depois do `Build` e **antes** de `Handlers`
+- [ ] Rotas autenticadas em `netx.PrivateRoutes`

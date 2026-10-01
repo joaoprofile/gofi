@@ -25,7 +25,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/expertise"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 )
 
 // Severity separates "this will break something" from "this is merely old".
@@ -58,8 +60,8 @@ type Finding struct {
 
 // Options carries what the checks cannot derive from the project itself.
 type Options struct {
-	// Upstream is the fetched agents source, used to tell which
-	// ai/knowledge/shared/ files the project is missing. Nil skips that check.
+	// Upstream is the fetched agents source, used to tell which expertise
+	// packs the project is missing. Nil skips that check.
 	Upstream fs.FS
 	// UpstreamRoot is the prefix of the agents tree inside Upstream (usually ".").
 	UpstreamRoot string
@@ -129,7 +131,36 @@ func checkConfig(root string) []Finding {
 			Hint:   "add it by hand, or gofi config --wizard rewrites the file with the current defaults",
 		})
 	}
+	out = append(out, retiredKeys(doc)...)
 	out = append(out, checkUISurfaces(doc)...)
+	return out
+}
+
+// retired are the top-level keys the CLI no longer reads, with what replaced
+// them. They load without complaint — the file is read leniently — so this is
+// the only place a team learns they can go.
+var retired = map[string]string{
+	"agents":   "every skill is installed; the role is picked per task, not per project",
+	"training": "the team's learning lives in knowledge/, read from the files themselves",
+	"git":      "git keeps the remote; gofi no longer mirrors it",
+}
+
+func retiredKeys(doc map[string]any) []Finding {
+	var keys []string
+	for k := range retired {
+		if _, ok := doc[k]; ok {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	out := make([]Finding, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, Finding{
+			Area: "config", Item: k + ":", Severity: SeverityInfo,
+			Detail: "no longer read — " + retired[k],
+			Hint:   "delete the block by hand, or gofi config --wizard rewrites the file without it",
+		})
+	}
 	return out
 }
 
@@ -238,7 +269,7 @@ func checkDocs(root, dir string) []Finding {
 			out = append(out, Finding{
 				Area: dir, Item: dir + "/INDEX.md", Severity: SeverityWarn,
 				Detail: "missing — agents discover documents through it",
-				Hint:   "bash .claude/scripts/gen-index.sh " + dir,
+				Hint:   "gofi index docs",
 			})
 		}
 	}
@@ -256,7 +287,7 @@ func inspectDoc(rel, body string) []Finding {
 		return []Finding{{
 			Area: area(rel), Item: rel, Severity: SeverityWarn,
 			Detail: "no YAML frontmatter — invisible to the retrieval protocol",
-			Hint:   "add the frontmatter from .claude/templates/, then regenerate the INDEX",
+			Hint:   "add the frontmatter from " + layout.Templates().Dir + "/, then regenerate the INDEX",
 		}}
 	}
 
@@ -271,7 +302,7 @@ func inspectDoc(rel, body string) []Finding {
 		out = append(out, Finding{
 			Area: area(rel), Item: rel, Severity: SeverityWarn,
 			Detail: "frontmatter without " + strings.Join(missing, ", "),
-			Hint:   "gen-index.sh skips documents missing contexto/keywords",
+			Hint:   "without contexto the INDEX files it under sem-contexto, and keywords are what search matches",
 		})
 	}
 	for _, m := range legacyMarkers {
@@ -327,25 +358,19 @@ func hasKey(front, key string) bool {
 // on, so every finding here names what actually closes it rather than pointing
 // at an update that would not touch the file.
 func checkClaude(root string, opts Options) []Finding {
-	claude := filepath.Join(root, ".claude")
+	claude := filepath.Join(root, layout.Home())
 	if _, err := os.Stat(claude); err != nil {
 		return []Finding{{
-			Area: "claude", Item: ".claude/", Severity: SeverityWarn,
+			Area: "claude", Item: layout.Home() + "/", Severity: SeverityWarn,
 			Detail: "missing — the agents have nothing to read",
 			Hint:   "gofi update skills restores the skills; the rest of the tree comes from gofi init",
 		}}
 	}
 
 	var out []Finding
-	if _, err := os.Stat(filepath.Join(claude, "scripts", "gen-index.sh")); err != nil {
-		out = append(out, Finding{
-			Area: "claude", Item: ".claude/scripts/gen-index.sh", Severity: SeverityInfo,
-			Detail: "absent — INDEX regeneration is manual",
-			Hint:   "copy it from ai/scripts/ in the gofi repo; no update installs it",
-		})
-	}
 	out = append(out, legacyLayout(claude)...)
-	out = append(out, missingShared(claude, opts)...)
+	out = append(out, missingPacks(root, opts)...)
+	out = append(out, seededCopies(root)...)
 	return out
 }
 
@@ -377,7 +402,10 @@ func legacyLayout(claude string) []Finding {
 	}}
 }
 
-func missingShared(claude string, opts Options) []Finding {
+// missingPacks reports the expertise packs upstream ships that the project
+// does not have: the skills cite them, and without them a role works from
+// nothing.
+func missingPacks(root string, opts Options) []Finding {
 	if opts.Upstream == nil {
 		return nil
 	}
@@ -385,16 +413,16 @@ func missingShared(claude string, opts Options) []Finding {
 	if srcRoot == "" {
 		srcRoot = "."
 	}
-	entries, err := fs.ReadDir(opts.Upstream, path.Join(srcRoot, "ai", "knowledge", "shared"))
+	entries, err := fs.ReadDir(opts.Upstream, path.Join(srcRoot, "ai", "expertise"))
 	if err != nil {
 		return nil
 	}
 	var missing []string
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+		if !e.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(claude, "knowledge", "shared", e.Name())); err != nil {
+		if _, err := os.Stat(layout.Expertise().Abs(root, e.Name(), expertise.ManifestFile)); err != nil {
 			missing = append(missing, e.Name())
 		}
 	}
@@ -403,9 +431,30 @@ func missingShared(claude string, opts Options) []Finding {
 	}
 	sort.Strings(missing)
 	return []Finding{{
-		Area: "claude", Item: ".claude/knowledge/shared/", Severity: SeverityWarn,
-		Detail: "missing upstream file(s): " + strings.Join(missing, ", "),
-		Hint:   "no update writes knowledge/; copy them from ai/knowledge/shared/ to get the protocols the skills cite",
+		Area: "claude", Item: layout.Expertise().Dir + "/", Severity: SeverityWarn,
+		Detail: "missing pack(s): " + strings.Join(missing, ", "),
+		Hint:   "gofi update expertise installs them",
+	}}
+}
+
+// seededCopies reports the files older versions of gofi seeded into
+// knowledge/ that now ship in a pack: two versions of the same section, the
+// older one read as the team's learning and so winning the search.
+func seededCopies(root string) []Finding {
+	var found []string
+	for old := range expertise.Moved {
+		if _, err := os.Stat(layout.Knowledge().Abs(root, old)); err == nil {
+			found = append(found, old)
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	sort.Strings(found)
+	return []Finding{{
+		Area: "claude", Item: layout.Knowledge().Dir + "/", Severity: SeverityWarn,
+		Detail: "seeded by an older gofi, now in the packs: " + strings.Join(found, ", "),
+		Hint:   "gofi update expertise removes the untouched ones; an edited one is the team's — keep only what differs from the pack, with overrides: in its frontmatter",
 	}}
 }
 
@@ -413,11 +462,11 @@ func checkGraph(root string, enabled bool) []Finding {
 	if !enabled {
 		return nil
 	}
-	if _, err := os.Stat(filepath.Join(root, ".gofi", "graph")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(layout.CodeDir))); err != nil {
 		return []Finding{{
-			Area: "graph", Item: ".gofi/graph/", Severity: SeverityInfo,
+			Area: "graph", Item: layout.CodeDir + "/", Severity: SeverityInfo,
 			Detail: "graph enabled but never built",
-			Hint:   "gofi graph build",
+			Hint:   "gofi index code",
 		}}
 	}
 	return nil

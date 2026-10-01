@@ -1,5 +1,5 @@
 // Package extensions installs the editor extensions that ship with gofi —
-// today just GOFI AI, the chat panel whose sources live in gofi-ai/ at the
+// today just GOFI AI, the chat panel whose sources live in vscode/ at the
 // repo root.
 //
 // The packaged .vsix is embedded in the binary, so installing needs neither a
@@ -12,11 +12,11 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/joaoprofile/gofi-cli/internal/vsix"
+	"github.com/gofi-labs/gofi/cli/internal/vsix"
 )
 
 // embeddedFS carries the packaged GOFI AI extension. Regenerate with
-// `go generate ./internal/extensions` after touching anything under gofi-ai/ —
+// `go generate ./internal/extensions` after touching anything under vscode/ —
 // TestEmbeddedVSIXMatchesSources fails if you forget.
 //
 //go:generate go run ./gen

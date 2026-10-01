@@ -29,7 +29,7 @@ func frontmatterOf(t *testing.T, rendered []byte) string {
 func TestRenderSkill_SynthesisesFrontmatter(t *testing.T) {
 	body := []byte("# /gofi-eng — Context Engineer\n\n## Identidade\n\nVocê é o gofi-eng.\n")
 
-	front := frontmatterOf(t, renderSkill("gofi-eng", body))
+	front := frontmatterOf(t, renderSkill("gofi-eng", body, ""))
 
 	if !strings.Contains(front, "name: gofi-eng") {
 		t.Errorf("frontmatter is missing the name:\n%s", front)
@@ -43,7 +43,7 @@ func TestRenderSkill_SynthesisesFrontmatter(t *testing.T) {
 	}
 	// The body must survive intact — this step adds metadata, it does not edit
 	// the skill.
-	if !strings.Contains(string(renderSkill("gofi-eng", body)), "## Identidade") {
+	if !strings.Contains(string(renderSkill("gofi-eng", body, "")), "## Identidade") {
 		t.Error("skill body was altered")
 	}
 }
@@ -51,7 +51,7 @@ func TestRenderSkill_SynthesisesFrontmatter(t *testing.T) {
 func TestRenderSkill_KeepsExistingFrontmatter(t *testing.T) {
 	body := []byte("---\nname: whatever\ndescription: Curada à mão.\nmodel: opus\n---\n\n# Título\n\nCorpo.\n")
 
-	front := frontmatterOf(t, renderSkill("gofi-qa", body))
+	front := frontmatterOf(t, renderSkill("gofi-qa", body, ""))
 
 	// A curated description beats anything derived here.
 	if !strings.Contains(front, "description: Curada à mão.") {
@@ -71,7 +71,7 @@ func TestRenderSkill_KeepsExistingFrontmatter(t *testing.T) {
 func TestRenderSkill_FillsOnlyTheMissingKey(t *testing.T) {
 	body := []byte("---\ndescription: Só a descrição.\n---\n\n# /gofi-pd — Discovery\n")
 
-	front := frontmatterOf(t, renderSkill("gofi-pd", body))
+	front := frontmatterOf(t, renderSkill("gofi-pd", body, ""))
 
 	if !strings.Contains(front, "name: gofi-pd") {
 		t.Errorf("missing name was not added:\n%s", front)
@@ -85,7 +85,7 @@ func TestRenderSkill_FillsOnlyTheMissingKey(t *testing.T) {
 func TestRenderSkill_QuotesRiskyDescriptions(t *testing.T) {
 	body := []byte("# /gofi-doc — Documentation: contratos e QA\n")
 
-	front := frontmatterOf(t, renderSkill("gofi-doc", body))
+	front := frontmatterOf(t, renderSkill("gofi-doc", body, ""))
 
 	line := ""
 	for _, l := range strings.Split(front, "\n") {
@@ -99,7 +99,7 @@ func TestRenderSkill_QuotesRiskyDescriptions(t *testing.T) {
 }
 
 func TestRenderSkill_NoHeadingStillDescribes(t *testing.T) {
-	front := frontmatterOf(t, renderSkill("gofi-x", []byte("corpo sem título\n")))
+	front := frontmatterOf(t, renderSkill("gofi-x", []byte("corpo sem título\n"), ""))
 
 	if !strings.Contains(front, "name: gofi-x") || !strings.Contains(front, "description:") {
 		t.Errorf("both keys are required even without a heading:\n%s", front)

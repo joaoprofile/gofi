@@ -110,7 +110,7 @@ func TestInstallSkillsContent_RealTree(t *testing.T) {
 	if _, err := InstallSkillsContent(os.DirFS(repoRoot), ".", root, InstallNew); err != nil {
 		t.Fatalf("InstallSkillsContent: %v", err)
 	}
-	for _, agent := range allAgents {
+	for _, agent := range allSkills {
 		installed := filepath.Join(root, ".claude", skillRelPath(agent))
 		body, err := os.ReadFile(installed)
 		if err != nil {
@@ -125,13 +125,4 @@ func TestInstallSkillsContent_RealTree(t *testing.T) {
 			t.Errorf("skill %s installed without a description:\n%s", agent, front)
 		}
 	}
-}
-
-func TestInstallAgentFromFS_FolderLayout(t *testing.T) {
-	root := t.TempDir()
-	if err := InstallAgentFromFS(folderSkillsFS(), ".", root, "gofi-eng"); err != nil {
-		t.Fatalf("InstallAgentFromFS: %v", err)
-	}
-	mustContain(t, filepath.Join(root, ".claude/skills/gofi-eng/SKILL.md"), "name: gofi-eng")
-	mustContain(t, filepath.Join(root, ".claude/skills/gofi-eng/references/rbac.md"), "rbac reference")
 }

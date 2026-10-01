@@ -44,12 +44,14 @@ func TestGraphIsVersionedAndTheRestOfGofiIsNot(t *testing.T) {
 	}
 
 	for path, wantIgnored := range map[string]bool{
-		".gofi/gofi-sdk-go/go.mod":            true,
-		".gofi/installed.json":                true,
-		".gofi/graph/gofi_graph.json":         false,
-		".gofi/graph/gofi_graph_report.md":    false,
-		".gofi/graph/sdk/gofi_graph.json":     false,
-		".gofi/graph/extractors/gofi-graph-x": true,
+		".gofi/gofi-sdk-go/go.mod":              true,
+		".gofi/installed.json":                  true,
+		".gofi/index/code/gofi_graph.json":      false,
+		".gofi/index/code/gofi_graph_report.md": false,
+		".gofi/index/code/sdk/gofi_graph.json":  false,
+		".gofi/index/docs/index.json":           true,
+		".gofi/index/manifest.json":             true,
+		".gofi/extractors/gofi-graph-x":         true,
 	} {
 		if got := checkIgnore(t, root, path); got != wantIgnored {
 			t.Errorf("%s: ignored = %v, want %v", path, got, wantIgnored)
@@ -79,7 +81,7 @@ func TestGofiIgnoreUpgradesTheLegacyRule(t *testing.T) {
 			t.Errorf("dropped an unrelated rule %q:\n%s", want, body)
 		}
 	}
-	if checkIgnore(t, root, ".gofi/graph/gofi_graph.json") {
+	if checkIgnore(t, root, ".gofi/index/code/gofi_graph.json") {
 		t.Errorf("graph still ignored after the upgrade:\n%s", body)
 	}
 }
@@ -103,5 +105,25 @@ func TestGofiIgnoreIsIdempotent(t *testing.T) {
 	}
 	if string(first) != string(second) {
 		t.Errorf("rules stacked up:\n%s\n---\n%s", first, second)
+	}
+}
+
+// Some projects versioned the old document index by hand. That line goes with
+// the upgrade: the index moved, and is rebuilt on read instead of committed.
+func TestGofiIgnoreDropsTheHandVersionedDocs(t *testing.T) {
+	root := gitRepo(t)
+	legacy := ".gofi/*\n!.gofi/docs/\n!.gofi/graph/\n"
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureGofiIgnored(root); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(filepath.Join(root, ".gitignore"))
+	if strings.Contains(string(body), ".gofi/docs") || strings.Contains(string(body), ".gofi/graph") {
+		t.Errorf("legacy rules kept:\n%s", body)
+	}
+	if !checkIgnore(t, root, ".gofi/index/docs/index.json") {
+		t.Error("the document index is versioned")
 	}
 }

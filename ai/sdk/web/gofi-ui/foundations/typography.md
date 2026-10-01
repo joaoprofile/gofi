@@ -1,6 +1,6 @@
 # Tipografia
 
-Escala e pesos em [design-tokens.md](../../../../knowledge/ui/design-tokens.md).
+Escala e pesos em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md).
 No máximo **2 famílias tipográficas** (princípio 5).
 
 ## Escala e hierarquia

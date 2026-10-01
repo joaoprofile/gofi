@@ -1,7 +1,10 @@
 package docs
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/gofi-labs/gofi/cli/internal/expertise"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,14 +15,17 @@ import (
 // tool reads. Two levels on purpose.
 const (
 	IndexMarkdown  = "INDEX.md"
-	KnowledgeIndex = ".claude/knowledge/INDEX.md"
 	signatureTerms = 14
 )
+
+// KnowledgeIndex is the generated manifest of the knowledge layers.
+func KnowledgeIndex() string { return layout.Knowledge().Path("INDEX.md") }
 
 // Drift is a corpus layout problem worth reporting but not worth failing on.
 type Drift string
 
-// WriteIndexes writes the two-level retrieval index for a corpus.
+// writeIndexes writes the two-level retrieval index for a corpus: the router
+// and the shards.
 //
 // One level answers "which context", the other "which documents are here".
 // Splitting them is what keeps the entry cost flat: contexts grow slowly,
@@ -32,14 +38,7 @@ type Drift string
 // folders with no index at all, while the index describing them sat in a
 // sibling. Directory is physical organisation, context is the concept, and
 // submodulo is the link between them; the router carries that mapping.
-func WriteIndexes(root, corpus string) ([]Drift, error) {
-	return writeIndexes(root, corpus, nil, nil)
-}
-
-// writeIndexes writes the router and the shards of one corpus. With a scope it
-// rewrites only the shards of the staged folders and only the router rows of
-// the contexts they belong to; every other line stays byte for byte.
-func writeIndexes(root, corpus string, scope *Scope, out *[]string) ([]Drift, error) {
+func writeIndexes(root, corpus string, out *[]string) ([]Drift, error) {
 	if st, err := os.Stat(filepath.Join(root, corpus)); err != nil || !st.IsDir() {
 		return nil, nil
 	}
@@ -83,7 +82,7 @@ func writeIndexes(root, corpus string, scope *Scope, out *[]string) ([]Drift, er
 > **abra os dois ou três** — errar o palpite sai mais barato que adivinhar bem.
 > Melhor ainda: ` + "`gofi find \"<pergunta>\"`" + `, que pergunta ao corpus inteiro.
 >
-> Derivado — não edite à mão. Regenere com ` + "`gofi docs build`" + `.
+> Derivado — não edite à mão. Regenere com ` + "`gofi index docs`" + `.
 
 | Contexto | Docs | Do que trata | Onde |
 |---|--:|---|---|
@@ -109,9 +108,6 @@ func writeIndexes(root, corpus string, scope *Scope, out *[]string) ([]Drift, er
 	for _, dir := range dirs {
 		shardPath := filepath.Join(root, filepath.FromSlash(dir), IndexMarkdown)
 		written[shardPath] = true
-		if scope != nil && !scope.Dirs[dir] {
-			continue
-		}
 		content, d := renderShard(dir, corpus, byDir[dir])
 		if d != "" {
 			drift = append(drift, d)
@@ -123,22 +119,10 @@ func writeIndexes(root, corpus string, scope *Scope, out *[]string) ([]Drift, er
 
 	path := filepath.Join(root, corpus, IndexMarkdown)
 	written[path] = true
-	router := b.String()
-	if scope != nil {
-		current, err := os.ReadFile(path)
-		if err == nil {
-			affected := affectedContexts(string(current), byContext, scope)
-			if len(affected) == 0 {
-				router = string(current)
-			} else if merged, err := mergeRootIndex(string(current), router, affected); err == nil {
-				router = merged
-			}
-		}
-	}
-	if err := writeIfChanged(path, []byte(router), out); err != nil {
+	if err := writeIfChanged(path, []byte(b.String()), out); err != nil {
 		return drift, err
 	}
-	return append(drift, sweepShards(root, corpus, written, scope, out)...), nil
+	return append(drift, sweepShards(root, corpus, written, out)...), nil
 }
 
 type indexEntry struct {
@@ -193,7 +177,7 @@ func renderShard(dir, corpus string, group []indexEntry) (string, Drift) {
 > tabela, é esta coluna. Escolhido o documento, leia o frontmatter e pule para a
 > §seção; nunca o arquivo inteiro.
 >
-> Derivado — não edite à mão. Regenere com ` + "`gofi docs build`" + `.
+> Derivado — não edite à mão. Regenere com ` + "`gofi index docs`" + `.
 
 | Submódulo | Versão | Status | Entidades | Assunto | Arquivo |
 |---|---|---|---|---|---|
@@ -314,26 +298,31 @@ var core = map[string]bool{
 	"structure.md": true, "ddd-principles.md": true, "clean-code.md": true,
 }
 
-// WriteKnowledgeIndex writes the manifest of the portable knowledge layers.
+// writeKnowledgeIndex writes the manifest of the portable knowledge layers.
 //
 // The reading convention used to say "read knowledge/shared/*.md" — a glob,
 // with no way to be selective. That is the largest fixed cost in the harness,
 // paid on every invocation whatever the task, and larger than the spec of the
 // context being worked on. The manifest exists so an agent can load the core
 // and then only the modules the task actually calls for.
-func WriteKnowledgeIndex(root, language string) error {
-	return writeKnowledgeIndex(root, language, nil)
-}
-
 func writeKnowledgeIndex(root, language string, out *[]string) error {
-	areas := []knowledgeArea{
-		{".claude/knowledge/shared", "Cross-agent — princípios e protocolos universais"},
+	var areas []knowledgeArea
+	// A pack with a broken contract is left out, as it is from routing;
+	// `gofi index check` reports it.
+	packs, _ := expertise.Load(root)
+	for _, p := range packs {
+		about := p.Title
+		if p.Summary != "" {
+			about += " — " + p.Summary
+		}
+		areas = append(areas, knowledgeArea{p.Dir, about})
 	}
+	areas = append(areas, knowledgeArea{layout.Knowledge().Path("shared"), "Aprendizado do time — vale para todos os papéis e vence os packs quando diverge"})
 	if language != "" {
 		areas = append(areas,
-			knowledgeArea{".claude/sdk/" + language + "/knowledge", language + " — padrões e armadilhas do SDK"},
-			knowledgeArea{".claude/sdk/" + language + "/sdk-docs", language + " — API do SDK por módulo"},
-			knowledgeArea{".claude/sdk/" + language + "/boilerplates", language + " — esqueletos por camada"},
+			knowledgeArea{layout.SDK().Path(language, "knowledge"), language + " — padrões e armadilhas do SDK"},
+			knowledgeArea{layout.SDK().Path(language, "api"), language + " — API do SDK por pacote (gerada do código)"},
+			knowledgeArea{layout.SDK().Path(language, "boilerplates"), language + " — esqueletos por camada"},
 		)
 	}
 
@@ -346,7 +335,7 @@ func writeKnowledgeIndex(root, language string, out *[]string) error {
 > **Núcleo ⬤** é curto e universal: carregue sempre. **O resto é sob demanda**:
 > leia a linha *Quando* e carregue só o que a tarefa pede.
 >
-> Derivado — regenere com ` + "`gofi docs build`" + ` após ` + "`gofi update sdk`" + `.
+> Derivado — regenere com ` + "`gofi index docs`" + ` após ` + "`gofi update sdk`" + `.
 
 `)
 	var totalLines, totalBytes, coreLines, coreBytes int
@@ -357,7 +346,7 @@ func writeKnowledgeIndex(root, language string, out *[]string) error {
 		}
 		var files []string
 		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && e.Name() != IndexMarkdown {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && e.Name() != IndexMarkdown && e.Name() != expertise.ManifestFile {
 				files = append(files, e.Name())
 			}
 		}
@@ -392,7 +381,7 @@ func writeKnowledgeIndex(root, language string, out *[]string) error {
 `, totalLines, totalBytes/3600, coreLines, coreBytes/3600,
 		coreLines+600, (coreBytes+21000)/3600)
 
-	return writeIfChanged(filepath.Join(root, filepath.FromSlash(KnowledgeIndex)), []byte(b.String()), out)
+	return writeIfChanged(filepath.Join(root, filepath.FromSlash(KnowledgeIndex())), []byte(b.String()), out)
 }
 
 // firstProse is the first sentence that is not a heading, quote, table, list or
@@ -435,14 +424,11 @@ const generatedMark = "Derivado — não edite à mão"
 // still announcing a context the corpus no longer has. That is the failure this
 // whole index exists to avoid: an index nobody rebuilt is not merely unhelpful,
 // it answers confidently and wrongly.
-func sweepShards(root, corpus string, written map[string]bool, scope *Scope, out *[]string) []Drift {
+func sweepShards(root, corpus string, written map[string]bool, out *[]string) []Drift {
 	var removed []Drift
 	base := filepath.Join(root, corpus)
 	_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Name() != IndexMarkdown || written[path] {
-			return nil
-		}
-		if scope != nil && !scope.Dirs[filepath.ToSlash(filepath.Dir(relPath(root, path)))] {
 			return nil
 		}
 		raw, err := os.ReadFile(path)
@@ -460,4 +446,23 @@ func sweepShards(root, corpus string, written map[string]bool, scope *Scope, out
 		return nil
 	})
 	return removed
+}
+
+// writeIfChanged writes only when the content differs, so an unchanged index
+// is not rewritten (and does not show up as modified). Paths actually written
+// are appended to written.
+func writeIfChanged(path string, data []byte, written *[]string) error {
+	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, data) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+	if written != nil {
+		*written = append(*written, path)
+	}
+	return nil
 }

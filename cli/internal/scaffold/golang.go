@@ -11,17 +11,6 @@ import (
 	"strings"
 )
 
-// InstallGo installs the Go scaffold at projectRoot — go.work plus the source
-// folder (data.SourceRoot, e.g. "src" or "services") containing go.mod,
-// main.go, domain/ and .migrations/.
-//
-// Go is the only language with a dedicated entry point because it is the only
-// one that also gets go.work wiring; every other backend goes through
-// InstallBackend directly.
-func InstallGo(projectRoot string, data TemplateData) ([]string, error) {
-	return InstallBackend("go", projectRoot, data)
-}
-
 // EnsureGoWork writes a minimal go.work at projectRoot when there is none,
 // pointing at the module under sourcePath ("." when it sits at the root).
 //

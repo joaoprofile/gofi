@@ -1,6 +1,6 @@
 # Tipografia — mobile
 
-Escala em [design-tokens.md](../../../../knowledge/ui/design-tokens.md). Componente
+Escala em [design-tokens.md](../../../../expertise/ui-design/design-tokens.md). Componente
 `Text` do DS encapsula os papéis (ver [components/text.md](../components/text.md)).
 
 ## Dynamic Type (acessibilidade)

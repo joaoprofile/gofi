@@ -1,10 +1,20 @@
-# Conhecimento — Validação de DTOs (gofi/base/validator)
+---
+name: validation
+description: Validação de DTOs com base/validator — singleton por pacote, Validate() no DTO, chamada no service e detalhes por campo no 400
+sdk: v0.8.2
+keywords: [validator, ValidateStruct, Validate, DTO, required, oneof, gtfield, ValidationError, FieldError, WithDetails, 400]
+---
+
+# Conhecimento — Validação de DTOs (`base/validator`)
+
+Import: `github.com/gofi-labs/gofi-sdk-go/base/validator` (tags do
+`go-playground/validator/v10`). Referência: `.claude/sdk/go/api/base-validator.md`.
 
 ## Singleton de pacote
 
 ```go
 // dto.go
-var v = validator.New()
+var v = validator.New() // *validator.Validator
 ```
 
 Instanciar **uma vez por pacote**, não por request. O validator compila reflection em cache na primeira chamada — instanciar por request desperdiça CPU.
@@ -14,7 +24,7 @@ Instanciar **uma vez por pacote**, não por request. O validator compila reflect
 Todos os DTOs que chegam via HTTP (Create, Update) devem ter `Validate()`:
 
 ```go
-func (r CreatePersonRequest) Validate() error {
+func (r CreateEntityRequest) Validate() error {
     return v.ValidateStruct(r)
 }
 ```
@@ -24,14 +34,14 @@ DTOs de filtro/paginação não precisam — seus campos são opcionais.
 ## Tags de validação mais usadas
 
 ```go
-type CreatePersonRequest struct {
-    Name  string `validate:"required"`           // não vazio
-    Email string `validate:"required,email"`     // não vazio + formato email
-    CPF   string `validate:"required"`           // não vazio
-    Age   int    `validate:"required,min=1"`     // não zero + mínimo 1
-    Role  string `validate:"oneof=admin user"`   // enum
-    URL   string `validate:"url"`                // URL válida
-    ID    string `validate:"uuid"`               // UUID v4
+type CreateEntityRequest struct {
+    Name     string `validate:"required"`             // não vazio
+    Email    string `validate:"required,email"`       // não vazio + formato email
+    Document string `validate:"required"`             // não vazio
+    Age      int    `validate:"required,min=1"`       // não zero + mínimo 1
+    Role     string `validate:"oneof=RoleA RoleB"`    // enum
+    URL      string `validate:"url"`                  // URL válida
+    ID       string `validate:"uuid"`                 // UUID
 }
 ```
 
@@ -40,9 +50,9 @@ type CreatePersonRequest struct {
 Sempre no **service**, antes de qualquer I/O:
 
 ```go
-func (s *personService) Create(ctx context.Context, req model.CreatePersonRequest) errs.AppError {
+func (s *entityService) Create(ctx context.Context, req model.CreateEntityRequest) errs.AppError {
     if err := req.Validate(); err != nil {
-        return ErrPersonValidation.WithDetails(err)  // detalhes chegam ao cliente
+        return ErrEntityValidation.WithDetails(err)  // detalhes chegam ao cliente
     }
     // ... apenas aqui acessa o banco
 }
@@ -52,21 +62,29 @@ Nunca no handler — o handler não sabe nada sobre regras de negócio.
 
 ## Propagação de erros de validação ao cliente
 
-`WithDetails(err)` + `netx.RespondError` garantem que os erros de campo chegam no body:
+`ValidateStruct` devolve `validator.ValidationError{Errors []FieldError}`.
+`WithDetails(err)` + `netx.RespondError(w, r, appErr)` levam os campos ao body:
 
 ```json
 HTTP 400
 {
-  "code": "PERSON_VALIDATION",
-  "message": "invalid person data",
+  "code": 400,
+  "message": "invalid entity data",
+  "errorCode": "ENTITY_VALIDATION",
+  "kind": "VALIDATION",
   "details": {
     "errors": [
-      {"field": "Email", "message": "Email must be a valid email address"},
-      {"field": "Age", "message": "Age must be 1 or greater"}
+      {"field": "Email", "message": "Field 'Email' failed on the 'email' rule"},
+      {"field": "Age", "message": "Field 'Age' failed on the 'min' rule"}
     ]
   }
 }
 ```
+
+`field` é o **nome do campo Go** (não a tag `json`) e a mensagem é fixa em
+inglês (`Field '<campo>' failed on the '<tag>' rule`). Se o front precisa do
+nome JSON ou de texto traduzido, traduza no cliente a partir de `field` + tag —
+não reescreva o validator.
 
 ## Config que alimenta motor de decisão — Create exige payload completo
 

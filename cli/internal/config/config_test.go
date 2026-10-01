@@ -13,8 +13,7 @@ func validConfig() *GofiConfig {
 		Project: Project{Name: "my-service", Root: "/abs/path/my-service"},
 		Backend: &Backend{Language: LanguageGo, Path: "src"},
 		AI:      AI{Host: AIHostClaudeVSCode, Model: ModelOpus47},
-		Agents:  []string{AgentPD, AgentSpec, AgentEng, AgentQA},
-		Sources: Sources{Agents: "github.com/joaoprofile/gofi-agents@v0.1.0"},
+		Sources: Sources{Agents: "github.com/gofi-labs/gofi@v0.1.0"},
 		Test: TestSection{
 			Default: "unit",
 			Tasks: map[string]TestTask{
@@ -47,9 +46,6 @@ func TestValidate_Invalid(t *testing.T) {
 		{"no backend no surface", func(c *GofiConfig) { c.Backend = nil; c.Frontend = nil; c.Mobile = nil }},
 		{"bad host", func(c *GofiConfig) { c.AI.Host = "cursor" }},
 		{"bad model", func(c *GofiConfig) { c.AI.Model = "gpt-5" }},
-		{"empty agents", func(c *GofiConfig) { c.Agents = nil }},
-		{"unknown agent", func(c *GofiConfig) { c.Agents = []string{"gofi-foo"} }},
-		{"duplicated agent", func(c *GofiConfig) { c.Agents = []string{AgentPD, AgentPD} }},
 		{"bad source format", func(c *GofiConfig) { c.Sources.Agents = "https://github.com/x/y" }},
 		{"test default missing", func(c *GofiConfig) { c.Test.Default = "ghost" }},
 	}
@@ -161,17 +157,6 @@ func TestValidate_TestTaskCycle(t *testing.T) {
 	}
 }
 
-func TestValidate_TrainingDuplicateTopic(t *testing.T) {
-	c := validConfig()
-	c.Training.PD = []TrainingItem{
-		{Topic: "domain", Source: "a.md", InstalledAt: "2026-04-25", Hash: "x"},
-		{Topic: "domain", Source: "b.md", InstalledAt: "2026-04-25", Hash: "y"},
-	}
-	if err := c.Validate(); err == nil {
-		t.Fatal("expected duplicate topic error")
-	}
-}
-
 func TestSaveLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".gofi.yaml")
@@ -185,9 +170,6 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	}
 	if loaded.Project.Name != original.Project.Name {
 		t.Errorf("name mismatch: %s vs %s", loaded.Project.Name, original.Project.Name)
-	}
-	if len(loaded.Agents) != len(original.Agents) {
-		t.Errorf("agents length mismatch")
 	}
 	if loaded.Test.Default != original.Test.Default {
 		t.Errorf("test.default mismatch")
@@ -216,7 +198,7 @@ ai:
   model: claude-opus-4-7
 agents: [gofi-pd, gofi-spec, gofi-eng, gofi-qa]
 sources:
-  agents: github.com/joaoprofile/gofi-agents@v0.1.0
+  agents: github.com/gofi-labs/gofi@v0.1.0
 git:
   remote: ""
 test:
@@ -271,7 +253,7 @@ ai:
   model: claude-opus-4-8
 agents: [gofi-eng, gofi-ui, gofi-full]
 sources:
-  agents: github.com/joaoprofile/gofi@main
+  agents: github.com/gofi-labs/gofi@main
 git:
   remote: ""
 test:
@@ -377,7 +359,7 @@ ai:
   model: claude-opus-4-8
 agents: [gofi-ui]
 sources:
-  agents: github.com/joaoprofile/gofi@main
+  agents: github.com/gofi-labs/gofi@main
 git:
   remote: ""
 test:

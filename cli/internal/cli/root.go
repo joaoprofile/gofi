@@ -7,13 +7,18 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/dotenv"
-	"github.com/joaoprofile/gofi-cli/internal/help"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
-	"github.com/joaoprofile/gofi-cli/internal/settings"
-	"github.com/joaoprofile/gofi-cli/internal/sources"
-	"github.com/joaoprofile/gofi-cli/internal/tui/spinner"
+	"github.com/gofi-labs/gofi/cli/internal/dotenv"
+	"github.com/gofi-labs/gofi/cli/internal/help"
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/settings"
+	"github.com/gofi-labs/gofi/cli/internal/sources"
+	"github.com/gofi-labs/gofi/cli/internal/tui/flow"
+	"github.com/gofi-labs/gofi/cli/internal/tui/spinner"
 )
 
 var (
@@ -32,13 +37,14 @@ func NewRoot() *cobra.Command {
 		Short: i18n.T("root.short"),
 		Long:  i18n.T("root.long"),
 		Example: `gofi init
-gofi agent add gofi-pd
-gofi train -a pd ./docs/fiscal.md
+gofi find "onde o pedido é faturado"
+gofi update skills
 gofi test cover-html`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			loadDotenv()
+			useProjectHome()
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -65,18 +71,21 @@ gofi test cover-html`,
 	root.AddCommand(
 		newVersionCmd(),
 		newInitCmd(),
-		newCommitCmd(),
-		newAgentCmd(),
-		newRemoteCmd(),
-		newTrainCmd(),
+		newChatCmd(),
+		newHookCmd(),
+		newMemoryCmd(),
 		newTestCmd(),
 		newUpdateCmd(),
-		newInstitutionalCmd(),
 		newDoctorCmd(),
 		newInstallCmd(),
-		newGraphCmd(),
-		newDocsCmd(),
+		newIndexCmd(),
 		newFindCmd(),
+		newIntakeCmd(),
+		newAskCmd(),
+		newShowCmd(),
+		newPathCmd(),
+		newMCPCmd(),
+		newGuardCmd(),
 		newConfigCmd(),
 		newSettingsCmd(),
 		newHsecCmd(),
@@ -116,6 +125,14 @@ func runRootDefault(cmd *cobra.Command) error {
 	if cfg, root, err := loadProjectConfig(); err == nil {
 		if settings.CheckinEnabled() {
 			runCheckin(cfg.Sources.Agents, root)
+		}
+		// Inside a project, a bare `gofi` is most often someone about to talk
+		// to the agents: offer the interactive mode before the command list.
+		if interactive(cmd) {
+			enter, err := flow.YesNo(i18n.T("root.ask_chat"), i18n.T("root.ask_chat_help"), "", "", true)
+			if err == nil && enter {
+				return runChat(chatFlags{permissionMode: permissionAsk})
+			}
 		}
 	} else if !errors.Is(err, ErrNotInProject) {
 		fmt.Fprintln(os.Stderr, i18n.T("root.warning", err))
@@ -160,4 +177,27 @@ func runCheckin(agentsRef, projectRoot string) {
 	}
 	fmt.Println()
 	spinner.Run(steps)
+}
+
+// interactive reports whether a question can be asked: both ends are a
+// terminal and the output is not plain.
+func interactive(cmd *cobra.Command) bool {
+	if help.DetectOptions(cmd).Plain {
+		return false
+	}
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// useProjectHome points every path at the agent folder this project uses,
+// which its host decides: .claude/ for Claude Code, .agents/ for the tools on
+// the open skills convention. Outside a project, or with a config that does
+// not load, the default stands — the command that needs the project reports
+// that itself.
+func useProjectHome() {
+	if cfg, _, err := loadProjectConfig(); err == nil {
+		layout.SetHome(layout.HomeFor(cfg.AI.Host))
+		if h, ok := host.Get(cfg.AI.Host); ok {
+			scaffold.SetSkillModels(h, cfg.AI.Tiers)
+		}
+	}
 }

@@ -13,20 +13,21 @@ documentos e busca. Trabalha em qualquer projeto gofi — detecta o estado, não
 o assume.
 
 Você **não** toca em código de aplicação, IaC ou schema. Só `specs/`, `prd/`,
-`.claude/memory/`, `.claude/lexicon/` e o `CLAUDE.md` do projeto.
+`.claude/memory/`, `.claude/lexicon/` e o `AGENTS.md` do projeto.
 
 ---
 
 ## Leis
 
 1. **Você orquestra; a CLI executa.** Todo o trabalho mecânico é
-   `gofi docs …`. Você **não escreve script** — nem Python, nem shell, nem
+   `gofi index …` (build, validação, migração) e `gofi find`/`gofi show`
+   (consulta). Você **não escreve script** — nem Python, nem shell, nem
    arquivo auxiliar. Um projeto gofi carrega **apenas `.md` e a CLI**. Se
    faltar capacidade, a correção é na CLI, não um script ao lado.
 2. **Especialista genérica e portável.** Nada de produto, empresa ou domínio
    entra aqui. O léxico do projeto é **derivado do próprio projeto** (schema,
    keywords existentes), nunca escrito na skill.
-3. **Medir antes e depois (LEI absoluta).** `gofi docs eval` roda antes e
+3. **Medir antes e depois (LEI absoluta).** `gofi index check` roda antes e
    depois. Sem medição não há migração: há mudança torcendo para dar certo.
    Piorou recall ou custo, a saída é `git revert` — não argumentar.
 4. **Auditar antes de escrever.** Todo passo é dry-run por padrão. `--apply`
@@ -52,14 +53,14 @@ Você **não** toca em código de aplicação, IaC ou schema. Só `specs/`, `prd
    roda em produção?* Não → não bumpa. `atualizado` muda **sempre**; `status` diz
    a fase. Reformulação profunda vira **documento novo** (sufixo `-v2`), que nasce
    em `1.0`. Política completa em
-   `.claude/knowledge/shared/document-versioning.md`.
+   `.claude/expertise/harness-protocols/document-versioning.md`.
 
 ---
 
 ## Pré-execução
 
 1. Ler `.gofi.yaml` — `project.language`, `project.name`.
-2. Ler o `CLAUDE.md` do projeto — mapa de paths do alvo.
+2. Ler o `AGENTS.md` do projeto — mapa de paths do alvo.
 3. `git status` — árvore suja aborta o `--apply`.
 4. Detectar capacidades, **nunca assumir**:
 
@@ -90,13 +91,13 @@ Se não houver `.claude/eval/golden.md`, escreva ~40 perguntas sobre o corpus
 > Escreva na língua em que as pessoas perguntam e **sem reusar as keywords do
 > documento** — pergunta escrita com a keyword exata mede a si mesma.
 
-Depois: `gofi docs build` e `gofi docs eval`. **Guarde o resultado.**
+Depois: `gofi index docs` e `gofi index check`. **Guarde o resultado.**
 
 ### 1. Migrar
 
 ```bash
-gofi docs migrate              # dry-run: leia a amostra antes de escrever
-gofi docs migrate --apply
+gofi index migrate              # dry-run: leia a amostra antes de escrever
+gofi index migrate --apply
 ```
 
 Os quatro passos, em ordem e idempotentes:
@@ -115,7 +116,7 @@ curadoria manual e **nunca** são sobrescritos.
 ### 2. Validar
 
 ```bash
-gofi docs validate
+gofi index check
 ```
 
 Zero erros antes de seguir. Termo de faceta fora do léxico é erro: é o que
@@ -124,28 +125,34 @@ impede o vocabulário de voltar a virar nuvem de tags.
 ### 3. Reconstruir e medir
 
 ```bash
-gofi docs build --with-code
-gofi docs eval
+gofi index docs
+gofi index check
 ```
 
 Compare com a linha de base do passo 0. **Piorou, reverta.**
 
 ### 4. Convenção de leitura
 
-Editar o `CLAUDE.md` do projeto:
+Editar o `AGENTS.md` do projeto:
 
 - trocar todo glob (`knowledge/**/*.md`) por carga seletiva via
   `.claude/knowledge/INDEX.md` — é o maior custo fixo do harness;
 - registrar **`gofi find` como primeiro movimento** de busca, antes de
-  qualquer `grep`, do mesmo jeito que `gofi graph explain` já é para código.
+  qualquer busca literal — para documento e, com `--in code`, para código —, com
+  `gofi show` para descrever o que ela achou; e `gofi find --text`/`--regex`
+  como a busca literal no lugar do `grep` (cada linha sai sob o símbolo ou a
+  §seção que a contém).
 
 **Sem este passo a migração não rende:** os artefatos existem e ninguém os usa.
 
 ### 5. Manter em dia
 
-Os artefatos são derivados e envelhecem a cada edição. Pendure
-`gofi docs build` nos mesmos hooks que o projeto já usa para o grafo de código,
-e `gofi docs validate` no `pre-commit`.
+Os artefatos são derivados e envelhecem a cada edição. O índice de documentos
+(`.gofi/index/docs/`, fora do git) se refaz sozinho quando `gofi find` ou
+`gofi show` notam documento mudado; os `INDEX.md` versionados não — rode
+`gofi index docs` depois de editar specs e PRDs, e ponha `gofi index check` e
+`gofi index status --check` na CI. Os hooks git do gofi cuidam do grafo de
+código no commit; os `INDEX.md` são do `gofi index docs`.
 
 > Índice desatualizado é **pior** que índice nenhum: sem índice o agente sabe
 > que não sabe; com índice velho ele aponta com confiança para o lugar errado.
@@ -168,4 +175,4 @@ e `gofi docs validate` no `pre-commit`.
 Toda busca que falhou por faltar a ponte entre a língua da pergunta e a do
 identificador vira uma linha em `.claude/lexicon/sinonimos.md`. É o que faz o
 retrieval melhorar com uso em vez de apodrecer. As demais correções seguem
-`.claude/knowledge/shared/learning-protocol.md`.
+`.claude/expertise/harness-protocols/learning.md`.

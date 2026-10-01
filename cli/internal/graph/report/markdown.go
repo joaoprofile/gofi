@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/analyze"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph/analyze"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // These limits keep the report deliberately small: it exists to be read in full
@@ -37,23 +37,17 @@ func stack(g *model.Graph) string {
 	return g.Language + " + " + g.Framework
 }
 
-// Markdown builds the gofi_graph_report.md. queryLang is the --lang a reader
-// needs to reach this graph, empty when none is — a scope listed in the
-// project's index is reached by name whatever its tree is written in, so the
-// flag would send the reader to a directory that does not exist.
-func Markdown(g *model.Graph, queryLang string) string {
+// Markdown builds the gofi_graph_report.md. The queries it names (gofi show,
+// find, path) reach every scope of the project's index by name.
+func Markdown(g *model.Graph) string {
 	var b strings.Builder
 	short := func(id string) string { return model.ShortID(id, g.Module) }
-	lang := ""
-	if queryLang != "" {
-		lang = " --lang " + queryLang
-	}
 
 	fmt.Fprintf(&b, "# Mapa do codigo — %s\n\n", g.Module)
-	fmt.Fprintf(&b, "Gerado por gofi graph (%s, modo `%s`).\n", stack(g), g.Mode)
+	fmt.Fprintf(&b, "Gerado por gofi index (%s, modo `%s`).\n", stack(g), g.Mode)
 	b.WriteString("Fonte de verdade: `gofi_graph.json`. Este relatorio e o resumo navegavel dele.\n\n")
 	b.WriteString("> Leia este arquivo **antes** de varrer o repositorio. Ele diz onde olhar.\n")
-	fmt.Fprintf(&b, "> Para detalhe de qualquer simbolo use `gofi graph explain <no>%s` em vez de abrir arquivos.\n\n", lang)
+	fmt.Fprintf(&b, "> Para detalhe de qualquer simbolo use `gofi show <simbolo>` em vez de abrir arquivos.\n\n")
 
 	// ---- summary ----
 	s := g.Stats
@@ -192,10 +186,10 @@ func Markdown(g *model.Graph, queryLang string) string {
 	// ---- how to query ----
 	b.WriteString("## Como consultar sem abrir arquivos\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "gofi graph explain <no>%s          # tudo sobre um simbolo: origem, vizinhos, doc\n", lang)
-	fmt.Fprintf(&b, "gofi graph explain <termo> <termo>%s # duas ou mais palavras = busca; substitui o grep -r\n", lang)
-	fmt.Fprintf(&b, "gofi graph explain <A> --to <B>%s  # como A alcanca B, aresta por aresta\n", lang)
-	fmt.Fprintf(&b, "gofi graph open%s                  # abre a visualizacao HTML do grafo\n", lang)
+	b.WriteString("gofi show <simbolo>             # tudo sobre um simbolo: origem, vizinhos, doc\n")
+	b.WriteString("gofi find --in code <palavras>  # busca por palavras; substitui o grep -r\n")
+	b.WriteString("gofi path <A> <B>               # como A alcanca B, aresta por aresta\n")
+	b.WriteString("gofi index open                 # abre a visualizacao HTML do grafo\n")
 	b.WriteString("```\n\n")
 	b.WriteString("Os nomes aceitam forma curta: `NewServer`, `api.NewServer` ou o ID completo funcionam.\n")
 

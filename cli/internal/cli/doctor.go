@@ -4,17 +4,23 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/doctor"
-	"github.com/joaoprofile/gofi-cli/internal/githooks"
-	"github.com/joaoprofile/gofi-cli/internal/graph/workspace"
-	"github.com/joaoprofile/gofi-cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/doctor"
+	"github.com/gofi-labs/gofi/cli/internal/githooks"
+	"github.com/gofi-labs/gofi/cli/internal/graph/workspace"
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/i18n"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/scaffold"
+	"github.com/gofi-labs/gofi/cli/internal/toolchain"
+	"github.com/gofi-labs/gofi/cli/internal/tui/styles"
 )
 
 func newDoctorCmd() *cobra.Command {
@@ -51,7 +57,15 @@ func runDoctor() error {
 	}
 	if graphEnabled(cfg) {
 		root := projectRootFromCfg(cfg)
-		checks = append(checks, checkGraph(cfg, root), checkGraphHooks(cfg, root))
+		h := projectHost()
+		if h.ID == host.ClaudeCode.ID {
+			checks = append(checks, checkClaudeCode())
+		}
+		checks = append(checks, checkInstructions(root, h), checkTiers(cfg, root, h), checkGraph(cfg, root), checkIndexLayout(root), checkMCP(root))
+		if h.Guard {
+			checks = append(checks, checkGuard(cfg, root))
+		}
+		checks = append(checks, checkHooks(cfg, root))
 	}
 
 	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(int(os.Stdout.Fd()))
@@ -64,11 +78,11 @@ func runDoctor() error {
 }
 
 func render(checks []doctor.Check, color bool) {
-	okStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
-	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true)
-	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+	okStyle := lipgloss.NewStyle().Foreground(styles.Good).Bold(true)
+	warnStyle := lipgloss.NewStyle().Foreground(styles.Amber).Bold(true)
+	failStyle := lipgloss.NewStyle().Foreground(styles.Bad).Bold(true)
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.Dim)
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
 
 	width := 0
 	for _, c := range checks {
@@ -150,7 +164,7 @@ func institutionalFreshnessCheck(ref, committed, resolved string, resolveErr err
 			Name:   name,
 			Status: doctor.StatusWarn,
 			Detail: "could not resolve " + ref,
-			Hint:   "check connectivity; then run `gofi institutional update`",
+			Hint:   "check connectivity; then run `gofi update institutional`",
 		}
 	case resolved == "local":
 		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "local source (fixture)"}
@@ -159,7 +173,7 @@ func institutionalFreshnessCheck(ref, committed, resolved string, resolveErr err
 			Name:   name,
 			Status: doctor.StatusWarn,
 			Detail: "configured but no snapshot recorded",
-			Hint:   "run `gofi institutional update` to pull the org base",
+			Hint:   "run `gofi update institutional` to pull the org base",
 		}
 	case committed == resolved:
 		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "up to date (" + short(resolved) + ")"}
@@ -168,7 +182,7 @@ func institutionalFreshnessCheck(ref, committed, resolved string, resolveErr err
 			Name:   name,
 			Status: doctor.StatusWarn,
 			Detail: fmt.Sprintf("behind: %s → %s", short(committed), short(resolved)),
-			Hint:   "run `gofi institutional update` to sync the org base",
+			Hint:   "run `gofi update institutional` to sync the org base",
 		}
 	}
 }
@@ -178,13 +192,13 @@ func institutionalFreshnessCheck(ref, committed, resolved string, resolveErr err
 // it is confidently wrong.
 func checkGraph(cfg *config.GofiConfig, root string) doctor.Check {
 	const name = "code graph"
-	ix, err := workspace.LoadIndex(root, backendLang(cfg))
+	ix, err := workspace.LoadIndex(root)
 	if err != nil {
 		return doctor.Check{
 			Name:   name,
 			Status: doctor.StatusWarn,
 			Detail: "not built",
-			Hint:   "run `gofi graph build`",
+			Hint:   "run `gofi index code`",
 		}
 	}
 	var nodes int
@@ -195,33 +209,147 @@ func checkGraph(cfg *config.GofiConfig, root string) doctor.Check {
 	}
 	detail := fmt.Sprintf("%d nodes across %s", nodes, strings.Join(scopes, ", "))
 
-	if stale, err := graphIsStale(cfg, root); err == nil && stale {
+	if st, err := indexStatus(cfg, root); err == nil && st.Code.State == workspace.Stale {
 		return doctor.Check{
 			Name:   name,
 			Status: doctor.StatusWarn,
-			Detail: detail + ", older than the code",
-			Hint:   "run `gofi graph build --update`",
+			Detail: detail + ", behind the code",
+			Hint:   "run `gofi index code`",
 		}
 	}
 	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: detail}
 }
 
-// checkGraphHooks reports whether the graph is being kept current on its own.
-func checkGraphHooks(cfg *config.GofiConfig, root string) doctor.Check {
-	const name = "graph git hooks"
-	if !cfg.Graph.HooksOn() {
-		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "disabled in .gofi.yaml"}
-	}
-	installed := githooks.Installed(root)
-	if len(installed) < len(githooks.Managed) {
+// checkHooks reports the git hooks against what the project asked for. A
+// block older releases installed calls commands that no longer exist, so it
+// fails on every commit — silently — and the graph stops following the code.
+func checkHooks(cfg *config.GofiConfig, root string) doctor.Check {
+	const name = "git hooks"
+	if legacy := githooks.Legacy(root); len(legacy) > 0 {
 		return doctor.Check{
 			Name:   name,
 			Status: doctor.StatusWarn,
-			Detail: fmt.Sprintf("%d of %d installed", len(installed), len(githooks.Managed)),
-			Hint:   "run `gofi graph hooks --install`",
+			Detail: "obsolete gofi block in " + strings.Join(legacy, ", "),
+			Hint:   "run `gofi install hooks` — it replaces the block",
 		}
 	}
+	installed := githooks.Installed(root)
+	if wantsIndexHooks(cfg) && len(installed) < len(githooks.Managed) {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: "graph.hooks is on, but not every hook is installed",
+			Hint:   "run `gofi install hooks`",
+		}
+	}
+	if len(installed) == 0 {
+		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "none (graph.hooks off)"}
+	}
 	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: strings.Join(installed, ", ")}
+}
+
+// checkMCP reports whether the project hands the index to its agents as MCP
+// tools. Without the registration they still reach it through the shell, one
+// process per question and one permission prompt per command.
+func checkMCP(root string) doctor.Check {
+	const name = "mcp server"
+	h := projectHost()
+	if !h.Registered(root) {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: "gofi not registered in " + h.MCP.File,
+			Hint:   "run `gofi install mcp`",
+		}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "registered in " + h.MCP.File}
+}
+
+// checkClaudeCode fails below the minimum Claude Code: the agents would start
+// without the project's AGENTS.md.
+func checkClaudeCode() doctor.Check {
+	const name = "claude code"
+	c := toolchain.ClaudeCode(os.Getenv(EnvEngine))
+	if !c.OK {
+		return doctor.Check{Name: name, Status: doctor.StatusFail, Detail: c.Hint, Hint: "minimum " + toolchain.MinClaudeCode}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: c.Version + " (minimum " + toolchain.MinClaudeCode + ")"}
+}
+
+// zedFirst are instruction files the Zed editor reads in preference to
+// AGENTS.md, stopping at the first it finds: a leftover from another tool
+// silently replaces the project's instructions there.
+var zedFirst = []string{".rules", ".cursorrules", ".windsurfrules", ".clinerules", ".github/copilot-instructions.md", "AGENT.md"}
+
+// checkInstructions reports whether every agent will read the project's
+// AGENTS.md: it has to exist, and no CLAUDE.md may be in the project, or
+// Claude Code reads that instead and never AGENTS.md.
+func checkInstructions(root string, h host.Host) doctor.Check {
+	const name = "agent instructions"
+	present := func(rel string) bool {
+		_, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
+		return err == nil
+	}
+	if h.ID == host.ClaudeCode.ID && present(scaffold.LegacyInstructions) {
+		return doctor.Check{Name: name, Status: doctor.StatusWarn,
+			Detail: scaffold.LegacyInstructions + " hides " + scaffold.AgentsFile + " from Claude Code",
+			Hint:   "run `gofi update agents`"}
+	}
+	if !present(scaffold.AgentsFile) {
+		return doctor.Check{Name: name, Status: doctor.StatusWarn,
+			Detail: scaffold.AgentsFile + " is missing — the agents start without the project's instructions",
+			Hint:   "run `gofi update agents`"}
+	}
+	// Only Claude Code skips AGENTS.md for a CLAUDE.md; other hosts read both.
+	for _, f := range scaffold.BlockingInstructions {
+		if h.ID == host.ClaudeCode.ID && present(f) {
+			return doctor.Check{Name: name, Status: doctor.StatusWarn,
+				Detail: f + " hides " + scaffold.AgentsFile + " from Claude Code",
+				Hint:   "move what it says into " + scaffold.AgentsFile + " and delete it"}
+		}
+	}
+	for _, f := range zedFirst {
+		if present(f) {
+			return doctor.Check{Name: name, Status: doctor.StatusWarn,
+				Detail: "Zed reads " + f + " instead of " + scaffold.AgentsFile,
+				Hint:   "fold it into " + scaffold.AgentsFile + " and delete it, if the team uses Zed"}
+		}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: scaffold.AgentsFile}
+}
+
+// checkGuard reports whether the hook that keeps agents asking the index is in
+// place for the mode the project chose.
+func checkGuard(cfg *config.GofiConfig, root string) doctor.Check {
+	const name = "guard"
+	mode := cfg.AI.GuardMode()
+	if mode == config.GuardOff {
+		return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: "off"}
+	}
+	if s, err := loadClaudeSettings(root); err != nil || !s.hasGuard() {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: mode + ", but the hook is missing from " + claudeSettingsFile,
+			Hint:   "run `gofi guard " + mode + "`",
+		}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: mode}
+}
+
+// checkIndexLayout reports an index still kept where older releases put it.
+// Nothing reads it there any more, so the agents search as if it did not exist.
+func checkIndexLayout(root string) doctor.Check {
+	const name = "index layout"
+	if layout.HasLegacy(root) {
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.StatusWarn,
+			Detail: "old index under .gofi/graph or .gofi/docs",
+			Hint:   "run `gofi index` — it moves it to " + layout.IndexDir,
+		}
+	}
+	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: layout.IndexDir}
 }
 
 func anyFailed(checks []doctor.Check) bool {

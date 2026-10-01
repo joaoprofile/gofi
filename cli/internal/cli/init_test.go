@@ -6,10 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/config"
-	"github.com/joaoprofile/gofi-cli/internal/detect"
-	"github.com/joaoprofile/gofi-cli/internal/toolchain"
-	"github.com/joaoprofile/gofi-cli/internal/tui/wizard"
+	"github.com/gofi-labs/gofi/cli/internal/config"
+	"github.com/gofi-labs/gofi/cli/internal/detect"
+	"github.com/gofi-labs/gofi/cli/internal/gitops"
+	"github.com/gofi-labs/gofi/cli/internal/host"
+	"github.com/gofi-labs/gofi/cli/internal/layout"
+	"github.com/gofi-labs/gofi/cli/internal/toolchain"
+	"github.com/gofi-labs/gofi/cli/internal/tui/wizard"
 )
 
 // forceToolchain overrides the preflight so pipeline tests don't depend on the
@@ -17,6 +20,9 @@ import (
 func forceToolchain(t *testing.T, p toolchain.Preflight) {
 	t.Helper()
 	orig := detectToolchain
+	// Claude Code is required, not skipped around: a test about Go or Node
+	// has it present unless it says otherwise.
+	p.ClaudeOK = true
 	detectToolchain = func(toolchain.Needs) toolchain.Preflight { return p }
 	t.Cleanup(func() { detectToolchain = orig })
 }
@@ -107,8 +113,7 @@ func goWizardResult(target string) *wizard.Result {
 		Language:       "go",
 		SourcePath:     "src",
 		Module:         "github.com/acme/my-svc",
-		Agents:         []string{"gofi-pd", "gofi-spec", "gofi-eng", "gofi-qa"},
-		AgentsRef:      "github.com/joaoprofile/gofi@main",
+		AgentsRef:      "github.com/gofi-labs/gofi@main",
 		CreateSpecsDir: true,
 		CreatePrdDir:   true,
 	}
@@ -139,7 +144,7 @@ func TestExecutePipeline_Go(t *testing.T) {
 		"go.work",
 		"src/go.mod",
 		"src/my-svc/main.go",
-		".claude/CLAUDE.md",
+		"AGENTS.md",
 		".claude/skills/gofi-pd/SKILL.md",
 		".claude/skills/gofi-spec/SKILL.md",
 		".claude/skills/gofi-eng/SKILL.md",
@@ -147,7 +152,6 @@ func TestExecutePipeline_Go(t *testing.T) {
 		".claude/templates/sdd-template.md",
 		".claude/memory/project.md",
 		".claude/knowledge/shared",
-		".claude/knowledge/pd",
 		".claude/sdk/go/boilerplates/model.md",
 		".claude/sdk/go/sdk-docs/overview.md",
 		".claude/sdk/go/knowledge/error-handling.md",
@@ -254,7 +258,7 @@ func TestExecutePipeline_AdoptsExistingGoTree(t *testing.T) {
 	}
 
 	// The harness is installed, and go.work now wires the adopted module.
-	for _, p := range []string{".gofi.yaml", ".claude/CLAUDE.md", "go.work"} {
+	for _, p := range []string{".gofi.yaml", "AGENTS.md", "go.work"} {
 		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
 			t.Errorf("expected %s: %v", p, err)
 		}
@@ -326,7 +330,7 @@ func TestExecutePipeline_AdoptsExistingWebApp(t *testing.T) {
 		t.Errorf("package.json was rewritten: %s", body)
 	}
 	// The harness still lands, and the config records the adopted path.
-	for _, p := range []string{".gofi.yaml", ".claude/CLAUDE.md"} {
+	for _, p := range []string{".gofi.yaml", "AGENTS.md"} {
 		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
 			t.Errorf("expected %s: %v", p, err)
 		}
@@ -440,20 +444,24 @@ func TestExecutePipeline_GoWithRemote(t *testing.T) {
 	if err := executePipeline(r); err != nil {
 		t.Fatalf("pipeline: %v", err)
 	}
-	// .gofi.yaml records the remote
+	// git keeps the remote; .gofi.yaml does not repeat it
+	if got, _ := gitops.GetRemote(target, "origin"); got != r.GitRemote {
+		t.Errorf("origin = %q, want %q", got, r.GitRemote)
+	}
 	data, err := os.ReadFile(filepath.Join(target, ".gofi.yaml"))
 	if err != nil {
 		t.Fatalf("read .gofi.yaml: %v", err)
 	}
-	if !strings.Contains(string(data), "git@github.com:acme/my-svc.git") {
-		t.Errorf("expected remote in .gofi.yaml, got:\n%s", data)
+	if strings.Contains(string(data), "git@github.com:acme/my-svc.git") {
+		t.Errorf(".gofi.yaml should not record the remote, got:\n%s", data)
 	}
 }
 
-// Every language with a scaffold produces a project through the full pipeline,
-// and go.work stays a Go-only artefact — a Java or Node project that carried one
-// would confuse every tool that looks for it.
-func TestExecutePipeline_NonGoBackendsAreScaffolded(t *testing.T) {
+// A backend in a language without a gofi SDK gets no skeleton, but init still
+// writes the harness, says what it skipped, and never leaves a go.work behind —
+// a Java or Node project that carried one would confuse every tool that looks
+// for it.
+func TestExecutePipeline_NonGoBackendsAreReported(t *testing.T) {
 	useFixtureRepo(t)
 	cases := []struct {
 		language string
@@ -478,14 +486,14 @@ func TestExecutePipeline_NonGoBackendsAreScaffolded(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(target, config.FileName)); err != nil {
 				t.Errorf("expected .gofi.yaml written: %v", err)
 			}
-			if _, err := os.Stat(filepath.Join(target, tc.manifest)); err != nil {
-				t.Errorf("expected %s: %v", tc.manifest, err)
+			if _, err := os.Stat(filepath.Join(target, tc.manifest)); !os.IsNotExist(err) {
+				t.Errorf("%s should not be scaffolded", tc.manifest)
 			}
 			if _, err := os.Stat(filepath.Join(target, "go.work")); !os.IsNotExist(err) {
 				t.Errorf("go.work should not exist for a %s backend", tc.language)
 			}
-			if len(r.Skipped) != 0 {
-				t.Errorf("Skipped = %v, want none", r.Skipped)
+			if len(r.Skipped) != 1 {
+				t.Errorf("Skipped = %v, want the missing skeleton reported", r.Skipped)
 			}
 		})
 	}
@@ -521,10 +529,10 @@ func TestExecutePipeline_GoWithSDKOverride(t *testing.T) {
 		"boilerplates/model.md":       "override model boilerplate",
 		"sdk-docs/overview.md":        "override sdk overview",
 		"knowledge/error-handling.md": "override error handling",
-		"go.mod":                      "module github.com/joaoprofile/gofi\n\ngo 1.25\n",
-		"sqln/go.mod":                 "module github.com/joaoprofile/gofi/sqln\n\ngo 1.25\n",
-		"sqln/sqln.go":                "package sqln\n",
-		"iam/go.mod":                  "module github.com/joaoprofile/gofi/iam\n\ngo 1.25\n",
+		"go.mod":                      "module github.com/gofi-labs/gofi\n\ngo 1.25\n",
+		"sqln/go.mod":                 "module github.com/gofi-labs/gofi/sqln\n\ngo 1.25\n",
+		"sqln/sqln.go":                "// Package sqln is the SQL layer.\npackage sqln\n\n// Open opens the connection.\nfunc Open() error { return nil }\n",
+		"iam/go.mod":                  "module github.com/gofi-labs/gofi/iam\n\ngo 1.25\n",
 		"iam/iam.go":                  "package iam\n",
 	} {
 		full := filepath.Join(sdkDir, rel)
@@ -557,6 +565,15 @@ func TestExecutePipeline_GoWithSDKOverride(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
 			t.Errorf("expected %s: %v", p, err)
 		}
+	}
+
+	// The API reference is generated from the checkout the project pinned.
+	ref, err := os.ReadFile(filepath.Join(target, ".claude/sdk/go/api/sqln.md"))
+	if err != nil || !strings.Contains(string(ref), "### sqln.Open") || !strings.Contains(string(ref), "Open opens the connection.") {
+		t.Errorf("generated reference = %q (%v)", ref, err)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude/sdk/go/api/INDEX.md")); err != nil {
+		t.Errorf("reference index missing: %v", err)
 	}
 
 	work, err := os.ReadFile(filepath.Join(target, "go.work"))
@@ -608,30 +625,74 @@ func TestExecutePipeline_GoWithoutSDKOverride(t *testing.T) {
 	}
 }
 
-func TestExecutePipeline_AgentFiltering(t *testing.T) {
+// init installs every skill: there is no agent selection to honour.
+func TestExecutePipeline_InstallsEverySkill(t *testing.T) {
 	useFixtureRepo(t)
-	dir := t.TempDir()
-	target := filepath.Join(dir, "my-svc")
-	r := goWizardResult(target)
-	r.Agents = []string{"gofi-spec", "gofi-eng"}
-	if err := executePipeline(r); err != nil {
+	target := filepath.Join(t.TempDir(), "my-svc")
+	if err := executePipeline(goWizardResult(target)); err != nil {
 		t.Fatalf("pipeline: %v", err)
 	}
-	// All skills are installed regardless of the selected agent set.
 	for _, kept := range []string{"gofi-pd/SKILL.md", "gofi-spec/SKILL.md", "gofi-eng/SKILL.md", "gofi-qa/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(target, ".claude/skills", kept)); err != nil {
 			t.Errorf("expected %s installed: %v", kept, err)
 		}
 	}
-	// The agent selection only scopes the per-agent knowledge dirs.
-	for _, kept := range []string{"spec", "eng"} {
-		if _, err := os.Stat(filepath.Join(target, ".claude/knowledge", kept)); err != nil {
-			t.Errorf("expected knowledge/%s for selected agent: %v", kept, err)
+	b, err := os.ReadFile(filepath.Join(target, config.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{"\nagents:", "\ntraining:", "\ngit:"} {
+		if strings.Contains(string(b), gone) {
+			t.Errorf(".gofi.yaml still writes %q", strings.TrimSpace(gone))
 		}
 	}
-	for _, gone := range []string{"pd", "qa"} {
-		if _, err := os.Stat(filepath.Join(target, ".claude/knowledge", gone)); !os.IsNotExist(err) {
-			t.Errorf("knowledge/%s should not exist for unselected agent", gone)
+}
+
+// Without Claude Code at the minimum there are no agents to scaffold for, and
+// stopping before anything is written leaves nothing to clean up.
+func TestExecutePipeline_StopsWithoutClaudeCode(t *testing.T) {
+	useFixtureRepo(t)
+	orig := detectToolchain
+	detectToolchain = func(toolchain.Needs) toolchain.Preflight {
+		return toolchain.Preflight{GoOK: true, NodeOK: true, ClaudeOK: false}
+	}
+	t.Cleanup(func() { detectToolchain = orig })
+
+	target := filepath.Join(t.TempDir(), "my-svc")
+	err := executePipeline(goWizardResult(target))
+	if err == nil || !strings.Contains(err.Error(), toolchain.MinClaudeCode) {
+		t.Fatalf("err = %v, want the minimum Claude Code named", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Error("init created the project before checking Claude Code")
+	}
+}
+
+// A project on Codex gets one agents folder, .agents/, and its MCP config in
+// Codex's format — and nothing of Claude Code's.
+func TestExecutePipeline_CodexHost(t *testing.T) {
+	useFixtureRepo(t)
+	forceToolchain(t, toolchain.Preflight{GoOK: true, NodeOK: true})
+	t.Cleanup(func() { layout.SetHome(layout.DefaultHome) })
+	target := filepath.Join(t.TempDir(), "my-svc")
+	r := goWizardResult(target)
+	r.AIHost = host.Codex.ID
+
+	if err := executePipeline(r); err != nil {
+		t.Fatalf("executePipeline: %v", err)
+	}
+	for _, p := range []string{".agents/skills", "AGENTS.md", ".codex/config.toml", ".gofi.yaml"} {
+		if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(p))); err != nil {
+			t.Errorf("expected %s: %v", p, err)
 		}
+	}
+	for _, p := range []string{".claude", ".mcp.json"} {
+		if _, err := os.Stat(filepath.Join(target, p)); !os.IsNotExist(err) {
+			t.Errorf("%s was created for a Codex project", p)
+		}
+	}
+	cfg, err := config.Load(filepath.Join(target, config.FileName))
+	if err != nil || cfg.AI.Host != host.Codex.ID {
+		t.Errorf("ai.host = %v (%v)", cfg, err)
 	}
 }

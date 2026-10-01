@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph"
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
-	"github.com/joaoprofile/gofi-cli/internal/graph/model"
+	"github.com/gofi-labs/gofi/cli/internal/graph"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 // Scope names.
@@ -111,7 +111,7 @@ func Scopes(opt Options) []Scope {
 		root = opt.Root
 	}
 	lang := (graph.BuildOptions{Language: opt.Language}).Lang()
-	base := graph.Dir(root, lang)
+	base := graph.Dir(root)
 
 	src := root
 	if opt.SrcDir != "" {
@@ -127,7 +127,7 @@ func Scopes(opt Options) []Scope {
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 			continue
 		}
-		if !canExtract(root, s.Language) {
+		if !CanExtract(root, s.Language) {
 			continue
 		}
 		scopes = append(scopes, Scope{
@@ -149,11 +149,11 @@ func Scopes(opt Options) []Scope {
 	return scopes
 }
 
-// canExtract reports whether this project can read a language at all. The
+// CanExtract reports whether this project can read a language at all. The
 // registry is asked rather than a list of names: a language gofi learns to read
 // natively must stop requiring an installed extractor on the same day, not on
 // the day someone remembers to edit this function.
-func canExtract(projectRoot, lang string) bool {
+func CanExtract(projectRoot, lang string) bool {
 	if lang == "" || slices.Contains(graph.Extractors.Native(), lang) {
 		return true
 	}
@@ -194,7 +194,7 @@ func (r *Result) Built() []ScopeResult {
 // got and report the rest.
 func Build(ctx context.Context, opt Options) (*Result, error) {
 	scopes := Scopes(opt)
-	prev, _ := LoadIndex(opt.Root, opt.Language)
+	prev, _ := LoadIndex(opt.Root)
 	log := opt.logger()
 
 	results := make([]ScopeResult, len(scopes))
@@ -211,7 +211,7 @@ func Build(ctx context.Context, opt Options) (*Result, error) {
 	// git tracks behind a build that failed outright, and would delete a usable
 	// index the next time a scan cannot run.
 	if len(res.Index.Scopes) > 0 {
-		if err := res.Index.Save(opt.Root, opt.Language); err != nil {
+		if err := res.Index.Save(opt.Root); err != nil {
 			log.Debug("could not write the graph index", "err", err)
 		}
 	}
@@ -247,9 +247,6 @@ func buildScope(ctx context.Context, sc Scope, opt Options, prev *Index, log *sl
 		Out:         sc.Dir,
 		Language:    sc.Language,
 		Framework:   sc.Framework,
-		// Every scope here is listed by name in one index, so a reader reaches
-		// it through that index's language and not through its own.
-		IndexLang: (graph.BuildOptions{Language: opt.Language}).Lang(),
 		Deep:        opt.Deep,
 		WithTests:   opt.WithTests,
 		Exclude:     opt.Exclude,

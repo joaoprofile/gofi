@@ -1,7 +1,7 @@
 # Cor — mobile
 
 Mesma semântica do web ([web/color.md](../../../web/gofi-ui/foundations/color.md)
-e [design-tokens.md](../../../../knowledge/ui/design-tokens.md)). Aqui, o essencial RN.
+e [design-tokens.md](../../../../expertise/ui-design/design-tokens.md)). Aqui, o essencial RN.
 
 ## Papel duplo da cor de marca (igual ao web)
 | Papel | Token | Onde | Texto |

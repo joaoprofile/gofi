@@ -103,21 +103,3 @@ func MissingBlocks(path string) []string {
 	}
 	return missing
 }
-
-// FileVersion reports the schema version recorded in the file on disk. Load
-// migrates in memory and leaves cfg.Version already current, so it is the only
-// way to tell whether the file itself still has to be rewritten. A file that is
-// missing, unreadable or has no version reads as 0.
-func FileVersion(path string) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	var doc struct {
-		Version int `yaml:"version"`
-	}
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return 0
-	}
-	return doc.Version
-}

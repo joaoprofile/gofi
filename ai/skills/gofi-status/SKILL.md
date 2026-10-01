@@ -22,8 +22,8 @@ silenciosamente.
 
 > **Corpora irmãos (RAG):** este índice cobre a **memória** (derivado do frontmatter dos
 > `contexts/*.md`). Specs e PRDs têm seus próprios manifestos **commitados** —
-> `specs/INDEX.md` e `prd/INDEX.md` (regen: `gofi docs build`). Protocolo de
-> descoberta/leitura em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
+> `specs/INDEX.md` e `prd/INDEX.md` (regen: `gofi index docs`). Protocolo de
+> descoberta/leitura em `.claude/expertise/harness-protocols/rag-retrieval.md`.
 
 ---
 
@@ -58,7 +58,7 @@ atualizado: {YYYY-MM-DD}
 ---
 ```
 
-Schema completo em `.claude/knowledge/shared/memory-protocol.md`.
+Schema completo em `.claude/expertise/harness-protocols/memory.md`.
 
 ---
 

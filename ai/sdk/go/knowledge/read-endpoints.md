@@ -2,132 +2,134 @@
 name: read-endpoints
 description: Endpoints de leitura para o front — handler bind+validate, repo com criteria+cache+paginação, normalização no repository
 type: feedback
+sdk: v0.8.2
+keywords: [read-endpoint, GET, BindQueryParamsToStruct, criteria, FindFromCriteria, PagedList, WithCache, pagination]
 ---
 
 # Endpoints de leitura (GET) consumidos pelo front
 
 Padrão para qualquer rota `GET` de listagem/detalhe servida ao front. Mantém o
 handler fino, o service só com regra de negócio, e o "como consultar" (SQL,
-paginação, cache, normalização de query) no repository.
+paginação, cache, normalização de query) no repository. API:
+`.claude/sdk/go/api/netx.md`, `sqln.md`, `sqln-criteria.md`.
 
 ## Handler — bind em struct + validate, nunca `strconv` cru
 
-**Anti-padrão:**
-```go
-q := r.URL.Query()
-limit, _ := strconv.Atoi(q.Get("limit"))   // sem validação, erro engolido
-page, _ := strconv.Atoi(q.Get("page"))
-```
+**Anti-padrão:** `limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))` (sem
+validação, erro engolido).
 
-**Padrão:** DTO com tags `form` (bind) + `validate` (regras de shape), e o handler
-faz bind + validate:
+**Padrão:** DTO com tags `form` (bind) + `validate` (shape):
 ```go
-var req model.XxxRequest
+var req model.{Ctx}ListRequest
 if err := netx.BindQueryParamsToStruct(r, w, &req); err != nil {
     netx.Error(w, http.StatusBadRequest, err)
     return
 }
-if err := req.Validate(); err != nil {        // só quando há tags validate
+if err := req.Validate(); err != nil {
     netx.Error(w, http.StatusBadRequest, err)
     return
 }
-req.TenantID = authFromContext(r).CompanyID   // tenancy vem do auth, nunca da query
+req.TenantID = tenantFromCtx(r) // do token, nunca da query
 ```
 
-DTO:
 ```go
-type XxxRequest struct {
-    TenantID string `form:"-"`                                  // form:"-" → nunca bindado da query
-    Sort     string `form:"sort"  validate:"omitempty,oneof=gmv units"`
+type {Ctx}ListRequest struct {
+    TenantID string `form:"-"`
+    Sort     string `form:"sort"  validate:"omitempty,oneof=total count"`
     Limit    uint16 `form:"limit" validate:"omitempty,lte=200"`
     Page     uint16 `form:"page"`
 }
-func (r XxxRequest) Validate() error { return v.ValidateStruct(r) } // v = validator.New()
+func (r {Ctx}ListRequest) Validate() error { return v.ValidateStruct(r) } // v = validator.New()
 ```
 
-- `BindQueryParamsToStruct` (de `gofi/netx`) bind por tag `form` (fallback nome
-  lowercased); suporta string/int/uint/slice. **Não roda os tags `validate`** —
-  por isso o `Validate()` é chamado separado.
-- **Campo de tenancy = `form:"-"`** e setado a partir do auth **depois** do bind —
-  senão `?tenantid=outro` vazaria cross-tenant.
-- Page/Limit como `uint16` (casa com `sqln.NewPageRequest`).
+- `netx.BindQueryParamsToStruct` casa pela tag `form` (fallback: nome em
+  minúsculas) e **não roda** as tags `validate` — daí o `Validate()`.
+- **Tenancy `form:"-"`**, setada do auth depois do bind — senão
+  `?tenantid=outro` vaza entre tenants.
+- `Page`/`Limit` como `uint16` (casam com `sqln.NewPageRequest`).
 
 ## Repository — criteria + cache + paginação; normalização mora aqui
 
-A normalização de query (whitelist de sort, clamp de limit, offset) é
-**responsabilidade do repository**, não do service. `sqln.NewPageRequest` já cuida
-de offset e default de limit (page 0-indexed, `limit=0` → `DefaultLimit`).
-
 ```go
-func (r *repo) GetXxx(ctx context.Context, f model.XxxFilter) (*sqln.Page[model.Row], error) {
-    sortCol := "gmv"                    // whitelist de colunas ordenáveis (anti-injection)
-    if f.Sort == "units" { sortCol = "units" }
-    limit := f.Limit
-    if limit == 0 { limit = defLimit }
-    if limit > maxLimit { limit = maxLimit }
+const {ctx}ListCacheTTL = 5 * time.Minute
 
-    q := criteria.From("xxx_table", "").
-        Select("id", "COALESCE(MAX(name),'') AS name", "SUM(v) AS v").
-        Where(criteria.Eq("tenant_id", f.TenantID)).
-        Where(criteria.Gte("d", f.From)).Where(criteria.Lte("d", f.To)).
-        GroupBy("id").Having(criteria.Gt("SUM(v)", 0))
+func (r *{ctx}Repository) List{Ctx}(ctx context.Context, f model.{Ctx}ListFilter) (*sqln.Page[model.{Ctx}Row], error) {
+    sortCol := "total" // allowlist de ordenação
+    if f.Sort == "count" {
+        sortCol = "count"
+    }
+    limit := min(f.Limit, maxLimit) // 0 vira DefaultLimit (15) no NewPageRequest
+
+    q := criteria.From("{tabela}", "e").
+        Select({ctx}RowSelectFields).
+        Where(
+            criteria.Eq("e.tenant_id", f.TenantID),
+            criteria.DateOnOrAfter("e.day", f.From),
+            criteria.DateOnOrBefore("e.day", f.To),
+        ).
+        GroupBy("e.item_id").
+        Having(criteria.Gt("SUM(e.value)", 0))
 
     page := sqln.NewPageRequest(f.Page, limit, []sqln.Sort{sqln.NewSort(sortCol, sqln.DESC)})
-    cache := sqln.NewCache[model.Row](fmt.Sprintf("xxx:%s:%s:%d:%d", f.TenantID, sortCol, f.Page, limit), cacheTTL)
-    return sqln.FindFromCriteria[model.Row](ctx, q).WithCache(cache).WithPage(page).PagedList()
+    return sqln.FindFromCriteria[model.{Ctx}Row](ctx, q).
+        WithCache(sqln.NewCache[model.{Ctx}Row]("{ctx}:list:"+f.TenantID, {ctx}ListCacheTTL)).
+        WithPage(page).
+        PagedList()
 }
 ```
 
-- **`criteria` builder** (não `fmt.Sprintf` + `QueryContext`) sempre que a query
-  cabe: `Select/Where/Join/GroupBy/Having/OrderBy` + predicados
-  `Eq/Gte/Lte/Gt/Between`. `GroupBy` + agregação é suportado; o `BuildCount`
-  embrulha em subquery (`SELECT COUNT(*) FROM (<q>) t`), então a contagem da
-  paginação fica correta mesmo com `GROUP BY`.
-- **Cache no repository** (`sqln.NewCache[T]` + `.WithCache`), nunca no service
-  (ver `cache-layer.md`). Chave inclui todos os params (tenant + filtros + page/limit).
-- **Resultado paginado** = `*sqln.Page[T]` via `.WithPage(...).PagedList()`.
-  Resultado único (agregação sem GROUP BY, ou detalhe) = `.Execute()` → `(*T, error)`.
-- **Contrato posicional do `sqln`**: a struct `model.Row` tem tags `db` e a ordem
-  dos campos = ordem das colunas no `Select` (scan posicional). Ver `value-objects.md`.
-- **Field-list / SQL longo → const de pacote no repository** (nunca inline no
-  método). Mesmo padrão de `configSelectFields`: uma `const xxxSelectFields = ...`
-  multi-linha com vírgulas, passada como **um** argumento a `Select(xxxSelectFields)`
-  (o builder não re-junta — a string já tem as vírgulas). Vale para qualquer
-  string SQL grande (select, base de query raw, etc.): extrair melhora leitura,
-  reuso e diff. Inline só quando é curto (1–2 colunas).
+- **`criteria`** sempre que a query cabe: `Select/Join/LeftJoin/LeftJoinLateral/Where/GroupBy/Having`
+  + predicados (`Eq`, `In`, `Contains`, `Between`, `DateOnOrAfter`, `IsTrue`,
+  `Group`+`Or` para OR isolado). **Não** use `OrderBy`/`Limit` junto de
+  `WithPage` — ordenação e página vêm do `PageRequest`.
+- **Contagem da página:** o SDK embrulha a query em
+  `SELECT COUNT(*) FROM (<q>) tb`, correto com `GROUP BY`. Se a projeção tem
+  custo que não muda o total (ex.: `LeftJoinLateral` só de projeção), passe
+  uma contagem própria com `.WithCountQuery(sql, args...)`.
+- **Sort:** `sqln.Sort.Field` precisa ser referência de coluna — expressão é
+  descartada com warning (proteção contra injeção). Ordene por alias da
+  projeção.
+- **Cache no repository** (`cache-layer.md`): o `nome` do `NewCache` é o
+  escopo de invalidação; o SDK já separa as entradas por SQL + args + página.
+- **Um resultado** (detalhe, agregado sem `GROUP BY`): `.UniqueResult()` →
+  `(*T, error)`, `nil, nil` sem linha.
+- **Mapeamento:** tags `db` do `model.{Ctx}Row` = nomes (ou aliases) das
+  colunas; ver `value-objects.md`.
+- **Field-list / SQL longo → const de pacote** (`{ctx}RowSelectFields`),
+  passada como **um** argumento a `Select(...)`. Inline só quando curto.
 
 ## Service — só regra de negócio; repassa cru
 
-O service resolve **regra de negócio** (janela de data + fuso, autorização de
-tenancy, defaults semânticos do domínio) e **repassa os params de query crus**
-(`Sort`, `Page`, `Limit`) ao repo — a normalização mecânica é do repo.
+O service resolve regra de negócio (janela de data + fuso, autorização,
+defaults do domínio) e repassa `Sort`/`Page`/`Limit` crus — allowlist e teto
+são do repository.
 
 ```go
-func (s *svc) GetXxx(ctx, req) (*sqln.Page[model.Row], errs.AppError) {
-    from, to, appErr := s.resolveWindow(req.From, req.To) // regra de negócio (tz, máx, futuro)
-    if appErr.Exists() { return nil, appErr }
-    page, err := s.repo.GetXxx(ctx, model.XxxFilter{TenantID: req.TenantID, From: from, To: to,
-        Sort: req.Sort, Page: req.Page, Limit: req.Limit}) // cru — sem clamp/whitelist aqui
-    if err != nil { return nil, ErrXxxQuery.Wrap(err) }
+func (s *{ctx}Service) List{Ctx}(ctx context.Context, req model.{Ctx}ListRequest) (*sqln.Page[model.{Ctx}Row], errs.AppError) {
+    from, to, appErr := s.resolveWindow(req.From, req.To)
+    if appErr.Exists() {
+        return nil, appErr
+    }
+    page, err := s.repo.List{Ctx}(ctx, model.{Ctx}ListFilter{TenantID: req.TenantID, From: from, To: to,
+        Sort: req.Sort, Page: req.Page, Limit: req.Limit})
+    if err != nil {
+        return nil, Err{Ctx}Query.Wrap(err)
+    }
     return page, errs.AppError{}
 }
 ```
 
 ## Quando criteria NÃO cabe
 
-- **Funções de janela** (`ROW_NUMBER()`, `SUM() OVER (...)`) não existem no
-  `criteria` builder → usar base raw + `sqln.FindWithFilter[T](ctx, sqln.NewQueryBuild(base, filters))`
-  (padrão do filtro dinâmico `/schemas` + `/query`), que também compõe
-  `WithPage`/`WithCache`. Tenancy entra como literal via `fmt.Sprintf(base, filters.Tenant)`.
-- **Cálculos de população inteira** (ranking ABC/Pareto via `cum_share`) **não
-  paginam** — o `cum_share` de uma página é sem sentido. São endpoint próprio
-  (lista completa) ou cômputo separado, nunca embutidos numa lista paginada.
-
-## Filtro dinâmico (quando o front filtra por campos arbitrários)
-
-Quando o front precisa filtrar/ordenar por campos variados, é o padrão de filtro
-dinâmico (`POST /{ctx}/schemas` + `POST /{ctx}/query` com `sqln.Filters`) — ver
-`dynamic-filter.md` e `lookup-endpoints.md`.
+- **Funções de janela** (`ROW_NUMBER()`, `SUM() OVER (...)`), CTE: SQL cru
+  como constante de pacote + `sqln.Find[T](ctx, query, args...)` — compõe
+  `WithPage`/`WithCache` igual. Tenant é **argumento** (`$1`), nunca
+  `fmt.Sprintf`.
+- **Cálculo de população inteira** (ranking ABC/Pareto por participação
+  acumulada) não pagina — endpoint próprio com lista completa (ou `.All()`),
+  nunca embutido numa lista paginada.
+- **Filtro por campos arbitrários escolhidos pelo front:** `dynamic-filter.md`
+  e `lookup-endpoints.md`.
 
 ## Campos herdados de um owner/config via tabela de associação (membro herda do dono)
 

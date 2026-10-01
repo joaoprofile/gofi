@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaoprofile/gofi-cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph/extract/external"
+	"github.com/gofi-labs/gofi/cli/internal/graph/model"
 )
 
 func TestLang(t *testing.T) {
@@ -25,27 +26,18 @@ func TestLang(t *testing.T) {
 	}
 }
 
-// Go sits at the top of .gofi/graph/ so the common case has no extra level;
-// every other language gets its own directory and cannot overwrite it.
-func TestDirPerLanguage(t *testing.T) {
+// Every language writes to the one code index; a language is a scope in it,
+// never a directory of its own beside it.
+func TestDirIsTheCodeIndex(t *testing.T) {
 	root := filepath.FromSlash("/tmp/proj")
-	if got, want := Dir(root, ""), filepath.Join(root, OutDir); got != want {
-		t.Errorf("Dir(go) = %q, want %q", got, want)
-	}
-	if got, want := Dir(root, "Java"), filepath.Join(root, OutDir, "java"); got != want {
-		t.Errorf("Dir(java) = %q, want %q", got, want)
+	if got, want := Dir(root), filepath.Join(root, filepath.FromSlash(OutDir)); got != want {
+		t.Errorf("Dir = %q, want %q", got, want)
 	}
 }
 
-func TestLoadMissingSaysHowToBuild(t *testing.T) {
-	root := t.TempDir()
-	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "gofi graph build") {
-		t.Fatalf("err = %v", err)
-	}
-	// The hint has to carry the language, or following it rebuilds the wrong graph.
-	_, err = Load(root, "java")
-	if err == nil || !strings.Contains(err.Error(), "gofi graph build --lang java") {
+func TestOpenMissingSaysHowToBuild(t *testing.T) {
+	err := Open(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "gofi index code") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -53,7 +45,7 @@ func TestLoadMissingSaysHowToBuild(t *testing.T) {
 func TestBuildWithoutExtractor(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	_, err := Build(t.Context(), BuildOptions{Root: t.TempDir(), Language: "cobol"})
-	if err == nil || !strings.Contains(err.Error(), "gofi graph install cobol") {
+	if err == nil || !strings.Contains(err.Error(), "gofi index install cobol") {
 		t.Fatalf("err = %v, want the install hint", err)
 	}
 }
@@ -91,7 +83,7 @@ func TestBuildExternal(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	if want := filepath.Join(root, OutDir, "fake"); res.Dir != want {
+	if want := Dir(root); res.Dir != want {
 		t.Errorf("dir = %q, want %q", res.Dir, want)
 	}
 	for _, name := range []string{GraphFile, ReportFile, HTMLFile} {
@@ -119,20 +111,20 @@ func TestBuildExternal(t *testing.T) {
 		t.Errorf("diagnostics = %+v", res.Diagnostics)
 	}
 
-	// The report is the first thing an agent reads, and every command it
-	// suggests has to point back at this graph rather than the Go one.
+	// The report is the first thing an agent reads, and it has to send the
+	// reader to the query commands rather than to the files.
 	md, err := os.ReadFile(filepath.Join(res.Dir, ReportFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(md), "gofi graph explain <no> --lang fake") {
-		t.Error("gofi_graph_report.md tells the reader to query the Go graph")
+	if !strings.Contains(string(md), "gofi show <simbolo>") {
+		t.Error("gofi_graph_report.md does not name the query commands")
 	}
 
-	// The graph must be readable back through the same language-aware path.
-	g, err := Load(root, "fake")
+	// The graph must be readable back from the code index.
+	g, err := model.Load(filepath.Join(Dir(root), GraphFile))
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("load: %v", err)
 	}
 	if g.Get("fake:com.acme.api.Server") == nil {
 		t.Error("node missing after a round trip through disk")
@@ -146,36 +138,12 @@ func TestExplicitOutIsUsedAsGiven(t *testing.T) {
 	root := t.TempDir()
 	buildFakeExtractor(t, root)
 
-	out := filepath.Join(root, OutDir, "fake", "sdk")
+	out := filepath.Join(Dir(root), "sdk")
 	res, err := Build(t.Context(), BuildOptions{Root: root, Language: "fake", Out: out})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if res.Dir != out {
 		t.Errorf("dir = %q, want %q", res.Dir, out)
-	}
-}
-
-// A polyglot repository keeps one graph per language, and building one must not
-// disturb another.
-func TestBuildExternalKeepsGoGraph(t *testing.T) {
-	root := t.TempDir()
-	buildFakeExtractor(t, root)
-
-	goDir := filepath.Join(root, OutDir)
-	if err := os.MkdirAll(goDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	marker := filepath.Join(goDir, GraphFile)
-	if err := os.WriteFile(marker, []byte("go graph"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := Build(t.Context(), BuildOptions{Root: root, Language: "fake"}); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	b, err := os.ReadFile(marker)
-	if err != nil || string(b) != "go graph" {
-		t.Errorf("the Go graph was overwritten: %q (%v)", b, err)
 	}
 }
