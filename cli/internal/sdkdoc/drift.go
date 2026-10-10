@@ -89,15 +89,15 @@ var distinctive = map[string]bool{
 
 // Stale lists the SDK identifiers a text cites that the SDK does not have —
 // pkg.Name where pkg is one of the SDK's distinctive package names and Name is
-// not among its exports. Other names (http.Request, driver.Valuer) are not the
-// SDK's to judge and are left alone.
+// not among its exports, or the package itself is not in this release (a doc
+// written for a later release, or for a package that moved). Other names
+// (http.Request, driver.Valuer) are not the SDK's to judge and are left alone.
 func (e Exports) Stale(text string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, m := range reQualified.FindAllStringSubmatch(text, -1) {
 		pkg, name := m[1], m[2]
-		set, ok := e[pkg]
-		if !ok || !distinctive[pkg] || set[name] {
+		if !distinctive[pkg] || e[pkg][name] {
 			continue
 		}
 		ref := pkg + "." + name
