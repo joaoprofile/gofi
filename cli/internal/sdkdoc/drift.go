@@ -82,6 +82,9 @@ var distinctive = map[string]bool{
 	"sqln": true, "netx": true, "msq": true, "obs": true, "iam": true, "gofi": true,
 	"criteria": true, "msqtest": true, "buckettest": true, "awssign": true,
 	"rdsauth": true, "awssm": true, "ocivault": true,
+	// The transports netx moved into subpackages, and the components that run
+	// them: without them, a doc citing httpx.X would never be checked.
+	"httpx": true, "grpcx": true, "httpserver": true, "grpcserver": true,
 }
 
 // Stale lists the SDK identifiers a text cites that the SDK does not have —

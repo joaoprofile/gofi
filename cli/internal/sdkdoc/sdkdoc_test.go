@@ -113,3 +113,23 @@ func TestStaleCitations(t *testing.T) {
 		t.Error("internal packages count as the SDK's API")
 	}
 }
+
+// The HTTP and gRPC transports live in netx subpackages; citations of them are
+// checked like any other SDK package, so a move between packages is caught.
+func TestStaleCitationsCoverTransportSubpackages(t *testing.T) {
+	src := fakeSDK(t)
+	put(t, src, "netx/go.mod", "module example.com/sdk/netx\n\ngo 1.22\n")
+	put(t, src, "netx/netx.go", "package netx\n\n// GetRequestID reads the request ID.\nfunc GetRequestID() string { return \"\" }\n")
+	put(t, src, "netx/httpx/httpx.go", "package httpx\n\n// RespondError writes an error.\nfunc RespondError() {}\n")
+	put(t, src, "netx/grpcx/go.mod", "module example.com/sdk/netx/grpcx\n\ngo 1.22\n")
+	put(t, src, "netx/grpcx/grpcx.go", "package grpcx\n\n// NewServer builds a server.\nfunc NewServer() {}\n")
+	exp, err := ReadExports(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := exp.Stale("httpx.RespondError, netx.GetRequestID and grpcx.NewServer exist; netx.RespondError moved; httpx.WSConfig and grpcx.Dial do not exist.")
+	want := []string{"grpcx.Dial", "httpx.WSConfig", "netx.RespondError"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("stale = %v, want %v", got, want)
+	}
+}
