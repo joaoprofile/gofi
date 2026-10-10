@@ -279,11 +279,22 @@ func AgentsRefFor(version string) string {
 	return AgentsRepo + "@v" + m[1]
 }
 
-// DefaultSDKGoRef is the default Go SDK source: the dedicated gofi-sdk-go repo,
-// fetched into .gofi/gofi-sdk-go/ as the toolchain checkout (go.work). The web
-// and mobile design systems ship as npm packages (gofi-ui / gofi-ui-native),
-// installed by the create step — not as git sources.
-const DefaultSDKGoRef = "github.com/joaoprofile/gofi-sdk-go@main"
+// SDKGoRepo is the dedicated Go SDK repo, fetched into .gofi/gofi-sdk-go/ as
+// the toolchain checkout (go.work). The web and mobile design systems ship as
+// npm packages (gofi-ui / gofi-ui-native), installed by the create step — not
+// as git sources.
+const SDKGoRepo = "github.com/joaoprofile/gofi-sdk-go"
+
+// SDKGoVersion is the gofi-sdk-go release the bundled Go docs (ai/sdk/go)
+// describe. Bump it together with those docs: CI checks them against the
+// source of this release.
+const SDKGoVersion = "v0.2.4"
+
+// DefaultSDKGoRef is the Go SDK source `gofi init` writes: the release the
+// bundled docs describe, so a new project's docs and toolchain checkout match.
+// The SDK tags each module (gofi/vX.Y.Z, netx/vX.Y.Z, ...) and has no root
+// tag; the orchestrator module's tag pins the release.
+const DefaultSDKGoRef = SDKGoRepo + "@gofi/" + SDKGoVersion
 
 // DefaultSourceRoot is the historical source folder name. It is the back-compat
 // fallback used when migrating older configs and when a config omits a path —
