@@ -1,6 +1,6 @@
 # base/secrets/ocivault
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/secrets/ocivault"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/secrets/ocivault"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -28,7 +28,8 @@ Provider is the reference provider name.
 func Register(cfg Config)
 ```
 
-Register enables the provider for secret references.
+Register enables the provider for secret references; call it once, a second
+call panics (see secrets.Register).
 
 ## ocivault.Config
 

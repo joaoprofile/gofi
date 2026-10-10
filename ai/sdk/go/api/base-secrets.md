@@ -1,6 +1,6 @@
 # base/secrets
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/secrets"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/secrets"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -49,7 +49,9 @@ IsRef reports whether s is a secret reference.
 func Register(provider string, o Opener)
 ```
 
-Register makes a provider available to references.
+Register makes a provider available to references. Like sql.Register, it
+panics when provider is empty, o is nil or the provider is already
+registered, so an imported package cannot silently replace a secret source.
 
 ### secrets.Resolve
 

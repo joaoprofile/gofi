@@ -1,6 +1,6 @@
 # iam/provider/password
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/password"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/password"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -46,6 +46,15 @@ func NeedsRehash(hash string) bool
 ```
 
 NeedsRehash reports whether hash should be replaced by a DefaultParams hash.
+
+### password.Supported
+
+```go
+func Supported(hash string) bool
+```
+
+Supported reports whether Verify can check hash (Argon2id within the
+accepted bounds, or bcrypt).
 
 ### password.Verify
 

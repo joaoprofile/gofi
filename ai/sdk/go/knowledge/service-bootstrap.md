@@ -1,7 +1,7 @@
 ---
 name: service-bootstrap
 description: Composition root do serviço Go — ordem do main (config → componentes → Build → wiring → ListenAndServe), split main/config/wire/iam, zero os.Getenv fora de config.go, workers como componentes, split de service CRUD vs Auth
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [main.go, bootstrap, composition root, config.go, wire.go, iam.go, LoadConfig, run, Build, ListenAndServe, os.Getenv, workers, service split, auth_service]
 ---
 

@@ -1,6 +1,6 @@
 # iam/types
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/types"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/types"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -24,7 +24,8 @@ type Claims struct {
 	// Extra carries project-specific custom claims that the SDK schema does not model.
 	// Round-tripped through the JWT payload under the "ext" key — preserved across
 	// Issue → Parse so the application can recover its domain claims after the SDK
-	// validates the token. Values must be JSON-serializable.
+	// validates the token. Values must be JSON-serializable. Readable by any
+	// bearer: never secrets (keep those in Session.SessionExtra).
 	Extra map[string]any `json:"ext,omitempty"`
 }
 ```
@@ -44,6 +45,7 @@ EventType identifies the type of security or authentication event emitted by the
 const (
 	EventLogin              EventType = "auth.login"
 	EventLoginFailed        EventType = "auth.login_failed"
+	EventLoginThrottled     EventType = "auth.login_throttled" // LoginThrottler lockout
 	EventIDPLogin           EventType = "auth.idp_login"
 	EventIDPLoginFailed     EventType = "auth.idp_login_failed"
 	EventNewUser            EventType = "auth.new_user" // first login via IDP
@@ -68,7 +70,10 @@ type ExternalIdentity struct {
 	Provider   string // "google", "github", "microsoft"
 	ExternalID string // the user's ID at the external provider
 	Email      string // email returned by the provider
-	LinkedAt   time.Time
+	// EmailVerified reports whether the provider asserted ownership of Email;
+	// never link to an existing account by an unverified email.
+	EmailVerified bool
+	LinkedAt      time.Time
 }
 ```
 
@@ -144,6 +149,10 @@ type Session struct {
 
 	AuthProvider string // "local", "google", "github", etc.
 
+	// AuthTime is the original login; kept across refresh rotations to
+	// enforce SecurityConfig.SessionMaxLifetime.
+	AuthTime time.Time
+
 	ExpiresAt  time.Time
 	CreatedAt  time.Time
 	LastUsedAt time.Time
@@ -157,10 +166,14 @@ type Session struct {
 	UserAgent string
 	DeviceID  string
 
-	// Extra carries project-specific session attributes that the SDK schema does not
-	// model (e.g. external provider tokens, domain role labels). Persisted by the
-	// SessionPort as part of the session blob — round-tripped on Save/Get.
-	Extra map[string]string `json:"extra,omitempty"`
+	// ClaimsExtra is re-issued as the "ext" claim of every access token of the
+	// session, readable by any bearer: never secrets. Stored under the legacy
+	// "extra" key so sessions saved before the split keep their claims.
+	ClaimsExtra map[string]string `json:"extra,omitempty"`
+
+	// SessionExtra carries server-side attributes (e.g. external provider
+	// tokens). Persisted with the session, never put in a token.
+	SessionExtra map[string]string `json:"session_extra,omitempty"`
 }
 ```
 

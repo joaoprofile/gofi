@@ -1,8 +1,8 @@
 ---
 name: absolute-rules
 description: Regras invioláveis de código Go com gofi — auditadas pelo gofi-qa em todo contexto
-sdk: v0.8.2
-keywords: [regras absolutas, logging, sqln, errs.AppError, repository, adapter, iam, netx.RespondError, os.Getenv, log.Fatal, componentes, ciclo de vida, cron]
+sdk: v0.2.4
+keywords: [regras absolutas, logging, sqln, errs.AppError, repository, adapter, iam, httpx.RespondError, os.Getenv, log.Fatal, componentes, ciclo de vida, cron]
 ---
 
 # Regras Absolutas — Go
@@ -17,8 +17,8 @@ review. **Auditadas pelo gofi-qa em todo contexto.**
 5. **Nunca** dois arquivos em `repository/` — interface e implementação no mesmo arquivo.
 6. **Nunca** adapters/factories em `repository/` — vão em `adapter/`.
 7. **IAM sobe pelo componente** `gofi/component/iam`: `iam.New(iam.Config{User, Tenant, RBAC, OnEvent})` — ele lê `JWT_*`/`*_TOKEN_TTL`/`OAUTH_GOOGLE_*` e falha o `Build` sem `JWT_SECRET`. **Nunca** montar o serviço IAM lendo variáveis à mão; `iam.FromService(svc)` só quando precisa de provider que o `DefaultConfig` não expressa. Ver `service-bootstrap.md` § IAM.
-8. **Erro de service sempre por `netx.RespondError(w, r, appErr)`** — inclusive 401/403, que nascem de `errs.RegisterUnauthorized`/`errs.RegisterForbidden`. `netx.Error(w, status, err)` só para erro que não é `AppError`. Nunca montar status HTTP à mão a partir de `appErr.Kind`.
-9. **Leitura só por `sqln.Find[T]` / `FindFromCriteria` / `FindWithFilter`** + `.List()`, `.UniqueResult()`, `.PagedList()`, `.All()`. **Nunca** `ExecuteListQuery(db)`/`ExecuteUniqueResultQuery(db)`/`ExecutePagedQuery(db)` passando `*sql.DB` (não existe `sqln.GetDB`).
+8. **Erro de service sempre por `httpx.RespondError(w, r, appErr)`** — inclusive 401/403, que nascem de `errs.RegisterUnauthorized`/`errs.RegisterForbidden`. `httpx.Error(w, status, err)` só para erro que não é `AppError`. Nunca montar status HTTP à mão a partir de `appErr.Kind`.
+9. **Leitura só por `sqln.Find[T]` / `FindFromCriteria` / `FindWithFilter`** + `.List()`, `.UniqueResult()`, `.PagedList()`, `.All()`. **Nunca** `ExecuteListQuery(db)`/`ExecuteUniqueResultQuery(db)`/`ExecutePagedQuery(db)` passando `*sql.DB` (o `sqln` não tem função `GetDB`).
 10. **Sempre** ler `memory/project.md` antes de qualquer ação (regra cross-agent).
 11. **Sempre** atualizar `memory/contexts/{contexto}.md` ao concluir uma fase.
 12. **Specs** ficam em `specs/{contexto}/` — **nunca** dentro de `.claude/`.

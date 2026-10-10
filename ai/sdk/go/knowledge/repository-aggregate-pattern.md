@@ -1,7 +1,7 @@
 ---
 name: repository-aggregate-pattern
 description: Mutação multi-tabela atômica — aggregate no model, transação no repository (sqln/transaction), helpers como métodos, bulk
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [repository, aggregate, transaction, tx, isolation, bulk, statement, helpers, receiver]
 ---
 

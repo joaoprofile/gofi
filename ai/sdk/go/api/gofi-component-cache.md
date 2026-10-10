@@ -1,6 +1,6 @@
 # gofi/component/cache
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/cache"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/cache"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -63,6 +63,15 @@ func (c *Component) Client() redis.UniversalClient
 ```
 
 Client returns the Redis client; nil before Build.
+
+### Component.InsecureTransports
+
+```go
+func (c *Component) InsecureTransports(env *environment.Environment) []gofi.InsecureTransport
+```
+
+InsecureTransports reports CACHE_USE_TLS=false towards a non-loopback
+Redis. Injected clients are the caller's and are not checked.
 
 ### Component.Name
 

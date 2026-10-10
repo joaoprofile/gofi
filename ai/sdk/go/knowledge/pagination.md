@@ -1,7 +1,7 @@
 ---
 name: pagination
 description: Paginação com sqln — PageRequest 0-indexed, defaults, Page[T] JSON, sort seguro, contagem, lista simples e streaming
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [pagination, PageRequest, Page, PagedList, WithPage, NewPageRequest, sort, List, All, WithCountQuery]
 ---
 

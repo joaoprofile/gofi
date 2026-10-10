@@ -1,6 +1,6 @@
 # msq/types
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/types"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq/types"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -10,6 +10,17 @@
 const (
 	DefaultConcurrency  = 20
 	DefaultPollInterval = 10 * time.Second
+	// DefaultVisibilityTimeout is the lease a received message gets on
+	// SQS, OCI Queue and NATS when ConsumeConfig.VisibilityTimeout is zero.
+	DefaultVisibilityTimeout = 30 * time.Second
+	// DefaultMaxDeliveries bounds how often the broker hands the same message
+	// to a handler that keeps nacking it (poison message).
+	DefaultMaxDeliveries = 10
+	// DefaultHandlerTimeout bounds one handler attempt when
+	// ConsumeConfig.HandlerTimeout is zero. The lease is renewed meanwhile, so
+	// it only has to outlast the slowest legitimate handler; its job is to
+	// keep a stuck handler from blocking shutdown forever.
+	DefaultHandlerTimeout = 5 * time.Minute
 )
 ```
 
@@ -38,6 +49,16 @@ var (
 CloudEvents binary-mode bindings.
 
 ## Funções
+
+### types.StableID
+
+```go
+func StableID(s string) uuid.UUID
+```
+
+StableID maps a transport message id (SQS MessageId, AMQP message-id,
+Kafka topic/partition/offset, ...) to a UUID: a UUID string is kept, any
+other value maps to the same name-based UUID every time.
 
 ### types.UnpackMessage
 
@@ -122,6 +143,11 @@ const (
 	EventProducerError       BrokerEventType = "producer_error"
 	EventConsumerError       BrokerEventType = "consumer_error"
 	EventMessageDeadLettered BrokerEventType = "message_dead_lettered"
+	// EventMessageRejected: the delivery limit was reached with no
+	// DeadLetterTopic, so the message was rejected (dropped or broker DLX).
+	EventMessageRejected BrokerEventType = "message_rejected"
+	// EventConsumerRestarting: a consumer failed and is restarted with backoff.
+	EventConsumerRestarting BrokerEventType = "consumer_restarting"
 )
 ```
 
@@ -138,8 +164,26 @@ type ConsumeConfig struct {
 	MaxRetries      int           // in-process retries after a Nack (0 = none)
 	RetryBackoff    time.Duration // first retry wait, doubled with jitter up to 30s (default 1s)
 	DeadLetterTopic string        // receives a copy once retries are exhausted; the original is then acked
-	HandlerTimeout  time.Duration // per-attempt handler deadline (0 = none)
+	HandlerTimeout  time.Duration // per-attempt handler deadline (0 = DefaultHandlerTimeout, negative = none)
 	InitialOffset   OffsetReset   // where to start when the group has no committed offset (Kafka)
+
+	// VisibilityTimeout is how long a received message stays leased to this
+	// consumer before the broker redelivers it (SQS and OCI visibility, NATS
+	// AckWait, Redis Streams claim idle). The lease is renewed every third of
+	// it while the message waits for and runs in its handler, so it bounds
+	// crash recovery, not handler time. 0 = DefaultVisibilityTimeout (Redis
+	// Streams: Config.ClaimIdle). NATS applies it when it creates the durable.
+	VisibilityTimeout time.Duration
+
+	// MaxDeliveries is how many times the broker may deliver a message that
+	// keeps failing. On the last one, a message still nacked goes to
+	// DeadLetterTopic when set; otherwise it is rejected (dropped, or routed
+	// by the broker's own dead-letter setup such as a RabbitMQ DLX) with an
+	// EventMessageRejected. Each delivery runs up to 1+MaxRetries attempts.
+	// 0 = DefaultMaxDeliveries with a DeadLetterTopic and unlimited without
+	// one, so a message is never dropped unless asked; negative = unlimited
+	// (defer to the broker, e.g. an SQS redrive policy).
+	MaxDeliveries int
 }
 ```
 
@@ -153,6 +197,31 @@ func DefaultConsumeConfig(topic string) ConsumeConfig
 ```
 
 DefaultConsumeConfig returns a ConsumeConfig with sensible defaults.
+
+### ConsumeConfig.DeliveryLimit
+
+```go
+func (c ConsumeConfig) DeliveryLimit() int
+```
+
+DeliveryLimit returns the effective MaxDeliveries; 0 means unlimited.
+
+### ConsumeConfig.DeliveryLimitReached
+
+```go
+func (c ConsumeConfig) DeliveryLimitReached(count int) bool
+```
+
+DeliveryLimitReached reports whether a message delivered count times has
+used its last delivery. An unknown count (0) never reaches the limit.
+
+### ConsumeConfig.EffectiveHandlerTimeout
+
+```go
+func (c ConsumeConfig) EffectiveHandlerTimeout() time.Duration
+```
+
+EffectiveHandlerTimeout returns the handler deadline; 0 means none.
 
 ## types.Encoding
 
@@ -186,6 +255,12 @@ type Message struct {
 	Value     json.RawMessage   `json:"value"`
 	Timestamp time.Time         `json:"timestamp"`
 	Headers   map[string]string `json:"headers,omitempty"`
+
+	// DeliveryCount is how many times the broker has delivered this message,
+	// this delivery included (1 = first). It is set by the consumer from the
+	// broker's own counter and is 0 when the broker does not track it. It
+	// never travels on the wire.
+	DeliveryCount int `json:"-"`
 }
 ```
 
@@ -203,7 +278,9 @@ func DecodeEnvelope(body []byte) Message
 ```
 
 DecodeEnvelope reads a JSON envelope. Bodies that are not an envelope
-(foreign producers) are delivered as the raw Value.
+(foreign producers) are delivered as the raw Value with a zero Id: the
+provider sets one from the transport (see StableID) so that it stays the
+same across redeliveries.
 
 ### types.NewMessage
 
@@ -298,6 +375,11 @@ const (
 	Ack    Result = iota // message processed: commit offset / delete from queue
 	Nack                 // processing failed: requeue / retry
 	Ignore               // discarded on purpose: removed from the queue, no requeue
+	// Reject gives up on a message that cannot be processed: it is removed
+	// without requeue and, where the broker has its own dead-letter route
+	// (RabbitMQ DLX, NATS terminate advisory), handed to it. The pipeline
+	// returns it once MaxDeliveries is reached without a DeadLetterTopic.
+	Reject
 )
 ```
 

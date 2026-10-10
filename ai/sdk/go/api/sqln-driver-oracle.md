@@ -1,6 +1,6 @@
 # sqln/driver/oracle
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/oracle"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/oracle"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -22,7 +22,10 @@ Requires godror or go-oci8 in go.mod.
 func (Driver) DSN(s connection.Settings) string
 ```
 
-DSN builds a go-ora URL: oracle://user:pass@host:port/service.
+DSN builds a go-ora URL, oracle://user:pass@host:port/service, with every
+part escaped. TLS follows s.EffectiveSSLMode(): disable → none, require →
+SSL=true without verification, anything else → SSL=true with
+"SSL VERIFY"=true (verify-full). Custom CAs go in a go-ora wallet.
 
 ### Driver.Dialect
 
@@ -47,6 +50,16 @@ func (Driver) Open(cfg connection.Config) (*sql.DB, error)
 ```go
 func (Driver) ParseError(err error) error
 ```
+
+ParseError hides the server message behind a generic one (see connection.Error).
+
+### Driver.ValidateSettings
+
+```go
+func (Driver) ValidateSettings(s connection.Settings) error
+```
+
+ValidateSettings rejects what the DSN cannot express.
 
 ## oracle.OracleDialect
 

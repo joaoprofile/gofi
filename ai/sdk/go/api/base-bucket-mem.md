@@ -1,11 +1,58 @@
 # base/bucket/mem
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/bucket/mem"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/bucket/mem"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
 Package mem implements bucket.Store in memory, for tests and local runs.
 Importing it registers the "mem" provider for bucket.Open.
+
+## mem.Manager
+
+```go
+type Manager struct {
+	// contains filtered or unexported fields
+}
+```
+
+Manager is an in-memory bucket.Manager; each bucket is a Store. Safe for
+concurrent use.
+
+### mem.NewManager
+
+```go
+func NewManager() *Manager
+```
+
+NewManager returns a Manager without buckets.
+
+### Manager.CreateBucket
+
+```go
+func (m *Manager) CreateBucket(_ context.Context, name string, _ bucket.CreateOptions) error
+```
+
+CreateBucket ignores opts.Region.
+
+### Manager.DeleteBucket
+
+```go
+func (m *Manager) DeleteBucket(ctx context.Context, name string, opts bucket.DeleteOptions) error
+```
+
+### Manager.ListBuckets
+
+```go
+func (m *Manager) ListBuckets(context.Context) ([]bucket.BucketInfo, error)
+```
+
+ListBuckets returns the buckets in name order; Region is empty.
+
+### Manager.Open
+
+```go
+func (m *Manager) Open(_ context.Context, name string) (bucket.Store, error)
+```
 
 ## mem.Store
 
@@ -39,6 +86,12 @@ All yields objects in key order.
 func (s *Store) Delete(_ context.Context, key string) error
 ```
 
+### Store.DeleteMany
+
+```go
+func (s *Store) DeleteMany(_ context.Context, keys []string) error
+```
+
 ### Store.Get
 
 ```go
@@ -63,5 +116,11 @@ PresignGet returns a mem:// URL; it is not downloadable.
 
 ```go
 func (s *Store) Put(_ context.Context, in bucket.PutInput) error
+```
+
+### Store.Stat
+
+```go
+func (s *Store) Stat(_ context.Context, key string) (bucket.Object, error)
 ```
 

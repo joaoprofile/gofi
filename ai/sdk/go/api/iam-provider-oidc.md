@@ -1,11 +1,26 @@
 # iam/provider/oidc
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/oidc"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/oidc"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
 Package oidc implements a generic IDPAuthPort for any OIDC-compliant provider.
 Supports PKCE (RFC 7636 S256), id_token validation via JWKS, and automatic discovery.
+
+## Variáveis
+
+```go
+var ErrInsecureEndpoint = errors.New("iam/oidc: endpoint must use https")
+```
+
+ErrInsecureEndpoint is returned for a token or JWKS endpoint that is not
+https (plain http is accepted only on loopback, for tests).
+
+```go
+var ErrRedirectURIMismatch = errors.New("iam/oidc: redirect_uri does not match the configured RedirectURI")
+```
+
+ErrRedirectURIMismatch is returned when the redirect URI differs from Config.RedirectURI.
 
 ## oidc.Config
 
@@ -17,7 +32,8 @@ type Config struct {
 
 	ClientID     string
 	ClientSecret string
-	RedirectURI  string
+	// RedirectURI is used when the flow input has none; a different one is rejected.
+	RedirectURI string
 
 	// Scopes beyond the minimum set (openid email profile).
 	ExtraScopes []string
@@ -33,6 +49,10 @@ type Config struct {
 
 	// JWKSCacheTTL defines how long JWKS keys are cached. Default: 1 hour.
 	JWKSCacheTTL time.Duration
+
+	// ClockSkew is the leeway for the id_token exp/iat/nbf. Default: 1 minute;
+	// capped at 5 minutes.
+	ClockSkew time.Duration
 
 	// HTTPClient allows injecting a custom client useful for tests.
 	HTTPClient *http.Client
@@ -79,5 +99,23 @@ HandleCallback processes the OIDC callback: validates state, exchanges the code,
 
 ```go
 func (p *Provider) ProviderName() string
+```
+
+## oidc.TokenEndpointError
+
+```go
+type TokenEndpointError struct {
+	Status int
+	Body   string
+}
+```
+
+TokenEndpointError is a non-200 token response. Error() carries only the
+status, safe to surface; Body (truncated) is for server-side logs only.
+
+### TokenEndpointError.Error
+
+```go
+func (e *TokenEndpointError) Error() string
 ```
 

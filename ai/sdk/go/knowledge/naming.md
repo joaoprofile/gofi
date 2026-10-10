@@ -1,7 +1,7 @@
 ---
 name: naming
 description: Convenções de nome em Go — arquivos, pacotes, tipos, receivers, erros, SQL, tags db/json, códigos de moeda/país, endpoints, imports do SDK
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [naming, nomes, snake_case, camelCase, PascalCase, tags db, tags json, currencyCode, countryCode, imports, ErrContextAction]
 ---
 

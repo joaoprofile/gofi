@@ -1,6 +1,6 @@
 # iam
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -27,7 +27,8 @@ func NewDefault(cfg DefaultConfig) (*core.IAMService, error)
 ```
 
 NewDefault builds an IAMService with built-in providers from DefaultConfig.
-Selects Redis if RedisAddr is configured, otherwise uses in-memory with TTL.
+Sessions, login throttling and single-use tenant tickets live in Redis when
+RedisAddr is configured (one shared client), in memory otherwise.
 
 ## iam.Config
 

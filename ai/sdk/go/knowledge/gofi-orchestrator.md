@@ -1,7 +1,7 @@
 ---
 name: gofi-orchestrator
 description: Orquestrador gofi — gofi.New/With/Build/ListenAndServe/Shutdown, componentes por estágio, Runner, Runtime e componente próprio
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [gofi.New, With, Build, ListenAndServe, Shutdown, Component, Runner, Stage, Runtime, OnClose, AddHealthCheck, Shared, componentes, ciclo de vida]
 ---
 
@@ -70,7 +70,7 @@ Regras:
   `Handlers`/`Use`/`UseAuth` podem ser chamados **depois** do `Build` (rotas que
   dependem de handle já iniciado). `UseAuth` antes de `Handlers`: a rota pega o
   middleware de auth no momento em que é adicionada.
-- Health: `httpserver.New(":8080", &netx.WSConfig{Health: &netx.HealthConfig{}})`
+- Health: `httpserver.New(":8080", &httpx.WSConfig{Health: &httpx.HealthConfig{}})`
   serve `/livez` e `/readyz` com os checks registrados pelos componentes
   iniciados **antes** do servidor (database, réplica, cache).
 

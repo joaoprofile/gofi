@@ -1,6 +1,6 @@
 # sqln/connection
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/connection"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/connection"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -23,6 +23,26 @@ const (
 Shared error message constants used across sqln subpackages.
 
 ```go
+const (
+	SSLDisable    = "disable"     // plaintext
+	SSLAllow      = "allow"       // plaintext, TLS only if the server demands it (postgres)
+	SSLPrefer     = "prefer"      // TLS when the server offers it, else plaintext
+	SSLRequire    = "require"     // TLS without verifying the server identity
+	SSLVerifyCA   = "verify-ca"   // TLS, certificate chain verified
+	SSLVerifyFull = "verify-full" // TLS, certificate chain and host name verified
+)
+```
+
+SSL modes accepted by Settings.SSLMode. They follow libpq's names; each
+driver maps them to its own options and rejects the ones it cannot honour.
+
+```go
+const DefaultQueryTimeout = 30 * time.Second
+```
+
+DefaultQueryTimeout bounds queries when Config.QueryTimeout is zero.
+
+```go
 const SqlTxContextKey txContextKey = "sqlTxContext"
 ```
 
@@ -32,6 +52,12 @@ and Query read it to participate in the same transaction automatically.
 With several databases use TxFor, which also knows which pool owns it.
 
 ## Variáveis
+
+```go
+var ErrInvalidSettings = errors.New("sqln: invalid connection settings")
+```
+
+ErrInvalidSettings is wrapped by every Settings validation failure.
 
 ```go
 var ErrPasswordFuncUnsupported = errors.New("sqln: Config.Password is not supported by this driver")
@@ -48,6 +74,24 @@ func AsPgError(err error) (*pgconn.PgError, bool)
 ```
 
 AsPgError extracts the PostgreSQL error from err's chain.
+
+### connection.BuildDSN
+
+```go
+func BuildDSN(d Driver, s Settings) (string, error)
+```
+
+BuildDSN validates s, generically and through d when it implements
+SettingsValidator, and returns d's DSN for it.
+
+### connection.Cause
+
+```go
+func Cause(err error) error
+```
+
+Cause returns the driver error behind err's *Error, for logs; other
+errors are returned as is.
 
 ### connection.DB
 
@@ -81,7 +125,8 @@ func LogPostgresError(err error)
 ```
 
 LogPostgresError logs database errors in structured form, with code,
-table and constraint for PostgreSQL errors.
+table and constraint for PostgreSQL errors. Detail and Where quote row
+values (e.g. the duplicated key), so they are logged at debug level only.
 
 ### connection.LogQueryDuration
 
@@ -138,6 +183,15 @@ func TxFrom(ctx context.Context) (*sql.Tx, bool)
 
 TxFrom returns the transaction carried by ctx (see transaction.Execute).
 
+### connection.WithTimeout
+
+```go
+func WithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc)
+```
+
+WithTimeout returns ctx bounded by d, unless ctx already has a deadline or
+d is not positive. Always call cancel.
+
 ### connection.WithTx
 
 ```go
@@ -146,6 +200,15 @@ func WithTx(ctx context.Context, db *sql.DB, tx *sql.Tx) context.Context
 
 WithTx returns ctx carrying tx opened on db. Outer transactions on other
 pools stay available through TxFor.
+
+### connection.WrapError
+
+```go
+func WrapError(op string, err error) error
+```
+
+WrapError wraps a driver error returned by op in an *Error; nil and errors
+already wrapped are returned as is.
 
 ## connection.Config
 
@@ -160,8 +223,12 @@ type Config struct {
 	Pool    PoolConfig
 	// Password, when set, is called for every new physical connection and
 	// overrides the DSN password: short-lived IAM tokens (RDS, Aurora) are
-	// fetched as the pool grows. Supported by the postgres driver.
+	// fetched as the pool grows. Supported by the postgres driver, which
+	// requires sslmode verify-ca or verify-full with it.
 	Password func(ctx context.Context) (string, error)
+	// QueryTimeout bounds each query run by sqln whose context has no
+	// deadline. Zero uses DefaultQueryTimeout; negative disables it.
+	QueryTimeout time.Duration
 }
 ```
 
@@ -193,6 +260,8 @@ func NewRaw(db *sql.DB, d Driver) *Connection
 
 NewRaw builds a Connection from an existing *sql.DB and a Dialect.
 Useful when integrating with legacy code that manages the pool itself.
+Its ID is random: the pool's database is unknown, so cached results are not
+shared with other connections or processes.
 
 ### Connection.Close
 
@@ -214,6 +283,25 @@ DB returns the primary pool.
 func (c *Connection) Dialect() driver.Dialect
 ```
 
+### Connection.ID
+
+```go
+func (c *Connection) ID() string
+```
+
+ID identifies the database this connection reaches, so results cached for
+one database are never served to another. It is a hash of the driver and
+DSN (stable across processes sharing a cache); NewRaw gets a random one.
+
+### Connection.QueryTimeout
+
+```go
+func (c *Connection) QueryTimeout() time.Duration
+```
+
+QueryTimeout is the bound sqln applies to queries whose context has no
+deadline (see Config.QueryTimeout); a nil Connection has the default.
+
 ### Connection.ReadDB
 
 ```go
@@ -221,6 +309,14 @@ func (c *Connection) ReadDB() *sql.DB
 ```
 
 ReadDB returns the replica pool, or the primary when none is configured.
+
+### Connection.WithQueryTimeout
+
+```go
+func (c *Connection) WithQueryTimeout(ctx context.Context) (context.Context, context.CancelFunc)
+```
+
+WithQueryTimeout bounds ctx by QueryTimeout (see WithTimeout).
 
 ## connection.ConnectionObserver
 
@@ -249,9 +345,11 @@ type Driver interface {
 	Name() DriverName
 	// DSN assembles the driver-specific connection string from s. Each driver
 	// owns its own format (key-value for postgres, URL for sqlserver, …) so new
-	// databases can be added without a central switch.
+	// databases can be added without a central switch. Every value is escaped;
+	// use BuildDSN to also reject invalid settings.
 	DSN(s Settings) string
 	Open(cfg Config) (*sql.DB, error)
+	// ParseError wraps a driver error so its message stays generic (see WrapError).
 	ParseError(err error) error
 	Dialect() driver.Dialect
 }
@@ -276,6 +374,40 @@ const (
 	DriverOracle    DriverName = "oracle"
 	DriverSQLServer DriverName = "sqlserver"
 )
+```
+
+## connection.Error
+
+```go
+type Error struct {
+	Op  string // query, exec, prepare, scan
+	Err error
+}
+```
+
+Error hides a database error behind a generic message: driver messages
+carry table, column and constraint names and, in details, row values that
+must not reach API clients. errors.As/Is still reach the driver error
+(e.g. *pgconn.PgError, sql.ErrNoRows) and SQLState keeps the code.
+
+### Error.Error
+
+```go
+func (e *Error) Error() string
+```
+
+### Error.SQLState
+
+```go
+func (e *Error) SQLState() string
+```
+
+SQLState returns the SQLSTATE code of the driver error, or "".
+
+### Error.Unwrap
+
+```go
+func (e *Error) Unwrap() error
 ```
 
 ## connection.Option
@@ -304,6 +436,11 @@ type PoolConfig struct {
 	MaxIdleTime time.Duration
 }
 ```
+
+PoolConfig bounds the pool. A zero field takes its DefaultPoolConfig value,
+so a zero PoolConfig never means database/sql's unlimited connections and
+infinite lifetime. A negative MaxOpenConns or MaxConnLifeTime explicitly
+removes that limit; a negative MaxIdleConns keeps no idle connections.
 
 ### connection.DefaultPoolConfig
 
@@ -342,7 +479,19 @@ type Settings struct {
 	User     string
 	Password string
 	Name     string
-	SSLMode  string
+	// SSLMode selects transport security (see the SSL* constants). Empty
+	// means verify-full, except on a loopback host or unix socket, where it
+	// means disable so local development works without certificates.
+	SSLMode string
+	// SSLRootCert is the PEM file of the CAs that sign the server
+	// certificate (e.g. the RDS bundle); empty uses the system roots.
+	SSLRootCert string
+	// SSLCert and SSLKey are the PEM client certificate and key for mutual TLS.
+	SSLCert string
+	SSLKey  string
+	// StatementTimeout makes the server cancel statements that run longer
+	// (postgres statement_timeout); zero keeps the server default.
+	StatementTimeout time.Duration
 }
 ```
 
@@ -350,4 +499,61 @@ Settings holds the structured connection parameters that a Driver assembles
 into its driver-specific DSN. It decouples DSN construction from any single
 configuration source: gofi's config.Database fills it from the DATABASE_*
 environment variables, but callers can build it by hand just as well.
+
+### Settings.CheckSSLMode
+
+```go
+func (s Settings) CheckSSLMode(supported ...string) error
+```
+
+CheckSSLMode fails when the effective SSL mode is not in supported.
+
+### Settings.EffectiveSSLMode
+
+```go
+func (s Settings) EffectiveSSLMode() string
+```
+
+EffectiveSSLMode is the SSL mode drivers apply: SSLMode, or its default
+when empty (disable on a local host, verify-full elsewhere).
+
+### Settings.Insecure
+
+```go
+func (s Settings) Insecure() bool
+```
+
+Insecure reports whether the connection may run in plaintext or without
+verifying the server identity: any effective mode other than verify-ca and
+verify-full, unknown modes included. Production guards should refuse it
+unless IsLocal (e.g. a sidecar proxy that owns TLS).
+
+### Settings.IsLocal
+
+```go
+func (s Settings) IsLocal() bool
+```
+
+IsLocal reports whether Host is empty, a loopback name or address, or a
+unix socket directory.
+
+### Settings.Validate
+
+```go
+func (s Settings) Validate() error
+```
+
+Validate rejects values that no driver can place in a DSN safely: control
+characters or whitespace, and URL or DSN delimiters in Host and Name.
+
+## connection.SettingsValidator
+
+```go
+type SettingsValidator interface {
+	ValidateSettings(s Settings) error
+}
+```
+
+SettingsValidator is implemented by drivers with their own constraints on
+Settings (supported SSL modes, options); BuildDSN calls it.
 

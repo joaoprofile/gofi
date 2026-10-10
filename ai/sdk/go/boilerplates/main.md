@@ -1,7 +1,7 @@
 ---
 name: main
 description: Esqueleto do main.go de um serviço gofi — config, componentes, Build, wiring depois do Build, ListenAndServe; variantes job, sem auth, mensageria e worker
-sdk: v0.8.2
+sdk: v0.2.4
 ---
 
 # Boilerplate — main.go
@@ -25,7 +25,7 @@ import (
 	"github.com/joaoprofile/gofi-sdk-go/gofi/component/database"
 	"github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver"
 	"github.com/joaoprofile/gofi-sdk-go/gofi/component/observability"
-	"github.com/joaoprofile/gofi-sdk-go/netx"
+	"github.com/joaoprofile/gofi-sdk-go/netx/httpx"
 	_ "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres" // DATABASE_DRIVER=postgres
 )
 
@@ -46,9 +46,9 @@ func run() error {
 	}
 
 	identity := newIdentity(cfg) // iam.go
-	server := httpserver.New(":8080", &netx.WSConfig{
+	server := httpserver.New(":8080", &httpx.WSConfig{
 		AllowedOrigins: cfg.AllowedOrigins,
-		Health:         &netx.HealthConfig{},
+		Health:         &httpx.HealthConfig{},
 	})
 
 	svc, err := gofi.New(serviceName).
@@ -118,7 +118,7 @@ LoadConfig → componentes no With → Build → repository → service → hand
 
 ## Variante — sem autenticação
 
-Sem `identity`; handlers só com `netx.PublicRoutes` e `server.Handlers(...)`
+Sem `identity`; handlers só com `httpx.PublicRoutes` e `server.Handlers(...)`
 direto no `wire`.
 
 ## Variante — job (sem HTTP)

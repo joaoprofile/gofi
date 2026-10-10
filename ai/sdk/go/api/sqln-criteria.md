@@ -1,6 +1,6 @@
 # sqln/criteria
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/criteria"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/criteria"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -13,20 +13,36 @@ const (
 )
 ```
 
+## Variáveis
+
+```go
+var ErrInvalidField = errors.New("criteria: invalid field")
+```
+
+ErrInvalidField is returned by Build when a predicate or order field is not
+a column reference and was not marked Raw.
+
+```go
+var ErrInvalidValue = errors.New("criteria: invalid value")
+```
+
+ErrInvalidValue is returned by Build when a predicate value has the wrong shape.
+
 ## Funções
 
 ### criteria.BuildClause
 
 ```go
-func BuildClause(predicates []Predicate, d driver.FilterDialect) (string, []any)
+func BuildClause(predicates []Predicate, d driver.FilterDialect) (string, []any, error)
 ```
 
 BuildClause compiles a predicate slice into a SQL WHERE fragment and its bound parameters.
+It fails with ErrInvalidField when a field is not a column reference.
 
 ### criteria.BuildClauseAfter
 
 ```go
-func BuildClauseAfter(args []any, predicates []Predicate, d driver.FilterDialect) (string, []any)
+func BuildClauseAfter(args []any, predicates []Predicate, d driver.FilterDialect) (string, []any, error)
 ```
 
 BuildClauseAfter numbers placeholders after args, the parameters the
@@ -38,10 +54,15 @@ surrounding query already binds, and returns args followed by the new ones.
 type Order struct {
 	Field     string
 	Direction string
+	// contains filtered or unexported fields
 }
 ```
 
 Order defines a sort expression for a query (field + direction).
+
+Field must be a column reference (see driver.IsIdentifier), so it may come
+from a request; anything else fails Build with ErrInvalidField. Mark a
+trusted SQL expression with Raw.
 
 ### criteria.Asc
 
@@ -59,6 +80,15 @@ func Desc(field string) Order
 
 Desc creates a descending ORDER BY expression.
 
+### Order.Raw
+
+```go
+func (o Order) Raw() Order
+```
+
+Raw marks Field as a trusted SQL expression (e.g. COUNT(*)) written as is.
+Trusted input only — never user data.
+
 ## criteria.Predicate
 
 ```go
@@ -69,6 +99,10 @@ type Predicate struct {
 
 Predicate represents a single WHERE/HAVING condition or a logical connector (AND/OR).
 Use the constructor functions below — never build Predicate literals directly.
+
+The field must be a column reference (col, t.col, "Col"; see driver.IsIdentifier):
+it is written into the SQL text, so anything else fails Build with ErrInvalidField.
+Mark a trusted SQL expression such as COUNT(*) with Raw.
 
 ### criteria.And
 
@@ -121,7 +155,7 @@ func DateBetween(field string, from, to time.Time) Predicate
 ```
 
 DateBetween produces field BETWEEN $from AND $to.
-Panics if either value is zero or if from is after to.
+Build fails when either value is zero or from is after to.
 
 ### criteria.DateEq
 
@@ -290,6 +324,26 @@ func Or() Predicate
 
 Or inserts an OR connector between adjacent predicates.
 
+### Predicate.Raw
+
+```go
+func (p Predicate) Raw() Predicate
+```
+
+Raw marks the field as a trusted SQL expression (e.g. COUNT(*), lower(u.name))
+written as is. Trusted input only — never user data.
+
+### Predicate.Substring
+
+```go
+func (p Predicate) Substring() Predicate
+```
+
+Substring makes a Contains, NotContains, Like or NotLike value literal
+text matched anywhere in the field: its wildcards are escaped for the
+dialect, it is wrapped in %…% and ESCAPE '!' is appended. Use it for user
+input, so "%" or "_" cannot turn a search into a full scan pattern.
+
 ## criteria.Query
 
 ```go
@@ -316,11 +370,15 @@ Example (direct use):
 	        criteria.In("u.role", []string{"admin", "moderator"}),
 	    ).
 	    GroupBy("u.id", "u.name").
-	    Having(criteria.Gt("COUNT(o.id)", 0)).
+	    Having(criteria.Gt("COUNT(o.id)", 0).Raw()).
 	    OrderBy(criteria.Asc("u.name"), criteria.Desc("u.id")).
 	    Limit(15).Offset(0)
 
-	sql, params := q.Build(dialect)
+	sql, params, err := q.Build(dialect)
+
+Table, alias, join ON, Select and GroupBy are written verbatim: trusted input
+only, never user data. Predicate and order fields are validated as column
+references (see Predicate) and may come from a request.
 
 Example (paged via manager — ORDER BY goes in PageRequest, not here):
 
@@ -337,11 +395,12 @@ func From(table, alias string) *Query
 
 From creates a new Query rooted at the given table with an optional alias.
 Pass an empty string for alias when none is needed.
+Both are written verbatim: trusted input only, never user data.
 
 ### Query.Build
 
 ```go
-func (q *Query) Build(d driver.FilterDialect) (string, []any)
+func (q *Query) Build(d driver.FilterDialect) (string, []any, error)
 ```
 
 Build compiles the full query (SELECT … ORDER BY … LIMIT … OFFSET …) into a
@@ -349,11 +408,13 @@ SQL string and the corresponding bound parameters, using the provided dialect
 for placeholder format and LIKE behaviour.
 
 Pass the returned parameters directly to database/sql query functions.
+It fails with ErrInvalidField when a predicate or order field is not a column
+reference, so a request-supplied name never reaches the SQL text.
 
 ### Query.BuildBase
 
 ```go
-func (q *Query) BuildBase(d driver.FilterDialect) (string, []any)
+func (q *Query) BuildBase(d driver.FilterDialect) (string, []any, error)
 ```
 
 BuildBase compiles the query without ORDER BY, LIMIT, and OFFSET.
@@ -367,6 +428,7 @@ func (q *Query) GroupBy(fields ...string) *Query
 ```
 
 GroupBy appends fields to the GROUP BY clause.
+Fields are written verbatim: trusted input only, never user data.
 
 ### Query.Having
 
@@ -384,7 +446,7 @@ func (q *Query) Join(table, alias, on string) *Query
 ```
 
 Join adds an INNER JOIN clause.
-alias may be empty.
+alias may be empty. table, alias and on are written verbatim: trusted input only, never user data.
 
 ### Query.LeftJoin
 
@@ -392,7 +454,7 @@ alias may be empty.
 func (q *Query) LeftJoin(table, alias, on string) *Query
 ```
 
-LeftJoin adds a LEFT JOIN clause.
+LeftJoin adds a LEFT JOIN clause; arguments are trusted input only, as in Join.
 
 ### Query.LeftJoinLateral
 
@@ -404,6 +466,7 @@ LeftJoinLateral adds a LEFT JOIN LATERAL clause over a subquery correlated with 
 outer row. The ON condition is always TRUE: a lateral subquery expresses its own
 correlation in its WHERE, so an outer ON would only ever be redundant.
 subquery is the parenthesized SELECT, e.g. "(SELECT x FROM t WHERE t.id = p.id LIMIT 1)".
+subquery and alias are written verbatim: trusted input only, never user data.
 
 ### Query.Limit
 
@@ -430,7 +493,8 @@ func (q *Query) OrderBy(orders ...Order) *Query
 ```
 
 OrderBy appends sort expressions.
-Use criteria.Asc(field) and criteria.Desc(field) as constructors.
+Use criteria.Asc(field) and criteria.Desc(field) as constructors; fields that
+are not column references fail Build unless marked Raw.
 
 ### Query.RightJoin
 
@@ -438,7 +502,7 @@ Use criteria.Asc(field) and criteria.Desc(field) as constructors.
 func (q *Query) RightJoin(table, alias, on string) *Query
 ```
 
-RightJoin adds a RIGHT JOIN clause.
+RightJoin adds a RIGHT JOIN clause; arguments are trusted input only, as in Join.
 
 ### Query.Select
 
@@ -448,6 +512,7 @@ func (q *Query) Select(fields ...string) *Query
 
 Select specifies the columns included in the SELECT clause.
 If never called, SELECT * is generated.
+Fields are SQL expressions written verbatim: trusted input only, never user data.
 
 ### Query.Where
 

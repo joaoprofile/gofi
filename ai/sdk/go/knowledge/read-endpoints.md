@@ -2,7 +2,7 @@
 name: read-endpoints
 description: Endpoints de leitura para o front — handler bind+validate, repo com criteria+cache+paginação, normalização no repository
 type: feedback
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [read-endpoint, GET, BindQueryParamsToStruct, criteria, FindFromCriteria, PagedList, WithCache, pagination]
 ---
 
@@ -11,7 +11,7 @@ keywords: [read-endpoint, GET, BindQueryParamsToStruct, criteria, FindFromCriter
 Padrão para qualquer rota `GET` de listagem/detalhe servida ao front. Mantém o
 handler fino, o service só com regra de negócio, e o "como consultar" (SQL,
 paginação, cache, normalização de query) no repository. API:
-`.claude/sdk/go/api/netx.md`, `sqln.md`, `sqln-criteria.md`.
+`.claude/sdk/go/api/netx-httpx.md`, `sqln.md`, `sqln-criteria.md`.
 
 ## Handler — bind em struct + validate, nunca `strconv` cru
 
@@ -21,12 +21,12 @@ validação, erro engolido).
 **Padrão:** DTO com tags `form` (bind) + `validate` (shape):
 ```go
 var req model.{Ctx}ListRequest
-if err := netx.BindQueryParamsToStruct(r, w, &req); err != nil {
-    netx.Error(w, http.StatusBadRequest, err)
+if err := httpx.BindQueryParamsToStruct(r, w, &req); err != nil {
+    httpx.Error(w, http.StatusBadRequest, err)
     return
 }
 if err := req.Validate(); err != nil {
-    netx.Error(w, http.StatusBadRequest, err)
+    httpx.Error(w, http.StatusBadRequest, err)
     return
 }
 req.TenantID = tenantFromCtx(r) // do token, nunca da query
@@ -42,7 +42,7 @@ type {Ctx}ListRequest struct {
 func (r {Ctx}ListRequest) Validate() error { return v.ValidateStruct(r) } // v = validator.New()
 ```
 
-- `netx.BindQueryParamsToStruct` casa pela tag `form` (fallback: nome em
+- `httpx.BindQueryParamsToStruct` casa pela tag `form` (fallback: nome em
   minúsculas) e **não roda** as tags `validate` — daí o `Validate()`.
 - **Tenancy `form:"-"`**, setada do auth depois do bind — senão
   `?tenantid=outro` vaza entre tenants.

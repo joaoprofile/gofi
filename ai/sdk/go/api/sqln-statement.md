@@ -1,6 +1,6 @@
 # sqln/statement
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/statement"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/statement"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 

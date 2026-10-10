@@ -1,7 +1,7 @@
 ---
 name: dynamic-filter
 description: Filtro dinâmico em Go — allowlist sqln.FilterMapping, BuildQuery, NewPageRequestFilter, tenant como argumento, envelope sqln.Filters
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [dynamic-filter, FilterMapping, BuildQuery, FindWithFilter, NewPageRequestFilter, ErrInvalidFilter, Filters, tenant]
 ---
 
@@ -78,18 +78,18 @@ var {Ctx}FilterMapping = sqln.FilterMapping{
 
 ```go
 func (h *{Ctx}Handler) getSchema(w http.ResponseWriter, _ *http.Request) {
-    netx.Response(w, http.StatusOK, model.{Ctx}FilterMapping)
+    httpx.Response(w, http.StatusOK, model.{Ctx}FilterMapping)
 }
 
 func (h *{Ctx}Handler) getDynamicQuery(w http.ResponseWriter, r *http.Request) {
     tenantID, ok := tenantFromCtx(r) // do token, nunca do body
     if !ok {
-        netx.Error(w, http.StatusUnauthorized, errUnauthorized)
+        httpx.Error(w, http.StatusUnauthorized, errUnauthorized)
         return
     }
     var filters sqln.Filters
-    if err := netx.ParseRequestBody(w, r, &filters); err != nil {
-        netx.Error(w, http.StatusBadRequest, err)
+    if err := httpx.ParseRequestBody(w, r, &filters); err != nil {
+        httpx.Error(w, http.StatusBadRequest, err)
         return
     }
     if len(filters.Filters) == 0 { // default só quando o cliente não filtrou
@@ -97,10 +97,10 @@ func (h *{Ctx}Handler) getDynamicQuery(w http.ResponseWriter, r *http.Request) {
     }
     page, appErr := h.svc.GetByDynamicQuery(r.Context(), tenantID, &filters)
     if appErr.Exists() {
-        netx.RespondError(w, r, appErr)
+        httpx.RespondError(w, r, appErr)
         return
     }
-    netx.Response(w, http.StatusOK, page)
+    httpx.Response(w, http.StatusOK, page)
 }
 ```
 

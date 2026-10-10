@@ -1,7 +1,7 @@
 ---
 name: worker-bootstrap
 description: Background worker (cron, ticker, listener) como gofi.Runner dono do próprio ciclo de vida — main só declara no With; Start monta dependências, Run bloqueia, Stop drena
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [worker, cron, cronjob, Runner, gofi.Runner, background, ciclo de vida, Start, Run, Stop, feature flag, multi-worker, timezone, tzdata]
 ---
 

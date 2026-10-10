@@ -1,6 +1,6 @@
 # gofi/component/iam
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/iam"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/iam"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -34,8 +34,19 @@ func New(cfg ...Config) *Component
 
 New builds the service with iam.NewDefault from the environment (see
 config.IAM): JWT_SECRET (required, 32+ bytes), JWT_ISSUER, ACCESS_TOKEN_TTL,
-REFRESH_TOKEN_TTL, JWT key rotation, OAUTH_GOOGLE_* and, with
-CACHE_TYPE=redis, Redis sessions (in memory otherwise).
+REFRESH_TOKEN_TTL, JWT key rotation, OAUTH_GOOGLE_*, IAM_LOGIN_MAX_ATTEMPTS,
+IAM_LOGIN_LOCKOUT and, with CACHE_TYPE=redis, Redis sessions, login
+throttling and single-use tenant tickets. Without Redis that state is kept
+in memory: a warning in dev/test, an error in stage/prod.
+
+### Component.InsecureTransports
+
+```go
+func (c *Component) InsecureTransports(env *environment.Environment) []gofi.InsecureTransport
+```
+
+InsecureTransports reports the Redis session store in plaintext when
+CACHE_TYPE=redis. Injected services are not checked.
 
 ### Component.Name
 
@@ -80,5 +91,6 @@ type Config struct {
 
 Config holds what the environment cannot provide. Every field is optional:
 without User and Tenant the service only validates tokens and revokes
-sessions (a resource server); with them it also logs users in.
+sessions (a resource server); with them it also logs users in, and
+SelectTenant requires the ticket returned by Authenticate.
 

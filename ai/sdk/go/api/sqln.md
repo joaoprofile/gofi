@@ -1,6 +1,6 @@
 # sqln
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -99,6 +99,12 @@ const Between = driver.Between
 ```
 
 ```go
+const DefaultMaxLimit = pagination.DefaultMaxLimit
+```
+
+DefaultMaxLimit caps the page size of NewPageRequest and NewPageRequestFilter.
+
+```go
 const SqlTxContextKey = connection.SqlTxContextKey
 ```
 
@@ -128,13 +134,14 @@ ErrInvalidFilter is wrapped by BuildQuery for each rejected filter or sort.
 ### sqln.BuildClause
 
 ```go
-func BuildClause(predicates []Predicate, dialect driver.FilterDialect) (string, []any)
+func BuildClause(predicates []Predicate, dialect driver.FilterDialect) (string, []any, error)
 ```
 
 BuildClause compiles a predicate slice into a SQL WHERE fragment and its bound parameters.
 The fragment does NOT include the WHERE keyword — designed for embedding into an existing
 base query (e.g., base + " AND ( " + clause + " )").
 Adjacent predicates without an explicit And()/Or() connector are implicitly joined with AND.
+It fails with criteria.ErrInvalidField when a field is not a column reference.
 
 ### sqln.CloseRedis
 
@@ -143,6 +150,16 @@ func CloseRedis() error
 ```
 
 CloseRedis closes the shared cache client created by InstanceRedis.
+
+### sqln.ContextWithCacheScope
+
+```go
+func ContextWithCacheScope(ctx context.Context, scope string) context.Context
+```
+
+ContextWithCacheScope returns ctx carrying a cache scope that every cached
+query run with it mixes into its key (see WithCacheScope). Set it once per
+request, e.g. in the middleware that selects the tenant.
 
 ### sqln.Find
 
@@ -222,7 +239,8 @@ CriteriaOrder defines a sort expression for a criteria query.
 func Asc(field string) CriteriaOrder
 ```
 
-Asc creates an ascending ORDER BY expression for criteria queries.
+Asc creates an ascending ORDER BY expression for criteria queries; a field
+that is not a column reference fails the build unless marked Raw.
 
 ### sqln.Desc
 
@@ -230,7 +248,7 @@ Asc creates an ascending ORDER BY expression for criteria queries.
 func Desc(field string) CriteriaOrder
 ```
 
-Desc creates a descending ORDER BY expression for criteria queries.
+Desc creates a descending ORDER BY expression for criteria queries; see Asc.
 
 ## sqln.CriteriaQuery
 
@@ -305,6 +323,14 @@ func AllowColumns(columns ...string) FilterMapping
 
 AllowColumns maps each column to itself (see filter.Allow).
 
+## sqln.FilterOption
+
+```go
+type FilterOption = filter.Option
+```
+
+FilterOption changes the bounds BuildQuery enforces (see filter.Option).
+
 ## sqln.FilterParams
 
 ```go
@@ -353,6 +379,22 @@ Manager defines a read-only query interface that can be mocked in tests.
 type Page[T any] = pagination.Page[T]
 ```
 
+## sqln.PageOption
+
+```go
+type PageOption = pagination.Option
+```
+
+PageOption configures the page size bound (see WithMaxLimit).
+
+### sqln.WithMaxLimit
+
+```go
+func WithMaxLimit(n uint16) PageOption
+```
+
+WithMaxLimit replaces DefaultMaxLimit, e.g. for internal batch jobs.
+
 ## sqln.PageRequest
 
 ```go
@@ -362,17 +404,22 @@ type PageRequest = pagination.PageRequest
 ### sqln.NewPageRequest
 
 ```go
-func NewPageRequest(page uint16, limit uint16, order []Sort) *PageRequest
+func NewPageRequest(page uint16, limit uint16, order []Sort, opts ...PageOption) *PageRequest
 ```
+
+NewPageRequest builds a page; limit is capped at DefaultMaxLimit (see
+WithMaxLimit). Order fields that are not column references are dropped
+from ORDER BY (see pagination.PageRequest.GetOrder).
 
 ### sqln.NewPageRequestFilter
 
 ```go
-func NewPageRequestFilter(f *filter.Filters, m filter.Mapping) (*PageRequest, error)
+func NewPageRequestFilter(f *filter.Filters, m filter.Mapping, opts ...PageOption) (*PageRequest, error)
 ```
 
 NewPageRequestFilter builds the page from the request parameters; the sort
-field is resolved through m and must be Sortable.
+field is resolved through m and must be Sortable, and the limit is capped
+at DefaultMaxLimit (see WithMaxLimit).
 
 ## sqln.Predicate
 
@@ -403,11 +450,13 @@ type QueryParam = filter.QueryParam
 ### sqln.BuildQuery
 
 ```go
-func BuildQuery(base string, args []any, f *Filters, m FilterMapping, dialect FilterDialect) (*QueryParam, error)
+func BuildQuery(base string, args []any, f *Filters, m FilterMapping, dialect FilterDialect, opts ...FilterOption) (*QueryParam, error)
 ```
 
 BuildQuery appends the filters to base through the mapping; placeholders
-continue after args. A nil dialect uses the active connection (see filter.Build).
+continue after args. A nil dialect uses the active connection. Requests
+above filter.DefaultMaxFilters conditions, DefaultMaxInValues list values
+or DefaultMaxLikeLength LIKE characters are rejected (see filter.Build).
 
 ## sqln.SQLQuery
 
@@ -426,6 +475,8 @@ type Sort = pagination.Sort
 ```go
 func NewSort(field string, direction SortDirection) Sort
 ```
+
+NewSort builds a sort entry; see pagination.NewSort for how field is validated.
 
 ## sqln.SortDirection
 

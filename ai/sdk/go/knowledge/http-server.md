@@ -1,13 +1,13 @@
 ---
 name: http-server
-description: Servidor HTTP netx pelo componente httpserver — RouterHandler, rotas públicas/privadas, ordem Use → UseAuth → Handlers, middlewares já embutidos, WSConfig e limites por rota
-sdk: v0.8.2
-keywords: [netx, httpserver, RouterHandler, PublicRoutes, PrivateRoutes, UseAuth, Use, Handlers, WSConfig, CrossOriginProtection, Health, Timeouts, Cors, MaxBodyBytes, middleware]
+description: Servidor HTTP netx/httpx pelo componente httpserver — RouterHandler, rotas públicas/privadas, ordem Use → UseAuth → Handlers, middlewares já embutidos, WSConfig e limites por rota
+sdk: v0.2.4
+keywords: [httpx, netx, httpserver, RouterHandler, PublicRoutes, PrivateRoutes, UseAuth, Use, Handlers, WSConfig, CrossOriginProtection, Health, Timeouts, Cors, MaxBodyBytes, middleware]
 ---
 
-# Servidor HTTP — `netx` + `gofi/component/httpserver`
+# Servidor HTTP — `netx/httpx` + `gofi/component/httpserver`
 
-Referência: `.claude/sdk/go/api/netx.md`, `gofi-component-httpserver.md`.
+Referência: `.claude/sdk/go/api/netx-httpx.md`, `gofi-component-httpserver.md`.
 Ciclo de vida (`Build`/`ListenAndServe`): `gofi-orchestrator.md`. Programa
 completo: `examples/netx/api`. Esqueleto de handler:
 `.claude/sdk/go/boilerplates/handler.md`.
@@ -15,33 +15,33 @@ completo: `examples/netx/api`. Esqueleto de handler:
 ## Rotas — o handler declara as suas
 
 ```go
-func (h *EntityHandler) Handlers() []*netx.Route { // netx.RouterHandler
-    public := netx.PublicRoutes("/v1/entities",
-        netx.GET("/").To(h.list),
-        netx.GET("/{id}").To(h.getByID),
+func (h *EntityHandler) Handlers() []*httpx.Route { // httpx.RouterHandler
+    public := httpx.PublicRoutes("/v1/entities",
+        httpx.GET("/").To(h.list),
+        httpx.GET("/{id}").To(h.getByID),
     )
-    private := netx.PrivateRoutes("/v1/entities",
-        netx.POST("/").To(h.create),
-        netx.PUT("/{id}").To(h.update).Timeouts(30*time.Second, 30*time.Second),
-        netx.DELETE("/{id}").To(h.delete),
+    private := httpx.PrivateRoutes("/v1/entities",
+        httpx.POST("/").To(h.create),
+        httpx.PUT("/{id}").To(h.update).Timeouts(30*time.Second, 30*time.Second),
+        httpx.DELETE("/{id}").To(h.delete),
     )
     return append(public, private...)
 }
 ```
 
 - `PrivateRoutes` = embrulhadas pelo middleware do `UseAuth`. `PublicRoutes` = não.
-- Verbos: `netx.GET/POST/PUT/PATCH/DELETE(path).To(fn)`; path param `{id}` lido
-  com `netx.GetPathParam("id", r)`.
-- Por rota só existem `.Cors(&netx.CorsConfig{...})` e `.Timeouts(read, write)`
+- Verbos: `httpx.GET/POST/PUT/PATCH/DELETE(path).To(fn)`; path param `{id}` lido
+  com `httpx.GetPathParam("id", r)`.
+- Por rota só existem `.Cors(&httpx.CorsConfig{...})` e `.Timeouts(read, write)`
   (estende deadline de conexão; `RequestTimeout` do servidor continua teto do
   contexto). **Não há middleware por rota.**
-- Não existem `netx.ProtectedRoutes`, `netx.NewRouter`, `netx.Config` — rotas
+- Não existem `ProtectedRoutes`, `NewRouter` nem um `Config` no `httpx` — rotas
   saem só de `PublicRoutes`/`PrivateRoutes`.
 
 ## Ordem de registro
 
 ```go
-server := httpserver.New(":8080", &netx.WSConfig{ /* … */ })
+server := httpserver.New(":8080", &httpx.WSConfig{ /* … */ })
 svc, err := gofi.New("<service>").With(/* componentes */, server).Build()
 // …
 server.Use(globalMW).          // 1. global
@@ -61,7 +61,7 @@ server.Use(globalMW).          // 1. global
 
 ## O que já vem ligado (não adicione de novo)
 
-`netx.NewServer` já aplica, nesta ordem: IP do cliente
+`httpx.NewServer` já aplica, nesta ordem: IP do cliente
 (`ClientIPMiddleware`, proxies confiáveis = `WSConfig.TrustedProxies`, nil =
 redes privadas), CORS global (`AllowedOrigins`), `CrossOriginProtection` se
 ligado, rate limit se `RateLimiter` configurado, request ID, recover de
@@ -78,10 +78,10 @@ também ganha span OTel e métricas com a rota.
 |---|---|
 | `AllowedOrigins` | front em outra origem; sem curinga em produção |
 | `CrossOriginProtection: true` | **sempre** que houver cookie de sessão (CSRF) |
-| `Health: &netx.HealthConfig{}` | serviço em orquestrador — `/livez`, `/readyz` antes de qualquer middleware; readiness dos componentes entra sozinha |
+| `Health: &httpx.HealthConfig{}` | serviço em orquestrador — `/livez`, `/readyz` antes de qualquer middleware; readiness dos componentes entra sozinha |
 | `MaxBodyBytes` + `ReadTimeout` + `WriteTimeout` | upload grande: os três juntos (ou `Timeouts` na rota) |
 | `RequestTimeout` | handler legitimamente mais lento que 30 s |
-| `RateLimiter: &netx.RedisRateLimiterConfig{Backend: netx.NewRedisBackend(client), …}` | endpoint exposto (login, público) |
+| `RateLimiter: &httpx.RedisRateLimiterConfig{Backend: httpx.NewRedisBackend(client), …}` | endpoint exposto (login, público) |
 | `TrustedProxies` | LB fora das redes privadas; `[]string{}` = não confia em ninguém |
 | `H2C` | mesh/LB falando HTTP/2 sem TLS |
 
@@ -91,4 +91,4 @@ também ganha span OTel e métricas com a rota.
 - ❌ `Handlers(...)` antes de `UseAuth(...)`/`Use(...)`.
 - ❌ Reaplicar `LoggingMiddleware`, `SecurityHeaders`, `LimitBody` ou CORS via `Use`.
 - ❌ `ExposeErrorCause = true` fora de dev.
-- ❌ `netx.NewServer` + `ListenAndServe` à mão num serviço que usa `gofi.New` — use o componente.
+- ❌ `httpx.NewServer` + `ListenAndServe` à mão num serviço que usa `gofi.New` — use o componente.

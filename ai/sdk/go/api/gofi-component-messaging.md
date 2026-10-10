@@ -1,6 +1,6 @@
 # gofi/component/messaging
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/messaging"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/messaging"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -17,6 +17,15 @@ func ConfigFromEnv(env *environment.Environment) msq.ProviderConfig
 ConfigFromEnv builds an msq.ProviderConfig from the MESSAGING_* variables; the
 Redis provider reuses the CACHE_* connection. Open it with msq.Open after
 importing the provider package (msq/provider/<type>).
+
+### messaging.ServiceDefaultsFromEnv
+
+```go
+func ServiceDefaultsFromEnv(cfg msq.Config, env *environment.Environment) msq.Config
+```
+
+ServiceDefaultsFromEnv fills the msq.Config consumer defaults left at zero
+from MESSAGING_MAX_DELIVERIES and MESSAGING_HANDLER_TIMEOUT.
 
 ## messaging.Component
 
@@ -72,6 +81,16 @@ func (c *Component) Broker() msq.Broker
 ```
 
 Broker returns the broker to create producers and consumers; nil before Build.
+
+### Component.InsecureTransports
+
+```go
+func (c *Component) InsecureTransports(env *environment.Environment) []gofi.InsecureTransport
+```
+
+InsecureTransports reports a broker opened from the environment in
+plaintext or without certificate verification (msq.ProviderConfig.Insecure).
+Brokers passed in, or injected, are the caller's and are not checked.
 
 ### Component.Name
 

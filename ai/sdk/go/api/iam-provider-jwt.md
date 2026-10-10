@@ -1,8 +1,16 @@
 # iam/provider/jwt
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/jwt"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/jwt"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
+
+## Variáveis
+
+```go
+var ErrInvalidKey = errors.New("iam/jwt: invalid key")
+```
+
+ErrInvalidKey is returned by NewProvider for a key of the wrong type or size.
 
 ## jwt.Algorithm
 

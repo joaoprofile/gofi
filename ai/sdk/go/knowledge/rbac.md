@@ -1,7 +1,7 @@
 ---
 name: rbac
 description: Autorização com o iam — matriz role → recurso → ações no roles provider, um helper único de gate no handler, regras dependentes do alvo no service
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [rbac, autorização, roles, permissão, Enforce, PermissionMap, NewRBACProvider, RequirePermission, 403, gate, handler, service]
 ---
 
@@ -50,11 +50,11 @@ Todo gate de acesso no handler passa por **uma** função, no `handler/middlewar
 func RequirePermission(w http.ResponseWriter, r *http.Request, rbac port.RBACPort, resource, action string) (*types.Claims, bool) {
     c := ClaimsFromContext(r.Context())
     if c == nil {
-        netx.Error(w, http.StatusUnauthorized, errUnauthenticated)
+        httpx.Error(w, http.StatusUnauthorized, errUnauthenticated)
         return nil, false
     }
     if !rbac.Enforce(*c, resource, action) {
-        netx.Error(w, http.StatusForbidden, errForbidden)
+        httpx.Error(w, http.StatusForbidden, errForbidden)
         return nil, false
     }
     return c, true
@@ -74,7 +74,7 @@ func (h *EntityHandler) delete(w http.ResponseWriter, r *http.Request) {
 - O handler recebe o `port.RBACPort` no construtor (`iamSvc.RBAC()`), não o
   `*core.IAMService` inteiro.
 - Rota só autenticada (qualquer role): basta `ClaimsFromContext` numa
-  `netx.PrivateRoutes`; não invente permissão fictícia.
+  `httpx.PrivateRoutes`; não invente permissão fictícia.
 - `iamSvc.RBAC().Permissions(claims)` lista as permissões — use no `/me` para
   o front esconder ações (UX, não autoridade).
 
@@ -94,7 +94,7 @@ hierarquia na fonte da verdade e mantém o handler testável só com claims.
 
 ## Por que NÃO `iammw.RBACMiddleware`
 
-- Rotas `netx` não aceitam middleware por rota (só `Cors`/`Timeouts`); o único
+- Rotas `httpx` não aceitam middleware por rota (só `Cors`/`Timeouts`); o único
   middleware por grupo é o `UseAuth`. `RBACMiddleware(svc, resource, action)`
   não tem onde ser pendurado sem embrulhar a rota à mão.
 - Lê as claims pela chave privada do `iammw` — com o middleware de auth do

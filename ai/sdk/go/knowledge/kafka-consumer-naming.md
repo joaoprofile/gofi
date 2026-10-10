@@ -1,7 +1,7 @@
 ---
 name: kafka-consumer-naming
 description: Nome de consumer group Kafka via helpers do projeto (SyncConsumer/LifecycleConsumer) — passar só o prefix
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [kafka, consumer-group, group-id, SyncConsumer, LifecycleConsumer, naming, offset]
 ---
 
@@ -13,7 +13,7 @@ Convenção para nomes de **consumer groups** quando o projeto usa
 > **Esses helpers são do PROJETO**, não do SDK: vivem no pacote comum de
 > Kafka do projeto (`services/common/kafka`, junto dos `Topic*`/`Type*`).
 > O provider do SDK (`msq/provider/kafka`) não tem helper de consumer. O
-> helper só monta um `msq.ConsumeConfig` (SDK v0.8.2) com group, tópico e DLQ
+> helper só monta um `msq.ConsumeConfig` (SDK v0.2.4) com group, tópico e DLQ
 > pré-cabeados. Mecânica do consumer (retry, DLQ, offset, concorrência):
 > `messaging-msq.md`.
 

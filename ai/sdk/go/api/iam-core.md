@@ -1,8 +1,17 @@
 # iam/core
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/core"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/core"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
+
+## Constantes
+
+```go
+const MaxClockSkew = 5 * time.Minute
+```
+
+MaxClockSkew caps the leeway for token time claims (SecurityConfig.ClockSkew,
+jwt Leeway, oidc ClockSkew): a larger one keeps expired tokens alive.
 
 ## Variáveis
 
@@ -11,6 +20,9 @@ var (
 	// Authentication errors are intentionally generic to prevent user enumeration.
 	ErrInvalidCredentials = errors.New("iam: invalid credentials")
 	ErrAccountInactive    = errors.New("iam: account inactive")
+	// ErrTooManyAttempts is returned while a LoginThrottler lockout is active;
+	// it is the same for known and unknown emails.
+	ErrTooManyAttempts = errors.New("iam: too many login attempts, try again later")
 
 	// Token errors.
 	ErrTokenExpired    = errors.New("iam: token expired")
@@ -35,6 +47,9 @@ var (
 	ErrRefreshTokenTTLExceeded    = errors.New("iam: RefreshTokenTTL must be ≤ 90 days")
 	ErrJWTSecretTooShort          = errors.New("iam: JWTSecret must be at least 32 bytes")
 	ErrTenantTicketSecretTooShort = errors.New("iam: TenantTicketSecret must be at least 32 bytes")
+	ErrTenantTicketSecretRequired = errors.New("iam: TenantTicketSecret is required when login is enabled")
+	ErrSessionMaxLifetimeExceeded = errors.New("iam: SessionMaxLifetime must be ≤ 90 days")
+	ErrClockSkewExceeded          = errors.New("iam: ClockSkew/Leeway must be ≤ 5 minutes")
 	ErrProviderNotFound           = errors.New("iam: IDP provider not registered")
 
 	// ErrLoginPortsRequired is returned by the login operations when the
@@ -269,6 +284,9 @@ type IDPServiceConfig struct {
 	Session  port.SessionPort
 	Cfg      AuthConfig
 	Emit     func(context.Context, types.IAMEvent)
+
+	// Tickets makes tenant tickets single-use; nil keeps them reusable until expiry.
+	Tickets port.TicketStore
 }
 ```
 
@@ -284,6 +302,11 @@ type LocalAuthConfig struct {
 	Session port.SessionPort
 	Cfg     AuthConfig
 	Emit    func(context.Context, types.IAMEvent)
+
+	// Throttler limits password guessing; nil disables throttling.
+	Throttler port.LoginThrottler
+	// Tickets makes tenant tickets single-use; nil keeps them reusable until expiry.
+	Tickets port.TicketStore
 }
 ```
 

@@ -1,7 +1,7 @@
 ---
 name: handler-test-boilerplate
 description: Esqueleto do teste de handler Go — stub de service com campos de resultado, httptest, SetPathValue, claims via WithClaims, RBAC real, só status code
-sdk: v0.8.2
+sdk: v0.2.4
 ---
 
 # Boilerplate — Handler Test
@@ -129,7 +129,7 @@ func TestEntityHandler_Create(t *testing.T) {
 func TestEntityHandler_GetByID(t *testing.T) {
 	get := func(id string) *http.Request {
 		req := as(httptest.NewRequest(http.MethodGet, "/v1/entities/"+id, nil), "RoleB")
-		req.SetPathValue("id", id) // netx.GetPathParam reads r.PathValue
+		req.SetPathValue("id", id) // httpx.GetPathParam reads r.PathValue
 		return req
 	}
 
@@ -179,7 +179,7 @@ func TestEntityHandler_GetByFilter(t *testing.T) {
 - Claims via `authhandler.WithClaims` (helper do middleware de auth) e
   `RBACPort` real (`roles.NewRBACProvider` com matriz de teste) — sem
   `IAMService`, sem mock de RBAC
-- `req.SetPathValue("param", val)` para path params — `netx.GetPathParam` lê `r.PathValue`
+- `req.SetPathValue("param", val)` para path params — `httpx.GetPathParam` lê `r.PathValue`
 - Cobrir apenas **status code** — não inspecionar corpo da resposta
 - Um `t.Run` por caso: happy path, input inválido, erro do service, 401/403 do gate
 - Sem `init()` de logging — handler não loga diretamente

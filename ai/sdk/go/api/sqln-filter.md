@@ -1,6 +1,6 @@
 # sqln/filter
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/filter"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/filter"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -46,6 +46,17 @@ const (
 	Or  = driver.Or
 )
 ```
+
+```go
+const (
+	DefaultMaxFilters    = 50   // conditions, AND/OR not counted
+	DefaultMaxInValues   = 1000 // elements of a list value
+	DefaultMaxLikeLength = 256  // characters of a LIKE value
+)
+```
+
+Default bounds of a filter request, so a client cannot make Build emit an
+arbitrarily large query.
 
 ```go
 const Between = driver.Between
@@ -220,6 +231,38 @@ func (m Mapping) SortColumn(field string) (string, error)
 SortColumn resolves a sort field through the mapping; an empty field
 returns "" (the caller's default applies).
 
+## filter.Option
+
+```go
+type Option func(*limits)
+```
+
+Option changes the bounds Build enforces; a value <= 0 keeps the default.
+
+### filter.WithMaxFilters
+
+```go
+func WithMaxFilters(n int) Option
+```
+
+WithMaxFilters bounds the number of conditions.
+
+### filter.WithMaxInValues
+
+```go
+func WithMaxInValues(n int) Option
+```
+
+WithMaxInValues bounds the elements of a list value (IN, NOT IN, …).
+
+### filter.WithMaxLikeLength
+
+```go
+func WithMaxLikeLength(n int) Option
+```
+
+WithMaxLikeLength bounds the characters of a Contains/Like value.
+
 ## filter.QueryParam
 
 ```go
@@ -234,14 +277,16 @@ QueryParam holds the final SQL fragment and its bound parameters.
 ### filter.Build
 
 ```go
-func Build(base string, args []any, filters *Filters, m Mapping, dialect FilterDialect) (*QueryParam, error)
+func Build(base string, args []any, filters *Filters, m Mapping, dialect FilterDialect, opts ...Option) (*QueryParam, error)
 ```
 
 Build appends the filters to base, which must end inside a WHERE clause,
 as "base AND ( … )". Placeholders continue after args, the parameters base
 already binds, and the returned Params are args followed by the filter
 values. Any filter outside m, or otherwise invalid, rejects the whole set.
-A nil dialect uses the active global connection.
+A nil dialect uses the active global connection. Requests above the
+bounds (DefaultMaxFilters, DefaultMaxInValues, DefaultMaxLikeLength, or
+opts) are rejected with ErrInvalidFilter.
 
 ## filter.SliceValue
 

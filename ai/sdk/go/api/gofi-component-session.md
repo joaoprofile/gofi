@@ -1,6 +1,6 @@
 # gofi/component/session
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/session"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/session"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -35,6 +35,15 @@ func (c *Component) Config() *basesession.Config
 ```
 
 Config returns the session configuration in use.
+
+### Component.InsecureTransports
+
+```go
+func (c *Component) InsecureTransports(env *environment.Environment) []gofi.InsecureTransport
+```
+
+InsecureTransports reports the CACHE_* Redis in plaintext when
+CACHE_TYPE=redis (see cache.Component).
 
 ### Component.Name
 

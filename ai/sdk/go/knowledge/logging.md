@@ -1,7 +1,7 @@
 ---
 name: logging
 description: Logging com obs/logging — o que o Build já configura, níveis (Info só início/fim de fluxo), FromContext para correlação com trace, Fatal só no main e armadilhas de logger derivado cedo
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [logging, slog, obs/logging, LOG_LEVEL, Info, Debug, Warn, Error, Fatal, FromContext, trace_id, níveis, loop]
 ---
 
@@ -90,7 +90,7 @@ Loop de paginação → `log.Debug("...: page processed", ...)`; o resumo
   métrica (`observability-otel.md`).
 - **Lifecycle de infra** (conexão aberta/fechada, cache conectado) é do SDK;
   código do projeto não loga isso.
-- **Erro já logado pelo SDK não é relogado:** `netx.RespondError` loga a causa
+- **Erro já logado pelo SDK não é relogado:** `httpx.RespondError` loga a causa
   do `AppError`; o componente de mensageria loga `Nack` (Warn), dead-letter e
   erro de consumer/producer.
 - `fmt.Println`/`log.Printf` em código de produção: proibido (exceção: `main`
@@ -104,5 +104,5 @@ Loop de paginação → `log.Debug("...: page processed", ...)`; o resumo
 - ❌ `logging.Fatal` / `os.Exit` / `log.Fatal` fora do `main` — em
   construtor, repository, handler, consumer, job: devolva `error`.
 - ❌ `slog.Logger` derivado e guardado antes do `Build`.
-- ❌ Logar de novo o erro que `netx.RespondError` ou o pipeline do `msq` já
+- ❌ Logar de novo o erro que `httpx.RespondError` ou o pipeline do `msq` já
   logam.

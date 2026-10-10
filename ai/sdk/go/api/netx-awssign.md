@@ -1,10 +1,10 @@
 # netx/awssign
 
-`import "github.com/joaoprofile/gofi-sdk-go/netx/awssign"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/netx/awssign"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
-Package awssign signs netx requests with AWS Signature V4 (API Gateway IAM
+Package awssign signs httpx client requests with AWS Signature V4 (API Gateway IAM
 auth, OpenSearch, Lambda URLs, ...). Credentials resolve through base/cloud/aws,
 so IRSA / Pod Identity work without static keys.
 
@@ -36,7 +36,7 @@ type Signer struct {
 }
 ```
 
-Signer implements netx.Signature.
+Signer implements httpx.Signature.
 
 ### awssign.New
 
@@ -60,5 +60,8 @@ NewWithConfig builds a Signer from an existing aws.Config.
 func (s *Signer) Sign(req *http.Request, body []byte) (*http.Request, error)
 ```
 
-Sign adds the SigV4 headers; body must be the exact payload sent.
+Sign adds the SigV4 headers, covering every header already set on req.
+body must be the exact payload sent; when nil, the payload is read from
+req.GetBody, and a body that cannot be replayed is an error rather than a
+signature over the wrong payload.
 

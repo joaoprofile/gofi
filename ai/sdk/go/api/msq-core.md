@@ -1,6 +1,6 @@
 # msq/core
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/core"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq/core"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -14,10 +14,19 @@ const (
 	HeaderDLQOriginalTopic = "x-gofi-dlq-original-topic"
 	HeaderDLQError         = "x-gofi-dlq-error"
 	HeaderDLQAttempts      = "x-gofi-dlq-attempts"
+	// HeaderDLQDeliveries is the broker delivery count of the dead message.
+	HeaderDLQDeliveries = "x-gofi-dlq-deliveries"
 )
 ```
 
 Dead-letter headers added to the copy published to ConsumeConfig.DeadLetterTopic.
+
+```go
+const DefaultHealthGrace = 30 * time.Second
+```
+
+DefaultHealthGrace is how long a consumer may be down (restarting) before
+Healthy reports it.
 
 ## Variáveis
 
@@ -31,6 +40,16 @@ var (
 
 	// ErrConsumerFailed is returned when a consumer exits with an unrecoverable error.
 	ErrConsumerFailed = errors.New("msq: consumer failed")
+)
+```
+
+```go
+var (
+	// ErrManagerClosed is returned by Start and Healthy after Close.
+	ErrManagerClosed = errors.New("msq: consumer manager closed")
+
+	// ErrConsumerDown is reported by Healthy for a consumer that stays down.
+	ErrConsumerDown = errors.New("msq: consumer down")
 )
 ```
 
@@ -64,8 +83,29 @@ func (s *BrokerService) Close() error
 ```
 
 Close drains every ConsumerManager created from this service, waiting for
-in-flight handlers. gofi's builder calls it before closing the broker and
-the database/cache pools. It does not close the underlying broker.
+in-flight handlers. It does not close the underlying broker. Prefer
+CloseContext to bound the wait.
+
+### BrokerService.CloseContext
+
+```go
+func (s *BrokerService) CloseContext(ctx context.Context) error
+```
+
+CloseContext drains every ConsumerManager created from this service; gofi's
+builder calls it with the shutdown context before closing the broker and
+the database/cache pools. When ctx ends first it returns an error wrapping
+ctx.Err(). It does not close the underlying broker.
+
+### BrokerService.Healthy
+
+```go
+func (s *BrokerService) Healthy() error
+```
+
+Healthy returns nil while every consumer of every ConsumerManager created
+from this service is running (see ConsumerManager.Healthy). Wire it into
+the readiness check.
 
 ### BrokerService.NewConsumer
 
@@ -93,6 +133,18 @@ func (s *BrokerService) NewProducer() (port.Producer, error)
 
 NewProducer returns an instrumented Producer from the underlying broker.
 
+## core.ConsumeDefaults
+
+```go
+type ConsumeDefaults struct {
+	MaxDeliveries  int
+	HandlerTimeout time.Duration
+}
+```
+
+ConsumeDefaults are service-wide values for ConsumeConfig fields a consumer
+leaves at zero (e.g. from MESSAGING_* variables).
+
 ## core.ConsumerManager
 
 ```go
@@ -103,6 +155,10 @@ type ConsumerManager struct {
 
 ConsumerManager orchestrates multiple consumers against a single BrokerService.
 Register all consumers before calling Start or Dispatcher.
+
+A consumer whose Consume fails (or returns before shutdown) is recreated
+and restarted with exponential backoff until the manager closes; Healthy
+reports consumers that stay down longer than the health grace.
 
 ### core.NewConsumerManager
 
@@ -123,6 +179,18 @@ func (m *ConsumerManager) Close()
 Close signals all consumers to stop and waits until in-flight handlers
 return. It is idempotent: a second caller (e.g. BrokerService.Close) blocks
 until the drain finishes, which keeps DB/cache pools alive meanwhile.
+Handlers are bounded by ConsumeConfig.HandlerTimeout; use CloseContext to
+bound the wait itself.
+
+### ConsumerManager.CloseContext
+
+```go
+func (m *ConsumerManager) CloseContext(ctx context.Context) error
+```
+
+CloseContext is Close bounded by ctx: when ctx ends before the drain
+finishes it returns an error wrapping ctx.Err() while consumers keep
+draining in the background. Calling it again waits for the same drain.
 
 ### ConsumerManager.Dispatcher
 
@@ -132,7 +200,18 @@ func (m *ConsumerManager) Dispatcher(concurrency int) error
 
 Dispatcher sets the default concurrency for entries without one and starts
 the consumers registered since the last start. It returns the joined errors
-of consumers that could not be created; the others keep running.
+of consumers that could not be created; those are retried in the
+background and the others keep running.
+
+### ConsumerManager.Healthy
+
+```go
+func (m *ConsumerManager) Healthy() error
+```
+
+Healthy returns nil while every started consumer is running. A consumer
+down (failed and restarting) for longer than the health grace, or a
+closed manager, is reported. Wire it into the readiness check.
 
 ### ConsumerManager.Register
 
@@ -152,6 +231,15 @@ func (m *ConsumerManager) RegisterHandler(cfg types.ConsumeConfig, handler port.
 RegisterHandler adds a consumer using the full MessageHandler interface.
 Use when your handler is a struct that implements port.MessageHandler.
 
+### ConsumerManager.SetHealthGrace
+
+```go
+func (m *ConsumerManager) SetHealthGrace(d time.Duration) *ConsumerManager
+```
+
+SetHealthGrace sets how long a consumer may be down before Healthy reports
+it (default DefaultHealthGrace).
+
 ### ConsumerManager.Shutdown
 
 ```go
@@ -167,7 +255,9 @@ func (m *ConsumerManager) Start() error
 ```
 
 Start launches the consumers registered since the last start, using the
-concurrency in each ConsumeConfig. It returns the joined creation errors.
+concurrency in each ConsumeConfig. It returns the joined creation errors;
+failed consumers are retried in the background. After Close it returns
+ErrManagerClosed.
 
 ## core.ServiceConfig
 
@@ -177,6 +267,8 @@ type ServiceConfig struct {
 	// System is the messaging.system attribute (kafka, rabbitmq, aws_sqs, ...).
 	System  string
 	OnEvent func(ctx context.Context, event types.BrokerEvent)
+	// Defaults fill ConsumeConfig fields left at zero.
+	Defaults ConsumeDefaults
 }
 ```
 

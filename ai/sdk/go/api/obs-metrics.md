@@ -1,6 +1,6 @@
 # obs/metrics
 
-`import "github.com/joaoprofile/gofi-sdk-go/obs/metrics"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/obs/metrics"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -67,13 +67,13 @@ func NewInt64UpDownCounter(name, description string) (metric.Int64UpDownCounter,
 func ObserveDBStats(pool string, db *sql.DB) error
 ```
 
-ObserveDBStats registers OpenTelemetry observable gauges that sample
+ObserveDBStats registers OpenTelemetry observable instruments that sample
 sql.DB pool stats at collection time — no hot-path cost. Reports:
-  - db_pool_connections{state=open|in_use|idle}
-  - db_pool_wait_count_total
-  - db_pool_wait_duration_seconds_total
+  - db_pool_connections{state=open|in_use|idle} (gauge)
+  - db_pool_wait_count_total (cumulative counter)
+  - db_pool_wait_duration_seconds_total (cumulative counter)
 
 pool labels the pool (e.g. "main"). No-op when db is nil; when telemetry is
-not initialized, Meter() returns a noop meter and the gauges are inert.
+not initialized, Meter() returns a noop meter and the instruments are inert.
 Call once per pool (gofi's database component does it for its connections).
 

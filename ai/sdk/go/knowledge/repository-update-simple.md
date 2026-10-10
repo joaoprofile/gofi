@@ -1,7 +1,7 @@
 ---
 name: repository-update-simple
 description: Update de repository devolve só erro estrutural — sem RowsAffected; not-found fica no FindByID do service
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [repository, update, RowsAffected, statement, not-found]
 ---
 

@@ -1,11 +1,11 @@
 ---
 name: qa-checklist
-description: Checklist de auditoria Go do gofi-qa contra o SDK v0.8.2 — ciclo de vida por componentes, Config tipado, secret://, UTC, sqln com allowlist, netx, iam, msq e observabilidade
-sdk: v0.8.2
-keywords: [qa, auditoria, checklist, gofi.New, componentes, config, secret, timezone, sqln, filtro-dinamico, netx, iam, msq, observabilidade]
+description: Checklist de auditoria Go do gofi-qa contra o SDK v0.2.4 — ciclo de vida por componentes, Config tipado, secret://, UTC, sqln com allowlist, netx, iam, msq e observabilidade
+sdk: v0.2.4
+keywords: [qa, auditoria, checklist, gofi.New, componentes, config, secret, timezone, sqln, filtro-dinamico, httpx, grpcx, iam, msq, observabilidade]
 ---
 
-# Checklist de Auditoria — Go (SDK v0.8.2)
+# Checklist de Auditoria — Go (SDK v0.2.4)
 
 Aplicado por `gofi-qa` em todo contexto Go implementado. Itens de PostgreSQL
 (aggregate, statements, índices, dinheiro) ficam em `qa-checklist-postgres.md`
@@ -36,7 +36,7 @@ Ver `gofi-orchestrator.md`, `service-bootstrap.md` e `database-connection.md`.
   `session.New()`, `messaging.New()`, `iam.New()`, `observability.New()`,
   `httpserver.New(port, cfg)`). Bootstrap manual num serviço que usa `gofi.New`
   é **MAJOR** — o recurso fica fora da ordem de start/close e do health:
-  `gofi find --regex "obs\.Init\(|connection\.(NewConnection|SetGlobal)\(|sqln\.NewCacheRedis\(|msq\.(New|Open)\(|netx\.NewServer\(" --in code`;
+  `gofi find --regex "obs\.Init\(|connection\.(NewConnection|SetGlobal)\(|sqln\.NewCacheRedis\(|msq\.(New|Open)\(|httpx\.NewServer\(" --in code`;
   para identidade, `gofi find --text "gofi-sdk-go/iam\"" --in code` (o pacote
   raiz `iam`, com `iam.New`/`iam.NewDefault`, importado no lugar de
   `gofi/component/iam`, cujo `New` tem o mesmo nome). Segunda conexão de banco
@@ -69,7 +69,7 @@ Ver `gofi-orchestrator.md`, `service-bootstrap.md` e `database-connection.md`.
   `package main`** — biblioteca e camadas devolvem `error`.
   `gofi find --regex "log\.Fatal|os\.Exit\(|logging\.Fatal\(|panic\(" --in code`;
   ocorrência fora do `main` é **MAJOR**
-- [ ] Deploy com probes (k8s): `httpserver.New(port, &netx.WSConfig{Health: &netx.HealthConfig{}})`
+- [ ] Deploy com probes (k8s): `httpserver.New(port, &httpx.WSConfig{Health: &httpx.HealthConfig{}})`
   — sem `Health` não há `/livez`/`/readyz` nem drenagem antes do shutdown.
   **MINOR** (MAJOR se a spec de infra declara as probes)
 
@@ -98,7 +98,7 @@ Ver `configuration.md` e `env-vars-standard.md`.
   de `environment.Environment`. Sem isso o valor chega como a string
   `secret://...`. **MAJOR**
 - [ ] Produção sem `.env`: `GOFI_DOTENV=true`, `TLS_INSECURE_SKIP_VERIFY=true`
-  ou `netx.ExposeErrorCause = true` fora de teste — `gofi find --regex "ExposeErrorCause\s*=\s*true|GOFI_DOTENV|TLS_INSECURE_SKIP_VERIFY"`.
+  ou `WSConfig{ExposeErrorCause: true}` fora de teste — `gofi find --regex "ExposeErrorCause\s*=\s*true|GOFI_DOTENV|TLS_INSECURE_SKIP_VERIFY"`.
   **MAJOR**
 
 ## 4. Tempo e fuso
@@ -186,7 +186,7 @@ Ver `dynamic-filter.md` e `examples/sqln/filter-api`.
   `json:"-"`). DTO próprio que copia `Column` para a resposta: **MAJOR**
   (expõe o schema)
 - [ ] Símbolos anteriores à allowlist (`NewQueryBuild`, `QueryMapping`,
-  `FieldMapping`, `.Validate(filters)`) não existem na v0.8.2: presença indica
+  `FieldMapping`, `.Validate(filters)`) não existem na v0.2.4: presença indica
   código não migrado. **BLOCKER** (não compila)
 
 ## 7. Lookup de enums no schema (só com filtro dinâmico)
@@ -226,20 +226,20 @@ Ver `validation.md`.
   no pacote. **MINOR**
 - [ ] Tags `validate:"..."` cobrem as RNs de validação. **MAJOR**
 
-## 10. HTTP servidor — `netx` + componente `httpserver`
+## 10. HTTP servidor — `netx/httpx` + componente `httpserver`
 Ver `http-auth-middleware.md`.
 
-- [ ] Body: `netx.ParseRequestBody(w, r, &req)`; query:
-  `netx.BindQueryParamsToStruct(r, w, &f)` (tag `form`); path:
-  `netx.GetPathParam("id", r)`; resposta: `netx.Response(w, status, data)`.
+- [ ] Body: `httpx.ParseRequestBody(w, r, &req)`; query:
+  `httpx.BindQueryParamsToStruct(r, w, &f)` (tag `form`); path:
+  `httpx.GetPathParam("id", r)`; resposta: `httpx.Response(w, status, data)`.
   **MINOR**
-- [ ] Erro de service: `netx.RespondError(w, r, appErr)` — o `Kind` vira o
+- [ ] Erro de service: `httpx.RespondError(w, r, appErr)` — o `Kind` vira o
   status (404, 409, 400, 401, 403, 502, 500) e a causa só vai para o log.
-  `netx.Error(w, status, err)` para erro fora de `AppError` (decode,
+  `httpx.Error(w, status, err)` para erro fora de `AppError` (decode,
   middleware). Assinatura antiga `RespondError(w, appErr)`: **BLOCKER** (não
   compila); status escolhido à mão para um `AppError`: **MINOR**
 - [ ] **`Use`/`UseAuth` antes de `Handlers`** e rota autenticada em
-  `netx.PrivateRoutes`. Rota privada registrada antes do `UseAuth` (ou sem
+  `httpx.PrivateRoutes`. Rota privada registrada antes do `UseAuth` (ou sem
   `UseAuth`) fica **sem** autenticação: **BLOCKER** — `gofi show` do `main`
 - [ ] `WSConfig` explícito no que o endpoint pede: `AllowedOrigins` com as
   origens da spec (o componente não aplica `ALLOWED_ORIGINS` sozinho: o `main`
@@ -249,8 +249,8 @@ Ver `http-auth-middleware.md`.
   **MAJOR**
 - [ ] Handler sem lógica de negócio; não acessa repository. **MAJOR**
 
-## 11. HTTP cliente — `netx.NewClient`
-- [ ] Cliente criado **uma vez** (`netx.NewClient(&netx.HttpClientConfig{Name, BaseURL, Timeout, Retries})`)
+## 11. HTTP cliente — `httpx.NewClient`
+- [ ] Cliente criado **uma vez** (`httpx.NewClient(&httpx.HttpClientConfig{Name, BaseURL, Timeout, Retries})`)
   e injetado; `Name` preenchido (nomeia os spans). Cliente por requisição:
   **MAJOR**
 - [ ] **Retry só em método idempotente.** O cliente reexecuta GET/HEAD/OPTIONS/
@@ -261,7 +261,7 @@ Ver `http-auth-middleware.md`.
   de uma tentativa só declara isso na spec e trata. `DisableRetryOn429: true`
   quando um rate limiter externo controla o ritmo. **MINOR**
 - [ ] Assinatura por `req.SetSignature(signer)` (`netx/awssign` ou
-  `netx.Signature` próprio) — nunca header de assinatura calculado fora do
+  `httpx.Signature` próprio) — nunca header de assinatura calculado fora do
   `Sign` (retry reenvia assinatura velha). **MAJOR**
 
 ## 12. Identidade — `iam`
@@ -312,8 +312,8 @@ Ver `observability-otel.md` e `logging.md`.
 
 - [ ] Telemetria pelo componente `observability.New()` (`OTEL_EXPORTER_OTLP_ENDPOINT`);
   `obs.Init` à mão: **MAJOR** (ver §2)
-- [ ] Sem span/middleware de tracing próprio em volta de rota `netx`, chamada
-  do `netx.HttpClient` ou consumer `msq` — o SDK já cria o span e propaga o
+- [ ] Sem span/middleware de tracing próprio em volta de rota `httpx`, chamada
+  do `httpx.HttpClient` ou consumer `msq` — o SDK já cria o span e propaga o
   contexto. Duplicado: **MINOR**
 - [ ] Instrumentos (`obs/metrics`: `NewInt64Counter`, `NewFloat64Histogram`,
   ...) criados **uma vez** no boot e injetados. Criados por requisição:
@@ -332,7 +332,7 @@ Ver `structure.md`.
 - [ ] `main.go` em `pathCmd` (`./src/{projectName}/main.go`); `go.mod`,
   `domain/` e `.migrations/` em `pathService`; `go.work` na raiz com
   `use ./src`. **MINOR**
-- [ ] Imports do SDK com os paths de módulo da v0.8.2
+- [ ] Imports do SDK com os paths de módulo da v0.2.4
   (`github.com/joaoprofile/gofi-sdk-go/gofi`, `.../sqln`, `.../netx`, ...).
   Path antigo do orquestrador na raiz (`github.com/joaoprofile/gofi-sdk-go` sem
   sufixo): **BLOCKER** (não resolve)

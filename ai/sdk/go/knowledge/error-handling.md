@@ -1,11 +1,11 @@
 ---
 name: error-handling
-description: Fluxo de erro repository → service (errs.AppError) → handler (netx.RespondError) e o mapeamento Kind → HTTP
-sdk: v0.8.2
+description: Fluxo de erro repository → service (errs.AppError) → handler (httpx.RespondError) e o mapeamento Kind → HTTP
+sdk: v0.2.4
 keywords: [errs, AppError, RegisterNotFound, RegisterValidation, RegisterForbidden, RespondError, ErrorResponse, WithDetails, Wrap, status HTTP, not-found]
 ---
 
-# Conhecimento — Tratamento de Erros (`base/errs` + `netx`)
+# Conhecimento — Tratamento de Erros (`base/errs` + `netx/httpx`)
 
 Import: `github.com/joaoprofile/gofi-sdk-go/base/errs`. Referência completa:
 `.claude/sdk/go/api/base-errs.md`.
@@ -13,7 +13,7 @@ Import: `github.com/joaoprofile/gofi-sdk-go/base/errs`. Referência completa:
 ## Fluxo de erro completo
 
 ```
-repository (error puro) → service (errs.AppError) → handler (netx.RespondError(w, r, appErr)) → cliente (JSON)
+repository (error puro) → service (errs.AppError) → handler (httpx.RespondError(w, r, appErr)) → cliente (JSON)
 ```
 
 ## O service nunca retorna `error` puro
@@ -68,13 +68,13 @@ var (
 | `RegisterExternalError` | `EXTERNAL_ERROR` | 502 |
 | `RegisterOperation` / `Register` | `OPERATION` / `UNKNOWN` | 500 |
 
-Feito por `netx.RespondError(w, r, appErr)` — assinatura com `*http.Request`
+Feito por `httpx.RespondError(w, r, appErr)` — assinatura com `*http.Request`
 (usa o contexto para logar com trace). Não há outro mapeador; não escreva
 `switch` de status no handler.
 
 ## Corpo da resposta e a causa
 
-`RespondError` escreve `netx.ErrorResponse`:
+`RespondError` escreve `httpx.ErrorResponse`:
 
 ```json
 {
@@ -88,7 +88,7 @@ Feito por `netx.RespondError(w, r, appErr)` — assinatura com `*http.Request`
 
 - `code` é o **status HTTP**; o código de negócio vem em `errorCode`.
 - A causa (`appErr.Err`) é **sempre logada** e **nunca** vai no body, a menos
-  que `netx.ExposeErrorCause = true` (só dev — carrega SQL/driver).
+  que o servidor tenha `WSConfig{ExposeErrorCause: true}` (só dev — carrega SQL/driver).
 - 5xx loga em Error, 4xx em Warn. O handler **não** loga de novo.
 
 ## Propagação de detalhes de validação
@@ -127,13 +127,13 @@ return errs.AppError{}
 
 | Situação no handler | Resposta |
 |---|---|
-| Body/query/path malformado (antes do service) | `netx.Error(w, http.StatusBadRequest, err)` |
-| 400 com detalhes montados no handler | `netx.ErrorDetails(w, 400, "msg", details)` |
-| Qualquer `errs.AppError` do service | `netx.RespondError(w, r, appErr)` |
+| Body/query/path malformado (antes do service) | `httpx.Error(w, http.StatusBadRequest, err)` |
+| 400 com detalhes montados no handler | `httpx.ErrorDetails(w, 400, "msg", details)` |
+| Qualquer `errs.AppError` do service | `httpx.RespondError(w, r, appErr)` |
 
 ## Anti-padrões
 
-- ❌ `netx.RespondError(w, appErr)` — assinatura antiga; hoje é `(w, r, appErr)`.
-- ❌ `netx.RespondJSON` / `netx.DecodeJSON` — não existem; use `netx.Response` / `netx.ParseRequestBody`.
+- ❌ `httpx.RespondError(w, appErr)` — assinatura antiga; hoje é `(w, r, appErr)`.
+- ❌ Funções `RespondJSON` / `DecodeJSON` — não existem no `httpx`; use `httpx.Response` / `httpx.ParseRequestBody`.
 - ❌ `errors.New` exportado no service como erro de negócio — registre com `errs.Register*`.
 - ❌ Assert de teste por `Message` — compare `appErr.Code` (ou `errors.Is`).

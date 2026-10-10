@@ -1,7 +1,7 @@
 ---
 name: cronjob
 description: Agendamento com base/cronjob — ScheduleJob por intervalo ou horário fixo, fuso explícito, panics de config, Locker para rodar em uma réplica, WorkerPool
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [cronjob, ScheduleJob, ScheduleConfig, Fixed, Interval, LocationName, Weekdays, Locker, RedisLocker, JobHandle, WorkerPool, JobGenerator, cron, agendamento, réplica]
 ---
 

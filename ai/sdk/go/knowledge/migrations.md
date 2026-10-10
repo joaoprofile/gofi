@@ -1,7 +1,7 @@
 ---
 name: migrations
 description: Migrations com sqln/migrate — DATABASE_MIGRATION, pasta .migrations, embed, drivers suportados
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [sqln, migrate, migrations, DATABASE_MIGRATION, golang-migrate, embed, schema]
 ---
 
@@ -28,7 +28,7 @@ API: `.claude/sdk/go/api/sqln-migrate.md` e `connection.WithMigrations` em
 ## Drivers
 
 O driver de migration é registrado pelo mesmo import em branco do driver SQL.
-Em v0.8.2 **só `sqln/driver/postgres` registra driver de migration**; com
+Em v0.2.4 **só `sqln/driver/postgres` registra driver de migration**; com
 `mysql`/`sqlserver`/`oracle`, `DATABASE_MIGRATION=true` falha com
 `migration driver not registered` — aplique o schema por fora ou registre um
 `migrate.Driver` próprio (`migrate.RegisterDriver`).

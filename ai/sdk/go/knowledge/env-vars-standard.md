@@ -1,7 +1,7 @@
 ---
 name: env-vars-standard
 description: Governança de variáveis de ambiente — nomes padrão lidos pelo gofi (base/environment), X_FILE, secret://, desvios comuns e protocolo para variável nova
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [env, variáveis de ambiente, APP_NAME, APP_ENVIRONMENT, DATABASE_, CACHE_, MESSAGING_, BUCKET_, OTEL_, JWT_, TIMEZONE, secret://, X_FILE, padrão]
 ---
 

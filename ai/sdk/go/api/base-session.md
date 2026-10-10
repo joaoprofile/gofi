@@ -1,6 +1,6 @@
 # base/session
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/session"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/session"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -45,6 +45,9 @@ func NewKey(prefix string, parts ...any) string
 type Config struct {
 	TTL    time.Duration
 	Prefix string
+	// LockTTL bounds how long a lock is held if its owner never releases it;
+	// keep it above the longest critical section. Default: 10 s.
+	LockTTL time.Duration
 }
 ```
 
@@ -57,14 +60,16 @@ func DefaultSessionConfig() *Config
 ```
 
 DefaultSessionConfig returns a Config with sensible defaults
-(10-minute TTL, "session" prefix).
+(10-minute TTL, "session" prefix, 10-second lock TTL).
 
 ## session.DistributedLocker
 
 ```go
 type DistributedLocker interface {
-	TryLock(ctx context.Context, key string) (bool, error)
-	Unlock(ctx context.Context, key string) error
+	// TryLock returns the owner token of the acquired lock; pass it to Unlock.
+	TryLock(ctx context.Context, key string) (token string, ok bool, err error)
+	// Unlock releases the lock only while token still owns it.
+	Unlock(ctx context.Context, key, token string) error
 	IsLocked(ctx context.Context, key string) (bool, error)
 	WithLock(ctx context.Context, key string, fn func() error) (bool, error)
 }
@@ -314,20 +319,22 @@ IsLocked reports whether key is currently locked.
 ### Session.TryLock
 
 ```go
-func (s *Session) TryLock(ctx context.Context, key string) (bool, error)
+func (s *Session) TryLock(ctx context.Context, key string) (string, bool, error)
 ```
 
-TryLock attempts to acquire a distributed lock for key.
-The key is used as-is; callers should use NewKey to build
-collision-resistant identifiers.
+TryLock attempts to acquire a distributed lock for key, held for at most
+Config.LockTTL, and returns its owner token for Unlock. The key is used
+as-is; callers should use NewKey to build collision-resistant identifiers.
+Drivers without TokenLocker return an empty token.
 
 ### Session.Unlock
 
 ```go
-func (s *Session) Unlock(ctx context.Context, key string) error
+func (s *Session) Unlock(ctx context.Context, key, token string) error
 ```
 
-Unlock releases the distributed lock for key.
+Unlock releases the lock for key only while token (from TryLock) still owns
+it, so a holder whose lock expired cannot release the next holder's lock.
 
 ### Session.WithLock
 

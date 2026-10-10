@@ -1,7 +1,7 @@
 ---
 name: session-store
 description: base/session e o componente session — store chave/valor com TTL e lock distribuído sobre Redis; não é a sessão de login do iam
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [base/session, session.Instance, CreateOrGet, Force, WithLock, TryLock, DistributedLocker, NewKey, lock distribuído, idempotência, componente session, CACHE_TYPE]
 ---
 

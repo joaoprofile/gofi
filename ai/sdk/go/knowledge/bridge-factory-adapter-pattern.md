@@ -1,8 +1,8 @@
 ---
 name: bridge-factory-adapter-pattern
-description: Bridge/Factory/Adapter para dimensão polimórfica externa — layout, factory com cache, decorators, adapter HTTP canônico sobre netx
-sdk: v0.8.2
-keywords: [bridge, factory, adapter, integration, netx, decorator, rate-limit, http-client, classifier]
+description: Bridge/Factory/Adapter para dimensão polimórfica externa — layout, factory com cache, decorators, adapter HTTP canônico sobre netx/httpx
+sdk: v0.2.4
+keywords: [bridge, factory, adapter, integration, httpx, decorator, rate-limit, http-client, classifier]
 ---
 
 # Bridge / Factory / Adapter — padrão para dimensão polimórfica externa
@@ -145,7 +145,7 @@ func (f *Factory) Get(key uint8) (bridge.{Ctx}Bridge, error) {
     }
     // Envelopa com decorators (observabilidade etc.) ANTES de cachear —
     // todos os callers compartilham o mesmo wrapper instrumentado.
-    wrapped := {ctx}obs.WrapBridge(build(), keyLabel(key))
+    wrapped := observability.WrapBridge(build(), keyLabel(key))
     actual, _ := f.cache.LoadOrStore(key, wrapped)
     return actual.(bridge.{Ctx}Bridge), nil
 }
@@ -172,7 +172,7 @@ a cross-cutting concerns. Padrão recomendado:
 
 ```go
 // Decorator 1: observabilidade (MeteredBridge do pacote de observabilidade do contexto)
-wrapped := {ctx}obs.WrapBridge(build(), keyLabel(key))
+wrapped := observability.WrapBridge(build(), keyLabel(key))
 
 // Decorator 2 (opcional): retry com backoff exponencial — pacote do projeto
 wrapped = {ctx}retry.WrapBridge(wrapped, {ctx}retry.Config{...})
@@ -427,7 +427,7 @@ Isso preserva o single-responsibility por workflow sem dividir a interface.
 ```go
 // services/adapter/{tech}/{ctx}/{ctx}_bridge.go
 
-type bridge struct { client *netx.HttpClient }
+type bridge struct { client *httpx.HttpClient }
 
 func (b *bridge) Fetch{X}s(ctx, owner) ([]model.{X}, error) { /* GET /api/... */ }
 func (b *bridge) Apply{Z}(ctx, owner, entity, params) error  { /* POST /api/... */ }
@@ -465,7 +465,7 @@ import (
     "<module>/services/domain/integration/token"
     {ctx}Bridge "<module>/services/domain/{ctx}/bridge"
     "github.com/joaoprofile/gofi-sdk-go/base/errs"
-    "github.com/joaoprofile/gofi-sdk-go/netx"
+    "github.com/joaoprofile/gofi-sdk-go/netx/httpx"
     "github.com/joaoprofile/gofi-sdk-go/obs/logging"
 )
 
@@ -503,11 +503,11 @@ type {op}Response struct {
 
 // 4. Struct + constructor — devolve a interface do DOMAIN, não o tipo concreto.
 type bridge struct {
-    client *netx.HttpClient
+    client *httpx.HttpClient
 }
 
 func NewBridge() {ctx}Bridge.{Op}Bridge {
-    client, err := netx.NewClient(&netx.HttpClientConfig{
+    client, err := httpx.NewClient(&httpx.HttpClientConfig{
         Name:       "{Tech}{Ctx}Bridge",
         BaseURL:    {tech}BaseURL,
         Timeout:    bridgeHTTPTimeout,
@@ -524,7 +524,7 @@ func NewBridge() {ctx}Bridge.{Op}Bridge {
 // 5. Métodos — token é argumento separado; entrada é DTO do domain; saída é (*Result, errs.AppError)
 func (b *bridge) {Op}(ctx context.Context, tkn *token.Token, in {ctx}Bridge.{Op}Input) (*{ctx}Bridge.{Op}Result, errs.AppError) {
     url := fmt.Sprintf({tech}{Op}Path, in.SkuMarketplace)
-    req := netx.NewRequest[{op}Response](ctx, b.client, http.MethodPost, url)
+    req := httpx.NewRequest[{op}Response](ctx, b.client, http.MethodPost, url)
     req.SetHeader("Authorization", "Bearer "+tkn.AccessToken)
     req.SetBody(&{op}Body{ /* mapping */ })
 
@@ -538,7 +538,7 @@ func (b *bridge) {Op}(ctx context.Context, tkn *token.Token, in {ctx}Bridge.{Op}
 // 6. Classificador local — HTTP status → AppError tipado.
 //    Adapter CONHECE a API externa, então classifica aqui (não na application).
 func classify{Op}Error(err error) errs.AppError {
-    httpErr := netx.FromError(err)
+    httpErr := httpx.FromError(err)
     status := 0
     if httpErr != nil {
         status = httpErr.Status
@@ -546,7 +546,7 @@ func classify{Op}Error(err error) errs.AppError {
     switch {
     case status == http.StatusUnauthorized:
         return Err{Tech}{Ctx}{Op}Auth.Wrap(err)
-    // 429 chega como 429 só com DisableRetryOn429; com retry do netx esgotado
+    // 429 chega como 429 só com DisableRetryOn429; com retry do httpx esgotado
     // o erro vem com status 408 (RequestTimeout).
     case status == http.StatusTooManyRequests || status == http.StatusRequestTimeout:
         return Err{Tech}{Ctx}{Op}RateLimited.Wrap(err)
@@ -609,7 +609,7 @@ func classify{Op}Error(err error) errs.AppError {
     com URL absoluta antes do `Execute()` (paginação que remonta a URL a cada
     iteração) bypassa o prepend — funciona, mas o argumento `path` do `NewRequest`
     fica morto; prefira path relativo + `req.Url` relativo quando possível.
-13. **Body OAuth: o `netx` escolhe o encoding pelo TIPO do body, não por header.**
+13. **Body OAuth: o `httpx` escolhe o encoding pelo TIPO do body, não por header.**
     `url.Values` → `Content-Type: application/x-www-form-urlencoded`; qualquer
     outro tipo (incl. `map[string]string`, struct) → `application/json`. Logo o
     tipo do `SetBody` **é** o contrato de encoding — escolha conforme o que o
@@ -622,7 +622,7 @@ func classify{Op}Error(err error) errs.AppError {
     devolve `(nil, nil)`.** O corpo é descartado sem erro. Adapter checa
     `resp == nil` antes de usar; em `httptest`, sempre
     `w.Header().Set("Content-Type", "application/json")` antes do `Write`.
-15. **`POST`/`PATCH` não são retentados em rede/5xx** — o `netx` só repete
+15. **`POST`/`PATCH` não são retentados em rede/5xx** — o `httpx` só repete
     método idempotente (`GET`/`PUT`/`DELETE`…) ou request com header
     `Idempotency-Key`. Escrita que precisa de retry automático e o provider
     aceita chave de idempotência → `req.SetHeader("Idempotency-Key", id)`.
@@ -656,7 +656,7 @@ Procurar implementações canônicas via grep no projeto:
 
 ## Logging em testes
 
-Desde o SDK v0.8, `logging.*` **não** panica sem `InitGlobal`: antes da
+`logging.*` **não** panica sem `InitGlobal`: antes da
 inicialização cai no `slog.Default()` (com um aviso). `TestMain` com
 `logging.InitGlobal` é **opcional** — só quando o teste quer o formato do
 logger do serviço. Quem reinicializa entre testes usa `logging.ResetForTesting()`.

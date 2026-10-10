@@ -1,6 +1,6 @@
 # sqln/driver
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -82,6 +82,20 @@ const Group = "__group__"
 Group Operator — internal sentinel used by Group predicate.
 Never emitted verbatim; the builder wraps the inner clause in parentheses.
 
+```go
+const LikeEscapeChar = "!"
+```
+
+LikeEscapeChar is the escape character of the ESCAPE clause written for
+literal LIKE matches. Unlike '\', '!' means the same inside a string
+literal in every dialect (MySQL escapes '\' unless NO_BACKSLASH_ESCAPES).
+
+```go
+const LikeEscapeClause = " ESCAPE '" + LikeEscapeChar + "'"
+```
+
+LikeEscapeClause follows a LIKE whose pattern was escaped with EscapeLike.
+
 ## Variáveis
 
 ```go
@@ -102,13 +116,24 @@ Used by the filter and criteria engines to reject unknown or injected operators.
 
 ## Funções
 
+### driver.EscapeLike
+
+```go
+func EscapeLike(d FilterDialect, s string) string
+```
+
+EscapeLike escapes s so that LIKE … ESCAPE '!' matches it literally in d.
+Only the escape character, the wildcards and d's extra wildcards are
+escaped: Oracle rejects the escape character before anything else.
+
 ### driver.IsIdentifier
 
 ```go
 func IsIdentifier(s string) bool
 ```
 
-IsIdentifier reports whether s is a column reference such as col, t.col, "Col" or schema.t.col.
+IsIdentifier reports whether s is a column reference such as col, t.col,
+"Col" or schema.t.col that is safe to write into SQL text from untrusted input.
 
 ### driver.IsSortDirection
 
@@ -161,4 +186,15 @@ type FilterDialect interface {
 	NotLike(field string, param string) string
 }
 ```
+
+## driver.LikeWildcards
+
+```go
+type LikeWildcards interface {
+	LikeWildcards() string
+}
+```
+
+LikeWildcards is implemented by dialects whose LIKE has wildcard
+characters besides % and _, such as SQL Server's [...] classes.
 

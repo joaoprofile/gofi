@@ -1,7 +1,7 @@
 ---
 name: handler-test-pattern
-description: Teste de handler netx — stub de service com campos de resultado, httptest, só status code; claims injetadas pelo helper do middleware de auth
-sdk: v0.8.2
+description: Teste de handler httpx — stub de service com campos de resultado, httptest, só status code; claims injetadas pelo helper do middleware de auth
+sdk: v0.2.4
 keywords: [handler test, httptest, stub, SetPathValue, status code, WithClaims, RespondError]
 ---
 
@@ -48,17 +48,17 @@ Chame o método do handler direto — sem servidor, sem roteador:
 
 ```go
 req := httptest.NewRequest(http.MethodGet, "/v1/entities/1", nil)
-req.SetPathValue("id", "1") // netx.GetPathParam lê r.PathValue
+req.SetPathValue("id", "1") // httpx.GetPathParam lê r.PathValue
 rr := httptest.NewRecorder()
 
 h.getByID(rr, req)
 assert.Equal(t, http.StatusOK, rr.Code)
 ```
 
-- `netx.RespondError(w, r, appErr)` precisa do `*http.Request` — passe o `req`
+- `httpx.RespondError(w, r, appErr)` precisa do `*http.Request` — passe o `req`
   do teste (nunca `nil` no código de produção).
 - Chamar o método direto **não** passa pelo middleware de auth (`UseAuth` só
-  embrulha rotas `netx.PrivateRoutes` no servidor). Handler que lê claims
+  embrulha rotas `httpx.PrivateRoutes` no servidor). Handler que lê claims
   recebe-as pelo helper do middleware de auth:
   `req = req.WithContext(authhandler.WithClaims(req.Context(), &types.Claims{...}))`
   — ver `http-auth-middleware.md` §"Claims no contexto".

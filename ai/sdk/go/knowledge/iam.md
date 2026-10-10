@@ -1,7 +1,7 @@
 ---
 name: iam
 description: Módulo iam de ponta a ponta — montagem pelo componente, ports do projeto, login em dois passos, refresh com rotação, logout real, claims de domínio, hash de senha, auditoria
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [iam, login, Authenticate, SelectTenant, RefreshToken, Logout, LogoutAll, JWT_SECRET, UserPort, TenantPort, password, Argon2id, bcrypt, Extra, OnEvent, componente iam]
 ---
 
@@ -126,7 +126,7 @@ func (a *userAdapter) AssertAccess(ctx context.Context, userID, tenantID, module
 - Para e-mail inexistente o SDK gasta uma comparação **bcrypt custo 12**
   (equaliza tempo). Com hashes Argon2id a latência de "e-mail inexistente" e
   "senha errada" difere; proteja o endpoint de login com rate limit
-  (`netx.WSConfig.RateLimiter`).
+  (`httpx.WSConfig.RateLimiter`).
 
 ## Login, refresh e logout
 
@@ -185,7 +185,7 @@ unitID, _ := authhandler.ClaimsFromContext(r.Context()).Extra["unitId"].(string)
 
 - Só dado **não sensível e estável durante a sessão** — o JWT é legível.
 - `Extra` não substitui `TenantID`/`Roles`: tenant e papéis têm campo próprio.
-- O fluxo social (`IDPSelectTenant`) **não** propaga `Extra` em v0.8.2.
+- O fluxo social (`IDPSelectTenant`) **não** propaga `Extra` em v0.2.4.
 
 ## Auditoria (`OnEvent`)
 
