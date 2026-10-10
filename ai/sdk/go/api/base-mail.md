@@ -1,6 +1,6 @@
 # base/mail
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/mail"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/mail"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -141,7 +141,7 @@ type Config struct {
 	Host     string
 	Port     int
 	Username string
-	Password string
+	Password string `redact:"true"`
 	From     Address
 
 	Encryption Encryption
@@ -153,12 +153,44 @@ type Config struct {
 	HELODomain string
 
 	// TLSConfig overrides the default tls.Config (ServerName = Host). Optional.
-	TLSConfig *tls.Config
+	TLSConfig *tls.Config `redact:"true"`
 }
 ```
 
 Config configures the SMTP mailer. Build it explicitly and pass it to New;
 gofi's config package can populate it from MAIL_* environment variables.
+
+### Config.Format
+
+```go
+func (c Config) Format(f fmt.State, verb rune)
+```
+
+### Config.GoString
+
+```go
+func (c Config) GoString() string
+```
+
+### Config.LogValue
+
+```go
+func (c Config) LogValue() slog.Value
+```
+
+### Config.MarshalJSON
+
+```go
+func (c Config) MarshalJSON() ([]byte, error)
+```
+
+### Config.String
+
+```go
+func (c Config) String() string
+```
+
+String, GoString, Format, LogValue and MarshalJSON mask the secret fields.
 
 ## mail.Encryption
 

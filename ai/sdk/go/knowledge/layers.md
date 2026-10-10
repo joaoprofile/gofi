@@ -1,8 +1,8 @@
 ---
 name: layers
 description: Responsabilidade de cada camada (handler, service, repository, adapter), fluxo de request e de erro entre camadas, testabilidade com mocks handcraft
-sdk: v0.8.2
-keywords: [camadas, handler, service, repository, adapter, errs.AppError, netx.RespondError, netx.Response, fluxo, mocks]
+sdk: v0.2.4
+keywords: [camadas, handler, service, repository, adapter, errs.AppError, httpx.RespondError, httpx.Response, fluxo, mocks]
 ---
 
 # Camadas de um Contexto — Go
@@ -11,7 +11,7 @@ keywords: [camadas, handler, service, repository, adapter, errs.AppError, netx.R
 
 | Camada | Responsabilidade | Não pode |
 |--------|------------------|----------|
-| **Handler** | Parse request → chamar service → traduzir resposta (`netx.Response` / `netx.RespondError`) | conter lógica de negócio; conhecer SQL; acessar repository diretamente |
+| **Handler** | Parse request → chamar service → traduzir resposta (`httpx.Response` / `httpx.RespondError`) | conter lógica de negócio; conhecer SQL; acessar repository diretamente |
 | **Service** | Validar DTO → operar via repository → retornar `errs.AppError` | conhecer `http.ResponseWriter`/`http.Request`; manipular SQL; retornar `error` puro |
 | **Repository** | Executar SQL via `sqln` → retornar entidade ou `error` puro | depender de DTOs; conter regra de negócio |
 | **Adapter** | Bridge entre SDK externo (IAM, mensageria, bucket) e domain model | conter regra de negócio do domínio |
@@ -34,8 +34,8 @@ Handler.create(w, r)
             ↓ Repository: INSERT ... RETURNING
         ↑ retorna *model.User, error
     ↑ retorna *model.User, errs.AppError
-    ↓ if appErr.Exists() → netx.RespondError(w, r, appErr)
-    ↓ senão → netx.Response(w, http.StatusCreated, user)
+    ↓ if appErr.Exists() → httpx.RespondError(w, r, appErr)
+    ↓ senão → httpx.Response(w, http.StatusCreated, user)
 ```
 
 ## Erros entre camadas
@@ -47,14 +47,14 @@ Handler.create(w, r)
   - `nil, nil` em `FindByID` → `ErrXxxNotFound.New(id)` no service
   - outros → `ErrXxxAction.Wrap(err)`
 - **Handler** chama `appErr.Exists()` e responde com
-  `netx.RespondError(w, r, appErr)`, que mapeia o `Kind` para o status
+  `httpx.RespondError(w, r, appErr)`, que mapeia o `Kind` para o status
   (validação 400, não autorizado 401, proibido 403, não encontrado 404,
   conflito 409, externo 502, demais 500) e loga a causa. 401/403 nascem de
   erros registrados com `errs.RegisterUnauthorized`/`errs.RegisterForbidden`.
   Tabela completa: `error-handling.md`.
-- `netx.Error(w, status, err)` só para erro que não é `AppError` (ex.:
+- `httpx.Error(w, status, err)` só para erro que não é `AppError` (ex.:
   middleware de borda).
-- Sucesso → `netx.Response(w, status, data)`.
+- Sucesso → `httpx.Response(w, status, data)`.
 
 ## Testabilidade
 

@@ -1,7 +1,7 @@
 ---
 name: lookup-endpoints
 description: Valores de dropdown dos filtros dinâmicos — FilterType, SearchType embedded vs path, Content em sqln.FilterField, enums compartilhados
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [lookup, FilterMapping, FilterField, FilterType, SearchType, Content, embedded, enums, dropdown]
 ---
 
@@ -19,7 +19,7 @@ Os metadados de UI moram no próprio `sqln.FilterField` (`Label`, `FilterType`,
 
 ## Resposta do schema
 
-`netx.Response(w, http.StatusOK, model.{Ctx}FilterMapping)` serializa um
+`httpx.Response(w, http.StatusOK, model.{Ctx}FilterMapping)` serializa um
 objeto indexado pelo **nome de API** (a coluna nunca sai):
 
 ```json

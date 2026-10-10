@@ -1,6 +1,6 @@
 # base/cloud/oci
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/cloud/oci"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/cloud/oci"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -64,4 +64,36 @@ type Config struct {
 
 Config holds OCI identity settings. The API-key fields are used only when
 AuthMode is AuthAPIKey (or empty).
+
+### Config.Format
+
+```go
+func (c Config) Format(f fmt.State, verb rune)
+```
+
+### Config.GoString
+
+```go
+func (c Config) GoString() string
+```
+
+### Config.LogValue
+
+```go
+func (c Config) LogValue() slog.Value
+```
+
+### Config.MarshalJSON
+
+```go
+func (c Config) MarshalJSON() ([]byte, error)
+```
+
+### Config.String
+
+```go
+func (c Config) String() string
+```
+
+String, GoString, Format, LogValue and MarshalJSON mask the secret fields.
 

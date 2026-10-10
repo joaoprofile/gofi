@@ -1,6 +1,6 @@
 # msq/msqtest
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/msqtest"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq/msqtest"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -24,6 +24,8 @@ Run exercises the target.
 type Capabilities struct {
 	// Redelivery: a Nack is delivered again (false for Redis Pub/Sub).
 	Redelivery bool
+	// DeliveryCount: Message.DeliveryCount grows on each redelivery.
+	DeliveryCount bool
 }
 ```
 

@@ -1,7 +1,7 @@
 ---
 name: iam-social-login
 description: Login social com o iam — Google, Microsoft Entra e OIDC genérico; state + PKCE em cookie temporário, callback, vínculo de identidade externa e abertura da sessão
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [iam, IDP, OAuth, OIDC, Google, Microsoft, Entra, PKCE, state, IDPInitFlow, IDPHandleCallback, IDPSelectTenant, FindOrCreateByExternalIdentity]
 ---
 
@@ -43,7 +43,7 @@ Pré-requisito: `iam.md` (ports, sessão, entrega token/cookie). Referência:
 ```go
 u, err := iamSvc.IDPInitFlow(r.Context(), provider, redirectURI, nil)
 if err != nil { // core.ErrProviderNotFound para nome não registrado
-    netx.Error(w, http.StatusNotFound, errUnknownProvider)
+    httpx.Error(w, http.StatusNotFound, errUnknownProvider)
     return
 }
 setIDPStateCookie(w, u.State, u.CodeVerifier) // HttpOnly, SameSite=Lax, 10 min
@@ -62,18 +62,18 @@ rota de callback. O SDK não escreve esse cookie.
 st, ok := readIDPStateCookie(r)
 clearIDPStateCookie(w) // uso único, sucesso ou falha
 if !ok {
-    netx.Error(w, http.StatusUnauthorized, errUnauthenticated)
+    httpx.Error(w, http.StatusUnauthorized, errUnauthenticated)
     return
 }
 res, err := iamSvc.IDPHandleCallback(r.Context(), provider, port.IDPCallbackInput{
-    Code:          netx.GetQueryParam("code", r),
-    State:         netx.GetQueryParam("state", r),
+    Code:          httpx.GetQueryParam("code", r),
+    State:         httpx.GetQueryParam("state", r),
     ExpectedState: st.State,        // ≠ → core.ErrInvalidIDPState (CSRF)
     CodeVerifier:  st.CodeVerifier, // PKCE
     RedirectURI:   redirectURI,
 })
 if err != nil {
-    netx.Error(w, http.StatusUnauthorized, errUnauthenticated)
+    httpx.Error(w, http.StatusUnauthorized, errUnauthenticated)
     return
 }
 session, err := iamSvc.IDPSelectTenant(r.Context(), provider, port.SelectTenantInput{
@@ -104,5 +104,5 @@ tenants. `res.IDPUser` traz o perfil normalizado (`Email`, `EmailVerified`,
 - ❌ State/verifier em query string, `localStorage` ou cookie legível por JS.
 - ❌ Reaproveitar o cookie de state (não limpar no callback).
 - ❌ `IDPSelectTenant` sem o `Ticket` de `IDPHandleCallback`.
-- ❌ Contar com `SelectTenantInput.Extra` no fluxo social — não é propagado em v0.8.2.
+- ❌ Contar com `SelectTenantInput.Extra` no fluxo social — não é propagado em v0.2.4.
 - ❌ `IDPConfig{Provider: "github"}` — não suportado; exige port próprio (`port.IDPAuthPort`).

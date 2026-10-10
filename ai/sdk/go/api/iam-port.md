@@ -1,6 +1,6 @@
 # iam/port
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/port"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/port"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -11,9 +11,12 @@ type AuthInput struct {
 	Email    string
 	Password string
 
+	// IPAddress of the client, when known; keys the per-IP LoginThrottler limit.
+	IPAddress string
+
 	// Extra carries provider-specific input that does not fit Email/Password,
 	// e.g. an external token already issued by a third party. Forwarded
-	// unchanged to the custom AuthPort implementation.
+	// unchanged to the custom AuthPort implementation; the built-in one ignores it.
 	Extra map[string]string
 }
 ```
@@ -57,18 +60,31 @@ type AuthResult struct {
 	Tenants []types.TenantAccess
 
 	// Ticket proves this authentication; pass it back in SelectTenantInput.Ticket.
-	// Empty when no TenantTicketSecret is configured.
+	// Valid for 5 minutes and only for UserID.
 	Ticket string
 
 	// Extra carries handoff data that the custom AuthPort needs between
 	// Authenticate and SelectTenant (e.g. an external session token). The
-	// caller is responsible for re-injecting it into SelectTenantInput.Extra.
+	// caller re-injects it into SelectTenantInput.SessionExtra (secrets) or
+	// ClaimsExtra (public claims only).
 	Extra map[string]string
 }
 ```
 
 AuthResult is the result of the Authenticate step.
 Does not contain tokens — the user must select a tenant to obtain a session.
+
+## port.DummyPasswordVerifier
+
+```go
+type DummyPasswordVerifier interface {
+	DummyValidatePassword(ctx context.Context, password string)
+}
+```
+
+DummyPasswordVerifier is optionally implemented by a UserPort. When the
+email is unknown, the built-in login calls it instead of the default dummy
+check, so both paths cost the same as ValidatePassword.
 
 ## port.IDPAuthInput
 
@@ -148,6 +164,35 @@ type IDPCallbackResult struct {
 
 IDPCallbackResult is the result of processing the callback.
 
+## port.LoginAttempt
+
+```go
+type LoginAttempt struct {
+	Email     string
+	IPAddress string
+}
+```
+
+LoginAttempt identifies a login attempt for throttling. Email is already
+normalized (trimmed, lower-case); IPAddress may be empty.
+
+## port.LoginThrottler
+
+```go
+type LoginThrottler interface {
+	// Allow returns core.ErrTooManyAttempts while the email or the IP is locked out.
+	Allow(ctx context.Context, attempt LoginAttempt) error
+	// Failure records a failed attempt and starts the lockout when a limit is reached.
+	Failure(ctx context.Context, attempt LoginAttempt) error
+	// Success clears the failures counted for the email.
+	Success(ctx context.Context, attempt LoginAttempt) error
+}
+```
+
+LoginThrottler limits password guessing. The built-in login calls Allow
+before touching the user store or hashing, then Failure or Success.
+Built-in implementations: provider/redis and provider/memory.
+
 ## port.Permission
 
 ```go
@@ -182,8 +227,8 @@ type SelectTenantInput struct {
 	TenantID string
 	Module   string
 
-	// Ticket from AuthResult/IDPCallbackResult; validated when present,
-	// required when SecurityConfig.RequireTenantTicket is set.
+	// Ticket from AuthResult/IDPCallbackResult, bound to UserID and the login
+	// flow; required unless SecurityConfig.InsecureSkipTenantTicket is set.
 	Ticket string
 
 	// Audit and security context.
@@ -191,10 +236,13 @@ type SelectTenantInput struct {
 	UserAgent string
 	DeviceID  string
 
-	// Extra carries provider-specific data needed to issue the session
-	// (e.g. an external org-scoped token, a domain role label). Propagated
-	// by the custom AuthPort into types.Claims.Extra and types.Session.Extra.
-	Extra map[string]string
+	// ClaimsExtra goes into the access token ("ext" claim), readable by any
+	// bearer: public labels only (e.g. a domain role), never secrets or tokens.
+	ClaimsExtra map[string]string
+
+	// SessionExtra stays server-side, persisted with the session and never put
+	// in a token: the place for external provider tokens and other secrets.
+	SessionExtra map[string]string
 }
 ```
 
@@ -214,7 +262,9 @@ type SessionPort interface {
 	// Revoke invalidates a specific session for single-device logout.
 	Revoke(ctx context.Context, sessionID string) error
 
-	// RevokeAllForUser invalidates all sessions for the user across all devices.
+	// RevokeAllForUser invalidates all sessions for the user across all devices
+	// and returns every failure. Implement UserRevocationStore too so sessions
+	// opened by a concurrent refresh are also rejected.
 	RevokeAllForUser(ctx context.Context, userID string) error
 
 	// ListByUser returns the active sessions for a user for device management.
@@ -253,6 +303,18 @@ type TenantPort interface {
 
 TenantPort abstracts the tenant repository and multi-tenant access control.
 
+## port.TicketStore
+
+```go
+type TicketStore interface {
+	Consume(ctx context.Context, jti string, ttl time.Duration) (bool, error)
+}
+```
+
+TicketStore makes tenant tickets single-use. Consume records jti for ttl
+and reports false when it was already consumed (SETNX semantics).
+Built-in implementations: provider/redis and provider/memory.
+
 ## port.TokenPort
 
 ```go
@@ -289,6 +351,9 @@ type UserPort interface {
 
 	// FindOrCreateByExternalIdentity is called during the social IDP callback.
 	// If the user does not exist, it must create one. Must be idempotent.
+	// Look up by Provider+ExternalID; linking to an existing account by Email
+	// must be refused unless identity.EmailVerified is true, otherwise anyone
+	// who controls an IDP account with the victim's email takes over the account.
 	FindOrCreateByExternalIdentity(ctx context.Context, identity types.ExternalIdentity) (*types.User, error)
 }
 ```
@@ -296,4 +361,17 @@ type UserPort interface {
 UserPort abstracts the user repository.
 The SDK has no opinion about where users are stored.
 The implementation is the responsibility of the developer.
+
+## port.UserRevocationStore
+
+```go
+type UserRevocationStore interface {
+	RevokedBefore(ctx context.Context, userID string) (time.Time, error)
+}
+```
+
+UserRevocationStore is optionally implemented by a SessionPort.
+RevokeAllForUser records the cut-off first; RevokedBefore returns it (zero
+when never set), and sessions whose login (AuthTime) is not after it are
+rejected on validation and refresh, closing the race with a concurrent refresh.
 

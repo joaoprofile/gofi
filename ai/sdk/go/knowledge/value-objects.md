@@ -1,7 +1,7 @@
 ---
 name: value-objects
 description: Mapeamento linha→struct do sqln (tags db) — por nome ou por posição, value objects aninhados, coluna JSON, arrays
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [mapping, db-tag, value-object, scan, nested-struct, sql.Scanner, jsonb, array]
 ---
 

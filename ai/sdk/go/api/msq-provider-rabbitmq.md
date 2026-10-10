@@ -1,6 +1,6 @@
 # msq/provider/rabbitmq
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/provider/rabbitmq"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq/provider/rabbitmq"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -13,6 +13,13 @@ var ErrNotConnected = errors.New("rabbitmq: not connected")
 ```
 
 ErrNotConnected is returned while the connection is being re-established.
+
+```go
+var ErrUnroutable = errors.New("rabbitmq: message unroutable")
+```
+
+ErrUnroutable is returned when the broker has no queue bound for the
+message's routing key: the message was not stored.
 
 ## rabbitmq.Broker
 
@@ -53,7 +60,9 @@ func (b *Broker) NewProducer() (port.Producer, error)
 ```
 
 NewProducer opens a channel in confirm mode: SendMessage returns only after
-the broker has taken responsibility for the message.
+the broker has taken responsibility for the message. Messages are published
+as mandatory, so one no queue is bound for fails with ErrUnroutable instead
+of being dropped: declare the queues (start the consumers) before producing.
 
 ### Broker.Setup
 
@@ -78,11 +87,13 @@ it. Producers and consumers re-open their channels on the new connection.
 ### rabbitmq.DialURL
 
 ```go
-func DialURL(url string) (*Conn, error)
+func DialURL(rawURL string, opts ...DialOption) (*Conn, error)
 ```
 
 DialURL establishes a connection to the given AMQP URL (amqp:// or amqps://).
-The caller closes it (Broker.Close does; gofi's builder closes the Broker).
+Credentials in the URL are sent with SASL PLAIN and never appear in errors
+or logs. The caller closes it (Broker.Close does; gofi's builder closes the
+Broker).
 
 ### Conn.Close
 
@@ -108,6 +119,24 @@ func (c *Conn) Setup(_ context.Context, exchangeName string) error
 
 Setup declares a durable direct exchange. Broker.Setup calls it; call it
 directly only when using Conn without a Broker.
+
+## rabbitmq.DialOption
+
+```go
+type DialOption func(*amqp091.Config)
+```
+
+DialOption configures DialURL.
+
+### rabbitmq.WithTLSConfig
+
+```go
+func WithTLSConfig(c *tls.Config) DialOption
+```
+
+WithTLSConfig sets the TLS configuration of an amqps:// connection
+(private CA, client certificate, server name). Versions below TLS 1.2 are
+raised to it.
 
 ## rabbitmq.Option
 

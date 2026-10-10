@@ -1,6 +1,6 @@
 # msq/provider/redis
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/provider/redis"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq/provider/redis"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -56,7 +56,7 @@ type Config struct {
 	// StreamMaxLen caps each stream approximately (XADD MAXLEN ~); 0 keeps all.
 	StreamMaxLen int64
 	// ClaimIdle is how long an unacked stream message waits before it is
-	// redelivered (default 1m).
+	// redelivered (default 1m); ConsumeConfig.VisibilityTimeout overrides it.
 	ClaimIdle time.Duration
 
 	// Standalone mode.
@@ -69,6 +69,9 @@ type Config struct {
 
 	// TLS
 	TLSEnabled bool
+	// TLS is the client TLS configuration (private CA, mTLS, server name);
+	// setting it enables TLS. Versions below TLS 1.2 are raised to it.
+	TLS *tls.Config `json:"-"`
 
 	// Connection pool.
 	PoolSize     int
@@ -76,7 +79,40 @@ type Config struct {
 }
 ```
 
-Config configures the Redis broker.
+Config configures the Redis broker. Printing or logging it redacts the
+password.
+
+### Config.GoString
+
+```go
+func (c Config) GoString() string
+```
+
+GoString implements fmt.GoStringer with the password redacted.
+
+### Config.LogValue
+
+```go
+func (c Config) LogValue() slog.Value
+```
+
+LogValue implements slog.LogValuer with the password redacted.
+
+### Config.MarshalJSON
+
+```go
+func (c Config) MarshalJSON() ([]byte, error)
+```
+
+MarshalJSON encodes the configuration with the password redacted.
+
+### Config.String
+
+```go
+func (c Config) String() string
+```
+
+String implements fmt.Stringer with the password redacted.
 
 ## redis.Mode
 

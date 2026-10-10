@@ -1,6 +1,6 @@
 # base/debug
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/debug"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/debug"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -34,11 +34,43 @@ type Config struct {
 	// User and Pass, when both non-empty, protect every route with HTTP basic
 	// auth. Without them a non-loopback Addr is rebound to 127.0.0.1.
 	User string
-	Pass string
+	Pass string `redact:"true"`
 }
 ```
 
 Config holds the configuration for the pprof debug server.
+
+### Config.Format
+
+```go
+func (c Config) Format(f fmt.State, verb rune)
+```
+
+### Config.GoString
+
+```go
+func (c Config) GoString() string
+```
+
+### Config.LogValue
+
+```go
+func (c Config) LogValue() slog.Value
+```
+
+### Config.MarshalJSON
+
+```go
+func (c Config) MarshalJSON() ([]byte, error)
+```
+
+### Config.String
+
+```go
+func (c Config) String() string
+```
+
+String, GoString, Format, LogValue and MarshalJSON mask the secret fields.
 
 ## debug.Server
 
@@ -57,6 +89,14 @@ func New(cfg Config) *Server
 ```
 
 New returns a new debug Server with the given configuration.
+
+### Server.Format
+
+```go
+func (s *Server) Format(f fmt.State, _ rune)
+```
+
+Format keeps fmt from printing the unexported cfg (and its password) raw.
 
 ### Server.Handler
 

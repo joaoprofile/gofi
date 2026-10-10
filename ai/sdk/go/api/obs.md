@@ -1,8 +1,17 @@
 # obs
 
-`import "github.com/joaoprofile/gofi-sdk-go/obs"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/obs"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
+
+## Variáveis
+
+```go
+var ErrInvalidTLS = errors.New("obs: invalid OTLP TLS configuration")
+```
+
+ErrInvalidTLS reports an unusable OTLP TLS setting; Init never falls back
+to plaintext.
 
 ## Funções
 
@@ -94,11 +103,33 @@ type TeleConfig struct {
 	CollectorAddr  string
 
 	// TLS encrypts the OTLP gRPC connection; the default is plaintext for
-	// in-cluster collectors.
+	// in-cluster collectors. The TLS fields below need TLS=true: setting any
+	// of them without it makes Init fail instead of sending plaintext.
 	TLS bool
+
+	// TLSConfig is used as is when set; the file fields and ServerName are
+	// then ignored.
+	TLSConfig *tls.Config
+	// CAFile is a PEM bundle trusted for the collector certificate. As the
+	// OTel spec defines for OTEL_EXPORTER_OTLP_CERTIFICATE, it replaces the
+	// system roots; empty verifies against the system roots.
+	CAFile string
+	// CertFile and KeyFile are the PEM client certificate and key (mTLS);
+	// set both or neither.
+	CertFile string
+	KeyFile  string
+	// ServerName overrides the name verified in the collector certificate
+	// (and sent as SNI); empty uses the dialed host.
+	ServerName string
 
 	// MetricInterval overrides OTEL_METRIC_EXPORT_INTERVAL (SDK default 60s).
 	MetricInterval time.Duration
+
+	// MetricCardinalityLimit caps the attribute sets kept per instrument in
+	// each collection; extra sets fold into one otel.metric.overflow series,
+	// so unbounded labels cannot exhaust memory. 0 keeps the SDK default
+	// (2000, or OTEL_GO_X_CARDINALITY_LIMIT); negative removes the cap.
+	MetricCardinalityLimit int
 
 	// LegacyMetricNames keeps the pre-v0.3 gofi_* metric names for existing
 	// dashboards instead of the OpenTelemetry semantic-convention names.

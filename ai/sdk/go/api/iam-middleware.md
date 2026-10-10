@@ -1,6 +1,6 @@
 # iam/middleware
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/middleware"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/middleware"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -9,12 +9,13 @@
 ### middleware.AuthInterceptor
 
 ```go
-func AuthInterceptor(svc *core.IAMService) grpc.UnaryServerInterceptor
+func AuthInterceptor(svc *core.IAMService, opts ...GRPCOption) grpc.UnaryServerInterceptor
 ```
 
 AuthInterceptor is the gRPC equivalent of AuthMiddleware for unary RPCs.
 Validates the token from the "authorization: Bearer" metadata entry.
 Injects the claims into the context for use in gRPC handlers.
+Only health checks are public unless opts add more (see WithPublicReflection).
 
 ### middleware.AuthMiddleware
 
@@ -29,7 +30,7 @@ On failure, responds with 401 and terminates the handler chain.
 ### middleware.AuthStreamInterceptor
 
 ```go
-func AuthStreamInterceptor(svc *core.IAMService) grpc.StreamServerInterceptor
+func AuthStreamInterceptor(svc *core.IAMService, opts ...GRPCOption) grpc.StreamServerInterceptor
 ```
 
 AuthStreamInterceptor is the gRPC equivalent of AuthMiddleware for streaming RPCs.
@@ -43,6 +44,32 @@ func ClaimsFromContext(ctx context.Context) *types.Claims
 ClaimsFromContext extracts the claims injected by AuthMiddleware.
 Returns nil if not found, meaning the request did not pass through AuthMiddleware.
 
+### middleware.ClearIDPStateCookie
+
+```go
+func ClearIDPStateCookie(w http.ResponseWriter, sec iamconfig.SecurityConfig)
+```
+
+ClearIDPStateCookie deletes the IDP state cookie; call it in the callback
+so a state is never used twice.
+
+### middleware.ClearRefreshCookie
+
+```go
+func ClearRefreshCookie(w http.ResponseWriter, sec iamconfig.SecurityConfig)
+```
+
+ClearRefreshCookie deletes the refresh token cookie (logout).
+
+### middleware.IDPStateFromCookie
+
+```go
+func IDPStateFromCookie(r *http.Request, sec iamconfig.SecurityConfig) (state, verifier string, ok bool)
+```
+
+IDPStateFromCookie returns the state and PKCE verifier saved by
+SetIDPStateCookie; pass them as ExpectedState and CodeVerifier.
+
 ### middleware.RBACMiddleware
 
 ```go
@@ -51,6 +78,32 @@ func RBACMiddleware(svc *core.IAMService, resource, action string) func(http.Han
 
 RBACMiddleware checks whether the claims authorize the given resource and action.
 Must be chained after AuthMiddleware. Responds with 403 on failure.
+
+### middleware.RefreshTokenFromCookie
+
+```go
+func RefreshTokenFromCookie(r *http.Request, sec iamconfig.SecurityConfig) string
+```
+
+RefreshTokenFromCookie returns the refresh token cookie value, or "".
+
+### middleware.SetIDPStateCookie
+
+```go
+func SetIDPStateCookie(w http.ResponseWriter, sec iamconfig.SecurityConfig, flow *port.IDPAuthURL)
+```
+
+SetIDPStateCookie keeps the flow's state and PKCE verifier for the callback,
+for IDPStateTTL. SameSite is Lax so it survives the IDP's redirect back.
+
+### middleware.SetRefreshCookie
+
+```go
+func SetRefreshCookie(w http.ResponseWriter, sec iamconfig.SecurityConfig, s *types.Session)
+```
+
+SetRefreshCookie stores the session's refresh token in a cookie scoped to
+CookiePath (the refresh endpoint), expiring with the session.
 
 ### middleware.TenantMiddleware
 
@@ -61,4 +114,30 @@ func TenantMiddleware(svc *core.IAMService) func(http.Handler) http.Handler
 TenantMiddleware verifies in the TenantPort whether the user still has access to the tenant in the claims.
 Ensures that access removal takes immediate effect without relying on token expiry.
 Must be chained after AuthMiddleware.
+
+## middleware.GRPCOption
+
+```go
+type GRPCOption func(*grpcOptions)
+```
+
+GRPCOption configures the auth interceptors.
+
+### middleware.WithPublicMethods
+
+```go
+func WithPublicMethods(prefixes ...string) GRPCOption
+```
+
+WithPublicMethods lets full method names with any of the prefixes through
+without a token (e.g. "/pkg.Service/Method" or "/pkg.Service/").
+
+### middleware.WithPublicReflection
+
+```go
+func WithPublicReflection() GRPCOption
+```
+
+WithPublicReflection lets server reflection through without a token. Off by
+default: reflection lists every service and method to anyone.
 

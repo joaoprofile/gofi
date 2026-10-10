@@ -1,7 +1,7 @@
 ---
 name: http-auth-middleware
-description: Middleware de autenticação HTTP sobre o iam — função netx.Middleware, Bearer ou cookie de sessão, sempre IAMService.ValidateToken, claims com chave própria
-sdk: v0.8.2
+description: Middleware de autenticação HTTP sobre o iam — função httpx.Middleware, Bearer ou cookie de sessão, sempre IAMService.ValidateToken, claims com chave própria
+sdk: v0.2.4
 keywords: [auth, middleware, UseAuth, ValidateToken, Bearer, cookie, sessão, BFF, vault, RefreshToken, ClaimsFromContext, CrossOriginProtection, 401]
 ---
 
@@ -13,17 +13,17 @@ Setup do serviço iam, login, refresh e logout: `iam.md`. Gate de permissão:
 
 ## Regra
 
-1. Middleware de autenticação é **função** que devolve `netx.Middleware`,
+1. Middleware de autenticação é **função** que devolve `httpx.Middleware`,
    fechada sobre o `*core.IAMService`. Nada de struct + construtor + `AsHandler()`.
 2. Registrado com `UseAuth(...)` do componente `httpserver` — roda **só** nas
-   rotas declaradas com `netx.PrivateRoutes`. **`UseAuth` antes de `Handlers`**
+   rotas declaradas com `httpx.PrivateRoutes`. **`UseAuth` antes de `Handlers`**
    (ver `http-server.md` §"Ordem de registro").
 3. Toda credencial termina em **`svc.ValidateToken(ctx, token)`**: assinatura +
    expiração + sessão ativa no `SessionPort`. É isso que torna o logout
    imediato. Nunca parse o JWT à mão no middleware.
 4. Aceita `Authorization: Bearer <jwt>` (apps, CLIs, serviço-a-serviço) **ou**
    cookie de sessão opaco (browser/BFF). Header tem prioridade.
-5. Falha → `netx.Error(w, http.StatusUnauthorized, errUnauthenticated)` (JSON
+5. Falha → `httpx.Error(w, http.StatusUnauthorized, errUnauthenticated)` (JSON
    no mesmo formato dos demais erros), mensagem genérica — nunca o motivo.
 6. Claims vão para o contexto com **chave do próprio pacote**; o mesmo arquivo
    exporta `ClaimsFromContext` e `WithClaims` (este último serve aos testes).
@@ -57,7 +57,7 @@ import (
 
     "github.com/joaoprofile/gofi-sdk-go/iam/core"
     "github.com/joaoprofile/gofi-sdk-go/iam/types"
-    "github.com/joaoprofile/gofi-sdk-go/netx"
+    "github.com/joaoprofile/gofi-sdk-go/netx/httpx"
 )
 
 const sessionCookie = "sid"
@@ -66,13 +66,13 @@ var errUnauthenticated = errors.New("not authenticated")
 
 type claimsKey struct{}
 
-// Middleware guards netx.PrivateRoutes; register it with UseAuth before Handlers.
-func Middleware(svc *core.IAMService, v *Vault) netx.Middleware {
+// Middleware guards httpx.PrivateRoutes; register it with UseAuth before Handlers.
+func Middleware(svc *core.IAMService, v *Vault) httpx.Middleware {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             claims, err := authenticate(r, svc, v)
             if err != nil {
-                netx.Error(w, http.StatusUnauthorized, errUnauthenticated)
+                httpx.Error(w, http.StatusUnauthorized, errUnauthenticated)
                 return
             }
             next.ServeHTTP(w, r.WithContext(WithClaims(r.Context(), claims)))
@@ -158,7 +158,7 @@ func clearSessionCookie(w http.ResponseWriter) {
 }
 ```
 
-- Cookie de sessão **exige** `netx.WSConfig{CrossOriginProtection: true}` no
+- Cookie de sessão **exige** `httpx.WSConfig{CrossOriginProtection: true}` no
   servidor (rejeita POST cross-site por `Sec-Fetch-Site`/`Origin` — CSRF).
 - Os campos `Cookie*` de `iamconfig.SecurityConfig` são só defaults
   declarativos: o SDK **não** escreve cookie nenhum. Quem seta é o handler.
@@ -170,7 +170,7 @@ Quando remover acesso precisa valer antes do token expirar, acrescente após
 
 ```go
 if err := svc.Tenant().AssertAccess(r.Context(), claims.UserID, claims.TenantID, claims.Module); err != nil {
-    netx.Error(w, http.StatusForbidden, errForbidden)
+    httpx.Error(w, http.StatusForbidden, errForbidden)
     return
 }
 ```
@@ -182,7 +182,7 @@ if err := svc.Tenant().AssertAccess(r.Context(), claims.UserID, claims.TenantID,
 
 ```go
 identity := iamc.New(iamc.Config{User: users, Tenant: users, RBAC: rbac}) // gofi/component/iam
-server := httpserver.New(":8080", &netx.WSConfig{CrossOriginProtection: true})
+server := httpserver.New(":8080", &httpx.WSConfig{CrossOriginProtection: true})
 
 svc, err := gofi.New("<service>").With(identity, server).Build()
 if err != nil {
@@ -208,7 +208,7 @@ Handlers **não** recebem o middleware; só leem `authhandler.ClaimsFromContext(
 server.Handlers(h).UseAuth(mw)
 
 // ❌ Rota que exige login declarada com PublicRoutes
-netx.PublicRoutes("/v1", netx.GET("/me").To(h.me))
+httpx.PublicRoutes("/v1", httpx.GET("/me").To(h.me))
 
 // ❌ Parse manual do JWT no middleware (pula a checagem de sessão revogada)
 tok, _ := jwt.Parse(raw, keyFunc)
@@ -226,12 +226,12 @@ tok, _ := jwt.Parse(raw, keyFunc)
 
 ## Checklist
 
-- [ ] `Middleware(svc, …) netx.Middleware` — função, fechada sobre `*core.IAMService`
+- [ ] `Middleware(svc, …) httpx.Middleware` — função, fechada sobre `*core.IAMService`
 - [ ] Toda credencial passa por `svc.ValidateToken`; Bearer tem prioridade sobre cookie
-- [ ] 401 via `netx.Error`, mensagem genérica
+- [ ] 401 via `httpx.Error`, mensagem genérica
 - [ ] `ClaimsFromContext` + `WithClaims` com chave própria, no mesmo arquivo
 - [ ] Modo sessão: cookie `HttpOnly` só com id opaco; renovação serializada por id; vault compartilhado com >1 réplica
 - [ ] `CrossOriginProtection: true` quando há cookie de sessão
 - [ ] `cookieSecure()` interno (`!environment.IsLocalEnvironment()`)
 - [ ] `UseAuth` depois do `Build` e **antes** de `Handlers`
-- [ ] Rotas autenticadas em `netx.PrivateRoutes`
+- [ ] Rotas autenticadas em `httpx.PrivateRoutes`

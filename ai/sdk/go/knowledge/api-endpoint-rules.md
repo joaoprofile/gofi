@@ -1,13 +1,13 @@
 ---
 name: api-endpoint-rules
 description: Regras de endpoints em Go — filtro dinâmico com FilterMapping, lookups, config de motor de decisão, GET do front
-sdk: v0.8.2
-keywords: [endpoint, handler, FilterMapping, dynamic-filter, lookup, read-endpoint, validation, netx]
+sdk: v0.2.4
+keywords: [endpoint, handler, FilterMapping, dynamic-filter, lookup, read-endpoint, validation, httpx]
 ---
 
 # Regras — endpoints e validação de entrada
 
-Índice; detalhe no arquivo apontado. API: `.claude/sdk/go/api/netx.md`,
+Índice; detalhe no arquivo apontado. API: `.claude/sdk/go/api/netx-httpx.md`,
 `sqln-filter.md`, `sqln.md`.
 
 - **Filtro dinâmico = allowlist `sqln.FilterMapping`.** O cliente envia nomes
@@ -32,7 +32,7 @@ keywords: [endpoint, handler, FilterMapping, dynamic-filter, lookup, read-endpoi
   §"Config que alimenta motor de decisão".
 - **GET do front — handler bind+validate; repo com criteria, cache e
   paginação.** Handler nunca faz `strconv.Atoi(q.Get(...))`: bind em DTO com
-  `netx.BindQueryParamsToStruct` (tags `form`) + `DTO.Validate()`; campo de
+  `httpx.BindQueryParamsToStruct` (tags `form`) + `DTO.Validate()`; campo de
   tenancy `form:"-"`, setado do auth depois do bind. Repository usa
   `criteria` (`GroupBy`/`Having` para agregação) + `WithCache` +
   `WithPage(sqln.NewPageRequest(...))` → `PagedList()`, ou `.UniqueResult()`
@@ -41,7 +41,7 @@ keywords: [endpoint, handler, FilterMapping, dynamic-filter, lookup, read-endpoi
   `read-endpoints.md`.
 - **Export (XLSX/CSV) reusa o filtro dinâmico** do contexto e lê com
   streaming (`.All()`) — `report-export.md`.
-- **Erros no handler:** erro de parse/bind → `netx.Error(w, http.StatusBadRequest, err)`;
-  erro do service (`errs.AppError`) → `netx.RespondError(w, r, appErr)`, que
+- **Erros no handler:** erro de parse/bind → `httpx.Error(w, http.StatusBadRequest, err)`;
+  erro do service (`errs.AppError`) → `httpx.RespondError(w, r, appErr)`, que
   mapeia o tipo registrado (`RegisterValidation` → 400, `RegisterNotFound` →
   404, `RegisterConflict` → 409, …). Padrão geral em `error-handling.md`.

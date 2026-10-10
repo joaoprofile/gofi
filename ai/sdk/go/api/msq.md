@@ -1,6 +1,6 @@
 # msq
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -17,6 +17,8 @@ const (
 	EventConsumerStopped     = types.EventConsumerStopped
 	EventProducerError       = types.EventProducerError
 	EventConsumerError       = types.EventConsumerError
+	EventMessageRejected     = types.EventMessageRejected
+	EventConsumerRestarting  = types.EventConsumerRestarting
 )
 ```
 
@@ -27,6 +29,7 @@ const (
 	HeaderDLQOriginalTopic = core.HeaderDLQOriginalTopic
 	HeaderDLQError         = core.HeaderDLQError
 	HeaderDLQAttempts      = core.HeaderDLQAttempts
+	HeaderDLQDeliveries    = core.HeaderDLQDeliveries
 )
 ```
 
@@ -46,6 +49,7 @@ const (
 	Ack    = types.Ack
 	Nack   = types.Nack
 	Ignore = types.Ignore
+	Reject = types.Reject
 )
 ```
 
@@ -53,12 +57,15 @@ Result constants re-exported at package level.
 
 ```go
 const (
-	DefaultConcurrency  = types.DefaultConcurrency
-	DefaultPollInterval = types.DefaultPollInterval
+	DefaultConcurrency       = types.DefaultConcurrency
+	DefaultPollInterval      = types.DefaultPollInterval
+	DefaultVisibilityTimeout = types.DefaultVisibilityTimeout
+	DefaultMaxDeliveries     = types.DefaultMaxDeliveries
+	DefaultHandlerTimeout    = types.DefaultHandlerTimeout
 )
 ```
 
-Consumer concurrency / polling defaults re-exported at package level.
+Consumer concurrency / polling / lease defaults re-exported at package level.
 
 ```go
 const (
@@ -195,6 +202,10 @@ type Config struct {
 	// OnEvent is called for every message and consumer lifecycle event. It runs
 	// on the hot path, so keep it cheap. Optional.
 	OnEvent func(ctx context.Context, event types.BrokerEvent)
+	// MaxDeliveries and HandlerTimeout are service-wide defaults for the
+	// ConsumeConfig fields of the same name a consumer leaves at zero.
+	MaxDeliveries  int
+	HandlerTimeout time.Duration
 }
 ```
 
@@ -304,6 +315,38 @@ type OCICredentials struct {
 
 OCICredentials configures the OCI Queue provider; see base/cloud/oci.
 
+### OCICredentials.GoString
+
+```go
+func (c OCICredentials) GoString() string
+```
+
+GoString implements fmt.GoStringer with the private key redacted.
+
+### OCICredentials.LogValue
+
+```go
+func (c OCICredentials) LogValue() slog.Value
+```
+
+LogValue implements slog.LogValuer with the private key redacted.
+
+### OCICredentials.MarshalJSON
+
+```go
+func (c OCICredentials) MarshalJSON() ([]byte, error)
+```
+
+MarshalJSON encodes the credentials with the private key redacted.
+
+### OCICredentials.String
+
+```go
+func (c OCICredentials) String() string
+```
+
+String implements fmt.Stringer with the private key redacted.
+
 ## msq.OffsetReset
 
 ```go
@@ -334,17 +377,23 @@ Producer sends messages to a broker.
 type ProviderConfig struct {
 	// Type selects the registered provider.
 	Type BrokerType
-
 	// Addr is the broker host:port (Kafka seed, AMQP or NATS server).
 	Addr     string
 	User     string
 	Password string
-	UseTLS   bool
-
+	// UseTLS encrypts the connection (Kafka, RabbitMQ, NATS). Any field set in
+	// TLS enables it too.
+	UseTLS bool
+	// TLS customizes the TLS connection: private CA, client certificate
+	// (mTLS) and server name. Kafka, RabbitMQ, NATS and Redis apply it.
+	TLS TLSConfig
 	// ClientName identifies the connection on the server (NATS).
 	ClientName string
 	// SASLMechanism selects Kafka SASL: PLAIN (default), SCRAM-SHA-256 or SCRAM-SHA-512.
 	SASLMechanism string
+	// AllowPlaintextSASL lets Kafka send SASL PLAIN credentials without TLS.
+	// Only for local development: the password travels in clear text.
+	AllowPlaintextSASL bool
 	// Exchange is the AMQP exchange (RabbitMQ).
 	Exchange string
 	// Encoding is the wire format (RabbitMQ); empty means envelope.
@@ -357,7 +406,66 @@ type ProviderConfig struct {
 
 ProviderConfig is the provider-neutral connection that Open hands to a
 registered provider. The root config package fills it from the MESSAGING_*
-variables; each provider reads only its own fields.
+variables; each provider reads only its own fields. Printing or logging it
+(fmt, slog, JSON) redacts every secret.
+
+### ProviderConfig.GoString
+
+```go
+func (c ProviderConfig) GoString() string
+```
+
+GoString implements fmt.GoStringer with secrets redacted.
+
+### ProviderConfig.Insecure
+
+```go
+func (c ProviderConfig) Insecure() bool
+```
+
+Insecure reports whether the connection would send data in plaintext or
+skip certificate verification. SQS and OCI always use their SDK's HTTPS.
+gofi refuses an insecure broker in production.
+
+### ProviderConfig.LogValue
+
+```go
+func (c ProviderConfig) LogValue() slog.Value
+```
+
+LogValue implements slog.LogValuer with secrets redacted.
+
+### ProviderConfig.MarshalJSON
+
+```go
+func (c ProviderConfig) MarshalJSON() ([]byte, error)
+```
+
+MarshalJSON encodes the configuration with secrets redacted.
+
+### ProviderConfig.RedisTLSEnabled
+
+```go
+func (c ProviderConfig) RedisTLSEnabled() bool
+```
+
+RedisTLSEnabled reports whether the Redis connection uses TLS.
+
+### ProviderConfig.String
+
+```go
+func (c ProviderConfig) String() string
+```
+
+String implements fmt.Stringer with secrets redacted.
+
+### ProviderConfig.TLSEnabled
+
+```go
+func (c ProviderConfig) TLSEnabled() bool
+```
+
+TLSEnabled reports whether the Kafka, RabbitMQ or NATS connection uses TLS.
 
 ## msq.RedisConnection
 
@@ -373,6 +481,38 @@ type RedisConnection struct {
 
 RedisConnection configures the Redis provider.
 
+### RedisConnection.GoString
+
+```go
+func (c RedisConnection) GoString() string
+```
+
+GoString implements fmt.GoStringer with the password redacted.
+
+### RedisConnection.LogValue
+
+```go
+func (c RedisConnection) LogValue() slog.Value
+```
+
+LogValue implements slog.LogValuer with the password redacted.
+
+### RedisConnection.MarshalJSON
+
+```go
+func (c RedisConnection) MarshalJSON() ([]byte, error)
+```
+
+MarshalJSON encodes the connection with the password redacted.
+
+### RedisConnection.String
+
+```go
+func (c RedisConnection) String() string
+```
+
+String implements fmt.Stringer with the password redacted.
+
 ## msq.Result
 
 ```go
@@ -380,4 +520,35 @@ type Result = types.Result
 ```
 
 Result signals the broker how to handle a processed message.
+
+## msq.TLSConfig
+
+```go
+type TLSConfig struct {
+	// CAFile is a PEM bundle of CAs trusted for the server certificate, in
+	// addition to the system roots.
+	CAFile string
+	// CertFile and KeyFile are the PEM client certificate and key (mTLS).
+	CertFile string
+	KeyFile  string
+	// ServerName overrides the name verified in the server certificate (and
+	// sent as SNI); empty uses the dialed host.
+	ServerName string
+	// InsecureSkipVerify disables server certificate verification. Never in
+	// production: Insecure reports it and gofi refuses it there.
+	InsecureSkipVerify bool
+}
+```
+
+TLSConfig customizes a broker TLS connection. The zero value verifies the
+server against the system roots.
+
+### TLSConfig.Config
+
+```go
+func (t TLSConfig) Config() (*tls.Config, error)
+```
+
+Config builds a TLS 1.2+ client configuration, loading the CA bundle and
+the client key pair from their files.
 

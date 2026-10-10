@@ -1,6 +1,6 @@
 # base/errs
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/errs"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/errs"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -122,6 +122,9 @@ func (e *AppError) GetCode() string
 ```go
 func (e AppError) GetSafeError(defaultMessage string) error
 ```
+
+GetSafeError returns the public Message as an error, or defaultMessage when
+Message is empty. The internal cause (Err) and Details are never exposed.
 
 ### AppError.Is
 

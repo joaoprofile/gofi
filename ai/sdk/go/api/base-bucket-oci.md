@@ -1,6 +1,6 @@
 # base/bucket/oci
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/bucket/oci"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/bucket/oci"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -21,6 +21,8 @@ type Config struct {
 	Endpoint string
 	// Credentials selects the principal and region (see base/cloud/oci).
 	Credentials cloudoci.Config
+	// PresignMaxTTL lowers the longest PAR validity; see bucket.PresignLimit.
+	PresignMaxTTL time.Duration
 }
 ```
 
@@ -88,7 +90,8 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (
 ```
 
 PresignGet issues a read-only Pre-Authenticated Request (PAR) scoped to a
-single object and returns the absolute download URL valid for ttl.
+single object and returns the absolute download URL valid for ttl. Each
+call creates a PAR that lives until it expires, so ttl is capped.
 
 ### Store.Put
 

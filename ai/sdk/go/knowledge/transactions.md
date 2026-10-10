@@ -1,7 +1,7 @@
 ---
 name: transactions
 description: Transações com sqln/transaction — propagação por ctx, isolamento, retry de conflito, aninhamento, onde a tx vive
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [sqln, transaction, tx, isolation, retry, serializable, QuerierFrom, TxFrom, aggregate]
 ---
 

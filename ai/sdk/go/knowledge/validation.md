@@ -1,7 +1,7 @@
 ---
 name: validation
 description: Validação de DTOs com base/validator — singleton por pacote, Validate() no DTO, chamada no service e detalhes por campo no 400
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [validator, ValidateStruct, Validate, DTO, required, oneof, gtfield, ValidationError, FieldError, WithDetails, 400]
 ---
 
@@ -63,7 +63,7 @@ Nunca no handler — o handler não sabe nada sobre regras de negócio.
 ## Propagação de erros de validação ao cliente
 
 `ValidateStruct` devolve `validator.ValidationError{Errors []FieldError}`.
-`WithDetails(err)` + `netx.RespondError(w, r, appErr)` levam os campos ao body:
+`WithDetails(err)` + `httpx.RespondError(w, r, appErr)` levam os campos ao body:
 
 ```json
 HTTP 400

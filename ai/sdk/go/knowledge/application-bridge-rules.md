@@ -1,15 +1,15 @@
 ---
 name: application-bridge-rules
-description: Regras de application vs domain service e bridge/factory/adapter em Go — layout, dependências, NotSupported, adapter HTTP sobre netx, httptest, cache da factory
-sdk: v0.8.2
-keywords: [application, domain-service, bridge, factory, adapter, integration, netx, httptest, NotSupported, decorator, rate-limit]
+description: Regras de application vs domain service e bridge/factory/adapter em Go — layout, dependências, NotSupported, adapter HTTP sobre netx/httpx, httptest, cache da factory
+sdk: v0.2.4
+keywords: [application, domain-service, bridge, factory, adapter, integration, httpx, httptest, NotSupported, decorator, rate-limit]
 ---
 
 # Regras — application, bridge, factory e adapter
 
 Índice; detalhe no arquivo apontado. Cliente HTTP do SDK:
-`.claude/sdk/go/api/netx.md` (`netx.NewClient`, `netx.NewRequest`,
-`netx.FromError`).
+`.claude/sdk/go/api/netx-httpx.md` (`httpx.NewClient`, `httpx.NewRequest`,
+`httpx.FromError`).
 
 - **Application service vs domain service — separação por camada.**
   Domain service (`service/`) possui regra de domínio: persistência em batch,
@@ -55,7 +55,7 @@ keywords: [application, domain-service, bridge, factory, adapter, integration, n
     (PURA: sem `ctx`, sem `error` de I/O; usada pelo decider sobre snapshot) e
     `bridge/execution_bridge.go` (com `ctx` + `error`; usada pelo executor).
     Cada adapter implementa as duas em arquivos separados;
-    `decision_bridge.go` que importa `net/http`/`netx` ou faz chamada externa é
+    `decision_bridge.go` que importa `net/http`/`httpx` ou faz chamada externa é
     violação. Detalhe: `.claude/expertise/event-driven/executor-pattern.md`.
 - **Application dispatched por evento — split físico por type.**
   `Execute(ctx, event) → switch event.Type → applyX/Y/Z` vira, no mesmo package:
@@ -67,12 +67,12 @@ keywords: [application, domain-service, bridge, factory, adapter, integration, n
   `services/domain/{ctx}/bridge/errors.go`). Application chama plano; se cair
   em `NotSupported`, o consumer dá `msq.Ack` + log (não `Nack`: retry não muda
   a resposta). **Não** ramificar por dimensão na application.
-- **`netx.Request.Execute()` devolve `(nil, nil)` sem `Content-Type: application/json`.**
+- **`httpx.Request.Execute()` devolve `(nil, nil)` sem `Content-Type: application/json`.**
   Resposta não-JSON (ou `204`) tem o corpo descartado, sem erro → nil deref no
   caller. Adapter checa `resp != nil`; em `httptest.NewServer`, sempre
   `w.Header().Set("Content-Type", "application/json")` antes do `Write`.
   Sistema externo que devolve HTML de erro cai no mesmo caso.
-- **`netx` só retenta método idempotente.** `POST`/`PATCH` não repetem em
+- **`httpx` só retenta método idempotente.** `POST`/`PATCH` não repetem em
   rede/5xx, a menos que o request leve `Idempotency-Key`; `429` é retentado
   (e, esgotado, volta com status `408`) salvo `DisableRetryOn429`. O
   classificador do adapter trata `408` como rate limit. Detalhe:
@@ -82,12 +82,12 @@ keywords: [application, domain-service, bridge, factory, adapter, integration, n
   cache, não faz N+1 em APIs auxiliares; enriquecimento mora na application
   (batch read prévio) ou num enricher fora do hot path. >2 chamadas externas
   por entidade no adapter = extrair etapa.
-- **Adapter em `httptest` — baseURL com trailing slash.** `netx.NewRequest`
+- **Adapter em `httptest` — baseURL com trailing slash.** `httpx.NewRequest`
   monta `client.BaseURL + path`. Se o `baseURL` real termina em `/` e os paths
   começam sem `/`, o teste passa `srv.URL + "/"`; se o `baseURL` não termina em
   `/` e os paths começam com `/`, passa `srv.URL`.
 - **Factory de bridge cacheia 1 instância por key.** Sem cache, cada `Get()`
-  cria `netx.HttpClient` novo (cada um com rate limiter local) → N consumers × M
+  cria `httpx.HttpClient` novo (cada um com rate limiter local) → N consumers × M
   workers clients independentes, mas o externo limita por token → estoura o
   limite real. `sync.Map` + `LoadOrStore`, decorators (observabilidade — pacote
   do projeto, não do SDK) aplicados **antes** de cachear. Detalhe:

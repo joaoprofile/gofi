@@ -1,7 +1,7 @@
 ---
 name: service-boilerplate
 description: Esqueleto do service Go — errors.go com errs.Register*, interface + implementação devolvendo errs.AppError, variante com split CRUD + Auth/IAM
-sdk: v0.8.2
+sdk: v0.2.4
 ---
 
 # Boilerplate — Service
@@ -185,7 +185,7 @@ func (s *entityService) GetByDynamicQuery(ctx context.Context, tenantID string, 
 Quando o contexto também autentica (login, refresh, logout, `/me`): **uma**
 interface, **um** struct/constructor, dois arquivos. `{contexto}_service.go`
 fica como acima; `auth_service.go` acrescenta os métodos de auth no mesmo
-`*entityService`, que passa a receber o `*core.IAMService`. `errors.go`
+`*entityService`, que passa a receber o `*core.IAMService` (campo `iamSvc`). `errors.go`
 continua único. Detalhe do iam: `.claude/sdk/go/knowledge/iam.md`.
 
 ```go
@@ -213,18 +213,18 @@ import (
 	"github.com/joaoprofile/gofi-sdk-go/iam/types"
 )
 
-// On the interface: Login, Refresh, Logout (LogoutAll follows Logout with s.iam.LogoutAll).
+// On the interface: Login, Refresh, Logout (LogoutAll follows Logout with s.iamSvc.LogoutAll).
 // model.LoginRequest (DTO with Validate), model.ClientMeta (IP, UserAgent) and model.Module are context types.
 
 func (s *entityService) Login(ctx context.Context, in model.LoginRequest, meta model.ClientMeta) (*types.Session, errs.AppError) {
-	res, err := s.iam.Authenticate(ctx, port.AuthInput{Email: in.Email, Password: in.Password})
+	res, err := s.iamSvc.Authenticate(ctx, port.AuthInput{Email: in.Email, Password: in.Password})
 	if err != nil {
 		return nil, ErrAuthInvalidCredentials.Wrap(err) // one message for every credential failure
 	}
 	if len(res.Tenants) == 0 {
 		return nil, ErrAuthTenantDenied.New()
 	}
-	session, err := s.iam.SelectTenant(ctx, port.SelectTenantInput{
+	session, err := s.iamSvc.SelectTenant(ctx, port.SelectTenantInput{
 		UserID:    res.UserID,
 		TenantID:  res.Tenants[0].Tenant.ID, // multi-tenant: tenant chosen by the user, checked by the ticket
 		Module:    model.Module,
@@ -242,7 +242,7 @@ func (s *entityService) Login(ctx context.Context, in model.LoginRequest, meta m
 }
 
 func (s *entityService) Refresh(ctx context.Context, refreshToken string) (*types.Session, errs.AppError) {
-	session, err := s.iam.RefreshToken(ctx, refreshToken) // rotation: the old pair stops working
+	session, err := s.iamSvc.RefreshToken(ctx, refreshToken) // rotation: the old pair stops working
 	if err != nil {
 		return nil, ErrAuthSession.Wrap(err)
 	}
@@ -250,7 +250,7 @@ func (s *entityService) Refresh(ctx context.Context, refreshToken string) (*type
 }
 
 func (s *entityService) Logout(ctx context.Context, sessionID string) errs.AppError {
-	if err := s.iam.Logout(ctx, sessionID); err != nil {
+	if err := s.iamSvc.Logout(ctx, sessionID); err != nil {
 		return ErrAuthLogout.Wrap(err)
 	}
 	return errs.AppError{}

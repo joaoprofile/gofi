@@ -1,7 +1,7 @@
 ---
 name: consumer-bootstrap
 description: Consumer de mensageria como gofi.Component dono do próprio ConsumerManager — Start monta dependências, registra e inicia; o gofi drena no shutdown; main só declara
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [consumer, ConsumerManager, NewConsumerManager, Register, Start, Dispatcher, Concurrency, messaging, msq, Component, drain, shutdown, wire]
 ---
 

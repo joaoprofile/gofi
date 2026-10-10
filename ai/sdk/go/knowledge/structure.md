@@ -1,7 +1,7 @@
 ---
 name: structure
 description: Layout físico de um serviço Go com gofi — go.work com os módulos do SDK, pathCmd (main/config/wire/workers), domain/{contexto} por camada, arquivo único de repository e split de service CRUD/Auth
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [estrutura, layout, go.work, go.mod, pathService, pathCmd, pathContext, domain, repository, adapter, handler, main.go, config.go, wire.go, .migrations, split service]
 ---
 

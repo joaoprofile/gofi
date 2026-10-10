@@ -1,6 +1,6 @@
 # obs/logging
 
-`import "github.com/joaoprofile/gofi-sdk-go/obs/logging"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/obs/logging"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -22,6 +22,12 @@ const (
 )
 ```
 
+```go
+const RedactedValue = "[REDACTED]"
+```
+
+RedactedValue replaces the value of a sensitive attribute.
+
 ## Variáveis
 
 ```go
@@ -41,7 +47,8 @@ func Attach(h slog.Handler, shutdown func(context.Context) error) error
 Attach tees the global logger to h, keeping the console output, and makes
 the result slog's default. h receives only records at or above the level
 set in Config, like the console, so an exporter does not ship the Debug
-records the console drops. shutdown, when not nil, runs in Shutdown so h can
+records the console drops, and with sensitive attributes masked (see
+Config.RedactKeys). shutdown, when not nil, runs in Shutdown so h can
 flush. Loggers derived (With, FromContext) before Attach keep writing only to
 the previous handlers. It returns ErrNotInitialized before InitGlobal.
 
@@ -50,6 +57,14 @@ the previous handlers. It returns ErrNotInitialized before InitGlobal.
 ```go
 func Debug(msg string, args ...any)
 ```
+
+### logging.DefaultRedactKeys
+
+```go
+func DefaultRedactKeys() []string
+```
+
+DefaultRedactKeys returns the attribute keys masked by every logger.
 
 ### logging.Error
 
@@ -91,21 +106,25 @@ NewLogger initialises the global logger with sane defaults (Info level, JSON
 console). It reads no environment; gofi's config.InitLogging builds
 an env-driven Config and is what services should use in production.
 
-### logging.PrintStruct
+### logging.NewRedactHandler
 
 ```go
-func PrintStruct(v any)
+func NewRedactHandler(h slog.Handler, extra ...string) slog.Handler
 ```
 
-PrintStruct prints the %+v representation of a struct to stdout.
+NewRedactHandler wraps h so records reach it with the values of sensitive
+keys (DefaultRedactKeys plus extra) masked; use it for handlers that take no
+ReplaceAttr, such as exporters. Attach already applies it.
 
-### logging.PrintStructToJson
+### logging.RedactAttr
 
 ```go
-func PrintStructToJson(v any)
+func RedactAttr(extra ...string) func(groups []string, a slog.Attr) slog.Attr
 ```
 
-PrintStructToJson prints the indented JSON representation of a struct to stdout.
+RedactAttr returns a slog.HandlerOptions.ReplaceAttr that masks the values
+of sensitive keys (DefaultRedactKeys plus extra), for handlers built outside
+this package.
 
 ### logging.ResetForTesting
 
@@ -145,6 +164,9 @@ type Config struct {
 	Environment string     // deployment environment; EnvDevelopment selects text output
 	EnableDebug bool       // legado: equivale a Level=Debug
 	Level       slog.Level // nível do handler (zero = Info); EnableDebug tem precedência
+	// RedactKeys extends DefaultRedactKeys: attributes whose key matches have
+	// their value masked in the console and in every attached handler.
+	RedactKeys []string
 }
 ```
 

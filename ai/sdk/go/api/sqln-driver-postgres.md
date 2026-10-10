@@ -1,10 +1,19 @@
 # sqln/driver/postgres
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
 Package postgres registers the PostgreSQL driver, built on pgx/v5.
+
+## Variáveis
+
+```go
+var ErrPasswordFuncNeedsVerifiedTLS = errors.New("postgres: Config.Password requires sslmode verify-ca or verify-full")
+```
+
+ErrPasswordFuncNeedsVerifiedTLS is returned by Open when Config.Password
+(an IAM token) would travel without a verified TLS connection.
 
 ## postgres.Driver
 
@@ -18,8 +27,10 @@ type Driver struct{}
 func (Driver) DSN(s connection.Settings) string
 ```
 
-DSN builds a key-value connection string. An empty SSLMode defaults to
-"disable" so the resulting DSN is always valid.
+DSN builds a key-value connection string with every value quoted, so no
+value can add keys. sslmode is s.EffectiveSSLMode(): verify-full unless the
+host is local. StatementTimeout becomes the statement_timeout runtime
+parameter (not accepted by PgBouncer in transaction mode).
 
 ### Driver.Dialect
 
@@ -42,12 +53,16 @@ func (Driver) Open(cfg connection.Config) (*sql.DB, error)
 Open returns a pgx-backed *sql.DB. Unless the DSN sets
 default_query_exec_mode, queries use cache_describe: one round trip without
 named prepared statements, so PgBouncer in transaction mode keeps working.
+With Config.Password the DSN must verify the server certificate: an IAM
+token sent to an unverified server can be replayed by whoever receives it.
 
 ### Driver.ParseError
 
 ```go
 func (Driver) ParseError(err error) error
 ```
+
+ParseError hides the server message behind a generic one (see connection.Error).
 
 ## postgres.MigrateDriver
 

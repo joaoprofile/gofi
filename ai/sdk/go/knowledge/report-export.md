@@ -1,7 +1,7 @@
 ---
 name: report-export
 description: Export XLSX/CSV a partir do filtro dinâmico — mesma allowlist, leitura em streaming com .All() do manager, escrita no handler de download
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [report, export, xlsx, csv, dynamic-filter, FilterMapping, All, streaming, download]
 ---
 

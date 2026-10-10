@@ -1,6 +1,6 @@
 # sqln/driver/sqlserver
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/sqlserver"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/sqlserver"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -24,7 +24,11 @@ Requires github.com/denisenkom/go-mssqldb in go.mod:
 func (Driver) DSN(s connection.Settings) string
 ```
 
-DSN builds a go-mssqldb URL: sqlserver://user:pass@host:port?database=dbname.
+DSN builds a go-mssqldb URL, sqlserver://user:pass@host:port?database=dbname,
+with every part escaped. Encryption follows s.EffectiveSSLMode(): disable →
+encrypt=disable, require → encrypt=true with TrustServerCertificate=true,
+anything else → encrypt=true verifying the certificate (verify-full);
+SSLRootCert becomes the certificate parameter.
 
 ### Driver.Dialect
 
@@ -50,6 +54,16 @@ func (Driver) Open(cfg connection.Config) (*sql.DB, error)
 func (Driver) ParseError(err error) error
 ```
 
+ParseError hides the server message behind a generic one (see connection.Error).
+
+### Driver.ValidateSettings
+
+```go
+func (Driver) ValidateSettings(s connection.Settings) error
+```
+
+ValidateSettings rejects what the DSN cannot express.
+
 ## sqlserver.SQLServerDialect
 
 ```go
@@ -73,6 +87,14 @@ func (SQLServerDialect) BuildPagination(query string, order string, limit uint16
 ```go
 func (SQLServerDialect) Like(field string, param string) string
 ```
+
+### SQLServerDialect.LikeWildcards
+
+```go
+func (SQLServerDialect) LikeWildcards() string
+```
+
+LikeWildcards reports '[', which opens a character class in T-SQL LIKE.
 
 ### SQLServerDialect.NotLike
 

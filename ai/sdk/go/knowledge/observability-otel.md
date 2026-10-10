@@ -1,7 +1,7 @@
 ---
 name: observability-otel
 description: Observabilidade com OpenTelemetry no gofi — componente observability, o que já vem instrumentado, métricas de negócio via obs/metrics (lazy, nil-guard, cardinalidade fechada, classifier, decorator), spans de job e teste com ManualReader
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [observabilidade, OpenTelemetry, OTLP, observability.New, obs/metrics, metrics.NewInt64Counter, histogram, cardinalidade, attrs, classify, decorator, ManualReader, service_name, db_pool, traces, spans]
 ---
 
@@ -37,8 +37,8 @@ With(observability.New(), /* database.New(), httpserver.New(...) ... */)
 
 | Origem | Traces | Métricas |
 |---|---|---|
-| `httpserver` / `netx` server | span por rota (`GET /orders/{id}`); health não é traçado | `http.server.*` com `http.route` |
-| `netx.HttpClient` | span cliente + propagação W3C | `http.client.*` |
+| `httpserver` / `httpx` server | span por rota (`GET /orders/{id}`); health não é traçado | `http.server.*` com `http.route` |
+| `httpx.HttpClient` | span cliente + propagação W3C | `http.client.*` |
 | `msq` (todo provider) | `send`/`process`, contexto pelos headers | `messaging.*` |
 | `database` | — | `db_pool_connections{pool,state}`, `db_pool_wait_count_total`, `db_pool_wait_duration_seconds_total` (`pool` = `main`/`replica`) |
 | runtime Go / processo | — | nomes semconv (`go.*`, `process.*`); `GOFI_OTEL_LEGACY_METRIC_NAMES=true` mantém os antigos `gofi_*` |
@@ -72,8 +72,8 @@ arquivo cobre **métricas de negócio** e spans próprios.
 Instrumentos vêm de `github.com/joaoprofile/gofi-sdk-go/obs/metrics`
 (`metrics.NewInt64Counter`, `metrics.NewFloat64Histogram`,
 `metrics.NewInt64UpDownCounter`, `metrics.NewInt64Gauge`… ou
-`metrics.Meter()` para opções extras). Os wrappers `obs.New*` / `obs.Meter`
-estão **deprecated**.
+`metrics.Meter()` para opções extras). Os wrappers do pacote `obs` (`obs.NewInt64Counter`, `obs.NewFloat64Histogram`…
+e `obs.Meter`) estão **deprecated**.
 
 ## Onde o pacote mora — `domain/{contexto}/observability/` por padrão, `common/` só por força
 
@@ -418,6 +418,6 @@ serviço: `label_values(<métrica>, service_name)` e
 - ❌ Instrumentar dentro do adapter — decorator no factory.
 - ❌ Histograma em segundos sem `WithExplicitBucketBoundaries`.
 - ❌ Helper sem nil-guard.
-- ❌ Duplicar span/métrica que `netx`/`msq`/`database` já emitem.
-- ❌ `obs.Init` à mão num serviço gofi; `obs.New*`/`obs.Meter` (deprecated).
+- ❌ Duplicar span/métrica que `httpx`/`grpcx`/`msq`/`database` já emitem.
+- ❌ `obs.Init` à mão num serviço gofi; `obs.NewInt64Counter` e demais wrappers de `obs`/`obs.Meter` (deprecated).
 - ❌ Métrica sem threshold acionável — se ninguém alarma, não emite.

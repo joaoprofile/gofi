@@ -1,8 +1,16 @@
 # iam/config
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/config"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/config"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
+
+## Constantes
+
+```go
+const DefaultSessionMaxLifetime = 30 * 24 * time.Hour
+```
+
+DefaultSessionMaxLifetime is the default absolute session lifetime.
 
 ## config.Config
 
@@ -18,6 +26,12 @@ type Config struct {
 
 	// Registered social IDPs. Key is the provider name ("google", "github", etc.).
 	IDPs map[string]port.IDPAuthPort
+
+	// LoginThrottler limits password guessing in the built-in login; nil disables it.
+	LoginThrottler port.LoginThrottler
+	// TicketStore makes tenant tickets single-use; nil keeps them reusable
+	// until they expire (5 minutes).
+	TicketStore port.TicketStore
 
 	// Security settings.
 	Security SecurityConfig
@@ -48,6 +62,12 @@ type DefaultConfig struct {
 	RedisAddr     string // empty string selects in-memory with TTL
 	RedisPassword string
 	RedisTLS      bool
+
+	// Login throttling (Redis when RedisAddr is set, in memory otherwise):
+	// failures per email within the window before a lockout. 0 uses the
+	// default (5); negative disables throttling. The per-IP limit is 4x.
+	LoginMaxAttempts int
+	LoginLockout     time.Duration // default: 15 min; also the counting window
 
 	// IDPs (optional).
 	IDPs []IDPConfig
@@ -94,24 +114,42 @@ type SecurityConfig struct {
 	AccessTokenTTL  time.Duration // default: 15 min, enforced maximum: 60 min
 	RefreshTokenTTL time.Duration // default: 7 days, enforced maximum: 90 days
 	Issuer          string        // default: "gofi/iam"
-	VerifyIssuer    bool          // optional: reject tokens whose iss differs from Issuer
-	Audience        string        // optional: issued as aud and required on validation
+	VerifyIssuer    bool          // reject tokens whose iss differs from Issuer; default: true
+	// InsecureSkipIssuerCheck keeps VerifyIssuer off, accepting tokens of any
+	// issuer that share the secret. Only for migrating legacy tokens.
+	InsecureSkipIssuerCheck bool
+	Audience                string // optional: issued as aud and required on validation; pin it per service
 
-	// TenantTicketSecret (≥32 bytes) signs the Authenticate→SelectTenant ticket.
-	// NewDefault derives it from JWTSecret when empty.
+	// SessionMaxLifetime caps a session from its original login across all
+	// refresh rotations; the user must log in again after it.
+	// Default: 30 days (never below RefreshTokenTTL), enforced maximum: 90 days.
+	SessionMaxLifetime time.Duration
+
+	// TenantTicketSecret (≥32 bytes) signs the Authenticate→SelectTenant ticket,
+	// which SelectTenant always requires. NewDefault derives it from JWTSecret
+	// when empty; New fails without it when login is enabled.
 	TenantTicketSecret []byte
-	// RequireTenantTicket rejects SelectTenant calls without a valid ticket.
-	RequireTenantTicket bool
-	ClockSkew           time.Duration // optional: leeway for token time claims
+	// InsecureSkipTenantTicket lets SelectTenant open a session for any
+	// caller-supplied UserID without a ticket. Only for callers that already
+	// authenticated the user server-side; never reachable from a public endpoint.
+	InsecureSkipTenantTicket bool
+	ClockSkew                time.Duration // optional: leeway for token time claims, at most 5 min
 
-	// Refresh token cookie settings.
+	// DummyPasswordHash is verified when the login email is unknown, so both
+	// cases take the same time. Use a hash made with the same algorithm and
+	// cost as the stored ones; default: Argon2id with password.DefaultParams.
+	DummyPasswordHash string
+
+	// Refresh token cookie settings, used by the middleware cookie helpers.
+	// Cookies are HttpOnly and Secure unless CookieInsecure is set.
 	CookieName     string        // default: "iam_rt"
 	CookiePath     string        // default: "/auth/refresh"
-	CookieSecure   bool          // default: true
+	CookieInsecure bool          // drops Secure; only for local http development
 	CookieSameSite http.SameSite // default: SameSiteStrictMode
 	CookieDomain   string        // optional
 
-	// Temporary cookie for OAuth2 state and PKCE verifier.
+	// Temporary cookie for OAuth2 state and PKCE verifier (always SameSite=Lax,
+	// so it survives the IDP's top-level redirect back).
 	IDPStateCookieName string        // default: "iam_idp_state"
 	IDPStateTTL        time.Duration // default: 10 min
 }

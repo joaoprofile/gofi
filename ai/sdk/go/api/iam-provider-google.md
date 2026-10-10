@@ -1,6 +1,6 @@
 # iam/provider/google
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/google"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/google"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 

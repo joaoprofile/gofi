@@ -1,7 +1,7 @@
 ---
 name: boilerplate-repository
-description: Esqueleto do repository Go com sqln v0.8.2 — statement, criteria, paginação, filtro dinâmico, cache, conflito UNIQUE
-sdk: v0.8.2
+description: Esqueleto do repository Go com sqln v0.2.4 — statement, criteria, paginação, filtro dinâmico, cache, conflito UNIQUE
+sdk: v0.2.4
 keywords: [boilerplate, repository, sqln, statement, criteria, FindFromCriteria, BuildQuery, cache]
 ---
 

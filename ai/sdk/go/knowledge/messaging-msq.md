@@ -1,7 +1,7 @@
 ---
 name: messaging-msq
 description: Mensageria com gofi/msq — provider por import, producer, consumer, retry/DLQ, key e consumer group, componente messaging, msq/worker e testes
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [msq, messaging, kafka, rabbitmq, sqs, nats, redis, oci-queue, producer, consumer, dead-letter, retry, consumer-group, partition-key, msqtest, worker]
 ---
 
@@ -68,7 +68,7 @@ broker := mq.Broker() // msq.Broker já envolvido no pipeline; nil antes do Buil
 - Standalone (sem builder): `b, err := msq.Open(ctx, messaging.ConfigFromEnv(env))`
   + `svc, err := msq.New(msq.Config{Broker: b})`.
 
-**Não existe** `msq.Messaging` nem `service.Messaging()`: o handle é
+**Não existe** tipo `Messaging` no `msq` nem `service.Messaging()`: o handle é
 `mq.Broker()` (tipo `msq.Broker`), passado por parâmetro aos builders do
 `wire.go`.
 

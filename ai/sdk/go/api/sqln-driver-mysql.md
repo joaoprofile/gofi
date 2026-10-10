@@ -1,6 +1,6 @@
 # sqln/driver/mysql
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/mysql"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/mysql"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -24,7 +24,11 @@ Requires the go-sql-driver/mysql driver in go.mod:
 func (Driver) DSN(s connection.Settings) string
 ```
 
-DSN builds a go-sql-driver/mysql DSN: user:pass@tcp(host:port)/dbname.
+DSN builds a go-sql-driver/mysql DSN: user:pass@tcp(host:port)/dbname?tls=….
+The database name is path-escaped and the driver splits the DSN at the
+last '@' and '/', so the password may hold any character. The tls
+parameter follows s.EffectiveSSLMode(): disable → false, prefer →
+preferred, require → skip-verify, anything else → true (verify-full).
 
 ### Driver.Dialect
 
@@ -49,6 +53,18 @@ func (Driver) Open(cfg connection.Config) (*sql.DB, error)
 ```go
 func (Driver) ParseError(err error) error
 ```
+
+ParseError hides the server message behind a generic one (see connection.Error).
+
+### Driver.ValidateSettings
+
+```go
+func (Driver) ValidateSettings(s connection.Settings) error
+```
+
+ValidateSettings rejects what the DSN cannot express. A custom CA or client
+certificate needs a tls.Config registered with mysql.RegisterTLSConfig and
+a hand-built DSN with tls=<name>.
 
 ## mysql.MySQLDialect
 

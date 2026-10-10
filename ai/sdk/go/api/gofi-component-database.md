@@ -1,6 +1,6 @@
 # gofi/component/database
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/database"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/database"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -25,7 +25,7 @@ It is driver-agnostic: the DSN is assembled by whichever driver is registered
 for DATABASE_DRIVER (blank-import its sqln/driver/<name> package to register
 it), so adding a new database requires no change here. The driver defaults to
 postgres when DATABASE_DRIVER is empty. Returns an error when the requested
-driver is not registered.
+driver is not registered or the settings are invalid (connection.BuildDSN).
 
 ## database.Component
 
@@ -63,6 +63,15 @@ func (c *Component) DB() *sql.DB
 ```
 
 DB returns the primary pool; nil before Build.
+
+### Component.InsecureTransports
+
+```go
+func (c *Component) InsecureTransports(env *environment.Environment) []gofi.InsecureTransport
+```
+
+InsecureTransports reports a primary or replica on a non-local host whose
+DATABASE_SSL_MODE does not verify the server. Injected pools are not checked.
 
 ### Component.Name
 

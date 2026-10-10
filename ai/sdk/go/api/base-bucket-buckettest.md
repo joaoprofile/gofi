@@ -1,6 +1,6 @@
 # base/bucket/buckettest
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/bucket/buckettest"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/base/bucket/buckettest"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -16,4 +16,13 @@ func Run(t *testing.T, s bucket.Store)
 ```
 
 Run exercises s; it must start empty and accept any key.
+
+### buckettest.RunManager
+
+```go
+func RunManager(t *testing.T, m bucket.Manager)
+```
+
+RunManager exercises m; the account must not hold a bucket named
+"gofi-buckettest" nor "gofi-buckettest-missing".
 

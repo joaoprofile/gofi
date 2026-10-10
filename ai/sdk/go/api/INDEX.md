@@ -1,4 +1,4 @@
-# Referência de API do SDK — SDK v0.8.2
+# Referência de API do SDK — SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 > Procure um símbolo com `gofi find --in sdk "<nome>"` ou abra o pacote com `gofi show`.
@@ -20,6 +20,7 @@
 | `github.com/joaoprofile/gofi-sdk-go/base/errs` | `base-errs.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/base/mail` | `base-mail.md` | Package mail sends transactional and bulk e-mail over any SMTP provider, with HTML + plain-text bodies, attachments and HTML templates. |
 | `github.com/joaoprofile/gofi-sdk-go/base/observer` | `base-observer.md` |  |
+| `github.com/joaoprofile/gofi-sdk-go/base/redact` | `base-redact.md` | Package redact renders configuration structs without their secrets, for fmt, log/slog and encoding/json alike. |
 | `github.com/joaoprofile/gofi-sdk-go/base/secrets` | `base-secrets.md` | Package secrets resolves secret references of the form |
 | `github.com/joaoprofile/gofi-sdk-go/base/secrets/awssm` | `base-secrets-awssm.md` | Package awssm resolves secret://awssm/<name-or-arn>[#key] from AWS Secrets Manager. |
 | `github.com/joaoprofile/gofi-sdk-go/base/secrets/ocivault` | `base-secrets-ocivault.md` | Package ocivault resolves secret://ocivault/<secret-ocid>[#key] and secret://ocivault/<vault-ocid>/<secret-name>[#key] from OCI Vault. |
@@ -29,7 +30,8 @@
 | `github.com/joaoprofile/gofi-sdk-go/gofi` | `gofi.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/gofi/component/cache` | `gofi-component-cache.md` | Package cache is the gofi component for the shared Redis client used by the sqln query cache and by the session component. |
 | `github.com/joaoprofile/gofi-sdk-go/gofi/component/database` | `gofi-component-database.md` | Package database is the gofi component for the SQL database (sqln). |
-| `github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver` | `gofi-component-httpserver.md` | Package httpserver is the gofi component for the HTTP server (netx). |
+| `github.com/joaoprofile/gofi-sdk-go/gofi/component/grpcserver` | `gofi-component-grpcserver.md` | Package grpcserver is the gofi component for the gRPC server (netx/grpcx). |
+| `github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver` | `gofi-component-httpserver.md` | Package httpserver is the gofi component for the HTTP server (netx/httpx). |
 | `github.com/joaoprofile/gofi-sdk-go/gofi/component/iam` | `gofi-component-iam.md` | Package iam is the gofi component for the identity service (iam): JWT tokens, sessions with real revocation and RBAC, configured from the environment. |
 | `github.com/joaoprofile/gofi-sdk-go/gofi/component/messaging` | `gofi-component-messaging.md` | Package messaging is the gofi component for the message broker (msq). |
 | `github.com/joaoprofile/gofi-sdk-go/gofi/component/observability` | `gofi-component-observability.md` | Package observability is the gofi component that exports traces, metrics and logs over OTLP/gRPC. |
@@ -63,8 +65,10 @@
 | `github.com/joaoprofile/gofi-sdk-go/msq/provider/sqs` | `msq-provider-sqs.md` | Package sqs implements the msq broker on Amazon SQS (aws-sdk-go-v2). |
 | `github.com/joaoprofile/gofi-sdk-go/msq/types` | `msq-types.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/msq/worker` | `msq-worker.md` |  |
-| `github.com/joaoprofile/gofi-sdk-go/netx` | `netx.md` |  |
-| `github.com/joaoprofile/gofi-sdk-go/netx/awssign` | `netx-awssign.md` | Package awssign signs netx requests with AWS Signature V4 (API Gateway IAM auth, OpenSearch, Lambda URLs, ...). |
+| `github.com/joaoprofile/gofi-sdk-go/netx` | `netx.md` | Package netx holds what the HTTP and gRPC transports share: the hardened server TLS (TLSConfig, ServerTLSConfig) and the request ID carried in the context (RequestIDKey, GetRequestID). |
+| `github.com/joaoprofile/gofi-sdk-go/netx/awssign` | `netx-awssign.md` | Package awssign signs httpx client requests with AWS Signature V4 (API Gateway IAM auth, OpenSearch, Lambda URLs, ...). |
+| `github.com/joaoprofile/gofi-sdk-go/netx/grpcx` | `netx-grpcx.md` | Package grpcx serves and calls gRPC services with the same defaults as the httpx HTTP server: hardened TLS with certificate reload and optional mTLS, request IDs, panic recovery, error-only logging, OpenTelemetry, graceful shutdown with readiness draining and the standard gRPC health service. |
+| `github.com/joaoprofile/gofi-sdk-go/netx/httpx` | `netx-httpx.md` | Package httpx serves and calls HTTP APIs: a chi-based server with hardened TLS (netx.TLSConfig), request IDs, error-only logging, CORS, cross-origin protection, rate limiting, health endpoints, OpenTelemetry and graceful shutdown, and a client with retries, request signing and safe response parsing. |
 | `github.com/joaoprofile/gofi-sdk-go/obs` | `obs.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/obs/logging` | `obs-logging.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/obs/metrics` | `obs-metrics.md` | Package metrics is the OpenTelemetry metric API used by gofi and by applications: it records through the global MeterProvider and links no exporter or gRPC code. |

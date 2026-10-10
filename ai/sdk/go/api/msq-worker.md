@@ -1,6 +1,6 @@
 # msq/worker
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/worker"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/msq/worker"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -16,6 +16,36 @@ const (
 Default receive-error backoff bounds for polling consumers.
 
 ## Funções
+
+### worker.KeepAlive
+
+```go
+func KeepAlive(ctx context.Context, interval time.Duration, renew func(context.Context)) (stop func())
+```
+
+KeepAlive calls renew every interval until the returned stop is called.
+Renewal ignores ctx cancellation: a shutdown drains in-flight handlers, and
+their leases must outlive it. Each renew call is bounded by interval. stop
+waits for a running renew, so no lease is renewed after the message is
+acked or deleted.
+
+### worker.RedeliveryDelay
+
+```go
+func RedeliveryDelay(base, maxDelay time.Duration, n int) time.Duration
+```
+
+RedeliveryDelay is the wait before delivery n+1 of a message nacked on
+delivery n (1-based): Backoff from base, capped at maxDelay.
+
+### worker.RenewEvery
+
+```go
+func RenewEvery(lease time.Duration) time.Duration
+```
+
+RenewEvery is the renewal period for a lease: a third of it, so two renewals
+can fail before the broker hands the message to another consumer.
 
 ### worker.Sleep
 
@@ -137,4 +167,41 @@ func (p *Pool) Wait()
 ```
 
 Wait blocks until all enqueued jobs complete.
+
+## worker.Slots
+
+```go
+type Slots struct {
+	// contains filtered or unexported fields
+}
+```
+
+Slots counts free handler slots so a poller receives only what can start
+now; a message waiting in a local buffer would burn its lease unseen.
+
+### worker.NewSlots
+
+```go
+func NewSlots(n int) *Slots
+```
+
+NewSlots returns n free slots (at least one).
+
+### Slots.Acquire
+
+```go
+func (s *Slots) Acquire(ctx context.Context, limit int) (int, error)
+```
+
+Acquire blocks until a slot is free, then takes up to limit of them
+without blocking. It returns how many it took, or ctx's error.
+
+### Slots.Release
+
+```go
+func (s *Slots) Release(n int)
+```
+
+Release returns n slots; slots beyond the capacity are dropped, so a
+broker that delivers more than asked cannot deadlock the poller.
 

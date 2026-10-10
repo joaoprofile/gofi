@@ -1,6 +1,6 @@
 # gofi
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi"` · SDK v0.8.2
+`import "github.com/joaoprofile/gofi-sdk-go/gofi"` · SDK gofi/v0.2.4 (310ba1a)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -28,13 +28,13 @@ package under component/, so a binary links only the resources it imports.
 
 	db := database.New()
 	svc, err := gofi.New("catalog-api").
-		With(db, httpserver.New(":8080", httpserver.Handlers(h))).
+		With(db, httpserver.New(":8080").Handlers(h)).
 		Build()
 
 ### gofi.New
 
 ```go
-func New(serviceName string) Builder
+func New(serviceName string, opts ...Option) Builder
 ```
 
 New returns a Builder for the named service. It has no side effects: the
@@ -64,6 +64,32 @@ type HealthCheck struct {
 
 HealthCheck is a readiness check registered by a component; the HTTP server
 component serves them when its Health config is set.
+
+## gofi.InsecureTransport
+
+```go
+type InsecureTransport = core.InsecureTransport
+```
+
+InsecureTransport is a connection that would run in plaintext or without
+verifying the server certificate.
+
+## gofi.Option
+
+```go
+type Option func(*gofiInstance)
+```
+
+Option customizes the service declared by New.
+
+### gofi.WithRedactKeys
+
+```go
+func WithRedactKeys(keys ...string) Option
+```
+
+WithRedactKeys masks the values of these log attribute keys, in addition
+to logging.DefaultRedactKeys(), in the console and in exported logs.
 
 ## gofi.Runner
 
@@ -196,4 +222,17 @@ const (
 	StageServer Stage = 900
 )
 ```
+
+## gofi.TransportChecker
+
+```go
+type TransportChecker interface {
+	InsecureTransports(env *environment.Environment) []InsecureTransport
+}
+```
+
+TransportChecker is implemented by components that connect with settings
+from the environment. In prod and stage Build collects their reports before
+starting any component and fails, naming the setting to fix, unless
+GOFI_ALLOW_INSECURE_TRANSPORT lists the resource (then it only warns).
 

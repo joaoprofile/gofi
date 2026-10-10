@@ -1,7 +1,7 @@
 ---
 name: boilerplate-model
 description: Esqueleto do model Go — entidade com tags db, DTOs com validate, query_dto com sqln.FilterMapping
-sdk: v0.8.2
+sdk: v0.2.4
 keywords: [boilerplate, model, entity, dto, FilterMapping, db-tag, validator, Page]
 ---
 
@@ -81,7 +81,7 @@ type UpdateEntityRequest struct {
 
 func (r UpdateEntityRequest) Validate() error { return v.ValidateStruct(r) }
 
-// EntityFilter is bound from the query string (netx.BindQueryParamsToStruct).
+// EntityFilter is bound from the query string (httpx.BindQueryParamsToStruct).
 type EntityFilter struct {
 	TenantID string   `form:"-"` // set from the auth context, never from the query
 	Name     string   `form:"name"`
