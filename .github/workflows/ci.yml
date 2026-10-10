@@ -33,3 +33,35 @@ jobs:
 
       - name: Build
         run: go build -o /tmp/gofi ./cmd/gofi
+
+  # The bundled Go docs (ai/sdk/go) describe one gofi-sdk-go release, the one
+  # config.SDKGoVersion pins. Check that every SDK identifier they cite exists
+  # in that release's source, so an SDK change cannot leave them stale.
+  sdk-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned SDK release
+        id: sdk
+        run: |
+          version=$(sed -n 's/^const SDKGoVersion = "\(v[0-9][0-9.]*\)"$/\1/p' internal/config/defaults.go)
+          test -n "$version" || { echo "SDKGoVersion not found in internal/config/defaults.go"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: joaoprofile/gofi-sdk-go
+          ref: gofi/${{ steps.sdk.outputs.version }}
+          path: gofi-sdk-go
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+          cache-dependency-path: cli/go.sum
+
+      - name: Check the bundled Go docs against the pinned SDK
+        env:
+          GOFI_SDK_CHECKOUT: ${{ github.workspace }}/gofi-sdk-go
+        run: go test -count=1 -run 'TestBundledGoDocs' -v ./internal/sdkdoc/

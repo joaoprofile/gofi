@@ -4,6 +4,7 @@
 #   make untag   VERSION=v0.2.5   # delete the local tag (before it is pushed)
 #   make latest                     # print the latest release tag
 #   make check                      # vet, test and build the CLI, as CI does
+#   make sdk-docs-check             # check ai/sdk/go against the pinned gofi-sdk-go release, as CI does
 #
 # Nothing here pushes. Push by hand: git push origin main dev <tag>
 # (the tag triggers .github/workflows/release.yml).
@@ -13,13 +14,22 @@ BRANCH := main
 DEV    := dev
 LATEST  = $(shell git tag -l 'v*' --sort=-v:refname | head -1)
 
-.PHONY: release untag latest check check-version
+.PHONY: release untag latest check check-version sdk-docs-check
 
 check-version:
 	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "use: make <target> VERSION=vX.Y.Z (latest is $(LATEST))"; exit 1; }
 
 check:
 	cd $(CLI) && export GOWORK=off && go vet ./... && go test ./... && go build -o /dev/null ./cmd/gofi
+
+# The gofi-sdk-go release the bundled Go docs describe (config.SDKGoVersion).
+SDK_GO_VERSION = $(shell sed -n 's/^const SDKGoVersion = "\(v[0-9][0-9.]*\)"$$/\1/p' $(CLI)/internal/config/defaults.go)
+
+sdk-docs-check:
+	@test -n "$(SDK_GO_VERSION)" || { echo "SDKGoVersion not found in $(CLI)/internal/config/defaults.go"; exit 1; }
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	git clone -q --depth 1 --branch gofi/$(SDK_GO_VERSION) https://github.com/joaoprofile/gofi-sdk-go "$$tmp/sdk" && \
+	cd $(CLI) && GOWORK=off GOFI_SDK_CHECKOUT="$$tmp/sdk" go test -count=1 -run 'TestBundledGoDocs' -v ./internal/sdkdoc/
 
 release: check-version
 	@test "$$(git rev-parse --abbrev-ref HEAD)" = "$(BRANCH)" || { echo "checkout $(BRANCH) first"; exit 1; }

@@ -133,3 +133,16 @@ func TestStaleCitationsCoverTransportSubpackages(t *testing.T) {
 		t.Errorf("stale = %v, want %v", got, want)
 	}
 }
+
+// A doc citing an SDK package the release does not have (written for a later
+// release, or for a package that moved) is stale too, not skipped.
+func TestStaleCitationsOfAMissingPackage(t *testing.T) {
+	exp, err := ReadExports(fakeSDK(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := exp.Stale("criteria.From exists; httpx.RespondError needs a release with httpx; acme.Thing is not the SDK's.")
+	if len(got) != 1 || got[0] != "httpx.RespondError" {
+		t.Errorf("stale = %v, want [httpx.RespondError]", got)
+	}
+}
