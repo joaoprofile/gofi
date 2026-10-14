@@ -64,7 +64,7 @@ func NewEntityRepository() EntityRepository {
 
 func (r *entityRepository) Save(ctx context.Context, e model.Entity) error {
 	_, err := r.stm.Execute(ctx, entityInsertQuery, e.ID, e.TenantID, e.Name, e.Email, e.Status)
-	if pgErr, ok := connection.AsPgError(err); ok && pgErr.Code == "23505" && pgErr.Constraint == uqEntityEmail {
+	if pgErr, ok := connection.AsPgError(err); ok && pgErr.Code == "23505" && pgErr.ConstraintName == uqEntityEmail {
 		return ErrDuplicateEntity
 	}
 	return err

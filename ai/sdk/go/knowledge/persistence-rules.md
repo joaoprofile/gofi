@@ -58,7 +58,7 @@ keywords: [repository, sqln, statement, transaction, aggregate, uuidv7, paginati
 - **Conflito de UNIQUE: SQLSTATE no repo, nunca string matching.**
   ```go
   if pgErr, ok := connection.AsPgError(err); ok && pgErr.Code == "23505" &&
-      pgErr.Constraint == "uq_{tabela}_{colunas}" {
+      pgErr.ConstraintName == "uq_{tabela}_{colunas}" {
       return ErrDuplicate{Entidade} // erro sentinela do pacote repository
   }
   ```
