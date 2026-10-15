@@ -1,7 +1,7 @@
 ---
 name: validation
 description: Validação de DTOs com base/validator — singleton por pacote, Validate() no DTO, chamada no service e detalhes por campo no 400
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [validator, ValidateStruct, Validate, DTO, required, oneof, gtfield, ValidationError, FieldError, WithDetails, 400]
 ---
 

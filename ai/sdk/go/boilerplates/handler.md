@@ -1,7 +1,7 @@
 ---
 name: handler-boilerplate
 description: Esqueleto do handler Go sobre netx/httpx — RouterHandler, PublicRoutes/PrivateRoutes, parse de body/query/path, resposta e RespondError(w, r, appErr)
-sdk: v0.2.4
+sdk: v0.2.6
 ---
 
 # Boilerplate — Handler

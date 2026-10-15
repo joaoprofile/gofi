@@ -1,7 +1,7 @@
 ---
 name: migrations
 description: Migrations com sqln/migrate — DATABASE_MIGRATION, pasta .migrations, embed, drivers suportados
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [sqln, migrate, migrations, DATABASE_MIGRATION, golang-migrate, embed, schema]
 ---
 
@@ -28,8 +28,10 @@ API: `.claude/sdk/go/api/sqln-migrate.md` e `connection.WithMigrations` em
 ## Drivers
 
 O driver de migration é registrado pelo mesmo import em branco do driver SQL.
-Em v0.2.4 **só `sqln/driver/postgres` registra driver de migration**; com
-`mysql`/`sqlserver`/`oracle`, `DATABASE_MIGRATION=true` falha com
+`sqln/driver/postgres` e `sqln/driver/mysql` registram driver de migration (no
+MySQL, o pool de migration — e só ele — abre com `multiStatements=true`, para
+arquivos com vários comandos; os pools de query nunca). Com
+`sqlserver`/`oracle`, `DATABASE_MIGRATION=true` falha com
 `migration driver not registered` — aplique o schema por fora ou registre um
 `migrate.Driver` próprio (`migrate.RegisterDriver`).
 
@@ -51,6 +53,13 @@ conn, err := connection.NewConnection(cfg,
 `migrate.Run(db, driver, cfg)` existe para quem já tem um `*sql.DB`, mas
 golang-migrate prende uma conexão desse pool até o fim do processo — prefira
 `RunAndClose` num `*sql.DB` aberto só para isso.
+
+## Índice full-text — migration gerada, não escrita
+
+A migration de um índice full-text é **renderizada** da definição
+(`fts.WriteMigration` / `fts.Migration`) e conferida por teste; não se edita à
+mão. Ver `full-text-search.md`. `CREATE INDEX CONCURRENTLY` (`Spec.Concurrently`)
+sai em arquivo próprio, só no PostgreSQL.
 
 ## Regras de conteúdo
 

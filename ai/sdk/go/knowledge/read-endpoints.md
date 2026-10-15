@@ -2,7 +2,7 @@
 name: read-endpoints
 description: Endpoints de leitura para o front — handler bind+validate, repo com criteria+cache+paginação, normalização no repository
 type: feedback
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [read-endpoint, GET, BindQueryParamsToStruct, criteria, FindFromCriteria, PagedList, WithCache, pagination]
 ---
 

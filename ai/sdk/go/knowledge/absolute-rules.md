@@ -1,7 +1,7 @@
 ---
 name: absolute-rules
 description: Regras invioláveis de código Go com gofi — auditadas pelo gofi-qa em todo contexto
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [regras absolutas, logging, sqln, errs.AppError, repository, adapter, iam, httpx.RespondError, os.Getenv, log.Fatal, componentes, ciclo de vida, cron]
 ---
 

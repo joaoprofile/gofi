@@ -1,6 +1,6 @@
 # sqln
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -103,6 +103,13 @@ const DefaultMaxLimit = pagination.DefaultMaxLimit
 ```
 
 DefaultMaxLimit caps the page size of NewPageRequest and NewPageRequestFilter.
+
+```go
+const Search = driver.Search
+```
+
+Search matches a full-text index; accepted only on a FilterField whose
+Search is set.
 
 ```go
 const SqlTxContextKey = connection.SqlTxContextKey
@@ -242,6 +249,14 @@ func Asc(field string) CriteriaOrder
 Asc creates an ascending ORDER BY expression for criteria queries; a field
 that is not a column reference fails the build unless marked Raw.
 
+### sqln.ByRelevance
+
+```go
+func ByRelevance(s FullTextSearch) CriteriaOrder
+```
+
+ByRelevance orders a criteria query by the relevance of s, most relevant first.
+
 ### sqln.Desc
 
 ```go
@@ -355,6 +370,32 @@ func NewFilters() *Filters
 type FloatValue = filter.FloatValue
 ```
 
+## sqln.FullTextIndex
+
+```go
+type FullTextIndex = fts.Index
+```
+
+FullTextIndex is a full-text index definition; see the fts package.
+
+## sqln.FullTextSearch
+
+```go
+type FullTextSearch = fts.Search
+```
+
+FullTextSearch is a search string on a FullTextIndex.
+
+### sqln.SuggestSearch
+
+```go
+func SuggestSearch(ctx context.Context, s FullTextSearch) (FullTextSearch, bool, error)
+```
+
+SuggestSearch corrects the misspelled words of s on the global connection
+(read replica when configured); see fts.Suggest. A typical search shows
+"did you mean" when s finds nothing and the corrected search does.
+
 ## sqln.IntValue
 
 ```go
@@ -428,6 +469,14 @@ type Predicate = criteria.Predicate
 ```
 
 Predicate represents a WHERE/HAVING condition or a logical connector (AND/OR).
+
+### sqln.Match
+
+```go
+func Match(s FullTextSearch) Predicate
+```
+
+Match produces the full-text condition of s on its index (see criteria.Match).
 
 ## sqln.Query
 

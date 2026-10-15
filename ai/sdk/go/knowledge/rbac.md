@@ -1,7 +1,7 @@
 ---
 name: rbac
 description: Autorização com o iam — matriz role → recurso → ações no roles provider, um helper único de gate no handler, regras dependentes do alvo no service
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [rbac, autorização, roles, permissão, Enforce, PermissionMap, NewRBACProvider, RequirePermission, 403, gate, handler, service]
 ---
 

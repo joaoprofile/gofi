@@ -1,7 +1,7 @@
 ---
 name: gofi-orchestrator
 description: Orquestrador gofi — gofi.New/With/Build/ListenAndServe/Shutdown, componentes por estágio, Runner, Runtime e componente próprio
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [gofi.New, With, Build, ListenAndServe, Shutdown, Component, Runner, Stage, Runtime, OnClose, AddHealthCheck, Shared, componentes, ciclo de vida]
 ---
 

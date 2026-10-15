@@ -1,7 +1,7 @@
 ---
 name: boilerplate-repository
 description: Esqueleto do repository Go com sqln v0.2.4 — statement, criteria, paginação, filtro dinâmico, cache, conflito UNIQUE
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [boilerplate, repository, sqln, statement, criteria, FindFromCriteria, BuildQuery, cache]
 ---
 
@@ -64,7 +64,7 @@ func NewEntityRepository() EntityRepository {
 
 func (r *entityRepository) Save(ctx context.Context, e model.Entity) error {
 	_, err := r.stm.Execute(ctx, entityInsertQuery, e.ID, e.TenantID, e.Name, e.Email, e.Status)
-	if pgErr, ok := connection.AsPgError(err); ok && pgErr.Code == "23505" && pgErr.ConstraintName == uqEntityEmail {
+	if connection.IsUniqueViolation(err, uqEntityEmail) {
 		return ErrDuplicateEntity
 	}
 	return err
@@ -181,7 +181,7 @@ nunca acessa Redis.
 - Escrita: `r.stm.Execute(ctx, query, args...)`. Leitura: `sqln.Find*` com
   tags `db` (nunca `rows.Scan` à mão).
 - `Update` não checa `RowsAffected` (`repository-update-simple.md`).
-- Conflito UNIQUE traduzido por `connection.AsPgError` + nome da constraint.
+- Conflito UNIQUE traduzido por `connection.IsUniqueViolation` + nome da constraint.
 - Helpers com `ctx` que tocam banco são métodos do receiver; só funções puras
   (`entityArgs(e) []any`) ficam no pacote.
 - Construtor sem `ctx` e sem acesso a banco.

@@ -1,7 +1,7 @@
 ---
 name: main
 description: Esqueleto do main.go de um serviço gofi — config, componentes, Build, wiring depois do Build, ListenAndServe; variantes job, sem auth, mensageria e worker
-sdk: v0.2.4
+sdk: v0.2.6
 ---
 
 # Boilerplate — main.go

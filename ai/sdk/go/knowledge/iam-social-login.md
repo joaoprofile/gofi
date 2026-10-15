@@ -1,7 +1,7 @@
 ---
 name: iam-social-login
 description: Login social com o iam — Google, Microsoft Entra e OIDC genérico; state + PKCE em cookie temporário, callback, vínculo de identidade externa e abertura da sessão
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [iam, IDP, OAuth, OIDC, Google, Microsoft, Entra, PKCE, state, IDPInitFlow, IDPHandleCallback, IDPSelectTenant, FindOrCreateByExternalIdentity]
 ---
 

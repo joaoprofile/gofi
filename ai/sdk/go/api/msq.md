@@ -1,6 +1,6 @@
 # msq
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/msq"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -115,6 +115,14 @@ func UnpackMessage[T any](message *Message) (*T, error)
 UnpackMessage decodes the message Value into T using type inference.
 
 	order, err := msq.UnpackMessage[Order](msg)
+
+## msq.BatchSendError
+
+```go
+type BatchSendError = types.BatchSendError
+```
+
+BatchSendError reports which messages of a batch were not delivered.
 
 ## msq.Broker
 

@@ -1,7 +1,7 @@
 ---
 name: grpc
 description: gRPC entre serviços com netx/grpcx e o componente grpcserver — registro de serviços, TLS, token de serviço, AppError atravessando a fronteira, cliente com timeout e retry opt-in
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [grpc, grpcx, grpcserver, comunicação entre serviços, api interna, AppError, FromError, health, token de serviço, keepalive, round_robin]
 ---
 

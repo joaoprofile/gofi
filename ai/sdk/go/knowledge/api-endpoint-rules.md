@@ -1,7 +1,7 @@
 ---
 name: api-endpoint-rules
 description: Regras de endpoints em Go — filtro dinâmico com FilterMapping, lookups, config de motor de decisão, GET do front
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [endpoint, handler, FilterMapping, dynamic-filter, lookup, read-endpoint, validation, httpx]
 ---
 

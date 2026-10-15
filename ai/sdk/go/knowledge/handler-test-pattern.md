@@ -1,7 +1,7 @@
 ---
 name: handler-test-pattern
 description: Teste de handler httpx — stub de service com campos de resultado, httptest, só status code; claims injetadas pelo helper do middleware de auth
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [handler test, httptest, stub, SetPathValue, status code, WithClaims, RespondError]
 ---
 

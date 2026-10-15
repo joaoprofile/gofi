@@ -1,7 +1,7 @@
 ---
 name: kafka-consumer-naming
 description: Nome de consumer group Kafka via helpers do projeto (SyncConsumer/LifecycleConsumer) — passar só o prefix
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [kafka, consumer-group, group-id, SyncConsumer, LifecycleConsumer, naming, offset]
 ---
 

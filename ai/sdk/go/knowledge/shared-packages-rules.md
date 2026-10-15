@@ -1,7 +1,7 @@
 ---
 name: shared-packages-rules
 description: Regras de pacotes comuns em Go — helpers, money, object storage (base/bucket), e-mail (base/mail), identidade de nuvem, observabilidade
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [helpers, money, currency, bucket, object-storage, presign, mail, smtp, cloud, credentials, observability, otel]
 ---
 

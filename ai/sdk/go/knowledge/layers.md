@@ -1,7 +1,7 @@
 ---
 name: layers
 description: Responsabilidade de cada camada (handler, service, repository, adapter), fluxo de request e de erro entre camadas, testabilidade com mocks handcraft
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [camadas, handler, service, repository, adapter, errs.AppError, httpx.RespondError, httpx.Response, fluxo, mocks]
 ---
 

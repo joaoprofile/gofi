@@ -1,7 +1,7 @@
 ---
 name: repository-close
 description: Ciclo de vida no repository — sem Close de conexão nem prepared statements em campo; quem fecha o pool é o componente database
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [repository, close, lifecycle, prepared-statement, sql.Stmt, shutdown]
 ---
 

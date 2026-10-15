@@ -1,7 +1,7 @@
 ---
 name: mail
 description: E-mail com gofi base/mail — Mailer aberto no composition root, templates, bulk com falha por mensagem, degradação quando SMTP não está configurado
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [mail, email, smtp, template, bulk, notification, MAIL_HOST]
 ---
 

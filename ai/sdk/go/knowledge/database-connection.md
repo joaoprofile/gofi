@@ -1,7 +1,7 @@
 ---
 name: database-connection
 description: Conexão SQL do sqln — componente database, DATABASE_*, registro de driver por import, réplica de leitura, IAM (rdsauth)
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [sqln, connection, database, DATABASE_DRIVER, driver, postgres, replica, rdsauth, pool]
 ---
 
@@ -48,9 +48,23 @@ svc, err := gofi.New("{servico}").
 | `DATABASE_MAX_OPEN_CONNS` / `DATABASE_MAX_IDLE_CONNS` / `DATABASE_MAX_LIFETIME` / `DATABASE_MAX_IDLE_TIME` | pool (`connection.PoolConfig`) |
 | `DATABASE_READ_HOST` / `DATABASE_READ_PORT` | réplica de leitura (opcional) |
 | `DATABASE_MIGRATION` | `true` aplica `.migrations` no boot — ver `migrations.md` |
+| `DATABASE_STATEMENT_TIMEOUT` / `DATABASE_QUERY_TIMEOUT` | `statement_timeout` do PostgreSQL; prazo das queries do sqln cujo `ctx` não tem deadline (default 30s, negativo desliga) |
+| `DATABASE_FULLTEXT_POLICY` | `verify` (default), `ensure` (cria índice ausente; **recusado em `stage`/`prod`**) ou `trust` (não confere) — ver `full-text-search.md` |
+| `DATABASE_LOG_QUERIES` | `true` loga cada SQL do sqln com argumentos e duração (`slog`); **recusado em `stage`/`prod`** |
+| `DATABASE_LOG_QUERIES_PRETTY` | `true` imprime cada SQL indentado em stderr, um argumento por linha; **recusado em `stage`/`prod`** |
 
 Segredo nunca em texto: `DATABASE_PASSWORD=secret://<provider>/<nome>[#chave]`
 ou `DATABASE_PASSWORD_FILE=/caminho`. Padrão geral em `env-vars-standard.md`.
+
+## Depurar o SQL — só em desenvolvimento
+
+`DATABASE_LOG_QUERIES=true` loga todo SQL que o sqln executa (páginas e seu
+`COUNT`, statements, conferência de índice full-text) com argumentos e
+duração; `DATABASE_LOG_QUERIES_PRETTY=true` imprime o mesmo, formatado para
+leitura, em stderr. Em código: `connection.LogQueries(logger)` (`nil`
+desliga) e `connection.PrintQueries(os.Stderr)`. Os argumentos podem ter dado
+pessoal: `ConfigFromEnv` **recusa** as duas variáveis em `stage` e `prod`.
+Nunca habilitar por manifesto de produção.
 
 ## Ciclo de vida — o repositório não é dono de nada
 
@@ -60,6 +74,9 @@ ou `DATABASE_PASSWORD_FILE=/caminho`. Padrão geral em `env-vars-standard.md`.
   handlers.
 - Quem fecha o pool é o componente (`Shutdown`). Repositório não expõe nem
   chama `Close` de conexão.
+- `database.New()` confere os índices full-text declarados com `fts.MustIndex`
+  logo após as migrations: índice ausente ou desatualizado derruba o `Build`
+  (`full-text-search.md`). Com vários bancos, `database.New(database.WithFullText(idx...))`.
 - Job sem HTTP: `Build` → trabalho → `svc.Shutdown(ctx)` (fecha banco e faz
   flush dos logs) — ver `examples/sqln/search/main.go`.
 
@@ -112,9 +129,14 @@ svc, err := gofi.New("{servico}").With(database.FromDB(conn.DB()) /*, ... */).Bu
 
 ## Erros do driver
 
-- PostgreSQL: `connection.AsPgError(err)` extrai o `*pgconn.PgError`
-  (`Code`, `Constraint`) — base da tradução de UNIQUE para conflito
-  (`persistence-rules.md`). Nunca `strings.Contains(err.Error(), ...)`.
+- Violação de integridade: `connection.IsUniqueViolation(err, constraint...)`,
+  `IsForeignKeyViolation`, `IsCheckViolation`, `IsNotNullViolation`;
+  `connection.SQLState(err)` e `connection.ConstraintName(err)` dão o código
+  e a constraint, sem o chamador conhecer o driver. Base da tradução de UNIQUE
+  para conflito (`persistence-rules.md`). Nunca
+  `strings.Contains(err.Error(), ...)`.
+- PostgreSQL: `connection.AsPgError(err)` extrai o `*pgconn.PgError` quando o
+  helper acima não basta.
 - `connection.IsRetryable(err)` reconhece conflito de serialização/deadlock
   (ver `transactions.md`).
 

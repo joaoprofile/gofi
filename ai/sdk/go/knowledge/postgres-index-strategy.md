@@ -1,7 +1,7 @@
 ---
 name: postgres-index-strategy
 description: Índices PostgreSQL por perfil de acesso da tabela e por tipo de filtro que o sqln gera; fillfactor e autovacuum
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [postgres, index, btree, gin, pg_trgm, fillfactor, autovacuum, ILIKE, ANY]
 ---
 
@@ -64,6 +64,7 @@ demais valores. Combina com índices do filtro adicional via `BitmapAnd`.
 | `text` exato (código, sku) | `=`, `IN` | Btree composite `(tenant, col)` |
 | `text` prefixo | `LIKE 'x%'` | Btree composite (mesma forma) |
 | `text` substring | `LIKE '%x%'`, `ILIKE`, regex | **GIN com `gin_trgm_ops`** (extensão `pg_trgm`). Single column é OK — planner combina com índice do tenant via `BitmapAnd`. |
+| `text` por palavra / relevância | `criteria.Match`, `SEARCH` do filtro dinâmico | **Índice full-text declarado com `fts.MustIndex`** (GIN sobre `tsvector`) e migration gerada — `full-text-search.md`. Não monte `tsvector` à mão. |
 | `number` exato | `=`, `IN` | Btree composite `(tenant, col)` |
 | `number` range | `BETWEEN`, `<`, `>` | Btree composite (range na 2ª coluna) |
 | `boolean` | `=` | Geralmente NÃO indexar (baixa cardinalidade). Exceção: partial pelo valor minoritário. |

@@ -1,7 +1,7 @@
 ---
 name: events-scheduling-rules
 description: Regras de eventos, scheduler e motor de decisão em Go — loader, processor no domínio, decider/executor sobre msq, Type* do envelope, consumer naming, rollup
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [loader, scheduler, processor, decider, executor, event-driven, msq, kafka, type-naming, consumer-group, dead-letter, partition-key, rollup]
 ---
 

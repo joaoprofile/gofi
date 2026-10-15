@@ -1,6 +1,6 @@
 # msq/port
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/port"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/msq/port"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -101,6 +101,9 @@ type Producer interface {
 	// SendMessagesBatch sends multiple messages.
 	// Providers that support native batching (SQS, Kafka) will use it;
 	// others will iterate sequentially.
+	// On a partial failure, providers that know which messages were not
+	// delivered (Kafka) return *types.BatchSendError with their indexes; any
+	// other error means the whole batch must be treated as failed.
 	SendMessagesBatch(ctx context.Context, msgs []*types.Message) error
 
 	// Close releases all resources held by this Producer.

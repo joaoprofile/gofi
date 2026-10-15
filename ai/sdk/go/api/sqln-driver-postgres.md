@@ -1,6 +1,6 @@
 # sqln/driver/postgres
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -130,4 +130,80 @@ func (PostgresDialect) NotLike(field string, param string) string
 ```go
 func (PostgresDialect) Param(index int) string
 ```
+
+### PostgresDialect.TextCandidates
+
+```go
+func (PostgresDialect) TextCandidates(idx *driver.TextIndex, key string, bind func(any) string) string
+```
+
+TextCandidates uses pg_trgm's % operator, served by the GIN trigram index
+(pg_trgm.similarity_threshold, 0.3 by default).
+
+### PostgresDialect.TextChecks
+
+```go
+func (PostgresDialect) TextChecks(idx *driver.TextIndex) []driver.TextCheck
+```
+
+TextChecks requires the lexicon of Suggest; the configuration and the
+extensions are dependencies of the index or lexicon, which cannot exist
+without them.
+
+### PostgresDialect.TextHighlight
+
+```go
+func (d PostgresDialect) TextHighlight(idx *driver.TextIndex, qualifier, column string, q driver.TextQuery, bind func(any) string) (string, bool)
+```
+
+TextHighlight uses ts_headline with the index configuration, so it marks
+what the search matches: stems ("cafés" for "cafe") and folded accents.
+PostgreSQL evaluates it after ORDER BY … LIMIT: only the page pays for it.
+
+### PostgresDialect.TextIndexDDL
+
+```go
+func (PostgresDialect) TextIndexDDL(idx *driver.TextIndex, comment string) ([]driver.TextStep, error)
+```
+
+TextIndexDDL creates, for Unaccent, the extension and a configuration
+copied from the language whose words pass through unaccent before the
+stemmer; the configuration is shared and kept on down. A Concurrently
+index is built in an isolated step: CREATE INDEX CONCURRENTLY cannot run
+inside a transaction block, so its comment follows in a step of its own.
+
+### PostgresDialect.TextIndexLookup
+
+```go
+func (PostgresDialect) TextIndexLookup(idx *driver.TextIndex) (string, []any)
+```
+
+TextIndexLookup finds a valid GIN index of that name on the table,
+resolved through the search_path like the queries are. A CONCURRENTLY
+build that failed leaves an invalid index, which reads as missing.
+
+### PostgresDialect.TextMatch
+
+```go
+func (d PostgresDialect) TextMatch(idx *driver.TextIndex, qualifier string, q driver.TextQuery, bind func(any) string) (string, bool)
+```
+
+### PostgresDialect.TextRank
+
+```go
+func (d PostgresDialect) TextRank(idx *driver.TextIndex, qualifier string, q driver.TextQuery, bind func(any) string) (string, bool)
+```
+
+TextRank uses cover density, which rewards matched words close together;
+the column weights apply through the setweight labels of the document.
+
+### PostgresDialect.TextSearchValue
+
+```go
+func (PostgresDialect) TextSearchValue(_ *driver.TextIndex, q driver.TextQuery) (string, bool)
+```
+
+TextSearchValue renders q in to_tsquery syntax. Words hold only letters,
+digits and marks, so quoting them as 'word' is enough; stopwords are left
+to to_tsquery, which drops them.
 

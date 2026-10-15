@@ -1,7 +1,7 @@
 ---
 name: bridge-factory-adapter-pattern
 description: Bridge/Factory/Adapter para dimensão polimórfica externa — layout, factory com cache, decorators, adapter HTTP canônico sobre netx/httpx
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [bridge, factory, adapter, integration, httpx, decorator, rate-limit, http-client, classifier]
 ---
 

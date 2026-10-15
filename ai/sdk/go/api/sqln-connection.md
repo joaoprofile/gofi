@@ -1,6 +1,6 @@
 # sqln/connection
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/connection"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/connection"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -21,6 +21,18 @@ const (
 ```
 
 Shared error message constants used across sqln subpackages.
+
+```go
+const (
+	SQLStateNotNullViolation    = "23502"
+	SQLStateForeignKeyViolation = "23503"
+	SQLStateUniqueViolation     = "23505"
+	SQLStateCheckViolation      = "23514"
+)
+```
+
+SQLSTATE codes of the integrity violations repositories translate into
+domain errors.
 
 ```go
 const (
@@ -93,6 +105,15 @@ func Cause(err error) error
 Cause returns the driver error behind err's *Error, for logs; other
 errors are returned as is.
 
+### connection.ConstraintName
+
+```go
+func ConstraintName(err error) string
+```
+
+ConstraintName returns the constraint named by the Postgres error in err's
+chain, or "".
+
 ### connection.DB
 
 ```go
@@ -108,6 +129,45 @@ func Dialect() driver.Dialect
 Dialect returns the SQL dialect of the active global connection.
 Returns nil if no connection has been established yet.
 
+### connection.FormatSQL
+
+```go
+func FormatSQL(query string) string
+```
+
+FormatSQL lays out a statement for reading: one clause per line, the
+SELECT list one column per line, AND/OR of WHERE and HAVING on their own
+lines, JOINs indented, and subqueries indented inside their parentheses.
+Function-call parentheses stay inline. It only changes whitespace outside
+literals and quoted identifiers, so the statement means the same; text
+that is not valid UTF-8 is returned as is.
+
+### connection.IsCheckViolation
+
+```go
+func IsCheckViolation(err error, constraint ...string) bool
+```
+
+IsCheckViolation reports a check violation (23514), optionally only on the
+given constraint.
+
+### connection.IsForeignKeyViolation
+
+```go
+func IsForeignKeyViolation(err error, constraint ...string) bool
+```
+
+IsForeignKeyViolation reports a foreign key violation (23503), optionally
+only on the given constraint.
+
+### connection.IsNotNullViolation
+
+```go
+func IsNotNullViolation(err error) bool
+```
+
+IsNotNullViolation reports a not-null violation (23502).
+
 ### connection.IsRetryable
 
 ```go
@@ -118,6 +178,15 @@ IsRetryable reports whether err is a transient transaction conflict that
 succeeds when the whole transaction runs again. It recognises errors that
 expose SQLState() (pgx, lib/pq).
 
+### connection.IsUniqueViolation
+
+```go
+func IsUniqueViolation(err error, constraint ...string) bool
+```
+
+IsUniqueViolation reports a unique violation (23505), optionally only on the
+given constraint.
+
 ### connection.LogPostgresError
 
 ```go
@@ -127,6 +196,19 @@ func LogPostgresError(err error)
 LogPostgresError logs database errors in structured form, with code,
 table and constraint for PostgreSQL errors. Detail and Where quote row
 values (e.g. the duplicated key), so they are logged at debug level only.
+
+### connection.LogQueries
+
+```go
+func LogQueries(logger *slog.Logger)
+```
+
+LogQueries logs, to logger, every statement sqln sends through a Querier
+— the query manager (pages and their COUNT included), statements,
+transactions, the full-text checks and suggestions — as the database
+receives it: the SQL, its arguments, the duration and the error. nil
+stops it. The arguments may hold personal data: development only (gofi
+refuses DATABASE_LOG_QUERIES in stage and prod).
 
 ### connection.LogQueryDuration
 
@@ -143,6 +225,19 @@ Queries above 300ms are logged as warning, below that as debug.
 func MustDB() *sql.DB
 ```
 
+### connection.PrintQueries
+
+```go
+func PrintQueries(w io.Writer)
+```
+
+PrintQueries writes, to w, every statement sqln runs (see LogQueries) laid
+out for reading — FormatSQL, then one argument per line — framed so each
+stands apart in the console; nil stops it. Keywords, parameters and
+literals are colored when w is a terminal and NO_COLOR is unset. It is
+independent of LogQueries, and as with it the arguments may hold personal
+data: development only (gofi refuses it in stage and prod).
+
 ### connection.RegisterDriver
 
 ```go
@@ -157,6 +252,16 @@ func ResetGlobalForTest()
 
 ResetGlobalForTest resets the global connection state.
 Must only be called from tests; not safe for concurrent use.
+
+### connection.SQLState
+
+```go
+func SQLState(err error) string
+```
+
+SQLState returns the SQLSTATE code of the database error in err's chain,
+through *Error and any other wrapping, or "" when there is none. Callers do
+not need to know which driver sqln uses.
 
 ### connection.SetGlobal
 
@@ -229,6 +334,8 @@ type Config struct {
 	// QueryTimeout bounds each query run by sqln whose context has no
 	// deadline. Zero uses DefaultQueryTimeout; negative disables it.
 	QueryTimeout time.Duration
+	// FullText decides how searches on full-text indexes are checked.
+	FullText FullTextConfig
 }
 ```
 
@@ -255,7 +362,7 @@ func NewConnection(cfg Config, opts ...Option) (*Connection, error)
 ### connection.NewRaw
 
 ```go
-func NewRaw(db *sql.DB, d Driver) *Connection
+func NewRaw(db *sql.DB, d Driver, opts ...Option) *Connection
 ```
 
 NewRaw builds a Connection from an existing *sql.DB and a Dialect.
@@ -309,6 +416,19 @@ func (c *Connection) ReadDB() *sql.DB
 ```
 
 ReadDB returns the replica pool, or the primary when none is configured.
+
+### Connection.RequireTextIndexes
+
+```go
+func (c *Connection) RequireTextIndexes(ctx context.Context, indexes ...*fts.Index) error
+```
+
+RequireTextIndexes applies the connection's full-text policy (see
+FullTextConfig) to each index not yet accepted: with fts.Verify it fails
+with fts.ErrIndexMissing, fts.ErrIndexOutdated or fts.ErrServerConfig when
+the index is not in the database as defined. An accepted index is not
+checked again on this connection; a failure is, so applying the migration
+fixes it without a restart.
 
 ### Connection.WithQueryTimeout
 
@@ -410,6 +530,35 @@ SQLState returns the SQLSTATE code of the driver error, or "".
 func (e *Error) Unwrap() error
 ```
 
+## connection.FullTextConfig
+
+```go
+type FullTextConfig struct {
+	// Policy defaults to fts.Verify: each index is checked in the catalog the
+	// first time it is searched, and the search fails when it is missing or
+	// was built from another definition.
+	Policy fts.Policy
+	// Indexes are checked (or created, with fts.Ensure) when the connection
+	// opens, after migrations, so a missing index fails the startup instead
+	// of the first search.
+	Indexes []*fts.Index
+}
+```
+
+FullTextConfig applies an fts.Policy to the full-text indexes searched
+through a connection.
+
+## connection.MigrationConfigurer
+
+```go
+type MigrationConfigurer interface {
+	MigrationConfig(cfg Config) Config
+}
+```
+
+MigrationConfigurer is implemented by drivers whose migration pool needs a
+configuration the query pools must not have, e.g. MySQL's multiStatements.
+
 ## connection.Option
 
 ```go
@@ -417,6 +566,16 @@ type Option func(*options)
 ```
 
 options
+
+### connection.WithFullTextPolicy
+
+```go
+func WithFullTextPolicy(p fts.Policy) Option
+```
+
+WithFullTextPolicy sets the full-text policy of a connection built by
+NewRaw (Config.FullText does it for NewConnection); use fts.Trust with a
+mocked database.
 
 ### connection.WithMigrations
 
@@ -462,13 +621,23 @@ type Querier interface {
 Querier is the common surface of *sql.DB, *sql.Tx and *sql.Conn, so
 repositories run the same code inside and outside a transaction.
 
+### connection.Logged
+
+```go
+func Logged(q Querier) Querier
+```
+
+Logged returns q logging its statements while LogQueries or PrintQueries
+is on.
+
 ### connection.QuerierFrom
 
 ```go
 func QuerierFrom(ctx context.Context, db *sql.DB) Querier
 ```
 
-QuerierFrom returns db's transaction carried by ctx, or db.
+QuerierFrom returns db's transaction carried by ctx, or db; it logs its
+statements while LogQueries is on.
 
 ## connection.Settings
 

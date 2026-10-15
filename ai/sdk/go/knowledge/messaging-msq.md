@@ -1,7 +1,7 @@
 ---
 name: messaging-msq
 description: Mensageria com gofi/msq — provider por import, producer, consumer, retry/DLQ, key e consumer group, componente messaging, msq/worker e testes
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [msq, messaging, kafka, rabbitmq, sqs, nats, redis, oci-queue, producer, consumer, dead-letter, retry, consumer-group, partition-key, msqtest, worker]
 ---
 
@@ -89,6 +89,10 @@ return producer.SendMessage(ctx, msg)
 ```
 
 - `SendMessagesBatch(ctx, msgs)` usa batch nativo onde existe (Kafka, SQS).
+  Falha parcial no Kafka volta como `*msq.BatchSendError`: `Failed` traz os
+  índices (no slice enviado) das mensagens **não** entregues, `FailedIndex(i)`
+  testa um índice; as demais foram entregues. Reenvie/rejeite só as falhas
+  (`errors.As(err, &be)`). Qualquer outro erro significa lote inteiro falho.
 - `Producer` **não** é seguro para uso concorrente sem sincronização: um por
   goroutine/wrapper, ou batch.
 - Headers transversais (`msg.WithHeader(k, v)`); trace context W3C já é

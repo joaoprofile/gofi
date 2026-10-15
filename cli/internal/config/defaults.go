@@ -288,7 +288,7 @@ const SDKGoRepo = "github.com/joaoprofile/gofi-sdk-go"
 // SDKGoVersion is the gofi-sdk-go release the bundled Go docs (ai/sdk/go)
 // describe. Bump it together with those docs: CI checks them against the
 // source of this release.
-const SDKGoVersion = "v0.2.4"
+const SDKGoVersion = "v0.2.6"
 
 // DefaultSDKGoRef is the Go SDK source `gofi init` writes: the release the
 // bundled docs describe, so a new project's docs and toolchain checkout match.

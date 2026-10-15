@@ -1,6 +1,6 @@
 # sqln/filter
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/filter"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/filter"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -62,6 +62,12 @@ arbitrarily large query.
 const Between = driver.Between
 ```
 
+```go
+const Search = driver.Search
+```
+
+Search matches a full-text index; see Field.Search.
+
 ## Variáveis
 
 ```go
@@ -102,6 +108,15 @@ type Field struct {
 	Ops []string `json:"ops,omitempty"`
 	// Sortable allows the name as a sort field.
 	Sortable bool `json:"sortable,omitempty"`
+
+	// Search maps the name to a full-text index, the only way the SEARCH
+	// condition is accepted. Column may stay empty for a search-only name.
+	Search *fts.Index `json:"-"`
+	// SearchMode reads the value; fts.Websearch by default.
+	SearchMode fts.Mode `json:"-"`
+	// SearchOn is the alias of the index's table in the base query; empty
+	// leaves the indexed columns unqualified.
+	SearchOn string `json:"-"`
 
 	// UI metadata, passed through untouched.
 	Label      string `json:"label,omitempty"`
@@ -261,7 +276,7 @@ WithMaxInValues bounds the elements of a list value (IN, NOT IN, …).
 func WithMaxLikeLength(n int) Option
 ```
 
-WithMaxLikeLength bounds the characters of a Contains/Like value.
+WithMaxLikeLength bounds the characters of a Contains/Like/Search value.
 
 ## filter.QueryParam
 
@@ -269,6 +284,9 @@ WithMaxLikeLength bounds the characters of a Contains/Like value.
 type QueryParam struct {
 	Query  string
 	Params []any
+	// Indexes are the full-text indexes the filters search; sqln's
+	// FindWithFilter checks them before running the query.
+	Indexes []*fts.Index
 }
 ```
 
