@@ -1,7 +1,7 @@
 ---
 name: http-client-signing
 description: Cliente HTTP netx com assinatura de request — httpx.Signature, AWS SigV4 via netx/awssign, assinador próprio (HMAC), retry e idempotência
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [httpx, netx, NewClient, NewRequest, SetSignature, Signature, awssign, SigV4, execute-api, HMAC, retry, Idempotency-Key, HttpError]
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: qa-checklist
 description: Checklist de auditoria Go do gofi-qa contra o SDK v0.2.4 — ciclo de vida por componentes, Config tipado, secret://, UTC, sqln com allowlist, netx, iam, msq e observabilidade
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [qa, auditoria, checklist, gofi.New, componentes, config, secret, timezone, sqln, filtro-dinamico, httpx, grpcx, iam, msq, observabilidade]
 ---
 

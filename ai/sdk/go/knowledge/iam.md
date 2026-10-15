@@ -1,7 +1,7 @@
 ---
 name: iam
 description: Módulo iam de ponta a ponta — montagem pelo componente, ports do projeto, login em dois passos, refresh com rotação, logout real, claims de domínio, hash de senha, auditoria
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [iam, login, Authenticate, SelectTenant, RefreshToken, Logout, LogoutAll, JWT_SECRET, UserPort, TenantPort, password, Argon2id, bcrypt, Extra, OnEvent, componente iam]
 ---
 

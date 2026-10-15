@@ -1,7 +1,7 @@
 ---
 name: handler-test-boilerplate
 description: Esqueleto do teste de handler Go — stub de service com campos de resultado, httptest, SetPathValue, claims via WithClaims, RBAC real, só status code
-sdk: v0.2.4
+sdk: v0.2.6
 ---
 
 # Boilerplate — Handler Test

@@ -1,7 +1,7 @@
 ---
 name: bucket-storage
 description: Object storage com gofi base/bucket — provider por import, bucket.Open no composition root, wrapper de domínio, presign e testes com mem
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [bucket, object-storage, s3, minio, oci, presign, upload, file-service, BUCKET_PROVIDER]
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: configuration
 description: Configuração no gofi — base/environment, .env só fora de prod/stage, X_FILE, referências secret:// (env, file, awssm, ocivault), adapters gofi/config, Config tipado do projeto e timezone UTC
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [environment, config, .env, GOFI_DOTENV, X_FILE, secret://, secrets, awssm, ocivault, ParseStructAnnotationFunc, LoadConfig, TIMEZONE, timezone, UTC, os.Getenv]
 ---
 

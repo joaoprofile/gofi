@@ -1,6 +1,6 @@
 # base/cronjob
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/cronjob"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/base/cronjob"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 

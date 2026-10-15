@@ -1,6 +1,6 @@
 # base/environment
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/environment"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/base/environment"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -191,6 +191,15 @@ type Environment struct {
 	// bounds sqln queries without a deadline (0 = sqln default, negative = none).
 	DatabaseStatementTimeout time.Duration `env:"DATABASE_STATEMENT_TIMEOUT"`
 	DatabaseQueryTimeout     time.Duration `env:"DATABASE_QUERY_TIMEOUT"`
+	// DatabaseFullTextPolicy is verify (default), ensure or trust: what the
+	// connection does before searching a full-text index (sqln/fts.Policy).
+	DatabaseFullTextPolicy string `env:"DATABASE_FULLTEXT_POLICY"`
+	// DatabaseLogQueries logs every SQL statement sqln runs, with its
+	// arguments (development only: refused in stage and prod).
+	DatabaseLogQueries bool `env:"DATABASE_LOG_QUERIES"`
+	// DatabaseLogQueriesPretty prints each statement laid out for reading
+	// (indented SQL, one argument per line) to stderr; same restriction.
+	DatabaseLogQueriesPretty bool `env:"DATABASE_LOG_QUERIES_PRETTY"`
 	// Read replica; user, password and database are shared with the primary.
 	DatabaseReadHost string `env:"DATABASE_READ_HOST"`
 	DatabaseReadPort int    `env:"DATABASE_READ_PORT"`

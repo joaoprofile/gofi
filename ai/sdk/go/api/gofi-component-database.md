@@ -1,6 +1,6 @@
 # gofi/component/database
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/database"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/database"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -50,11 +50,19 @@ connection.
 ### database.New
 
 ```go
-func New() *Component
+func New(opts ...Option) *Component
 ```
 
 New opens the database from DATABASE_* (see ConfigFromEnv) during Build.
-With DATABASE_MIGRATION=true it runs the migrations in .migrations first.
+With DATABASE_MIGRATION=true it runs the migrations in .migrations first,
+then checks the full-text indexes declared with fts.MustIndex in the
+packages linked into the binary (see WithFullText): a missing or outdated
+index fails the startup. DATABASE_FULLTEXT_POLICY selects verify
+(default), ensure (creates missing indexes; refused in stage and prod) or
+trust (no check). DATABASE_LOG_QUERIES=true logs every SQL statement
+sqln runs, with its arguments and duration, and
+DATABASE_LOG_QUERIES_PRETTY=true prints them indented, one argument per
+line, to stderr (both refused in stage and prod).
 
 ### Component.DB
 
@@ -98,4 +106,22 @@ func (c *Component) Stage() gofi.Stage
 ```go
 func (c *Component) Start(_ context.Context, rt *gofi.Runtime) error
 ```
+
+## database.Option
+
+```go
+type Option func(*Component)
+```
+
+Option configures a Component built by New.
+
+### database.WithFullText
+
+```go
+func WithFullText(indexes ...*fts.Index) Option
+```
+
+WithFullText checks exactly these full-text indexes at startup instead of
+every index declared with fts.MustIndex: use it when the service talks to
+several databases. With no index, nothing is checked at startup.
 

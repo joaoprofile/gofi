@@ -1,7 +1,7 @@
 ---
 name: http-auth-middleware
 description: Middleware de autenticação HTTP sobre o iam — função httpx.Middleware, Bearer ou cookie de sessão, sempre IAMService.ValidateToken, claims com chave própria
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [auth, middleware, UseAuth, ValidateToken, Bearer, cookie, sessão, BFF, vault, RefreshToken, ClaimsFromContext, CrossOriginProtection, 401]
 ---
 

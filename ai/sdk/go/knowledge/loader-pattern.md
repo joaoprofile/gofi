@@ -1,7 +1,7 @@
 ---
 name: loader-pattern
 description: Loader — snapshot de várias tabelas para motor de decisão, com sqln.Find, errgroup ou transação read-only
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [loader, snapshot, decider, errgroup, sqln, Find, read-only-transaction, replica]
 ---
 

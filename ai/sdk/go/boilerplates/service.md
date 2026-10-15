@@ -1,7 +1,7 @@
 ---
 name: service-boilerplate
 description: Esqueleto do service Go — errors.go com errs.Register*, interface + implementação devolvendo errs.AppError, variante com split CRUD + Auth/IAM
-sdk: v0.2.4
+sdk: v0.2.6
 ---
 
 # Boilerplate — Service

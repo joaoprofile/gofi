@@ -1,7 +1,7 @@
 ---
 name: error-handling
 description: Fluxo de erro repository → service (errs.AppError) → handler (httpx.RespondError) e o mapeamento Kind → HTTP
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [errs, AppError, RegisterNotFound, RegisterValidation, RegisterForbidden, RespondError, ErrorResponse, WithDetails, Wrap, status HTTP, not-found]
 ---
 

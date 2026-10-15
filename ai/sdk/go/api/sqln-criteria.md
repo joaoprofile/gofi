@@ -1,6 +1,6 @@
 # sqln/criteria
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/criteria"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/criteria"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -48,6 +48,14 @@ func BuildClauseAfter(args []any, predicates []Predicate, d driver.FilterDialect
 BuildClauseAfter numbers placeholders after args, the parameters the
 surrounding query already binds, and returns args followed by the new ones.
 
+### criteria.TextIndexes
+
+```go
+func TextIndexes(predicates []Predicate) []*fts.Index
+```
+
+TextIndexes lists the full-text indexes the predicates search.
+
 ## criteria.Order
 
 ```go
@@ -71,6 +79,14 @@ func Asc(field string) Order
 ```
 
 Asc creates an ascending ORDER BY expression.
+
+### criteria.ByRelevance
+
+```go
+func ByRelevance(s fts.Search) Order
+```
+
+ByRelevance orders by the relevance of s on its index, most relevant first.
 
 ### criteria.Desc
 
@@ -281,6 +297,22 @@ func Lte(field string, value any) Predicate
 ```
 
 Lte produces field <= value.
+
+### criteria.Match
+
+```go
+func Match(s fts.Search) Predicate
+```
+
+Match produces the full-text condition of s on its index:
+  - PostgreSQL → p.<vector> @@ to_tsquery('<config>'::regconfig, $n)
+  - MySQL      → MATCH(p.col1, p.col2) AGAINST (? IN BOOLEAN MODE)
+
+The indexed columns are qualified by the alias of the index's table in the
+query (see fts.Search.On). The search string is bound as a parameter. Build
+fails with ErrInvalidValue wrapping fts.ErrEmptySearch when no searchable
+word remains, and fts.ErrUnsupported on dialects without full-text search.
+Queries run through the sqln manager check the index exists first.
 
 ### criteria.Ne
 
@@ -513,6 +545,38 @@ func (q *Query) Select(fields ...string) *Query
 Select specifies the columns included in the SELECT clause.
 If never called, SELECT * is generated.
 Fields are SQL expressions written verbatim: trusted input only, never user data.
+
+### Query.SelectHighlight
+
+```go
+func (q *Query) SelectHighlight(s fts.Search, column, alias string) *Query
+```
+
+SelectHighlight adds column, one of the index's, to the SELECT list as
+alias, with the words s matches marked: scan it into an fts.Highlight and
+render it with Highlight.HTML or Highlight.Fragments, which escape the
+text. PostgreSQL marks stems as the search matches them (ts_headline);
+MySQL marks the searched words and their accented forms. Both only pay for
+the rows of the page. alias must be a column reference.
+
+### Query.SelectRelevance
+
+```go
+func (q *Query) SelectRelevance(s fts.Search, alias string) *Query
+```
+
+SelectRelevance adds the relevance of s to the SELECT list as alias, so a
+paged query can sort by it (pagination.NewSort(alias, pagination.DESC)).
+alias must be a column reference.
+
+### Query.TextIndexes
+
+```go
+func (q *Query) TextIndexes() []*fts.Index
+```
+
+TextIndexes lists the full-text indexes q searches, so the caller can check
+they exist before running it (the sqln manager does).
 
 ### Query.Where
 

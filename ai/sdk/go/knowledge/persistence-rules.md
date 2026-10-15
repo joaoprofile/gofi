@@ -1,7 +1,7 @@
 ---
 name: persistence-rules
 description: Regras de persistência em Go/sqln — repository, escrita, transação, IDs, listagem, conflito UNIQUE, cache
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [repository, sqln, statement, transaction, aggregate, uuidv7, pagination, unique, cache, persistence]
 ---
 
@@ -57,12 +57,15 @@ keywords: [repository, sqln, statement, transaction, aggregate, uuidv7, paginati
   descartar o envelope (paga `COUNT(*)` à toa). Detalhe: `pagination.md`.
 - **Conflito de UNIQUE: SQLSTATE no repo, nunca string matching.**
   ```go
-  if pgErr, ok := connection.AsPgError(err); ok && pgErr.Code == "23505" &&
-      pgErr.ConstraintName == "uq_{tabela}_{colunas}" {
+  if connection.IsUniqueViolation(err, "uq_{tabela}_{colunas}") {
       return ErrDuplicate{Entidade} // erro sentinela do pacote repository
   }
   ```
-  Constraints com nome explícito na migration. Nunca `FindBy<Chave>` antes do
+  `connection.IsUniqueViolation(err, constraint...)` atravessa qualquer
+  wrapping; sem o nome da constraint, casa qualquer `23505`. Irmãos:
+  `IsForeignKeyViolation`, `IsCheckViolation`, `IsNotNullViolation`;
+  `connection.SQLState(err)` e `connection.ConstraintName(err)` dão o código e
+  a constraint. Constraints com nome explícito na migration. Nunca `FindBy<Chave>` antes do
   `Save` só para detectar conflito (TOCTOU + round-trip).
 - **Insert simples — sem `RETURNING`, sem `(*Entity, error)`, sem `Scan`**
   quando ninguém consome campos gerados: `r.stm.Execute` e `error`. Handler

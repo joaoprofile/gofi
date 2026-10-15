@@ -1,6 +1,6 @@
 # msq/types
 
-`import "github.com/joaoprofile/gofi-sdk-go/msq/types"` · SDK gofi/v0.2.4 (310ba1a)
+`import "github.com/joaoprofile/gofi-sdk-go/msq/types"` · SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -67,6 +67,41 @@ func UnpackMessage[T any](message *Message) (*T, error)
 ```
 
 UnpackMessage decodes Value into T using type inference.
+
+## types.BatchSendError
+
+```go
+type BatchSendError struct {
+	Failed []int
+	Err    error
+}
+```
+
+BatchSendError reports a partial batch send: Failed holds the indexes, in the
+slice given to SendMessagesBatch, of the messages the broker did not accept.
+Every other message was delivered. Providers that cannot tell which messages
+failed return a plain error instead, and callers must then treat the whole
+batch as failed.
+
+### BatchSendError.Error
+
+```go
+func (e *BatchSendError) Error() string
+```
+
+### BatchSendError.FailedIndex
+
+```go
+func (e *BatchSendError) FailedIndex(i int) bool
+```
+
+FailedIndex reports whether the message at index i was not delivered.
+
+### BatchSendError.Unwrap
+
+```go
+func (e *BatchSendError) Unwrap() error
+```
 
 ## types.Binding
 

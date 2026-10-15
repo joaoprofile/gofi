@@ -1,7 +1,7 @@
 ---
 name: dynamic-filter
 description: Filtro dinâmico em Go — allowlist sqln.FilterMapping, BuildQuery, NewPageRequestFilter, tenant como argumento, envelope sqln.Filters
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [dynamic-filter, FilterMapping, BuildQuery, FindWithFilter, NewPageRequestFilter, ErrInvalidFilter, Filters, tenant]
 ---
 
@@ -71,8 +71,36 @@ var {Ctx}FilterMapping = sqln.FilterMapping{
   `sqln.In`, `sqln.Contains`, …). Alias (`"eq"`, `"contains"`) é rejeitado.
 - `LIKE`/`NOT LIKE` = contém, **case-insensitive** (`ILIKE` no PostgreSQL); o
   SDK envolve o valor em `%…%` — o cliente manda só o termo.
+- `SEARCH` = busca full-text num índice (`fts.Index`): só vale em campo do
+  mapping com `Search` preenchido; em qualquer outro campo a requisição é
+  rejeitada. Ver §"Busca full-text" abaixo.
 - `BETWEEN` de datas: `"inicioRFC3339|fimRFC3339"`. Lista em `IN`/`NOT IN`.
   `value` nulo = `IS NULL`.
+
+## Busca full-text — condição `SEARCH`
+
+Um campo do mapping aponta para um índice declarado com `fts.MustIndex`
+(`full-text-search.md`); o cliente manda `condition: "SEARCH"` com o texto:
+
+```go
+var {Ctx}FilterMapping = sqln.FilterMapping{
+    // "q" só busca: Column pode ficar vazio
+    "q":    {Search: {ctx}Search, SearchOn: "e", Ops: []string{sqln.Search}, Label: "SEARCH"},
+    "auto": {Search: {ctx}Search, SearchOn: "e", SearchMode: fts.Prefix},   // digitando
+    "name": {Column: "e.name", Ops: sqln.Text, Sortable: true},
+}
+// {"field": "q", "condition": "SEARCH", "value": "cafe -descafeinado"}
+```
+
+- `Search`/`SearchMode`/`SearchOn` têm `json:"-"` (não vão ao cliente). `SearchOn`
+  é o alias da tabela na base query; vazio deixa as colunas sem qualificador.
+  `SearchMode` default `fts.Websearch`.
+- `value` precisa ser string; o limite é o de `LIKE` (`WithMaxLikeLength`). Texto
+  só com stopwords/pontuação → `ErrInvalidFilter` que também satisfaz
+  `errors.Is(err, fts.ErrEmptySearch)` — distinga "busca vazia" de "pedido ruim".
+- `BuildQuery` devolve `QueryParam.Indexes`; `sqln.FindWithFilter` confere esses
+  índices (política `DATABASE_FULLTEXT_POLICY`) antes de rodar.
+- Campo só-busca rejeita as demais condições (não tem `Column`).
 
 ## Handler — parse, tenant do auth, delega
 

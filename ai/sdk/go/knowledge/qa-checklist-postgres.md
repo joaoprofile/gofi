@@ -1,7 +1,7 @@
 ---
 name: qa-checklist-postgres
 description: Itens de auditoria Go + PostgreSQL do gofi-qa no SDK v0.2.4 — repository aggregate, escrita e transação no sqln, driver postgres, índices e valores monetários
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [qa, auditoria, postgres, sqln, transacao, statement, aggregate, indices, pgbouncer, dinheiro]
 ---
 
@@ -41,7 +41,8 @@ em escopo `fast`, confirme com `--deep` ou declare a limitação.
   **MAJOR**. Função pura sem `ctx`/I-O (ex.: `configArgs(e) []any`) pode ser de
   pacote
 - [ ] Violação de constraint mapeada por código SQLSTATE
-  (`connection.AsPgError(err)` → `pgErr.Code`, ex.: `23505` unique) para
+  (`connection.IsUniqueViolation` / `IsForeignKeyViolation` / `IsCheckViolation`
+  / `IsNotNullViolation`, ou `connection.SQLState(err)`; ex.: `23505` unique) para
   `errs.RegisterConflict`. Comparação por texto da mensagem de erro:
   **MINOR**; unique violation virando 500: **MAJOR**
 
@@ -90,6 +91,14 @@ em escopo `fast`, confirme com `--deep` ou declare a limitação.
 - [ ] Tabela multi-tenant: todo índice tem **leading column = tenant**
   (composite `(tenant, x)` ou partial). Single-column em coluna não-tenant:
   **MAJOR**
+- [ ] Busca textual por palavra/relevância (catálogo, descrição, "pesquisar
+  tudo") usa `fts.MustIndex` + `criteria.Match` (`full-text-search.md`), com a
+  migration **gerada** (`fts.WriteMigration`) e o teste de migration atual.
+  `ILIKE '%x%'` em tabela grande para isso: **MAJOR**; `tsvector`/`MATCH` à mão
+  ou índice criado fora de migration: **MAJOR**; `DATABASE_FULLTEXT_POLICY=ensure`
+  ou `DATABASE_LOG_QUERIES*` em manifesto `stage`/`prod`: **BLOCKER** (o
+  `database.New()` já recusa); `fts.Highlight` escrito sem `HTML()`/`Fragments()`
+  em página: **MAJOR** (XSS)
 - [ ] Filtro de texto por `sqln.Contains`/`criteria.Contains` (vira `ILIKE` no
   postgres), `LIKE '%x%'` ou regex: índice **GIN `gin_trgm_ops`**
   (`pg_trgm`). Btree single-column nessa coluna: **MAJOR** (o planner não usa)

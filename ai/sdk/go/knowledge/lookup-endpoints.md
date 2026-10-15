@@ -1,7 +1,7 @@
 ---
 name: lookup-endpoints
 description: Valores de dropdown dos filtros dinâmicos — FilterType, SearchType embedded vs path, Content em sqln.FilterField, enums compartilhados
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [lookup, FilterMapping, FilterField, FilterType, SearchType, Content, embedded, enums, dropdown]
 ---
 

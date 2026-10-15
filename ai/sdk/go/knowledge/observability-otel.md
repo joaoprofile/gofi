@@ -1,7 +1,7 @@
 ---
 name: observability-otel
 description: Observabilidade com OpenTelemetry no gofi — componente observability, o que já vem instrumentado, métricas de negócio via obs/metrics (lazy, nil-guard, cardinalidade fechada, classifier, decorator), spans de job e teste com ManualReader
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [observabilidade, OpenTelemetry, OTLP, observability.New, obs/metrics, metrics.NewInt64Counter, histogram, cardinalidade, attrs, classify, decorator, ManualReader, service_name, db_pool, traces, spans]
 ---
 

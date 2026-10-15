@@ -1,7 +1,7 @@
 ---
 name: cloud-identity
 description: Identidade de nuvem com gofi base/cloud (aws, oci) — credencial resolvida uma vez, identidade de pod/máquina em vez de chave
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [cloud, aws, oci, credentials, irsa, workload-identity, instance-principal, api-key]
 ---
 

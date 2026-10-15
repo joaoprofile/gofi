@@ -1,7 +1,7 @@
 ---
 name: iam-adapter-pattern
 description: Ports próprios do iam — quando sair do componente para iam.New, contrato do SessionPort sobre storage existente, AuthPort para provedor externo, TokenPort assimétrico
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [iam, adapter, port, SessionPort, SessionRevoker, AuthPort, TokenPort, UserPort, TenantPort, iam.New, FromService, jwt.NewProvider, sessão de domínio]
 ---
 

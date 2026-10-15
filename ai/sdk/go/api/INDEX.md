@@ -1,4 +1,4 @@
-# Referência de API do SDK — SDK gofi/v0.2.4 (310ba1a)
+# Referência de API do SDK — SDK gofi/v0.2.6 (3df9d20)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 > Procure um símbolo com `gofi find --in sdk "<nome>"` ou abra o pacote com `gofi show`.
@@ -82,6 +82,7 @@
 | `github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres` | `sqln-driver-postgres.md` | Package postgres registers the PostgreSQL driver, built on pgx/v5. |
 | `github.com/joaoprofile/gofi-sdk-go/sqln/driver/sqlserver` | `sqln-driver-sqlserver.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/sqln/filter` | `sqln-filter.md` |  |
+| `github.com/joaoprofile/gofi-sdk-go/sqln/fts` | `sqln-fts.md` | Package fts defines full-text indexes and the searches that read them. |
 | `github.com/joaoprofile/gofi-sdk-go/sqln/mapping` | `sqln-mapping.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/sqln/migrate` | `sqln-migrate.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/sqln/pagination` | `sqln-pagination.md` |  |

@@ -1,7 +1,7 @@
 ---
 name: boilerplate-model
 description: Esqueleto do model Go — entidade com tags db, DTOs com validate, query_dto com sqln.FilterMapping
-sdk: v0.2.4
+sdk: v0.2.6
 keywords: [boilerplate, model, entity, dto, FilterMapping, db-tag, validator, Page]
 ---
 
