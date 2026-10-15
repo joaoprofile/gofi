@@ -2,16 +2,16 @@
 1. **Create an annotated tag** on the commit you want to release.
 
    ```sh
-   git tag -a v0.2.4 -m "release v0.3.3"
+   git tag -a v0.3.4 -m "release v0.3.4"
    ```
 
 2. **Push the tag.** This is what triggers the workflow — a regular `git push`
    does **not** push tags.
 
    ```sh
-   git push origin v0.3.3
+   git push origin v0.3.4
    ```
    
 ```sh
-git tag -d v0.3.3
-git push origin :refs/tags/v0.3.3
+git tag -d v0.3.4
+git push origin :refs/tags/v0.3.4
