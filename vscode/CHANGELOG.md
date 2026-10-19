@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.5
+
+- **A mensagem vai ao modelo como foi escrita.** O painel não planeja mais o
+  texto livre por padrão: `gofiAI.intake` vem desligado. O fluxo agêntico
+  começa por uma skill (`/gofi-full`, `/gofi-pd` …), ou ligando
+  `gofiAI.intake` para voltar ao plano conduzido com botões.
+- **Sem o hook de prompt do gofi.** O gofi 0.3.5 aposenta o `gofi hook intake`,
+  que segurava ou replanejava cada mensagem; o painel não precisa mais avisá-lo.
+
 ## 0.3.1
 
 - **O arquivo em foco não some quando você clica no chat.** Enquanto continua
