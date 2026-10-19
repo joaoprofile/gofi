@@ -46,22 +46,14 @@ func TestAgentSettingsMergeWithTheTeams(t *testing.T) {
 		}
 	}
 
-	// The guard off takes out its entries only: the intake's prompt hook,
-	// on by default, stays.
+	// The guard off takes out its entries, and nothing of gofi's is left on
+	// the prompt.
 	if _, err := installAgentSettings(root, config.AI{Guard: config.GuardOff}); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ = os.ReadFile(filepath.Join(root, claudeSettingsFile))
-	if strings.Contains(string(raw), guardCommand) || !strings.Contains(string(raw), intakeCommand) {
-		t.Errorf("guard off should leave only the intake's hook:\n%s", raw)
-	}
-	// With both off, nothing of gofi's is left on the prompt.
-	if _, err := installAgentSettings(root, config.AI{Guard: config.GuardOff, Intake: config.IntakeOff}); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ = os.ReadFile(filepath.Join(root, claudeSettingsFile))
-	if strings.Contains(string(raw), "UserPromptSubmit") {
-		t.Errorf("gofi's prompt hooks left after both off:\n%s", raw)
+	if strings.Contains(string(raw), guardCommand) || strings.Contains(string(raw), "UserPromptSubmit") {
+		t.Errorf("gofi's hooks left after guard off:\n%s", raw)
 	}
 	if !strings.Contains(string(raw), `"lint.sh"`) {
 		t.Errorf("the team's hook went with the guard's:\n%s", raw)
@@ -131,5 +123,21 @@ func TestGuardCommandSetsTheMode(t *testing.T) {
 	cmd.SetOut(&out)
 	if err := cmd.Execute(); err == nil {
 		t.Error("an unknown mode was accepted")
+	}
+}
+
+// The intake's prompt hook is retired: an install takes out the entry an older
+// gofi wrote.
+func TestRetiredIntakeHookIsTakenOut(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, claudeSettingsFile), `{
+  "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "gofi hook intake", "timeout": 10}]}]}
+}`)
+	if _, err := installAgentSettings(root, config.AI{Guard: config.GuardWarn}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, claudeSettingsFile))
+	if strings.Contains(string(raw), intakeCommand) {
+		t.Errorf("the retired intake hook survived an install:\n%s", raw)
 	}
 }

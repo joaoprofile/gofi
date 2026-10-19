@@ -22,9 +22,13 @@ const conduct = {
 		return String(this.config.get('gofiPath') || 'gofi').trim() || 'gofi';
 	},
 
-	/** Whether free text goes through the intake: on unless `gofiAI.intake` is off. */
+	/**
+	 * Whether free text goes through the intake: only when `gofiAI.intake` is
+	 * on. Off by default — a message goes to the model as typed, and the
+	 * person starts a conducted flow by choice.
+	 */
 	intakeEnabled() {
-		return this.config.get('intake') !== false && Boolean(this.projectRoot);
+		return this.config.get('intake') === true && Boolean(this.projectRoot);
 	},
 
 	/**

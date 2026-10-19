@@ -51,22 +51,6 @@ names, reminds or blocks an agent that searches before asking the index.
 			return nil
 		},
 	}
-	intakeHook := &cobra.Command{
-		Use:   "intake",
-		Short: "UserPromptSubmit hook: hand the agent the plan of a request",
-		Long: `Claude Code runs this on every prompt when ai.intake is hint. It plans the
-prompt with the rules — no model, no token — and hands the agent the plan, the
-open questions and the evidence to read as context. The session's model is
-left alone. Quiet on a command, outside a project, while gofi chat or gofi
-ask conduct a plan, and on any error of its own.
-'gofi install guard' installs it; there is no reason to run it by hand.`,
-		Example: `echo '{"hook_event_name":"UserPromptSubmit","prompt":"altere o fluxo de pricing","cwd":"."}' | gofi hook intake`,
-		Args:    cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			runHookIntake(os.Stdin, os.Stdout)
-			return nil
-		},
-	}
-	hook.AddCommand(pretool, guardHook, intakeHook)
+	hook.AddCommand(pretool, guardHook)
 	return hook
 }

@@ -36,6 +36,8 @@ function makeChat(script) {
 	// The chat reads its project root off the workspace; the test gives it one.
 	Object.defineProperty(chat, 'projectRoot', { value: '/projeto', writable: true, configurable: true });
 	Object.defineProperty(chat, 'cwd', { value: '/projeto', writable: true, configurable: true });
+	// The conducted flow is opt-in (`gofiAI.intake`): these tests turn it on.
+	Object.defineProperty(chat, 'config', { value: { get: (k) => (k === 'intake' ? true : undefined) }, writable: true, configurable: true });
 	const posted = [];
 	chat.surfaces.add({ postMessage: (m) => posted.push(m) });
 	const turns = [];
@@ -393,10 +395,13 @@ test('o intake fica aberto entre mensagens e volta à chamada comum quando falha
 	fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('com o painel planejando, o hook do gofi não planeja a mesma mensagem de novo', () => {
-	const { engineEnv } = require('../src/providers/claudeCode.js');
-	assert.strictEqual(engineEnv({ get: () => undefined }).GOFI_CONDUCTING, '1');
-	assert.strictEqual(engineEnv({ get: (k) => (k === 'intake' ? false : undefined) }).GOFI_CONDUCTING, process.env.GOFI_CONDUCTING);
+test('sem gofiAI.intake ligado, o texto livre vai direto ao modelo', async () => {
+	const { chat, turns, calls } = makeChat([threePhases()]);
+	Object.defineProperty(chat, 'config', { value: { get: () => undefined }, configurable: true });
+	await chat.send('altere o pricing');
+	await tick();
+	assert.strictEqual(calls.length, 0, 'o intake não roda');
+	assert.deepStrictEqual(turns.map((t) => t.prompt), ['altere o pricing']);
 });
 
 test('pergunta sobre o projeto vai com os ponteiros, sem cartão de plano', async () => {

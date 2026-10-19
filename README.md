@@ -476,7 +476,6 @@ kept):
 
 | Hook | Event | What it does | Modes (`.gofi.yaml`) |
 |---|---|---|---|
-| **intake** | `UserPromptSubmit` | Plans each prompt typed straight into Claude Code. `gate` holds back a prompt with open questions **before any model reads it** — the questions are shown to you, at no cost; `hint` hands the plan and pointers to the agent as context. Warns when the session's model is pricier than the plan needs. Quiet on `/skill`, `!command`, outside a project, and on turns gofi conducts or the panel already planned. | `ai.intake: gate` (default) · `hint` · `off` |
 | **guard** | `PreToolUse` | Keeps the agent asking the index before scanning the tree. A raw search — Grep, Glob, reading a whole file over 120 lines, `grep`/`rg` — before any `find`/`show`/`path` is flagged (`warn`, once per question) or refused with the query to make instead (`enforce`). Ranged reads, small files and paths outside the project always pass. | `ai.guard: warn` (default) · `enforce` · `off` |
 | **git** | `pre-commit`, `post-checkout`, `post-merge` | Keeps the code graph in the commit | `graph.hooks` |
 
@@ -533,8 +532,10 @@ It drives Claude Code **at the workspace root**, so the project's `.claude/` is
 inherited: the ten skills become chat commands and the agent reads specs, memory
 and knowledge with no extra wiring.
 
-- **Plans before it sends.** Free text goes through `gofi intake`, kept open per
-  project (~10 ms per message). Questions become buttons; the elicitation's
+- **Plans before it sends, when you ask it to.** With `gofiAI.intake` on, free
+  text goes through `gofi intake`, kept open per project (~10 ms per message).
+  Off (the default), a message goes to the model as typed, and a conducted flow
+  starts from a skill (`/gofi-full`, `/gofi-pd` …). Questions become buttons; the elicitation's
   decisions become cards with the recommended option first; the review after a PRD
   or spec offers *continue* or *stop*. A message that is no task goes straight
   through. The engine starts while the request is planned.
@@ -617,14 +618,13 @@ ai:
     host: claude-vscode
     model: claude-sonnet-5-5       # the session; skills run on their tier's model
     guard: warn                    # warn | enforce | off
-    intake: gate                   # gate | hint | off
     tiers:                         # optional: pin each tier; then `gofi update skills`
         light: claude-haiku-4-5
         standard: claude-sonnet-5-5
         deep: claude-opus-5-5
 ```
 
-In VS Code: `gofiAI.intake` (plan free text, default on), `gofiAI.gofiPath` (the
+In VS Code: `gofiAI.intake` (plan free text and conduct the phases, default off — a message goes to the model as typed), `gofiAI.gofiPath` (the
 `gofi` binary), `gofiAI.model` (the panel session's model).
 
 ---

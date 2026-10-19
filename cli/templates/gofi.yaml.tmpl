@@ -134,11 +134,6 @@ ai:
     # inteiro) antes de perguntar ao índice: warn avisa, enforce bloqueia, off
     # não faz nada. `gofi guard <modo>` troca e mantém o hook em dia.
     guard: {{.AI.GuardMode}}
-    # O que acontece com um pedido digitado direto no agente: hint planeja pelas
-    # regras e entrega o plano ao agente; gate faz o mesmo e segura o pedido
-    # vago — as perguntas aparecem antes de qualquer modelo ler; off não faz
-    # nada. `gofi install guard` mantém o hook em dia.
-    intake: {{.AI.IntakeMode}}
     # Modelo de cada nível de capacidade. Cada skill declara o nível de que
     # precisa (contract.yaml): light lê e responde (status, doc), standard
     # escreve com escopo definido ou revisa (eng, ui, ops, qa), deep decide e

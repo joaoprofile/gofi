@@ -402,31 +402,6 @@ type AI struct {
 	// whole-file Read — before asking the index: warn tells it to ask first,
 	// enforce blocks the call, off leaves it alone. Empty means warn.
 	Guard string `yaml:"guard,omitempty"`
-	// Intake is what happens when the person types a task straight into the
-	// coding agent: hint plans it by the rules and hands the agent the plan and
-	// the evidence as context; gate does the same, and holds back a prompt
-	// with open questions — asked there, before any model reads it; off leaves
-	// the prompt alone. Empty means gate.
-	Intake string `yaml:"intake,omitempty"`
-}
-
-// Intake modes.
-const (
-	IntakeHint = "hint"
-	IntakeGate = "gate"
-	IntakeOff  = "off"
-)
-
-// IntakeModes lists the accepted values of ai.intake.
-var IntakeModes = []string{IntakeHint, IntakeGate, IntakeOff}
-
-// IntakeMode is the effective ai.intake: gate unless the project chose
-// otherwise.
-func (a AI) IntakeMode() string {
-	if a.Intake == "" {
-		return IntakeGate
-	}
-	return a.Intake
 }
 
 // Guard modes.
@@ -478,8 +453,6 @@ func (a AI) MarshalYAML() (interface{}, error) {
 	}
 	add("guard", a.GuardMode())
 	node.Content[len(node.Content)-1].LineComment = strings.Join(GuardModes, " | ") + " — gofi guard <mode>"
-	add("intake", a.IntakeMode())
-	node.Content[len(node.Content)-1].LineComment = strings.Join(IntakeModes, " | ") + " — the plan handed to the agent on each prompt; gofi install guard applies it"
 
 	if len(a.Models) == 0 && len(AllModels()) == 0 {
 		return node, nil
