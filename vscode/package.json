@@ -2,7 +2,7 @@
   "name": "gofi-ai",
   "displayName": "GOFI AI",
   "description": "Chat com os agentes gofi dentro do VSCode. Fala com o Claude por padrão; o motor é plugável para qualquer LLM.",
-  "version": "0.3.1",
+  "version": "0.3.5",
   "publisher": "gofi",
   "license": "MIT",
   "engines": {
@@ -212,8 +212,8 @@
         },
         "gofiAI.intake": {
           "type": "boolean",
-          "default": true,
-          "markdownDescription": "Planeja o pedido em texto livre com `gofi intake` antes de enviar: mostra o plano, pergunta o que faltar e conduz as fases, cada papel no seu nível. `/skill`, `!comando` e mensagens com anexo vão como foram escritos."
+          "default": false,
+          "markdownDescription": "Desligado: a mensagem vai ao modelo como foi escrita, e o fluxo agêntico começa por uma skill (`/gofi-full`, `/gofi-pd` …). Ligado: planeja o texto livre com `gofi intake` antes de enviar — mostra o plano, pergunta o que faltar e conduz as fases, cada papel no seu nível. `/skill`, `!comando` e mensagens com anexo vão sempre como foram escritos."
         },
         "gofiAI.gofiPath": {
           "type": "string",
