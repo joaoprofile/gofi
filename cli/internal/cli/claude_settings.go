@@ -23,8 +23,8 @@ const claudeSettingsFile = ".claude/settings.json"
 // team's.
 const guardCommand = "gofi hook guard"
 
-// intakeCommand is how the settings run the intake's prompt hook, and how gofi
-// finds that entry again.
+// intakeCommand is how an older gofi ran the intake's prompt hook. The command
+// is gone; gofi finds that entry by it to take it out.
 const intakeCommand = "gofi hook intake"
 
 // guardMatcher is every tool the guard looks at: the raw searches it watches
@@ -99,9 +99,9 @@ func (s claudeSettings) setGuard(on bool) {
 	s.setHooks(guardCommand, map[string]string{guard.EventPreTool: guardMatcher, guard.EventPrompt: ""}, on)
 }
 
-// setIntake installs the intake's prompt hook, or removes it.
-func (s claudeSettings) setIntake(on bool) {
-	s.setHooks(intakeCommand, map[string]string{guard.EventPrompt: ""}, on)
+// dropIntake removes the retired intake prompt hook an older gofi installed.
+func (s claudeSettings) dropIntake() {
+	s.setHooks(intakeCommand, map[string]string{guard.EventPrompt: ""}, false)
 }
 
 // setHooks puts one command on the given events — event to tool matcher, ""
@@ -143,13 +143,6 @@ func (s claudeSettings) hasGuard() bool {
 	return slices.ContainsFunc(list, func(e any) bool { return entryRuns(e, guardCommand) })
 }
 
-// hasIntake reports whether the intake's prompt hook is installed.
-func (s claudeSettings) hasIntake() bool {
-	hooks, _ := s["hooks"].(map[string]any)
-	list, _ := hooks[guard.EventPrompt].([]any)
-	return slices.ContainsFunc(list, func(e any) bool { return entryRuns(e, intakeCommand) })
-}
-
 // entryRuns reports whether a hook entry runs command.
 func entryRuns(entry any, command string) bool {
 	m, _ := entry.(map[string]any)
@@ -163,8 +156,9 @@ func entryRuns(entry any, command string) bool {
 }
 
 // installAgentSettings wires a project's Claude Code to gofi: the read-only
-// queries allowed, the guard in the mode ai.guard names, and the intake's
-// prompt hook unless ai.intake is off.
+// queries allowed and the guard in the mode ai.guard names. A prompt goes to
+// the model as written: the retired intake hook is taken out where an older
+// gofi left it.
 func installAgentSettings(root string, ai config.AI) (bool, error) {
 	s, err := loadClaudeSettings(root)
 	if err != nil {
@@ -172,6 +166,6 @@ func installAgentSettings(root string, ai config.AI) (bool, error) {
 	}
 	s.allowReadOnly()
 	s.setGuard(ai.GuardMode() != config.GuardOff)
-	s.setIntake(ai.IntakeMode() != config.IntakeOff)
+	s.dropIntake()
 	return s.save(root)
 }

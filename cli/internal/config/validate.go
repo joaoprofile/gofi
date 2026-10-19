@@ -110,9 +110,6 @@ func (c *GofiConfig) Validate() error {
 			return fmt.Errorf("ai.tiers: %q is not a tier (expected light, standard or deep)", tier)
 		}
 	}
-	if c.AI.Intake != "" && !slices.Contains(IntakeModes, c.AI.Intake) {
-		return fmt.Errorf("ai.intake: %q invalid (expected %s)", c.AI.Intake, strings.Join(IntakeModes, ", "))
-	}
 	if c.AI.Guard != "" && !slices.Contains(GuardModes, c.AI.Guard) {
 		return fmt.Errorf("ai.guard: %q invalid (expected %s)", c.AI.Guard, strings.Join(GuardModes, ", "))
 	}

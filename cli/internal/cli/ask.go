@@ -72,9 +72,6 @@ func runAsk(cmd *cobra.Command, request string) error {
 	if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
 		return err
 	}
-	// The plan is made here: the intake's prompt hook stays quiet on the turns
-	// of the Claude Code this conducts.
-	_ = os.Setenv(EnvConducting, "1")
 	interactive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 
 	opts := intake.Options{Language: backendLanguage(cfg), CacheDir: filepath.Join(root, ".gofi", "cache", "intake")}

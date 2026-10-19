@@ -79,9 +79,6 @@ func runChat(f chatFlags) error {
 	if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
 		return err
 	}
-	// The chat plans requests itself: the intake's prompt hook stays quiet on
-	// the turns of the Claude Code it drives.
-	_ = os.Setenv(EnvConducting, "1")
 	// Outside a project the chat still works — it just has no skills to offer.
 	root, err := os.Getwd()
 	if err != nil {

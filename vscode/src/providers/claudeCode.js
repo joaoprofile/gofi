@@ -68,21 +68,6 @@ function chatSystemPrompt(askPerCall) {
 }
 
 /** Flags for a persistent, streaming session. */
-/**
- * The engine's environment. When the panel plans the free text itself
- * (`gofiAI.intake`, on by default), it tells gofi's prompt hook so: the hook
- * would otherwise plan the same message a second time, in a process of its
- * own — half a second or more on every message, for a plan already made.
- *
- * @param {{get: (key: string) => unknown}} config
- */
-function engineEnv(config) {
-	if (config && config.get('intake') === false) {
-		return process.env;
-	}
-	return { ...process.env, GOFI_CONDUCTING: '1' };
-}
-
 function sessionArgs(config, project, resumeId, writesAllowed, settings, modelOverride) {
 	const this_askPerCall = Boolean(settings);
 	const args = [
@@ -222,7 +207,7 @@ class ClaudeCodeSession {
 
 		let child;
 		try {
-			child = spawn(exe, args, { cwd: this.ctx.cwd, env: engineEnv(this.ctx.config), stdio: ['pipe', 'pipe', 'pipe'] });
+			child = spawn(exe, args, { cwd: this.ctx.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
 		} catch (err) {
 			this.child = null;
 			this.fail(`não deu para iniciar \`${exe}\`: ${err.message}`);
@@ -638,4 +623,4 @@ function firstLine(text) {
 	return line.length > 160 ? `${line.slice(0, 160)}…` : line;
 }
 
-module.exports = { claudeCodeProvider, engineEnv };
+module.exports = { claudeCodeProvider };

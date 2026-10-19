@@ -12,6 +12,25 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 )
 
+// intakeProject is a configured project with the shipped contracts and one
+// context, pricing, that has a spec.
+func intakeProject(t *testing.T) string {
+	t.Helper()
+	root := configuredProject(t)
+	skills, _ := filepath.Glob("../../../ai/skills/*/contract.yaml")
+	for _, s := range skills {
+		b, _ := os.ReadFile(s)
+		writeFile(t, filepath.Join(root, ".claude/skills", filepath.Base(filepath.Dir(s)), "contract.yaml"), string(b))
+	}
+	writeFile(t, filepath.Join(root, "specs", "pricing", "sdd-pricing.md"),
+		"---\ntipo: spec\nformato: sdd\ncontexto: pricing\nversao: \"1.0\"\nstatus: aprovado\nkeywords: [preco]\n---\n# SDD — pricing\n\n## 1. Envio de preços\n\nEm lote.\n")
+	// gofi init builds the document index; the intake reads it.
+	if _, _, _, err := (&docs.Builder{Root: root}).Build(); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 // `gofi intake --json` answers in the versioned schema, from the contracts
 // installed in the project.
 func TestIntakeCommandJSON(t *testing.T) {
