@@ -112,6 +112,9 @@ em duas passagens, para a conversa não acontecer no nível deste papel:
 - Antes de entregar: `gofi spec check {contexto}` com **zero erros** — seção
   obrigatória, RN sem descrição ou repetida, placeholder do template e
   TODO/TBD são o que faria a implementação adivinhar.
+- A spec sai com `status: proposto` (ou `em_revisao`). **Não grave
+  `aprovado`**: aprovar é da pessoa, com `gofi spec approve {contexto}`, que
+  sela o corpo com um hash — editar depois desfaz a aprovação.
 - Entrega para `/gofi-eng` (e `/gofi-ui`).
 
 ## Output esperado

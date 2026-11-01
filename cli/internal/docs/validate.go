@@ -42,6 +42,9 @@ var known = map[string]bool{
 	"versao_spec": true, "versao_prd": true, "feature": true,
 	// The audit's open majors and minors, next to status in a context's memory.
 	"ressalvas": true,
+	// The seal of an approved spec: the version approved and the hash of its
+	// body (gofi spec approve).
+	"aprovacao_versao": true, "aprovacao_sha": true,
 }
 
 // facetAxes are the fields whose terms must exist in the lexicon. This is what

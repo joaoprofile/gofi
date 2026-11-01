@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/docs"
 	"github.com/joaoprofile/gofi/cli/internal/expertise"
 	"github.com/joaoprofile/gofi/cli/internal/githooks"
@@ -259,6 +260,7 @@ func runIndexCheck(cmd *cobra.Command, _ []string) error {
 	}
 	findings = append(findings, sdkDrift(root)...)
 	findings = append(findings, docs.CheckOverrides(root)...)
+	findings = append(findings, contract.StaleSeals(root)...)
 	errs := 0
 	for _, f := range findings {
 		kind := i18n.T("index.check.warn")
