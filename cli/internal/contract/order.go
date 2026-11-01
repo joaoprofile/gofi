@@ -17,10 +17,10 @@ const FieldDepends = "depende_de"
 // Deps maps each context that has a spec to the contexts its specs declare it
 // depends on, sorted and without repeats. A context depending on itself is
 // left out here and reported by the check.
-func Deps(specs []Spec) map[string][]string {
+func Deps(specs []Doc) map[string][]string {
 	set := map[string]map[string]bool{}
 	for _, s := range specs {
-		if s.Context == "" {
+		if !isLiving(s) || s.Context == "" {
 			continue
 		}
 		if set[s.Context] == nil {
@@ -50,7 +50,7 @@ func (e *CycleError) Error() string {
 // levels, so the contexts of one level can be built side by side. Within a
 // level the order is by name, so the same specs always give the same order. A
 // dependency on a context with no spec is ignored here — the check reports it.
-func Order(specs []Spec) ([][]string, error) {
+func Order(specs []Doc) ([][]string, error) {
 	deps := Deps(specs)
 	if cycle := findCycle(deps); cycle != nil {
 		return nil, &CycleError{Path: cycle}
@@ -133,11 +133,11 @@ func findCycle(deps map[string][]string) []string {
 // corpus, and reports on the specs in mine: a dependency on a context with no
 // spec, on itself, a cycle — errors, since no order could build them — and two
 // contexts sharing a table with no dependency declared either way, a warning.
-func depFindings(all []Spec, mine map[string]bool) []docs.Finding {
+func depFindings(all []Doc, mine map[string]bool) []docs.Finding {
 	deps := Deps(all)
 	var out []docs.Finding
 	for _, s := range all {
-		if !mine[s.Path] {
+		if !mine[s.Path] || !isLiving(s) {
 			continue
 		}
 		for _, d := range s.Front.List(FieldDepends) {
@@ -157,7 +157,7 @@ func depFindings(all []Spec, mine map[string]bool) []docs.Finding {
 			in[c] = true
 		}
 		for _, s := range all {
-			if mine[s.Path] && in[s.Context] && len(s.Front.List(FieldDepends)) > 0 {
+			if mine[s.Path] && isLiving(s) && in[s.Context] && len(s.Front.List(FieldDepends)) > 0 {
 				out = append(out, docs.Finding{Path: s.Path, Error: true,
 					Message: (&CycleError{Path: cycle}).Error() + " — nenhuma ordem constrói esses contextos"})
 			}
@@ -169,11 +169,11 @@ func depFindings(all []Spec, mine map[string]bool) []docs.Finding {
 
 // sharedTables warns once per pair of contexts that describe the same table
 // with no dependency between them: one of them likely consumes the other.
-func sharedTables(all []Spec, deps map[string][]string, mine map[string]bool) []docs.Finding {
+func sharedTables(all []Doc, deps map[string][]string, mine map[string]bool) []docs.Finding {
 	byTable := map[string]map[string]bool{}
 	first := map[string]string{} // context -> its first spec, where the warning goes
 	for _, s := range all {
-		if s.Context == "" {
+		if !isLiving(s) || s.Context == "" {
 			continue
 		}
 		if _, ok := first[s.Context]; !ok {
@@ -227,6 +227,11 @@ func sharedTables(all []Spec, deps map[string][]string, mine map[string]bool) []
 	}
 	return out
 }
+
+// isLiving reports whether a document is a spec that orders the project: a
+// living spec, or a format-2 one. A delta's depende_de reaches the living
+// spec when the change is archived, not before.
+func isLiving(d Doc) bool { return d.Kind == KindSpec && d.Change == "" }
 
 func sortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))

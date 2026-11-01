@@ -1,82 +1,150 @@
-// Package contract reads the specs a person approves as the contract the loop
-// implements (0002, D1–D2, D7): whether a spec is ready to be approved, and
-// which specs belong to a context. A spec that does not pass here is a spec
-// the loop would have to guess at, so the check runs before any model reads it.
+// Package contract reads the documents a person approves as the contract the
+// loop implements (0002, D1–D2, D7; 0003): whether each is ready to be
+// approved, which belong to a context or a change, and the order the contexts
+// are built in. A document that does not pass here is one the loop would have
+// to guess at, so the check runs before any model reads it.
 package contract
 
 import (
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/docs"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
-// Spec is one spec file of the corpus.
-type Spec struct {
-	Path    string // relative to the project root, slash-separated
-	Context string
-	Front   docs.Frontmatter
-	Body    []string
+// The kinds of document the contract is made of (0003, S3). The spec is the
+// living truth of a context; a change is a proposal, the deltas it applies to
+// the specs and the design of how. Tasks are derived, never approved, and are
+// not part of it.
+const (
+	KindSpec   = "spec"
+	KindChange = "mudanca"
+	KindDelta  = "delta"
+	KindDesign = "design"
+)
+
+var contractKinds = map[string]bool{KindSpec: true, KindChange: true, KindDelta: true, KindDesign: true}
+
+// FormatSplit is the corpus format of 0003: living specs and changes. A
+// document of an earlier format is checked by the rules it was written under,
+// until gofi-migrate converts it.
+const FormatSplit = 3
+
+// ChangesDir is where changes live, under specs/: one folder per change, and
+// archive/ for the ones applied.
+const ChangesDir = "changes"
+
+// Doc is one document of the contract.
+type Doc struct {
+	Path string // relative to the project root, slash-separated
+	Kind string
+	// Format is the corpus format the document declares (formato).
+	Format int
+	// Context is the context a spec, delta or design belongs to; Contexts is
+	// every context the document is about — a proposal names all of its own.
+	Context  string
+	Contexts []string
+	// Change is the change the document is part of, read from its folder —
+	// specs/changes/<id>/ — never from the frontmatter, so the two cannot
+	// disagree. Empty for a living spec.
+	Change string
+	Front  docs.Frontmatter
+	Body   []string
 	// Offset is the file line the body starts at, so a finding can point at
 	// the line the person sees in the editor.
 	Offset int
 }
 
-// Specs lists every spec in the corpus, sorted by path. A file whose
-// frontmatter does not say tipo: spec is not one, whatever its folder.
-func Specs(root string) ([]Spec, error) {
+// Docs lists every document of the contract under specs/, sorted by path. A
+// file is one by its frontmatter tipo, whatever its name; an archived change
+// is history, not contract, and is left out.
+func Docs(root string) ([]Doc, error) {
 	dir := layout.Specs().Abs(root)
-	var out []Spec
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	archive := filepath.Join(dir, ChangesDir, "archive")
+	var out []Doc
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if os.IsNotExist(err) && path == dir {
+			if os.IsNotExist(err) && p == dir {
 				return filepath.SkipDir
 			}
 			return err
 		}
-		if d.IsDir() || filepath.Ext(path) != ".md" || d.Name() == "INDEX.md" {
+		if d.IsDir() {
+			if p == archive {
+				return filepath.SkipDir
+			}
 			return nil
 		}
-		raw, err := os.ReadFile(path)
+		if filepath.Ext(p) != ".md" || d.Name() == "INDEX.md" {
+			return nil
+		}
+		raw, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}
 		fm, body := docs.Parse(string(raw))
-		if fm.Get("tipo") != "spec" {
+		kind := value(fm, "tipo")
+		if !contractKinds[kind] {
 			return nil
 		}
-		rel, _ := filepath.Rel(root, path)
-		out = append(out, Spec{
-			Path: filepath.ToSlash(rel), Context: fm.Get("contexto"),
-			Front: fm, Body: body, Offset: bodyLine(string(raw), body),
-		})
+		rel, _ := filepath.Rel(root, p)
+		doc := Doc{
+			Path: filepath.ToSlash(rel), Kind: kind, Format: formatOf(fm),
+			Context: value(fm, "contexto"), Front: fm, Body: body, Offset: bodyLine(string(raw), body),
+		}
+		doc.Change = changeOf(doc.Path)
+		doc.Contexts = fm.List("contextos")
+		if doc.Context != "" && !contains(doc.Contexts, doc.Context) {
+			doc.Contexts = append([]string{doc.Context}, doc.Contexts...)
+		}
+		if doc.Context == "" && len(doc.Contexts) > 0 {
+			doc.Context = doc.Contexts[0]
+		}
+		out = append(out, doc)
 		return nil
 	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, err
 }
 
-// Select narrows the corpus to what the person named: a context name takes
-// all of its specs, a path takes that file. An empty selection is everything.
-// A name that matches nothing is returned in missing.
-func Select(all []Spec, names []string) (picked []Spec, missing []string) {
+// changeOf is the change a path sits in: specs/changes/<id>/…, or "".
+func changeOf(rel string) string {
+	prefix := layout.Specs().Path(ChangesDir) + "/"
+	rest, ok := strings.CutPrefix(rel, prefix)
+	if !ok {
+		return ""
+	}
+	id, _, nested := strings.Cut(rest, "/")
+	if !nested {
+		return ""
+	}
+	return id
+}
+
+// Select narrows the corpus to what the person named: a context takes its
+// living spec and every open change that touches it, a change id takes that
+// change, a path takes that file. An empty selection is everything. A name
+// that matches nothing is returned in missing.
+func Select(all []Doc, names []string) (picked []Doc, missing []string) {
 	if len(names) == 0 {
 		return all, nil
 	}
 	seen := map[string]bool{}
 	for _, n := range names {
-		n = filepath.ToSlash(strings.TrimPrefix(n, "./"))
+		n = path.Clean(filepath.ToSlash(strings.TrimPrefix(n, "./")))
 		found := false
-		for _, s := range all {
-			if s.Context == n || s.Path == n {
+		for _, d := range all {
+			if d.Path == n || d.Change == n || contains(d.Contexts, n) {
 				found = true
-				if !seen[s.Path] {
-					seen[s.Path] = true
-					picked = append(picked, s)
+				if !seen[d.Path] {
+					seen[d.Path] = true
+					picked = append(picked, d)
 				}
 			}
 		}
@@ -86,6 +154,17 @@ func Select(all []Spec, names []string) (picked []Spec, missing []string) {
 	}
 	sort.Slice(picked, func(i, j int) bool { return picked[i].Path < picked[j].Path })
 	return picked, missing
+}
+
+// Living is the living spec of a context: the format-3 spec outside any
+// change.
+func Living(all []Doc, ctx string) (Doc, bool) {
+	for _, d := range all {
+		if d.Kind == KindSpec && d.Change == "" && d.Context == ctx {
+			return d, true
+		}
+	}
+	return Doc{}, false
 }
 
 // bodyLine is the 1-based file line the body starts at, counted the way
@@ -103,4 +182,24 @@ func value(fm docs.Frontmatter, key string) string {
 		v = strings.TrimSpace(v[:i])
 	}
 	return strings.Trim(v, `"'`)
+}
+
+// formatOf is the corpus format a document declares. One that declares none,
+// or something that is not a number, is read as the format before the split:
+// the rules of an older document are the safe ones to apply to it.
+func formatOf(fm docs.Frontmatter) int {
+	n, err := strconv.Atoi(value(fm, "formato"))
+	if err != nil {
+		return FormatSplit - 1
+	}
+	return n
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

@@ -60,7 +60,7 @@ func runSpecCheck(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
-	all, err := contract.Specs(root)
+	all, err := contract.Docs(root)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func runSpecApprove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
-	corpus, err := contract.Specs(root)
+	corpus, err := contract.Docs(root)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func runSpecOrder(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
-	specs, err := contract.Specs(root)
+	specs, err := contract.Docs(root)
 	if err != nil {
 		return err
 	}

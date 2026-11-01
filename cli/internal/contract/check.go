@@ -3,6 +3,7 @@ package contract
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -11,14 +12,11 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
-// TemplateFile is the spec template the placeholders are read from.
-const TemplateFile = "sdd-template.md"
-
-// requiredSections are the sections the loop works from: the overview says
-// what the context is, the operations what to implement, the rules what to
-// test and audit against. A spec without one of them has nothing to anchor
-// that work to. Matched by number, so a reworded title still counts.
-var requiredSections = []struct{ num, name string }{
+// requiredSectionsV2 are the sections a format-2 spec is worked from: the
+// overview says what the context is, the operations what to implement, the
+// rules what to test and audit against. Matched by number, as format 2 is
+// read; format 3 drops section numbers as a contract (0003, S8).
+var requiredSectionsV2 = []struct{ num, name string }{
 	{"1", "Visão Geral"},
 	{"4", "Operações"},
 	{"5", "Regras de Negócio"},
@@ -35,41 +33,50 @@ var (
 	reOpenMarker  = regexp.MustCompile(`\b(TODO|TBD|FIXME)\b|\?\?\?`)
 )
 
-// Check reports what stands between one spec and the loop: what keeps it from
-// being approved, and an approval that no longer holds. Errors block; warnings
-// are worth reading and block nothing.
-func Check(root string, s Spec, placeholders map[string]bool) []docs.Finding {
-	return append(content(s, placeholders), sealFindings(s)...)
+// Check reports what stands between one document and the loop: what keeps it
+// from being approved, and an approval that no longer holds. Errors block;
+// warnings are worth reading and block nothing.
+func Check(root string, d Doc, placeholders map[string]bool) []docs.Finding {
+	return append(content(d, placeholders), sealFindings(d)...)
 }
 
-// content checks what the spec says: its sections, rules and leftovers.
-func content(s Spec, placeholders map[string]bool) []docs.Finding {
-	var out []docs.Finding
-	add := func(line int, isErr bool, format string, a ...any) {
-		msg := fmt.Sprintf(format, a...)
-		if line > 0 {
-			msg = fmt.Sprintf("L%d: %s", line, msg)
-		}
-		out = append(out, docs.Finding{Path: s.Path, Message: msg, Error: isErr})
+// content checks what a document says, by the rules of its kind and format.
+func content(d Doc, placeholders map[string]bool) []docs.Finding {
+	f := finder{doc: d}
+	if len(d.Contexts) == 0 {
+		f.add(0, true, "sem contexto no frontmatter")
 	}
-
-	if s.Context == "" {
-		add(0, true, "sem contexto no frontmatter")
+	f.leftovers(placeholders)
+	if d.Kind == KindSpec && d.Format < FormatSplit {
+		f.rulesV2()
 	}
+	return f.out
+}
 
-	sections := map[string]bool{}
-	rules := map[string]int{}
-	var ruleOrder []string
-	inRules, fenced := false, false
-	var rule string
-	ruleText := map[string]bool{}
-	for i, ln := range s.Body {
-		line := s.Offset + i
-		// Placeholders first, on every line: a heading or a code block can
-		// carry one as well as prose.
+// finder collects the findings about one document.
+type finder struct {
+	doc Doc
+	out []docs.Finding
+}
+
+func (f *finder) add(line int, isErr bool, format string, a ...any) {
+	msg := fmt.Sprintf(format, a...)
+	if line > 0 {
+		msg = fmt.Sprintf("L%d: %s", line, msg)
+	}
+	f.out = append(f.out, docs.Finding{Path: f.doc.Path, Message: msg, Error: isErr})
+}
+
+// leftovers reports what a writer left in: a placeholder of a template, on
+// any line — a heading or a code block can carry one as well as prose — and
+// an open marker outside code.
+func (f *finder) leftovers(placeholders map[string]bool) {
+	fenced := false
+	for i, ln := range f.doc.Body {
+		line := f.doc.Offset + i
 		for _, p := range rePlaceholder.FindAllString(ln, -1) {
 			if placeholders[p] {
-				add(line, true, "placeholder do template %s não preenchido", p)
+				f.add(line, true, "placeholder do template %s não preenchido", p)
 			}
 		}
 		if reFence.MatchString(ln) {
@@ -77,81 +84,112 @@ func content(s Spec, placeholders map[string]bool) []docs.Finding {
 			continue
 		}
 		if !fenced {
-			if m := reSection.FindStringSubmatch(ln); m != nil {
-				sections[m[1]] = true
-				inRules, rule = m[1] == "5", ""
-				continue
-			}
-			if inRules {
-				if m := reRule.FindStringSubmatch(ln); m != nil {
-					rule = m[1]
-					if first, dup := rules[rule]; dup {
-						add(line, true, "%s repetida (já declarada na L%d)", rule, first)
-					} else {
-						rules[rule] = line
-						ruleOrder = append(ruleOrder, rule)
-					}
-					continue
-				}
-				if strings.HasPrefix(ln, "### ") {
-					rule = ""
-				} else if rule != "" && strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(ln), ">")) != "" {
-					ruleText[rule] = true
-				}
-			}
 			if m := reOpenMarker.FindString(ln); m != "" {
-				add(line, true, "marcador em aberto %q: decida antes de aprovar", m)
+				f.add(line, true, "marcador em aberto %q: decida antes de aprovar", m)
 			}
 		}
 	}
+}
 
-	for _, sec := range requiredSections {
+// rulesV2 are the rules of a format-2 spec: numbered sections and RN-xx rules
+// with a description.
+func (f *finder) rulesV2() {
+	sections := map[string]bool{}
+	rules := map[string]int{}
+	var ruleOrder []string
+	inRules, fenced := false, false
+	var rule string
+	ruleText := map[string]bool{}
+	for i, ln := range f.doc.Body {
+		line := f.doc.Offset + i
+		if reFence.MatchString(ln) {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		if m := reSection.FindStringSubmatch(ln); m != nil {
+			sections[m[1]] = true
+			inRules, rule = m[1] == "5", ""
+			continue
+		}
+		if !inRules {
+			continue
+		}
+		if m := reRule.FindStringSubmatch(ln); m != nil {
+			rule = m[1]
+			if first, dup := rules[rule]; dup {
+				f.add(line, true, "%s repetida (já declarada na L%d)", rule, first)
+			} else {
+				rules[rule] = line
+				ruleOrder = append(ruleOrder, rule)
+			}
+			continue
+		}
+		if strings.HasPrefix(ln, "### ") {
+			rule = ""
+		} else if rule != "" && strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(ln), ">")) != "" {
+			ruleText[rule] = true
+		}
+	}
+	for _, sec := range requiredSectionsV2 {
 		if !sections[sec.num] {
-			add(0, true, "falta a seção %s (%s)", sec.num, sec.name)
+			f.add(0, true, "falta a seção %s (%s)", sec.num, sec.name)
 		}
 	}
 	if sections["5"] && len(rules) == 0 {
-		add(0, false, "§5 sem nenhuma regra RN-xx: o loop não terá o que rastrear até o teste")
+		f.add(0, false, "§5 sem nenhuma regra RN-xx: o loop não terá o que rastrear até o teste")
 	}
 	for _, r := range ruleOrder {
 		if !ruleText[r] {
-			add(rules[r], true, "%s sem descrição", r)
+			f.add(rules[r], true, "%s sem descrição", r)
 		}
 	}
-	return out
 }
 
-// Placeholders reads the template's own placeholders, so the check knows a
-// leftover from a phrase that merely sits in braces. Without the template
-// there is nothing to compare against, and ok is false.
+// Placeholders reads the placeholders of every template the project has —
+// the corpus templates and each pack's — so the check knows a leftover from a
+// phrase that merely sits in braces. With no template there is nothing to
+// compare against, and ok is false.
 func Placeholders(root string) (map[string]bool, bool) {
-	b, err := os.ReadFile(layout.Templates().Abs(root, TemplateFile))
-	if err != nil {
-		return nil, false
+	var files []string
+	for _, pattern := range []string{
+		layout.Templates().Abs(root, "*.md"),
+		layout.SDK().Abs(root, "*", "templates", "*.md"),
+	} {
+		m, _ := filepath.Glob(pattern)
+		files = append(files, m...)
 	}
 	set := map[string]bool{}
-	for _, p := range rePlaceholder.FindAllString(string(b), -1) {
-		set[p] = true
+	for _, file := range files {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		for _, p := range rePlaceholder.FindAllString(string(b), -1) {
+			set[p] = true
+		}
 	}
-	return set, true
+	return set, len(files) > 0
 }
 
-// CheckAll checks the specs picked out of the whole corpus (all): their
+// CheckAll checks the documents picked out of the whole corpus (all): their
 // content, their seal, the dependencies they declare, and the corpus findings
 // — format, unknown fields, lexicon — `gofi index check` reports for the same
-// files, so one command says everything that stands between a spec and the
+// files, so one command says everything that stands between them and the
 // loop.
-func CheckAll(root string, all, specs []Spec) []docs.Finding {
+func CheckAll(root string, all, picked []Doc) []docs.Finding {
 	placeholders, ok := Placeholders(root)
 	var out []docs.Finding
 	if !ok {
-		out = append(out, docs.Finding{Path: layout.Templates().Path(TemplateFile),
-			Message: "template ausente: placeholders não verificados — rode `gofi update templates`"})
+		out = append(out, docs.Finding{Path: layout.Templates().Path(),
+			Message: "nenhum template: placeholders não verificados — rode `gofi update templates`"})
 	}
 	mine := map[string]bool{}
-	for _, s := range specs {
-		mine[s.Path] = true
-		out = append(out, Check(root, s, placeholders)...)
+	for _, d := range picked {
+		mine[d.Path] = true
+		out = append(out, Check(root, d, placeholders)...)
 	}
 	out = append(out, depFindings(all, mine)...)
 	for _, f := range docs.Validate(root) {

@@ -16,9 +16,9 @@ func spec(t *testing.T, root, ctx, deps, tables string) {
 	write(t, root, "specs/"+ctx+"/sdd-"+ctx+".md", body)
 }
 
-func corpus(t *testing.T, root string) []Spec {
+func corpus(t *testing.T, root string) []Doc {
 	t.Helper()
-	all, err := Specs(root)
+	all, err := Docs(root)
 	if err != nil {
 		t.Fatal(err)
 	}
