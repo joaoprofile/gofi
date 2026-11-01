@@ -143,6 +143,7 @@ const (
 	EdgeTouches    = "toca"       // doc -> entity, from the entidades facet
 	EdgeBelongs    = "pertence"   // doc -> context
 	EdgeImplements = "implementa" // entity -> source file
+	EdgeDepends    = "depende"    // spec -> context it consumes, from depende_de
 )
 
 // Node carries what a listing needs without opening the document.

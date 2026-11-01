@@ -6,6 +6,7 @@ submodulo: {sub}                  # ou n/a se for a spec única do contexto (sdd
 versao: "1.0"
 status: proposto                  # ou em_revisao; aprovado só por `gofi spec approve`, que sela o corpo
 prd: prd/{contexto}/prd-{...}.md  # ou n/a
+depende_de: []                    # contextos cujo código este consome — ordena o loop (gofi spec order)
 entidades: [{tabelas do schema que esta spec DEFINE ou usa}]
 operacoes: [{processos do léxico — .claude/lexicon/operacoes.md}]
 marketplaces: [{canais citados, se houver}]

@@ -136,11 +136,12 @@ func Placeholders(root string) (map[string]bool, bool) {
 	return set, true
 }
 
-// CheckAll checks the specs given and adds the corpus findings — format,
-// unknown fields, lexicon — that `gofi index check` reports for the same
-// files, so one command says everything that stands between a spec and its
-// approval.
-func CheckAll(root string, specs []Spec) []docs.Finding {
+// CheckAll checks the specs picked out of the whole corpus (all): their
+// content, their seal, the dependencies they declare, and the corpus findings
+// — format, unknown fields, lexicon — `gofi index check` reports for the same
+// files, so one command says everything that stands between a spec and the
+// loop.
+func CheckAll(root string, all, specs []Spec) []docs.Finding {
 	placeholders, ok := Placeholders(root)
 	var out []docs.Finding
 	if !ok {
@@ -152,6 +153,7 @@ func CheckAll(root string, specs []Spec) []docs.Finding {
 		mine[s.Path] = true
 		out = append(out, Check(root, s, placeholders)...)
 	}
+	out = append(out, depFindings(all, mine)...)
 	for _, f := range docs.Validate(root) {
 		if mine[f.Path] {
 			out = append(out, f)

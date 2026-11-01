@@ -45,6 +45,8 @@ var known = map[string]bool{
 	// The seal of an approved spec: the version approved and the hash of its
 	// body (gofi spec approve).
 	"aprovacao_versao": true, "aprovacao_sha": true,
+	// The contexts whose code this one consumes: the order the loop builds in.
+	"depende_de": true,
 }
 
 // facetAxes are the fields whose terms must exist in the lexicon. This is what

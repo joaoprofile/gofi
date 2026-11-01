@@ -64,3 +64,42 @@ ressalva: 0
 		t.Errorf("findings = %+v, want one error naming the misspelt field", got)
 	}
 }
+
+// A declared dependency is an edge to the context, when the context exists;
+// one with no document is the spec check's to report, not a node to invent.
+func TestGraphLinksADeclaredDependency(t *testing.T) {
+	root := corpusFixture(t)
+	writeFixture(t, root, "specs/envio/sdd-envio.md", `---
+tipo: spec
+formato: 2
+contexto: envio
+versao: "1.0"
+status: proposto
+depende_de: [churn, estoque]
+keywords: [envio]
+---
+# SDD — Envio
+`)
+	_, g := build(t, root)
+	if !hasEdge(g, "specs/envio/sdd-envio.md", PrefixCtx+"churn", EdgeDepends) {
+		t.Error("no depende edge to an existing context")
+	}
+	if hasEdge(g, "specs/envio/sdd-envio.md", PrefixCtx+"estoque", EdgeDepends) {
+		t.Error("an edge to a context nothing belongs to")
+	}
+	if _, ok := g.Nodes[PrefixCtx+"estoque"]; ok {
+		t.Error("a context node was invented for a dependency")
+	}
+	if got := findingsFor(Validate(root), "specs/envio/sdd-envio.md"); len(got) > 0 {
+		t.Errorf("depende_de is not part of the format: %+v", got)
+	}
+}
+
+func hasEdge(g *Graph, from, to, kind string) bool {
+	for _, e := range g.Edges {
+		if e == (Edge{from, to, kind}) {
+			return true
+		}
+	}
+	return false
+}

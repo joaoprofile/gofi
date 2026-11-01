@@ -403,6 +403,14 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 		for _, m := range reWikilink.FindAllStringSubmatch(body, -1) {
 			add(d.Path, resolve(m[1]), EdgeWikilink)
 		}
+		// A declared dependency points at the context, which exists only when
+		// some document belongs to it; one with no document is the check's to
+		// report, not a node to invent.
+		for _, target := range fm.List("depende_de") {
+			if contexts[target] {
+				add(d.Path, PrefixCtx+target, EdgeDepends)
+			}
+		}
 		for _, e := range fm.List("entidades") {
 			id := PrefixEntity + e
 			if _, ok := g.Nodes[id]; !ok {
