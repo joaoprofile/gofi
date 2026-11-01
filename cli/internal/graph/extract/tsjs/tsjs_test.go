@@ -202,6 +202,45 @@ func TestAngularEdges(t *testing.T) {
 	}
 }
 
+// A NestJS backend is read by the same scanner as a front end. Its decorators
+// say what each class is: a controller is where a request lands, a guard is
+// an @Injectable like any provider, a module is wiring.
+func TestNestKinds(t *testing.T) {
+	g := build(t, "testdata/nestjs", "nodejs")
+
+	if g.Language != "nodejs" {
+		t.Errorf("language = %q, want the one the project declared", g.Language)
+	}
+	for _, tc := range []struct {
+		id   string
+		kind model.Kind
+	}{
+		// @Controller stacked with @UseGuards: the decorator that names a kind wins.
+		{"type:orders-api/src/orders/orders.controller.OrdersController", model.KindController},
+		{"type:orders-api/src/orders/orders.service.OrdersService", model.KindService},
+		{"type:orders-api/src/auth/auth.guard.AuthGuard", model.KindService},
+		{"type:orders-api/src/orders/orders.module.OrdersModule", model.KindClass},
+		{"method:orders-api/src/orders/orders.controller.OrdersController.create", model.KindMethod},
+	} {
+		if got := node(t, g, tc.id).Kind; got != tc.kind {
+			t.Errorf("%s kind = %q, want %q", tc.id, got, tc.kind)
+		}
+	}
+}
+
+func TestNestEdges(t *testing.T) {
+	g := build(t, "testdata/nestjs", "nodejs")
+
+	const controller = "type:orders-api/src/orders/orders.controller.OrdersController"
+	// The injected service is the controller's dependency, as in Angular.
+	if !hasEdge(g, controller, model.RelUses, "type:orders-api/src/orders/orders.service.OrdersService") {
+		t.Error("controller does not depend on the injected service")
+	}
+	if !hasEdge(g, controller, model.RelContains, "method:orders-api/src/orders/orders.controller.OrdersController.create") {
+		t.Error("controller does not contain its route handler")
+	}
+}
+
 // Where the markup lives in a file of its own, the component tree is written
 // nowhere else: user-list.component.ts never names UserCardComponent, and the
 // module that declares both names them by class, not by the tag the template
@@ -345,7 +384,7 @@ func TestAstroFrontmatter(t *testing.T) {
 // The graph is committed to git, so two scans of the same tree must produce the
 // same bytes.
 func TestDeterministic(t *testing.T) {
-	for _, root := range []string{"testdata/react", "testdata/angular", "testdata/vue", "testdata/svelte", "testdata/astro"} {
+	for _, root := range []string{"testdata/react", "testdata/angular", "testdata/vue", "testdata/svelte", "testdata/astro", "testdata/nestjs"} {
 		a, b := build(t, root, "typescript"), build(t, root, "typescript")
 		a.Sort()
 		b.Sort()

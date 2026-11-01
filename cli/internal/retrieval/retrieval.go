@@ -247,7 +247,7 @@ var codeKinds = map[model.Kind]bool{
 	model.KindFunc: true, model.KindMethod: true, model.KindClass: true,
 	model.KindTrait: true, model.KindEnum: true, model.KindConst: true,
 	model.KindVar: true, model.KindComponent: true, model.KindHook: true,
-	model.KindService: true,
+	model.KindService: true, model.KindController: true,
 }
 
 func (e *Engine) loadCode(language string) {

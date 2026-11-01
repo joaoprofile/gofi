@@ -482,7 +482,7 @@ func (s *scanner) ref(f *fileParse, from, name string, rel model.Rel, line int) 
 
 func isNodeType(k model.Kind) bool {
 	switch k {
-	case model.KindClass, model.KindInterface, model.KindEnum, model.KindType, model.KindService:
+	case model.KindClass, model.KindInterface, model.KindEnum, model.KindType, model.KindService, model.KindController:
 		return true
 	}
 	return false
