@@ -1,281 +1,75 @@
 ---
 tipo: prd
-formato: 2                          # versão do formato do corpus — não invente outro valor
+formato: 3                          # versão do formato do corpus — não invente outro valor
 contexto: {contexto}
-submodulo: {sub}                    # ou n/a
 versao: "1.0"
-status: aprovado                    # ou draft | discovery se ainda não implementado
-spec: specs/{contexto}/sdd-{...}.md # ou n/a
-entidades: [{tabelas do schema que este PRD toca, se já houver}]
+status: proposto                    # ou discovery | aprovado (depois da revisão da pessoa)
+spec: specs/{contexto}/spec.md      # a spec viva, quando existir — ou n/a
 operacoes: [{processos do léxico — .claude/lexicon/operacoes.md}]
 marketplaces: [{canais citados, se houver}]
 keywords: [{até 12 termos que ainda não couberam nas facetas acima}]
 atualizado: {YYYY-MM-DD}
 ---
-# PRD — {contexto}/{submodulo} — {Nome do Requisito}
+# PRD — {contexto} — {Nome do Requisito}
 
-> **As facetas são vocabulário controlado, não tags livres.** `entidades` vem do
-> schema, `operacoes` e `marketplaces` do `.claude/lexicon/`. Termo novo entra no
-> léxico **antes** de entrar aqui — é o que impede o índice de voltar a ser uma
-> nuvem de tags onde cada termo aparece uma vez e não discrimina nada.
-> `gofi index check` reprova termo fora do léxico.
+> **O PRD responde por quê e para quem** — discovery de um contexto ou produto
+> novo. Requisitos, regras, cenários e dados **não** entram aqui: nascem no
+> delta da primeira mudança (`gofi change new`), que cita este PRD. Se uma
+> frase deste documento diz "o sistema deve…", ela é de um requisito.
 >
-> **`keywords` é o resto**, com teto de 12: o que não coube nas facetas.
+> As facetas (`operacoes`, `marketplaces`) são vocabulário controlado do
+> `.claude/lexicon/`; termo novo entra no léxico antes. `keywords` é o resto,
+> com teto de 12.
 
-## 1. Informações Gerais
+## 1. Problema
 
-| Campo        | Valor |
-|-------------|------|
-| Contexto     | {contexto} |
-| Stakeholders | {só papéis, ex.: Produto · Pricing · Engenharia — sem nomes de pessoas} |
+> O que dói hoje, para quem, com que frequência e a que custo. Evidência
+> (números, relatos, incidentes) vale mais que opinião.
 
----
+## 2. Objetivo e métricas de sucesso
 
-## 2. Contexto de Negócio
+> O resultado esperado em uma frase e como saber que foi atingido.
 
-Descreva o problema atual e o cenário que motivou este requisito.
+| Métrica | Hoje | Meta | Como medir |
+|---|---|---|---|
+| {métrica} | {valor} | {valor} | {fonte} |
 
-- Problema 1  
-- Problema 2  
-- Problema 3  
+## 3. Personas
 
----
+| Persona | Papel | O que precisa | O que a impede hoje |
+|---|---|---|---|
+| {Persona} | {papel} | {necessidade} | {obstáculo} |
 
-## 3. Objetivo do Requisito
+## 4. Escopo
 
-Descreva claramente o que este requisito pretende resolver.
+### Dentro
+- {o que esta entrega cobre}
 
-> Ex: Permitir que...
+### Fora
+- {o que fica de fora, e por quê}
 
----
+## 5. Jornadas
 
-## 4. Definições (Opcional)
+> As jornadas que a entrega muda, do ponto de vista de quem usa — passos de
+> negócio, não telas nem endpoints. Cada jornada vira um ou mais requisitos
+> com cenários no delta. Fluxo com ramificação real pode levar um diagrama PlantUML
+> (`.claude/expertise/diagramming/conventions.md`); não é obrigatório.
 
-| Termo  | Definição |
-|--------|----------|
-|        |          |
+### J1 — {nome da jornada}
+1. {passo}
+2. {passo}
 
----
+## 6. Restrições, premissas e riscos
 
-## 5. Escopo
+| Tipo | Descrição | Impacto | Mitigação |
+|---|---|---|---|
+| Restrição | {prazo, regulação, legado} | | |
+| Premissa | {o que se assume verdadeiro} | | |
+| Risco | {o que pode dar errado} | | |
 
-### 5.1 Dentro do Escopo
+## 7. Dúvidas em aberto
 
-- Item 1  
-- Item 2  
-- Item 3  
+> Cada dúvida que ainda depende de alguém. A primeira mudança só é aprovável
+> sem nenhum marcador: responda aqui antes de escrevê-la.
 
-### 5.2 Fora do Escopo
-
-- Item 1  
-- Item 2  
-- Item 3  
-
----
-
-## 6. Personas / Usuários Impactados
-
-| Persona  | Descrição | Permissões |
-|----------|----------|-----------|
-|          |          |           |
-
----
-
-## 7. Descrição do Processo de Negócio
-
-Descreva o fluxo de forma narrativa (alto nível).
-
-- Etapa 1  
-- Etapa 2  
-- Etapa 3  
-
-**Resultado esperado:**
-> Descreva o resultado final do processo
-
----
-
-## 8. Regras de Negócio
-
-| Código | Regra |
-|--------|------|
-| RN-01  |      |
-| RN-02  |      |
-| RN-03  |      |
-
----
-
-## 9. Fluxo de Negócio
-
-### Fluxo Principal
-
-1. Passo 1  
-2. Passo 2  
-3. Passo 3  
-
-### Fluxos Alternativos
-
-- FA-01:  
-- FA-02:  
-
-### Fluxos de Exceção
-
-- FE-01:  
-- FE-02:  
-
----
-
-## 10. BPMN — Fluxo de Negócio
-
-> Formato obrigatório: PlantUML (` ```plantuml `, normalmente
-> `activity` ou `sequence`). **Não** usar Mermaid, ASCII art ou link
-> para draw.io/Miro. Detalhes e exemplos em
-> `.claude/expertise/diagramming/conventions.md`.
-
-```plantuml
-@startuml
-start
-:Passo inicial do processo;
-if (condição de negócio?) then (sim)
-  :Caminho principal;
-else (não)
-  :Caminho alternativo;
-endif
-stop
-@enduml
-```
-
----
-
-## 11. Entradas e Saídas
-
-### Entradas
-
-| Informação | Origem | Obrigatório | Observação |
-|------------|--------|------------|------------|
-|            |        | Sim/Não     |            |
-
-### Saídas
-
-| Resultado | Destino | Observação |
-|----------|--------|------------|
-|          |        |            |
-
----
-
-## 12. Critérios de Aceite
-
-**CA-01**  
-Dado que...  
-Quando...  
-Então...  
-
-**CA-02**  
-Dado que...  
-Quando...  
-Então...  
-
----
-
-## 13. Requisitos Funcionais (RF)
-
-| Código | Descrição | Referência |
-|--------|----------|------------|
-| RF-01  |          | RN-XX |
-| RF-02  |          | RN-XX |
-
----
-
-## 14. Requisitos Não Funcionais (RNF)
-
-| Código | Categoria | Descrição |
-|--------|----------|-----------|
-| RNF-01 | Performance | |
-| RNF-02 | Segurança   | |
-| RNF-03 | Confiabilidade | |
-
----
-
-## 15. Modelo de Dados (Opcional)
-
-| Campo | Descrição | Obrigatório |
-|------|----------|------------|
-|      |          | Sim/Não |
-
----
-
-## 16. Regras de Validação (Opcional)
-
-| Campo | Regra | Obrigatório |
-|------|------|------------|
-|      |      | Sim/Não |
-
----
-
-## 17. Considerações Técnicas (Opcional)
-
-- Arquitetura sugerida  
-- Dependências  
-- Integrações futuras  
-- Estratégias de escalabilidade  
-
----
-
-## 18. Riscos e Premissas
-
-### Riscos
-
-- Risco 1  
-- Risco 2  
-
-### Premissas
-
-- Premissa 1  
-- Premissa 2  
-
----
-
-## 19. Análise de Impactos
-
-Questionário para mapear os efeitos (positivos e negativos) que esta feature pode
-gerar. Responda cada pergunta; quando não houver impacto, registre **"Sem impacto"**
-para deixar explícito que o ponto foi avaliado.
-
-### 19.1 Impactos Positivos
-
-| # | Pergunta | Resposta | Área/Funcionalidade afetada | Intensidade (Baixa/Média/Alta) |
-|---|----------|----------|-----------------------------|-------------------------------|
-| 1 | Que benefício direto a feature traz ao **cliente/usuário final**? | | | |
-| 2 | Quais **outras funcionalidades** são beneficiadas ou potencializadas? | | | |
-| 3 | Quais **áreas/equipes internas** ganham com isso (ex: suporte, comercial, financeiro, operações)? | | | |
-| 4 | Há ganho de **eficiência operacional** (redução de tempo, custo, retrabalho)? | | | |
-| 5 | Gera **vantagem competitiva** ou diferencial de mercado? | | | |
-| 6 | Contribui para **receita, retenção ou conversão**? | | | |
-
-### 19.2 Impactos Negativos / Riscos de Impacto
-
-| # | Pergunta | Resposta | Área/Funcionalidade afetada | Severidade (Baixa/Média/Alta) | Mitigação |
-|---|----------|----------|-----------------------------|-------------------------------|-----------|
-| 1 | Quais **funcionalidades existentes** podem quebrar, mudar de comportamento ou ser depreciadas? | | | | |
-| 2 | Há impacto negativo na **experiência do cliente/usuário** (curva de aprendizado, mudança de fluxo)? | | | | |
-| 3 | Quais **áreas/equipes internas** terão sobrecarga ou precisarão se adaptar? | | | | |
-| 4 | Existe risco de **performance, segurança ou disponibilidade**? | | | | |
-| 5 | Há **dependências ou integrações** que podem ser afetadas? | | | | |
-| 6 | Gera **dívida técnica**, custo de manutenção ou esforço de migração? | | | | |
-| 7 | Há impacto em **dados existentes** (migração, perda, inconsistência)? | | | | |
-
-### 19.3 Síntese de Impacto
-
-| Tipo | Resumo | Balanço final |
-|------|--------|---------------|
-| Positivo |  | |
-| Negativo |  | |
-
-> **Conclusão:** o saldo dos impactos justifica seguir com a feature? (Sim / Não / Com ressalvas — descreva)
-
----
-
-## 20. Anexos
-
-- Diagramas  
-- Documentos de apoio  
-- Links úteis  
+- [PRECISA ESCLARECER: {pergunta} — {quem decide}]

@@ -407,6 +407,7 @@ var ErrNoInstitutionalSubdir = errors.New("institutional repo has no folder for 
 //	  boilerplates/                ← <sdkRoot>/boilerplates/
 //	  sdk-docs/                    ← <sdkRoot>/sdk-docs/
 //	  knowledge/                   ← <sdkRoot>/knowledge/
+//	  templates/                   ← <sdkRoot>/templates/ (design of a change)
 //
 // The tree is filled in place rather than wiped: on InstallUpdate a file the
 // project tuned (design tokens, house rules) is kept and everything else is
@@ -421,8 +422,10 @@ func InstallSDKContent(srcFS fs.FS, sdkRoot, projectRoot, language string, mode 
 	}
 
 	// api/ is the generated reference; sdk-docs/ is its hand-written
-	// predecessor, still accepted from a source pinned before it.
-	subdirs := []string{"boilerplates", "api", "sdk-docs", "knowledge"}
+	// predecessor, still accepted from a source pinned before it. templates/
+	// holds the pack's own document templates — the design of a change in
+	// that stack (decision 0003).
+	subdirs := []string{"boilerplates", "api", "sdk-docs", "knowledge", "templates"}
 	found := false
 	for _, sub := range subdirs {
 		if dirExistsInFS(srcFS, path.Join(sdkRoot, sub)) {
