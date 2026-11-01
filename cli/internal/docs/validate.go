@@ -40,6 +40,8 @@ var known = map[string]bool{
 	"entidades": true, "marketplaces": true, "operacoes": true, "keywords": true,
 	"atualizado": true, "servicos": true, "diretorio": true,
 	"versao_spec": true, "versao_prd": true, "feature": true,
+	// The audit's open majors and minors, next to status in a context's memory.
+	"ressalvas": true,
 }
 
 // facetAxes are the fields whose terms must exist in the lexicon. This is what
