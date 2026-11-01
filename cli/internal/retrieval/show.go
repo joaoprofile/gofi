@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -332,6 +333,8 @@ func (e *Engine) showSection(d docs.Doc, frag string) (*View, error) {
 		Text: b.String()}, nil
 }
 
+var reReqAnchor = regexp.MustCompile(`(?i)^REQ-\d{2,}(\.\d+)?$`)
+
 func matchSection(secs []docs.Section, frag string) (docs.Section, bool) {
 	f := strings.TrimSpace(frag)
 	if n, err := strconv.Atoi(strings.TrimPrefix(strings.ToUpper(f), "L")); err == nil {
@@ -341,6 +344,21 @@ func matchSection(secs []docs.Section, frag string) (docs.Section, bool) {
 			}
 		}
 		return docs.Section{}, false
+	}
+	// A requirement or scenario id names one section exactly: REQ-04 is not
+	// REQ-040, and REQ-04 is the requirement, not its scenario REQ-04.1.
+	if reReqAnchor.MatchString(f) {
+		id := strings.ToUpper(f)
+		for _, s := range secs {
+			h := "### " + s.Heading
+			if rid, _, ok := docs.RequirementHeading(h); ok && rid == id {
+				return s, true
+			}
+			if sid, _, ok := docs.ScenarioHeading("#" + h); ok && sid == id {
+				return s, true
+			}
+		}
+		// Not a requirement here: the heading is matched as any other is.
 	}
 	want := docs.Normalize(f)
 	for _, test := range []func(h string) bool{

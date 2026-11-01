@@ -51,7 +51,26 @@ func (e *CycleError) Error() string {
 // level the order is by name, so the same specs always give the same order. A
 // dependency on a context with no spec is ignored here — the check reports it.
 func Order(specs []Doc) ([][]string, error) {
-	deps := Deps(specs)
+	return levels(Deps(specs))
+}
+
+// ChangeOrder puts the open changes in levels by the depende_de of their
+// proposals, as Order does the contexts. A dependency on a change that is not
+// open — archived, so already applied — is met and does not move the order.
+func ChangeOrder(all []Doc) ([][]string, error) {
+	deps := map[string][]string{}
+	for _, d := range all {
+		if d.Kind == KindChange && d.Change != "" {
+			deps[d.Change] = d.Front.List(FieldDepends)
+		}
+	}
+	return levels(deps)
+}
+
+// levels groups the keys of deps so each depends only on earlier groups, by
+// name within one; a dependency outside deps is ignored, and a cycle is an
+// error.
+func levels(deps map[string][]string) ([][]string, error) {
 	if cycle := findCycle(deps); cycle != nil {
 		return nil, &CycleError{Path: cycle}
 	}
@@ -70,18 +89,15 @@ func Order(specs []Doc) ([][]string, error) {
 		level[c] = l
 		return l
 	}
-	var levels [][]string
+	var out [][]string
 	for _, c := range sortedKeys(deps) {
 		l := depth(c)
-		for len(levels) <= l {
-			levels = append(levels, nil)
+		for len(out) <= l {
+			out = append(out, nil)
 		}
-		levels[l] = append(levels[l], c)
+		out[l] = append(out[l], c)
 	}
-	for _, l := range levels {
-		sort.Strings(l)
-	}
-	return levels, nil
+	return out, nil
 }
 
 // findCycle returns the first cycle found walking the contexts by name, closed

@@ -162,7 +162,8 @@ func newSpecOrderCmd() *cobra.Command {
 (depende_de: [clientes] in the frontmatter). Each level depends only on the
 levels before it, so the contexts of one level can be built side by side;
 within a level they are sorted by name, so the same specs always give the same
-order.
+order. The open changes follow, in levels by the depende_de of their
+proposals; a dependency on an archived change is met.
 
 The order comes from declared dependencies only. Two contexts describing the
 same table say nothing about which one comes first — gofi spec check warns
@@ -191,18 +192,37 @@ func runSpecOrder(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return &ExitCodeError{Code: 1, Err: err}
 	}
+	changes, err := contract.ChangeOrder(specs)
+	if err != nil {
+		return &ExitCodeError{Code: 1, Err: err}
+	}
 	if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 		if levels == nil {
 			levels = [][]string{}
 		}
+		if changes == nil {
+			changes = [][]string{}
+		}
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{"levels": levels, "depends_on": contract.Deps(specs)})
+		return enc.Encode(map[string]any{"levels": levels, "depends_on": contract.Deps(specs), "changes": changes})
 	}
-	if len(levels) == 0 {
+	if len(levels) == 0 && len(changes) == 0 {
 		fmt.Fprintln(out, "  "+i18n.T("spec.none"))
 		return nil
 	}
+	defer func() {
+		if len(changes) == 0 {
+			return
+		}
+		fmt.Fprintln(out, "\n  "+i18n.T("spec.order.changes"))
+		for i, level := range changes {
+			fmt.Fprintf(out, "  %s\n", i18n.T("spec.order.level", i))
+			for _, c := range level {
+				fmt.Fprintf(out, "    %s\n", c)
+			}
+		}
+	}()
 	deps := contract.Deps(specs)
 	for i, level := range levels {
 		fmt.Fprintf(out, "  %s\n", i18n.T("spec.order.level", i))

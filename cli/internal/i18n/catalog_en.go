@@ -50,6 +50,7 @@ var catalogEN = map[string]string{
 	"cmd.spec.order.short":       "The order the contexts are built in, from the dependencies their specs declare",
 	"cmd.spec.flag.json":         "print the levels and the dependencies as JSON",
 	"spec.order.level":           "level %d",
+	"spec.order.changes":         "open changes",
 	"cmd.change.short":           "Changes: how the contract moves — a proposal, deltas and the design of how",
 	"cmd.change.new.short":       "Create the folder of a change from the project's templates",
 	"cmd.change.list.short":      "List the open changes, their status and whether they are sealed",
