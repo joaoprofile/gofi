@@ -50,6 +50,7 @@ var Extractors = NewRegistry(
 	goExtractor{},
 	tsjsExtractor{lang: LangTypeScript},
 	tsjsExtractor{lang: LangJavaScript},
+	tsjsExtractor{lang: LangNodeJS},
 )
 
 // NewRegistry returns a registry holding the given native extractors.
