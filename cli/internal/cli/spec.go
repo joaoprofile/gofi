@@ -151,29 +151,7 @@ func runSpecApprove(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	placeholders, _ := contract.Placeholders(root)
-	blocked := 0
-	for _, s := range specs {
-		for _, f := range contract.Blocking(root, corpus, s, placeholders) {
-			fmt.Fprintf(out, "  %s %s: %s\n", i18n.T("index.check.error"), f.Path, f.Message)
-			blocked++
-		}
-	}
-	if blocked > 0 {
-		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("spec.approve.refused", blocked))}
-	}
-	for _, s := range specs {
-		wrote, err := contract.Approve(root, s)
-		if err != nil {
-			return err
-		}
-		key := "spec.approve.done"
-		if !wrote {
-			key = "spec.approve.already"
-		}
-		fmt.Fprintln(out, "  "+i18n.T(key, s.Path, contract.Seal(s.Body)[:15]))
-	}
-	return nil
+	return approveDocs(cmd, root, corpus, specs)
 }
 
 func newSpecOrderCmd() *cobra.Command {
