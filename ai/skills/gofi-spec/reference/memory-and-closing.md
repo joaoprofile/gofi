@@ -89,6 +89,7 @@ Conteúdo mínimo:
 ### Checklist de fechamento (rode mentalmente antes de devolver "spec gerada")
 
 - [ ] `specs/{contexto}/sdd-{contexto}.md` foi criado/atualizado
+- [ ] `gofi spec check {contexto}` sai com 0 erros
 - [ ] `specs/{outros-contextos}/sdd-*.md` afetados foram bumpados (se houve cross-spec impact)
 - [ ] `.claude/memory/contexts/{contexto}.md` frontmatter (`status: spec`, `versao_spec`, `atualizado`) + histórico refletem o estado atual
 - [ ] `.claude/memory/project.md` só tocado se nasceu serviço/binário novo

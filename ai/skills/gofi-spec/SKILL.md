@@ -109,6 +109,9 @@ em duas passagens, para a conversa não acontecer no nível deste papel:
 - Atualiza `.claude/memory/contexts/{contexto}.md` (frontmatter `status: spec`,
   `versao_spec`, `atualizado` + handoff para o gofi-eng); `project.md` só se
   nasceu serviço/binário novo → `reference/memory-and-closing.md` §Atualização de memória.
+- Antes de entregar: `gofi spec check {contexto}` com **zero erros** — seção
+  obrigatória, RN sem descrição ou repetida, placeholder do template e
+  TODO/TBD são o que faria a implementação adivinhar.
 - Entrega para `/gofi-eng` (e `/gofi-ui`).
 
 ## Output esperado
