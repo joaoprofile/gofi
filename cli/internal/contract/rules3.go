@@ -16,7 +16,7 @@ import (
 var (
 	reClarify  = regexp.MustCompile(`\[(PRECISA ESCLARECER|NEEDS CLARIFICATION)\b`)
 	reMust     = regexp.MustCompile(`\bDEVE\b`) // NÃO DEVE carries it too
-	reReqCited = regexp.MustCompile(`\bREQ-\d{2,}\b`)
+	reReqCited = regexp.MustCompile(`\b(?:[a-z0-9][a-z0-9_-]*/)?REQ-\d{2,}\b`)
 )
 
 // rules3 checks a format-3 document by its kind.
@@ -245,6 +245,9 @@ func (f *finder) delta(all []Doc) {
 	}
 	existing := map[string]bool{}
 	living, hasLiving := Living(all, f.doc.Context)
+	if !hasLiving && strings.TrimSpace(strings.Join(sectionBody(f.doc, "Propósito"), "")) == "" {
+		f.add(0, true, "%s ainda não tem spec viva: o delta traz o ## Propósito que ela vai ter", f.doc.Context)
+	}
 	if hasLiving {
 		for _, r := range Requirements(living) {
 			existing[r.ID] = true
@@ -288,26 +291,45 @@ func (f *finder) delta(all []Doc) {
 func (f *finder) design(all []Doc) {
 	f.requireSections("Abordagem", "Mapa de requisitos")
 	c := docsOf(all, f.doc.Change)
-	touched := map[string]bool{}
+	// Ids are numbered per context: in a change that touches several, REQ-01
+	// may be two requirements. The design cites ctx/REQ-NN where an id
+	// repeats, and may cite it bare where it does not.
+	touched := map[string]bool{} // ctx/REQ-NN
+	owners := map[string]int{}   // REQ-NN -> how many touched contexts have it
 	known := map[string]bool{}
 	for _, d := range c.deltas {
 		if living, ok := Living(all, d.Context); ok {
 			for _, r := range Requirements(living) {
-				known[r.ID] = true
+				known[r.ID], known[d.Context+"/"+r.ID] = true, true
 			}
 		}
+		seen := map[string]bool{}
 		for _, s := range DeltaSections(d) {
 			for _, r := range s.Requirements {
-				known[r.ID] = true
-				if s.Op != OpRemoved && r.ID != "" {
-					touched[r.ID] = true
+				if r.ID == "" {
+					continue
+				}
+				known[r.ID], known[d.Context+"/"+r.ID] = true, true
+				if s.Op != OpRemoved && !seen[r.ID] {
+					seen[r.ID] = true
+					touched[d.Context+"/"+r.ID] = true
+					owners[r.ID]++
 				}
 			}
 		}
 	}
 	mapText := strings.Join(sectionBody(f.doc, "Mapa de requisitos"), "\n")
-	for _, id := range sortedKeys(touched) {
-		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(id) + `\b`).MatchString(mapText) {
+	cites := func(ref string) bool {
+		return regexp.MustCompile(`\b` + regexp.QuoteMeta(ref) + `\b`).MatchString(mapText)
+	}
+	for _, ref := range sortedKeys(touched) {
+		_, id, _ := strings.Cut(ref, "/")
+		if cites(ref) || owners[id] == 1 && cites(id) {
+			continue
+		}
+		if owners[id] > 1 {
+			f.add(0, true, "%s não está no ## Mapa de requisitos — %s existe em mais de um contexto da mudança: cite %s", ref, id, ref)
+		} else {
 			f.add(0, true, "%s é adicionado ou modificado pela mudança e não está no ## Mapa de requisitos", id)
 		}
 	}

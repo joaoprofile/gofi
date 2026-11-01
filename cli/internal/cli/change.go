@@ -25,9 +25,10 @@ what the loop implements; accepted, it is archived and its deltas become the
 living specs.`,
 		Example: `gofi change new adicionar-rate-limit --context pedidos
 gofi change list
-gofi change approve adicionar-rate-limit`,
+gofi change approve adicionar-rate-limit
+gofi change archive adicionar-rate-limit`,
 	}
-	cmd.AddCommand(newChangeNewCmd(), newChangeListCmd(), newChangeApproveCmd())
+	cmd.AddCommand(newChangeNewCmd(), newChangeListCmd(), newChangeApproveCmd(), newChangeArchiveCmd())
 	return cmd
 }
 
@@ -157,6 +158,49 @@ change until it is approved again.`,
 				return errors.New(i18n.T("change.not_found", args[0]))
 			}
 			return approveDocs(cmd, root, all, docs)
+		},
+	}
+}
+
+func newChangeArchiveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "archive <id>",
+		Short: i18n.T("cmd.change.archive.short"),
+		Long: `Apply an approved change to the living specs and archive it. Each delta
+becomes its context's spec: requirements ADICIONADO after the last one,
+MODIFICADO replaced in place, REMOVIDO taken out; a context with no spec yet
+gets one from the delta's Propósito. The version goes up one minor step, the
+spec is sealed again — it is the mechanical application of what the person
+approved — and the folder moves to specs/changes/archive/<date>-<id>/ with the
+proposal marked arquivado.
+
+No model is involved, and nothing is written unless all of it can be: a change
+that is not sealed as it is, does not pass gofi spec check, or would leave a
+spec that does not, is refused untouched.
+
+In the autonomous loop the executor archives a change when it accepts the
+delivery; run by hand, it is the step after the delivery is accepted.`,
+		Example: `gofi change archive adicionar-rate-limit`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := findProjectRoot()
+			if err != nil {
+				return err
+			}
+			all, err := contract.Docs(root)
+			if err != nil {
+				return err
+			}
+			res, err := contract.Archive(root, all, args[0], time.Now().Format("2006-01-02"))
+			if err != nil {
+				return &ExitCodeError{Code: 1, Err: err}
+			}
+			out := cmd.OutOrStdout()
+			for _, p := range res.Specs {
+				fmt.Fprintln(out, "  "+i18n.T("change.archive.spec", p))
+			}
+			fmt.Fprintln(out, "  "+i18n.T("change.archive.moved", res.Dir))
+			return nil
 		},
 	}
 }
