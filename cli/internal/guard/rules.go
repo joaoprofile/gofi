@@ -3,9 +3,9 @@ package guard
 import "regexp"
 
 // ReadOnlyRules are Claude Code permission rules for the gofi calls that only
-// read the index. Allowing them ahead of time is what makes asking the index
-// cheaper than grepping: a query that stops for a permission prompt loses to
-// the tool that does not.
+// read: the index, and the check of the specs. Allowing them ahead of time is
+// what makes asking the index cheaper than grepping: a query that stops for a
+// permission prompt loses to the tool that does not.
 var ReadOnlyRules = []string{
 	MCPPrefix + "find",
 	MCPPrefix + "show",
@@ -18,6 +18,8 @@ var ReadOnlyRules = []string{
 	"Bash(gofi index status)",
 	"Bash(gofi index status *)",
 	"Bash(gofi intake *)",
+	"Bash(gofi spec check)",
+	"Bash(gofi spec check *)",
 }
 
 // WriteRules are the gofi calls that write where Claude Code would stop an
