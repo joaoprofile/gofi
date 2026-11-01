@@ -4,7 +4,7 @@ formato: 2                        # versão do formato do corpus — não invent
 contexto: {contexto}
 submodulo: {sub}                  # ou n/a se for a spec única do contexto (sdd-{contexto}.md)
 versao: "1.0"
-status: aprovado                  # ou proposto | em_revisao se ainda não implementado
+status: proposto                  # ou em_revisao; aprovado só por `gofi spec approve`, que sela o corpo
 prd: prd/{contexto}/prd-{...}.md  # ou n/a
 entidades: [{tabelas do schema que esta spec DEFINE ou usa}]
 operacoes: [{processos do léxico — .claude/lexicon/operacoes.md}]

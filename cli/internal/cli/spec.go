@@ -19,9 +19,10 @@ func newSpecCmd() *cobra.Command {
 be approved. A spec that does not pass is a spec the implementation would have
 to guess at, so this runs before any model reads it — and costs no tokens.`,
 		Example: `gofi spec check
-gofi spec check pedidos`,
+gofi spec check pedidos
+gofi spec approve pedidos`,
 	}
-	cmd.AddCommand(newSpecCheckCmd())
+	cmd.AddCommand(newSpecCheckCmd(), newSpecApproveCmd())
 	return cmd
 }
 
@@ -38,6 +39,10 @@ declared twice or left without a description, a placeholder of the template
 left in ({Contexto}, {Nome da Regra}), an open marker (TODO, TBD, FIXME, ???)
 outside a code block, and the corpus findings gofi index check reports for the
 same file. A §5 with no RN-xx is a warning: nothing for the loop to trace.
+
+An approved spec that was edited afterwards is an error too: its approval no
+longer holds (see gofi spec approve). An approved status with no seal is a
+warning.
 
 Exits non-zero when there is an error, for CI and for the loop.`,
 		Example: `gofi spec check
@@ -78,6 +83,78 @@ func runSpecCheck(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, "\n  "+i18n.T("spec.check.summary", len(specs), errs, len(findings)-errs))
 	if errs > 0 {
 		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("spec.check.failed", errs))}
+	}
+	return nil
+}
+
+func newSpecApproveCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "approve <context|path>... | --all",
+		Short: i18n.T("cmd.spec.approve.short"),
+		Long: `Approve specs as the contract the loop implements. Each one is checked first
+(gofi spec check); then its frontmatter gets status: aprovado, the version
+approved (aprovacao_versao) and the hash of its body (aprovacao_sha). No name
+and no date: who approved and when is in git.
+
+The hash is the seal. Editing the body afterwards breaks it, and the spec is
+no longer approved: gofi spec check and gofi index check say so, and the loop
+will not implement it until it is approved again. Changing only the
+frontmatter does not break it; changing versao does.
+
+All or nothing: when any spec named has an error, none is approved.`,
+		Example: `gofi spec approve pedidos
+gofi spec approve pedidos clientes
+gofi spec approve --all`,
+		RunE: runSpecApprove,
+	}
+	cmd.Flags().Bool("all", false, i18n.T("cmd.spec.flag.all"))
+	return cmd
+}
+
+func runSpecApprove(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	if all == (len(args) > 0) {
+		return errors.New(i18n.T("spec.approve.which"))
+	}
+	root, err := findProjectRoot()
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	corpus, err := contract.Specs(root)
+	if err != nil {
+		return err
+	}
+	specs, missing := contract.Select(corpus, args)
+	if len(missing) > 0 {
+		return errors.New(i18n.T("spec.not_found", strings.Join(missing, ", ")))
+	}
+	if len(specs) == 0 {
+		fmt.Fprintln(out, "  "+i18n.T("spec.none"))
+		return nil
+	}
+
+	placeholders, _ := contract.Placeholders(root)
+	blocked := 0
+	for _, s := range specs {
+		for _, f := range contract.Blocking(root, s, placeholders) {
+			fmt.Fprintf(out, "  %s %s: %s\n", i18n.T("index.check.error"), f.Path, f.Message)
+			blocked++
+		}
+	}
+	if blocked > 0 {
+		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("spec.approve.refused", blocked))}
+	}
+	for _, s := range specs {
+		wrote, err := contract.Approve(root, s)
+		if err != nil {
+			return err
+		}
+		key := "spec.approve.done"
+		if !wrote {
+			key = "spec.approve.already"
+		}
+		fmt.Fprintln(out, "  "+i18n.T(key, s.Path, contract.Seal(s.Body)[:15]))
 	}
 	return nil
 }

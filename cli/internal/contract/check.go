@@ -35,9 +35,15 @@ var (
 	reOpenMarker  = regexp.MustCompile(`\b(TODO|TBD|FIXME)\b|\?\?\?`)
 )
 
-// Check reports what keeps one spec from being approved. Errors block the
-// approval; warnings are worth reading and block nothing.
+// Check reports what stands between one spec and the loop: what keeps it from
+// being approved, and an approval that no longer holds. Errors block; warnings
+// are worth reading and block nothing.
 func Check(root string, s Spec, placeholders map[string]bool) []docs.Finding {
+	return append(content(s, placeholders), sealFindings(s)...)
+}
+
+// content checks what the spec says: its sections, rules and leftovers.
+func content(s Spec, placeholders map[string]bool) []docs.Finding {
 	var out []docs.Finding
 	add := func(line int, isErr bool, format string, a ...any) {
 		msg := fmt.Sprintf(format, a...)
