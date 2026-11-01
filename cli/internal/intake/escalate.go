@@ -12,9 +12,13 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
-// VerdictRejected is the status the QA writes in the context's memory when it
-// fails a delivery — the signal /gofi-full reopens the implementation on.
-const VerdictRejected = "reprovado"
+// The statuses the QA writes in the context's memory. Aprovado comes with
+// ressalvas, the majors and minors still open; only a clean audit — aprovado
+// with none — is accepted, here and in /gofi-full alike (0002, D8).
+const (
+	VerdictRejected = "reprovado"
+	VerdictApproved = "aprovado"
+)
 
 // fixers are the artifacts a failed audit sends back: what the QA reads was
 // written by the phase that produced one of them.
@@ -90,31 +94,52 @@ func Verdict(root string, r *Result) []byte {
 }
 
 // Rejected reports whether the audit that just ran failed the delivery: the
-// context's memory changed since before the phase (before, from Verdict) and
-// its status is now reprovado. An audit that wrote nothing rejects nothing —
-// the conductor does not escalate on a verdict it cannot see.
+// context's memory changed since before the phase (before, from Verdict), and
+// it is now reprovado, or aprovado with ressalvas still open. An audit that
+// wrote nothing rejects nothing — the conductor does not escalate on a verdict
+// it cannot see.
 func Rejected(root string, r *Result, before []byte) bool {
 	now := Verdict(root, r)
 	if now == nil || bytes.Equal(now, before) {
 		return false
 	}
-	return Status(now) == VerdictRejected
+	switch Status(now) {
+	case VerdictRejected:
+		return true
+	case VerdictApproved:
+		return openCaveats(now)
+	}
+	return false
+}
+
+// openCaveats reports whether an aprovado still has majors or minors open. A
+// memory written before the field existed has none; a value that is not a
+// plain zero counts as open, since nothing proves the audit clean.
+func openCaveats(doc []byte) bool {
+	v, ok := field(doc, "ressalvas")
+	return ok && v != "0"
 }
 
 // Status reads the status field of a document's frontmatter.
 func Status(doc []byte) string {
+	v, _ := field(doc, "status")
+	return v
+}
+
+// field reads one key of a document's frontmatter, lowercased and unquoted.
+func field(doc []byte, key string) (string, bool) {
 	sc := bufio.NewScanner(bytes.NewReader(doc))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
-		return ""
+		return "", false
 	}
 	for sc.Scan() {
 		line := sc.Text()
 		if strings.TrimSpace(line) == "---" {
-			return ""
+			return "", false
 		}
-		if v, ok := strings.CutPrefix(line, "status:"); ok {
-			return strings.ToLower(strings.Trim(strings.TrimSpace(v), `"'`))
+		if v, ok := strings.CutPrefix(line, key+":"); ok {
+			return strings.ToLower(strings.Trim(strings.TrimSpace(v), `"'`)), true
 		}
 	}
-	return ""
+	return "", false
 }

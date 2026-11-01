@@ -16,7 +16,7 @@ const { installVscodeStub, makeContext, runner } = require('./vscode-stub.js');
 installVscodeStub();
 
 const { Chat } = require('../src/chat.js');
-const { shouldPlan, intakeArgs, nextStep, phaseTurn } = require('../src/intake.js');
+const { shouldPlan, intakeArgs, nextStep, phaseTurn, rejected } = require('../src/intake.js');
 const { test, run } = runner();
 
 function phase(role, produces, extra = {}) {
@@ -440,6 +440,23 @@ test('o arquivo em foco continua enquanto está aberto e vai como referência na
 	assert.strictEqual(posted.filter((m) => m.type === 'activeFile').pop().file, null);
 	vscode.window.tabGroups.all = [];
 	vscode.window.activeTextEditor = undefined;
+});
+
+test('só a auditoria limpa é aceita: aprovado com ressalvas reabre a entrega', () => {
+	const before = '---\nstatus: implementado\n---\n';
+	const cases = [
+		['---\nstatus: reprovado\n---\n', true],
+		['---\nstatus: aprovado\nressalvas: 2\n---\n', true],
+		['---\nstatus: aprovado\nressalvas: "0"\n---\n', false],
+		['---\nstatus: aprovado\nressalvas: alguns\n---\n', true],
+		['---\nstatus: aprovado\n---\n', false],
+		['---\nstatus: implementado\nressalvas: 3\n---\n', false],
+	];
+	for (const [now, want] of cases) {
+		assert.strictEqual(rejected(before, now), want, now);
+	}
+	assert.strictEqual(rejected(before, before), false, 'veredicto de uma rodada anterior');
+	assert.strictEqual(rejected(before, null), false, 'auditoria que não escreveu nada');
 });
 
 run();

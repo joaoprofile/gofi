@@ -46,12 +46,18 @@ corrigir a spec (a spec é a verdade pós-QA).
 
 ### 3. `.claude/memory/contexts/{contexto}.md` — frontmatter
 
-Atualizar o `status` no frontmatter (sem tocar `project.md`):
+Atualizar `status` e `ressalvas` no frontmatter (sem tocar `project.md`):
 
 ```yaml
-status: aprovado    # ou: reprovado
+status: aprovado    # ou: reprovado (algum BLOCKER)
+ressalvas: 0        # MAJOR + MINOR pendentes; 0 só no ✅ Aprovado
 atualizado: {data}
 ```
+
+`⚠️ Aprovado com ressalvas` grava `status: aprovado` com `ressalvas` maior que
+zero — e **não** encerra o ciclo: o condutor (CLI, painel e `/gofi-full`) só
+aceita `aprovado` com `ressalvas: 0` e reabre a implementação nos demais casos.
+SUGGESTION não entra na contagem.
 
 > O índice global (panorama de todos os contextos) é gerado por `/gofi-status`
 > lendo esse frontmatter. Nenhuma tabela por-contexto no `project.md`.

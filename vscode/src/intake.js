@@ -301,26 +301,45 @@ function readVerdict(root, result) {
 	}
 }
 
-/** The status field of a document's frontmatter. */
-function statusOf(doc) {
+/** One key of a document's frontmatter, lowercased and unquoted; null when absent. */
+function fieldOf(doc, key) {
 	const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(doc || ''));
 	if (!m) {
-		return '';
+		return null;
 	}
-	const line = m[1].split(/\r?\n/).find((l) => l.startsWith('status:'));
-	return line ? line.slice('status:'.length).trim().replace(/^["']|["']$/g, '').toLowerCase() : '';
+	const line = m[1].split(/\r?\n/).find((l) => l.startsWith(key + ':'));
+	return line ? line.slice(key.length + 1).trim().replace(/^["']|["']$/g, '').toLowerCase() : null;
+}
+
+/** The status field of a document's frontmatter. */
+function statusOf(doc) {
+	return fieldOf(doc, 'status') || '';
 }
 
 /**
  * Whether the audit that just ran failed the delivery: the memory changed
- * since before the phase and its status is now reprovado. An audit that wrote
- * nothing rejects nothing.
+ * since before the phase, and it is now reprovado, or aprovado with ressalvas
+ * still open — only a clean audit is accepted, as in the CLI and /gofi-full.
+ * A memory written before the field existed has no ressalvas; a value that is
+ * not a plain zero counts as open. An audit that wrote nothing rejects nothing.
  *
  * @param {string|null} before
  * @param {string|null} now
  */
 function rejected(before, now) {
-	return now !== null && now !== before && statusOf(now) === 'reprovado';
+	if (now === null || now === before) {
+		return false;
+	}
+	switch (statusOf(now)) {
+		case 'reprovado':
+			return true;
+		case 'aprovado': {
+			const caveats = fieldOf(now, 'ressalvas');
+			return caveats !== null && caveats !== '0';
+		}
+		default:
+			return false;
+	}
 }
 
 /** The shape of an elicitation file (`gofi.elicit/v1`). */
