@@ -103,3 +103,13 @@ func hasEdge(g *Graph, from, to, kind string) bool {
 	}
 	return false
 }
+
+// A change names the contexts it touches in contextos; that stands for the
+// required contexto.
+func TestAChangeNamesItsContextsInContextos(t *testing.T) {
+	root := corpusFixture(t)
+	writeFixture(t, root, "specs/changes/rate-limit/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [churn]\nversao: \"1.0\"\nstatus: proposto\n---\n# M\n")
+	if got := findingsFor(Validate(root), "specs/changes/rate-limit/proposal.md"); len(got) > 0 {
+		t.Errorf("findings = %+v", got)
+	}
+}

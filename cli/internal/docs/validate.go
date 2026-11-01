@@ -79,6 +79,10 @@ func Validate(root string) []Finding {
 			rel := relPath(root, path)
 			for _, field := range required[corpus] {
 				if _, ok := fm[field]; !ok {
+					// A change names every context it touches, in contextos.
+					if _, many := fm["contextos"]; field == "contexto" && many {
+						continue
+					}
 					add(rel, fmt.Sprintf("falta o campo obrigatório %q", field), true)
 				}
 			}
