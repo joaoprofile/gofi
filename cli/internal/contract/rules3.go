@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
@@ -39,7 +40,7 @@ func (f *finder) rules3(all []Doc, root string) {
 func (f *finder) clarifications() {
 	fenced := false
 	for i, ln := range f.doc.Body {
-		if reFence.MatchString(ln) {
+		if docs.IsFence(ln) {
 			fenced = !fenced
 			continue
 		}
@@ -54,7 +55,7 @@ func (f *finder) livingSpec() {
 	f.requirements(Requirements(f.doc), map[string]int{}, true)
 	fenced := false
 	for i, ln := range f.doc.Body {
-		if reFence.MatchString(ln) {
+		if docs.IsFence(ln) {
 			if !fenced {
 				f.add(f.doc.Offset+i, false, "bloco de código na spec: o como vai para o design da mudança")
 			}
@@ -126,7 +127,7 @@ func (f *finder) requireSections(titles ...string) {
 	have := map[string]bool{}
 	fenced := false
 	for _, ln := range f.doc.Body {
-		if reFence.MatchString(ln) {
+		if docs.IsFence(ln) {
 			fenced = !fenced
 			continue
 		}

@@ -131,6 +131,14 @@ const (
 	PrefixCtx    = "ctx:"
 	PrefixEntity = "ent:"
 	PrefixCode   = "code:"
+
+	// A requirement and a scenario of a format-3 spec (decision 0003, S6),
+	// named by context and id — req:pedidos/REQ-04, cen:pedidos/REQ-04.1 —
+	// since ids are numbered per context.
+	NodeRequirement = "requisito"
+	NodeScenario    = "cenario"
+	PrefixReq       = "req:"
+	PrefixScenario  = "cen:"
 )
 
 // Edge kinds. Each is a link that already existed in the corpus and was only
@@ -144,6 +152,10 @@ const (
 	EdgeBelongs    = "pertence"   // doc -> context
 	EdgeImplements = "implementa" // entity -> source file
 	EdgeDepends    = "depende"    // spec -> context it consumes, from depende_de
+	EdgeSpecifies  = "especifica" // living spec -> requirement -> scenario
+	EdgeAdds       = "adiciona"   // delta -> requirement it adds
+	EdgeModifies   = "modifica"   // delta -> requirement it modifies
+	EdgeRemoves    = "remove"     // delta -> requirement it removes
 )
 
 // Node carries what a listing needs without opening the document.

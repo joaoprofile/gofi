@@ -162,8 +162,7 @@ type rawBlock struct {
 func deltaBlocks(d Doc) map[string][]rawBlock {
 	out := map[string][]rawBlock{}
 	for _, b := range blocksOf(d.Body) {
-		if m := reOp.FindStringSubmatch(b.section); m != nil {
-			op := strings.TrimSuffix(strings.ToUpper(m[1]), "S")
+		if op, ok := docs.DeltaOp(b.section); ok {
 			out[op] = append(out[op], b.rawBlock)
 		}
 	}
@@ -192,16 +191,15 @@ func blocksOf(body []string) []indexedBlock {
 	}
 	fenced := false
 	for i, ln := range body {
-		if reFence.MatchString(ln) {
+		if docs.IsFence(ln) {
 			fenced = !fenced
 			continue
 		}
 		if fenced {
 			continue
 		}
-		if m := reRequirement.FindStringSubmatch(ln); m != nil {
+		if id, _, ok := docs.RequirementHeading(ln); ok {
 			end(i)
-			id, _ := splitHeading(m[1])
 			cur = &indexedBlock{rawBlock: rawBlock{id: id}, start: i, section: section}
 			continue
 		}

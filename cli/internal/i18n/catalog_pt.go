@@ -49,6 +49,7 @@ var catalogPT = map[string]string{
 	"cmd.spec.order.short":       "A ordem em que os contextos são construídos, pelas dependências que as specs declaram",
 	"cmd.spec.flag.json":         "imprime os níveis e as dependências em JSON",
 	"spec.order.level":           "nível %d",
+	"spec.order.changes":         "mudanças abertas",
 	"cmd.change.short":           "Mudanças: como o contrato anda — proposta, deltas e o design do como",
 	"cmd.change.new.short":       "Cria a pasta de uma mudança a partir dos templates do projeto",
 	"cmd.change.list.short":      "Lista as mudanças abertas, o estado e se estão seladas",

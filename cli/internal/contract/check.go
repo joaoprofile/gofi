@@ -23,9 +23,9 @@ var requiredSectionsV2 = []struct{ num, name string }{
 }
 
 var (
-	reSection = regexp.MustCompile(`^##\s+(\d+(?:\.\d+)?)[.\s]`)
-	reRule    = regexp.MustCompile(`^###\s+(RN-\d+)\b`)
-	reFence   = regexp.MustCompile("^\\s*(```|~~~)")
+	reSection  = regexp.MustCompile(`^##\s+(\d+(?:\.\d+)?)[.\s]`)
+	reRule     = regexp.MustCompile(`^###\s+(RN-\d+)\b`)
+	reHeading2 = regexp.MustCompile(`^##\s`)
 	// A template placeholder is a braced phrase that starts in upper case:
 	// {Contexto}, {Nome da Regra}. Lower-case braces are left alone, because
 	// a route parameter ({id}) is written exactly like one.
@@ -83,7 +83,7 @@ func (f *finder) leftovers(placeholders map[string]bool) {
 				f.add(line, true, "placeholder do template %s não preenchido", p)
 			}
 		}
-		if reFence.MatchString(ln) {
+		if docs.IsFence(ln) {
 			fenced = !fenced
 			continue
 		}
@@ -106,7 +106,7 @@ func (f *finder) rulesV2() {
 	ruleText := map[string]bool{}
 	for i, ln := range f.doc.Body {
 		line := f.doc.Offset + i
-		if reFence.MatchString(ln) {
+		if docs.IsFence(ln) {
 			fenced = !fenced
 			continue
 		}

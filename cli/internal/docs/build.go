@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -172,7 +173,7 @@ func (b *Builder) scan() ([]Doc, map[string][]string, error) {
 			rel := relPath(b.Root, path)
 			docs = append(docs, Doc{
 				Path:     rel,
-				Context:  fm.Get("contexto"),
+				Context:  contextOf(fm),
 				Kind:     kindOf(fm, corpus),
 				Status:   fm.Get("status"),
 				Title:    titleOf(body),
@@ -259,6 +260,18 @@ func walkLibrary(root string, lib Library, visit func(path string, fm Frontmatte
 	})
 }
 
+// contextOf is the context a document belongs to: its contexto, or the first
+// of the contextos a change names.
+func contextOf(fm Frontmatter) string {
+	if c := fm.Get("contexto"); c != "" {
+		return c
+	}
+	if cs := fm.List("contextos"); len(cs) > 0 {
+		return cs[0]
+	}
+	return ""
+}
+
 func kindOf(fm Frontmatter, corpus string) string {
 	if k := fm.Get("tipo"); k != "" {
 		return k
@@ -315,6 +328,31 @@ func sectionsOf(body []string, offset int) []Section {
 			End:     offset + end,
 		})
 	}
+	// A scenario is a section of its own, so `gofi show spec.md#REQ-04.1`
+	// reads only it; the requirement's section still spans its scenarios.
+	fenced := false
+	for i, l := range body {
+		if IsFence(l) {
+			fenced = !fenced
+			continue
+		}
+		if _, _, ok := ScenarioHeading(l); !ok || fenced {
+			continue
+		}
+		end := len(body)
+		for j := i + 1; j < len(body); j++ {
+			if strings.HasPrefix(body[j], "## ") || strings.HasPrefix(body[j], "### ") || strings.HasPrefix(body[j], "#### ") {
+				end = j
+				break
+			}
+		}
+		secs = append(secs, Section{
+			Heading: strings.TrimSpace(strings.TrimLeft(l, "# ")),
+			Start:   offset + i + 1,
+			End:     offset + end,
+		})
+	}
+	sort.SliceStable(secs, func(a, b int) bool { return secs[a].Start < secs[b].Start })
 	return secs
 }
 
@@ -335,6 +373,18 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 		}
 		if d.Context != "" {
 			contexts[d.Context] = true
+		}
+	}
+	// A change belongs to every context it names, not only the first.
+	contextsOf := map[string][]string{}
+	for _, d := range docs {
+		fm, _, err := ParseFile(filepath.Join(b.Root, filepath.FromSlash(d.Path)))
+		if err != nil {
+			continue
+		}
+		for _, c := range fm.List("contextos") {
+			contexts[c] = true
+			contextsOf[d.Path] = append(contextsOf[d.Path], c)
 		}
 	}
 
@@ -384,13 +434,18 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 			Kind: NodeDoc, Context: d.Context, Corpus: sourceOf(d.Path),
 			Status: d.Status, Version: fm.Get("versao"),
 		}
-		if d.Context != "" {
-			id := PrefixCtx + d.Context
+		owners := contextsOf[d.Path]
+		if d.Context != "" && !slices.Contains(owners, d.Context) {
+			owners = append([]string{d.Context}, owners...)
+		}
+		for _, c := range owners {
+			id := PrefixCtx + c
 			if _, ok := g.Nodes[id]; !ok {
 				g.Nodes[id] = Node{Kind: NodeContext}
 			}
 			add(d.Path, id, EdgeBelongs)
 		}
+		b.requirementNodes(g, d, fm, bodies[d.Path], add)
 		for _, field := range []string{"prd", "spec", "prds", "specs"} {
 			for _, target := range valuesOf(fm, field) {
 				add(d.Path, resolve(target), EdgeDeclares)
@@ -469,6 +524,51 @@ func (b *Builder) graph(docs []Doc, bodies map[string][]string) *Graph {
 		}
 	}
 	return g
+}
+
+// requirementNodes adds the requirements and scenarios of a format-3
+// document: a living spec specifies them, a delta adds, modifies or removes
+// them. A requirement only a delta knows — one being added — is a node too,
+// marked proposto until a living spec has it.
+func (b *Builder) requirementNodes(g *Graph, d Doc, fm Frontmatter, body []string, add func(from, to, kind string)) {
+	if strings.TrimSpace(strings.Split(fm["formato"], "#")[0]) != "3" || d.Context == "" {
+		return
+	}
+	reqID := func(id string) string { return PrefixReq + d.Context + "/" + id }
+	switch fm.Get("tipo") {
+	case "spec":
+		if strings.Contains(d.Path, "/changes/") {
+			return
+		}
+		for _, r := range ParseRequirements(body, 0) {
+			if r.ID == "" {
+				continue
+			}
+			g.Nodes[reqID(r.ID)] = Node{Kind: NodeRequirement, Context: d.Context, Status: "vivo"}
+			add(d.Path, reqID(r.ID), EdgeSpecifies)
+			for _, s := range r.Scenarios {
+				if s.ID == "" {
+					continue
+				}
+				id := PrefixScenario + d.Context + "/" + s.ID
+				g.Nodes[id] = Node{Kind: NodeScenario, Context: d.Context}
+				add(reqID(r.ID), id, EdgeSpecifies)
+			}
+		}
+	case "delta":
+		kinds := map[string]string{OpAdded: EdgeAdds, OpModified: EdgeModifies, OpRemoved: EdgeRemoves}
+		for _, sec := range ParseDelta(body, 0) {
+			for _, r := range sec.Requirements {
+				if r.ID == "" {
+					continue
+				}
+				if _, ok := g.Nodes[reqID(r.ID)]; !ok {
+					g.Nodes[reqID(r.ID)] = Node{Kind: NodeRequirement, Context: d.Context, Status: "proposto"}
+				}
+				add(d.Path, reqID(r.ID), kinds[sec.Op])
+			}
+		}
+	}
 }
 
 // codeIndex maps each entity to the source files that mention it.
