@@ -77,20 +77,20 @@ cd .claude/memory/contexts && awk '
   }
   infm==2 && !done[FILENAME] {
     done[FILENAME]=1
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", \
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", \
       f["status"], f["contexto"], f["servicos"], f["versao_spec"], \
-      f["versao_prd"], f["spec"], f["prd"], f["atualizado"]
+      f["versao_prd"], f["spec"], f["prd"], f["atualizado"], f["ressalvas"]
   }
 ' *.md | sort
 ```
 
-   Colunas (TSV): `status · contexto · servicos · versao_spec · versao_prd · spec · prd · atualizado`.
+   Colunas (TSV): `status · contexto · servicos · versao_spec · versao_prd · spec · prd · atualizado · ressalvas`.
 
 2. **Renderize 4 tabelas markdown**, agrupando por `status`:
 
    - **Implementados** — `status ∈ {implementado, aprovado, reprovado}`
      Colunas: Contexto · Serviços · Versão spec · Status · Spec · Atualizado.
-     Para `aprovado` use ✅, `reprovado` ❌, `implementado` ⏳ (aguardando QA).
+     Para `aprovado` use ✅ (⚠️ quando `ressalvas` > 0 — ainda reabre o ciclo), `reprovado` ❌, `implementado` ⏳ (aguardando QA).
    - **Em implementação** — `status = em_implementacao` (omita a seção se vazia).
    - **Spec gerada (aguardando implementação)** — `status = spec`
      Colunas: Contexto · Serviços · Versão spec · Spec · Atualizado.

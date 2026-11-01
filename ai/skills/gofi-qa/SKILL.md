@@ -70,7 +70,15 @@ Segue a *Convenção de leitura dos agents* do AGENTS.md, com estes pontos do QA
 
 ## Saída e memória
 
-- **Memória do contexto:** refresh do `## Estado atual` + 1 linha no `## Histórico de versões`; `status: aprovado | reprovado` e `atualizado` no frontmatter (sem tocar `project.md`).
+- **Memória do contexto:** refresh do `## Estado atual` + 1 linha no `## Histórico de versões`; `status`, `ressalvas` e `atualizado` no frontmatter (sem tocar `project.md`). O veredicto vira frontmatter assim — é o que o condutor lê para aceitar ou reabrir:
+
+  | Veredicto | `status` | `ressalvas` |
+  |---|---|---|
+  | ✅ Aprovado | `aprovado` | `0` |
+  | ⚠️ Aprovado com ressalvas | `aprovado` | nº de MAJOR + MINOR pendentes |
+  | ❌ Reprovado | `reprovado` | nº de MAJOR + MINOR pendentes |
+
+  Só `aprovado` com `ressalvas: 0` encerra o ciclo; SUGGESTION não conta.
 - **Spec:** drift corrigido em §0.1, §8 atualizada — e só. **Não toque em
   `status` da spec:** ele é da aprovação da pessoa; o resultado da auditoria
   vive na memória do contexto. **A versão sobe aqui, e só aqui:** ao aprovar um

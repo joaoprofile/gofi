@@ -30,6 +30,7 @@ markdown. **Toda fase atualiza o frontmatter** (`status`, `versao_*`,
 contexto: {contexto}
 servicos: [{servico}, ...]        # binários/pacotes que hospedam o contexto
 status: prd | spec | em_implementacao | implementado | aprovado | reprovado
+ressalvas: 0                      # só após QA: MAJOR + MINOR pendentes
 versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
 versao_prd: "{X.Y}"               # ou n/a
 versao_spec: "{X.Y}"              # ou n/a (contexto sem spec / eng-reverse)
@@ -84,6 +85,7 @@ Integrações externas: {lista ou "nenhuma"}
 contexto: {contexto}
 servicos: [...]
 status: {prd|spec|em_implementacao|implementado|aprovado|reprovado}
+ressalvas: {N}                    # só após QA
 versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
 versao_prd: "{X.Y}" | n/a         # ponteiro p/ o doc PRD (versão própria dele)
 versao_spec: "{X.Y}" | n/a        # ponteiro p/ o doc SDD (versão própria dele)
@@ -147,6 +149,10 @@ o invariante "1 dono por contexto = zero conflito de git".
 | `aprovado` | QA aprovou | gofi-qa |
 | `reprovado` | QA reprovou (blockers pendentes) | gofi-qa |
 
+`ressalvas` acompanha o veredicto do QA: MAJOR + MINOR pendentes. Só
+`aprovado` com `ressalvas: 0` encerra o ciclo — `aprovado` com ressalvas reabre
+a implementação, na CLI, no painel e no `/gofi-full`.
+
 ## Regras de escrita por agent
 
 | Agent | O que adiciona ao arquivo |
@@ -154,7 +160,7 @@ o invariante "1 dono por contexto = zero conflito de git".
 | **gofi-pd** | Domínio + subdomínios (do contexto de negócio), atores principais, decisões de produto validadas, premissas e riscos. `Status: prd criado`. |
 | **gofi-spec** | Manifesto do serviço (nome, module, banco, porta, prefixo), decisões de infraestrutura (cache, mensageria, padrões). `Status: spec criada`. |
 | **gofi-eng** | Lista de arquivos criados; decisões de implementação não-óbvias (ex: usou índice composto, escolheu transação serializável). `Status: implementação concluída`. |
-| **gofi-qa** | Score (`N blockers, N majors, N minors, N suggestions`); pendências ou "nenhuma". `Status: aprovado | reprovado`. |
+| **gofi-qa** | Score (`N blockers, N majors, N minors, N suggestions`); pendências ou "nenhuma". `Status: aprovado | reprovado` e `ressalvas: N`. |
 
 ## Memória de projeto — `memory/project.md` (global, baixo churn)
 

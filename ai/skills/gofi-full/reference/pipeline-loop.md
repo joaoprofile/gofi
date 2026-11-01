@@ -29,7 +29,7 @@ loop:
 | `gofi-pd`  | PRD gerado, sem ambiguidade bloqueante de escopo; frontmatter `status: prd` | discovery incompleto a ponto de impedir a spec |
 | `gofi-spec`| spec SDD completa e internamente consistente; `status: spec` | spec não fecha por **lacuna de negócio** no PRD |
 | `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes), **todo bug fix/melhoria vem com teste de regressão** e o **grafo foi reconstruído** (`gofi index code`); `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
-| `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** | qualquer blocker/major, **⚠️ com ressalvas**, ou ❌ reprovado |
+| `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** — na memória, `status: aprovado` **e** `ressalvas: 0` (o mesmo critério da CLI e do painel) | qualquer blocker/major, **⚠️ com ressalvas** (`aprovado` com `ressalvas` > 0), ou ❌ reprovado |
 
 > **Índice de documentos entre fases.** Cada fase escreve documento que a
 > seguinte precisa achar: o PRD do `gofi-pd`, a spec do `gofi-spec`. O

@@ -48,6 +48,34 @@ func TestAFailedAuditIsRetriedOneTierUp(t *testing.T) {
 	}
 }
 
+// Only a clean audit is accepted: aprovado with majors or minors still open
+// reopens the implementation, as /gofi-full does.
+func TestCaveatsReopenTheDelivery(t *testing.T) {
+	root := project(t)
+	r := runIntake(t, root, "altere o fluxo de pricing, adicionando um rate limit", Options{})
+	before := Verdict(root, r)
+	path := filepath.Join(root, filepath.FromSlash(r.VerdictFile))
+	for _, tc := range []struct {
+		memory string
+		want   bool
+	}{
+		{"---\nstatus: aprovado\nressalvas: 2\n---\n", true},
+		{"---\nstatus: aprovado\nressalvas: \"0\"\n---\n", false},
+		{"---\nstatus: aprovado\nressalvas: 0\n---\n", false},
+		// Unreadable is not clean.
+		{"---\nstatus: aprovado\nressalvas: alguns\n---\n", true},
+		// A memory written before the field existed keeps meaning what it meant.
+		{"---\nstatus: aprovado\n---\n", false},
+		// The count belongs to an approval; it does not turn another status into one.
+		{"---\nstatus: implementado\nressalvas: 3\n---\n", false},
+	} {
+		_ = os.WriteFile(path, []byte(tc.memory), 0o644)
+		if got := Rejected(root, r, before); got != tc.want {
+			t.Errorf("%q: rejected = %v, want %v", tc.memory, got, tc.want)
+		}
+	}
+}
+
 // An audit alone, with no implementation before it, has nothing to retry.
 func TestAnAuditAloneHasNoRetry(t *testing.T) {
 	r := runIntake(t, project(t), "audite o contexto de pricing", Options{})
