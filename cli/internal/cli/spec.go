@@ -30,26 +30,41 @@ gofi spec order`,
 
 func newSpecCheckCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "check [<context|path>...]",
+		Use:   "check [<context|change|path>...]",
 		Short: i18n.T("cmd.spec.check.short"),
-		Long: `Check whether specs are ready to be approved. With no argument, every spec in
-specs/; a context name takes all of its specs; a path takes that file.
+		Long: `Check whether the contract is ready to be approved: the living specs and the
+open changes. With no argument, everything under specs/; a context takes its
+living spec and every open change that touches it; a change id takes that
+change; a path takes that file.
 
-Errors block the approval: a required section missing (1 Overview, 4
-Operations, 5 Business Rules, matched by number), a business rule RN-xx
-declared twice or left without a description, a placeholder of the template
-left in ({Contexto}, {Nome da Regra}), an open marker (TODO, TBD, FIXME, ???)
-outside a code block, and the corpus findings gofi index check reports for the
-same file. A §5 with no RN-xx is a warning: nothing for the loop to trace.
+Format 3 (living specs and changes, decision 0003):
+  spec      ## Propósito and ## Requisitos; each requirement
+            "### Requisito: REQ-NN — título", with a DEVE, and at least one
+            "#### Cenário: REQ-NN.n — título" with DADO, QUANDO and ENTÃO;
+            ids unique; a code block is a warning; a living spec edited by
+            hand after its approval is an error.
+  proposal  ## Por quê and ## O que muda; a delta for each context it names
+            and none for one it does not; a design when it adds or modifies
+            requirements (or design: n/a); depende_de on changes that exist.
+  delta     ADICIONADO only for ids the living spec lacks — and no other open
+            change adds; MODIFICADO and REMOVIDO only for ids it has.
+  design    ## Abordagem and ## Mapa de requisitos with every requirement the
+            change adds or modifies; no requirement cited that does not exist.
+Any [PRECISA ESCLARECER: …] outside code is an error.
 
-An approved spec that was edited afterwards is an error too: its approval no
-longer holds (see gofi spec approve). An approved status with no seal is a
-warning.
+Format 2 (sdd-<ctx>.md): sections 1, 4 and 5 by number, and RN-xx rules with
+a description — the rules it was written under, until it is migrated.
+
+Every document: a placeholder of a template left in, an open marker (TODO,
+TBD, FIXME, ???) outside code, and the corpus findings gofi index check
+reports for the same file. A stale approval is an error; an approved status
+with no seal, a warning.
 
 Exits non-zero when there is an error, for CI and for the loop.`,
 		Example: `gofi spec check
 gofi spec check pedidos
-gofi spec check specs/pedidos/sdd-pedidos.md`,
+gofi spec check adicionar-rate-limit
+gofi spec check specs/pedidos/spec.md`,
 		RunE: runSpecCheck,
 	}
 }

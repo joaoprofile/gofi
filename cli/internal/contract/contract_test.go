@@ -112,7 +112,7 @@ Texto.
 ### RN-03 — {Nome da Regra}
 `
 	write(t, root, "specs/pedidos/sdd-pedidos.md", spec)
-	got := messages(Check(root, only(t, root), mustPlaceholders(t, root)))
+	got := messages(Check(root, corpus(t, root), only(t, root), mustPlaceholders(t, root)))
 	for _, want := range []string{
 		"error L13: placeholder do template {Contexto} não preenchido",
 		`error L13: marcador em aberto "TBD"`,
@@ -130,7 +130,7 @@ Texto.
 func TestRulesSectionWithoutRulesIsAWarning(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/sdd-pedidos.md", front+"## 1. Visão\n\nx\n\n## 4. Operações\n\nx\n\n## 5. Regras de Negócio\n\nNenhuma.\n")
-	got := Check(root, only(t, root), mustPlaceholders(t, root))
+	got := Check(root, corpus(t, root), only(t, root), mustPlaceholders(t, root))
 	if len(got) != 1 || got[0].Error || !strings.Contains(got[0].Message, "sem nenhuma regra") {
 		t.Errorf("findings:\n%s", messages(got))
 	}

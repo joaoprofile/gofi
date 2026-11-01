@@ -206,11 +206,15 @@ func TestDeltaSections(t *testing.T) {
 }
 
 // A format-3 document is not checked by the format-2 rules: it has no
-// numbered sections and no RN-xx, and that is not an error.
+// numbered sections and no RN-xx, and that is not an error. What it has is
+// held to its own.
 func TestFormatThreeIsNotHeldToTheFormatTwoRules(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/spec.md", livingSpec)
-	if got := Check(root, only(t, root), mustPlaceholders(t, root)); len(got) != 0 {
-		t.Errorf("findings:\n%s", messages(got))
+	got := messages(Check(root, corpus(t, root), only(t, root), mustPlaceholders(t, root)))
+	want := "error L39: requisito sem ID: escreva `### Requisito: REQ-NN — título` (\"sem id\")\n" +
+		"warn L26: bloco de código na spec: o como vai para o design da mudança\n"
+	if got != want {
+		t.Errorf("findings:\n%s\nwant:\n%s", got, want)
 	}
 }

@@ -36,18 +36,22 @@ var (
 // Check reports what stands between one document and the loop: what keeps it
 // from being approved, and an approval that no longer holds. Errors block;
 // warnings are worth reading and block nothing.
-func Check(root string, d Doc, placeholders map[string]bool) []docs.Finding {
-	return append(content(d, placeholders), sealFindings(d)...)
+func Check(root string, all []Doc, d Doc, placeholders map[string]bool) []docs.Finding {
+	return append(content(root, all, d, placeholders), sealFindings(d)...)
 }
 
-// content checks what a document says, by the rules of its kind and format.
-func content(d Doc, placeholders map[string]bool) []docs.Finding {
+// content checks what a document says, by the rules of its kind and format,
+// against the whole corpus (all) where a rule needs another document.
+func content(root string, all []Doc, d Doc, placeholders map[string]bool) []docs.Finding {
 	f := finder{doc: d}
 	if len(d.Contexts) == 0 {
 		f.add(0, true, "sem contexto no frontmatter")
 	}
 	f.leftovers(placeholders)
-	if d.Kind == KindSpec && d.Format < FormatSplit {
+	switch {
+	case d.Format >= FormatSplit:
+		f.rules3(all, root)
+	case d.Kind == KindSpec:
 		f.rulesV2()
 	}
 	return f.out
@@ -189,7 +193,7 @@ func CheckAll(root string, all, picked []Doc) []docs.Finding {
 	mine := map[string]bool{}
 	for _, d := range picked {
 		mine[d.Path] = true
-		out = append(out, Check(root, d, placeholders)...)
+		out = append(out, Check(root, all, d, placeholders)...)
 	}
 	out = append(out, depFindings(all, mine)...)
 	for _, f := range docs.Validate(root) {
