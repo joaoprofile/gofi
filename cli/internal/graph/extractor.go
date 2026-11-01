@@ -208,7 +208,7 @@ func countKinds(g *model.Graph) {
 		case model.KindPackage:
 			g.Stats.Packages++
 		case model.KindStruct, model.KindInterface, model.KindType,
-			model.KindClass, model.KindTrait, model.KindEnum, model.KindService:
+			model.KindClass, model.KindTrait, model.KindEnum, model.KindService, model.KindController:
 			g.Stats.Types++
 		case model.KindFunc, model.KindComponent, model.KindHook:
 			g.Stats.Funcs++

@@ -131,21 +131,22 @@ func (d Diagnostic) String() string { return d.Severity + ": " + d.Message }
 // describe what the language actually has (a Java class, a Rust trait) instead
 // of forcing it into Go's shape.
 var wireKinds = map[string]model.Kind{
-	"package":   model.KindPackage,
-	"module":    model.KindPackage,
-	"namespace": model.KindPackage,
-	"struct":    model.KindStruct,
-	"class":     model.KindClass,
-	"interface": model.KindInterface,
-	"trait":     model.KindTrait,
-	"protocol":  model.KindInterface,
-	"enum":      model.KindEnum,
-	"type":      model.KindType,
-	"func":      model.KindFunc,
-	"method":    model.KindMethod,
-	"field":     model.KindField,
-	"const":     model.KindConst,
-	"var":       model.KindVar,
+	"package":    model.KindPackage,
+	"module":     model.KindPackage,
+	"namespace":  model.KindPackage,
+	"struct":     model.KindStruct,
+	"class":      model.KindClass,
+	"controller": model.KindController,
+	"interface":  model.KindInterface,
+	"trait":      model.KindTrait,
+	"protocol":   model.KindInterface,
+	"enum":       model.KindEnum,
+	"type":       model.KindType,
+	"func":       model.KindFunc,
+	"method":     model.KindMethod,
+	"field":      model.KindField,
+	"const":      model.KindConst,
+	"var":        model.KindVar,
 }
 
 var wireRels = map[string]model.Rel{

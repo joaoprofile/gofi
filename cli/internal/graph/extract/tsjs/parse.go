@@ -137,8 +137,8 @@ func usable(name string) bool { return isIdent(name) && !reservedNames[name] && 
 // decoratorKinds maps a decorator to what the class it decorates really is.
 // Nothing here is a branch on which framework the project declared: a decorated
 // class states outright what it is, and the frameworks that use decorators —
-// Angular, Stencil, Lit — agree on the names that matter. Supporting one more
-// is a few more entries in this table.
+// Angular, Stencil, Lit, NestJS — agree on the names that matter. Supporting
+// one more is a few more entries in this table.
 var decoratorKinds = map[string]model.Kind{
 	"Component":     model.KindComponent,
 	"Directive":     model.KindComponent,
@@ -146,6 +146,12 @@ var decoratorKinds = map[string]model.Kind{
 	"Injectable":    model.KindService,
 	"NgModule":      model.KindClass,
 	"Pipe":          model.KindClass,
+	// NestJS. Providers, guards, pipes and interceptors are all @Injectable,
+	// so they are services already; a module is wiring, as NgModule is.
+	"Controller":       model.KindController,
+	"Resolver":         model.KindController,
+	"WebSocketGateway": model.KindController,
+	"Module":           model.KindClass,
 }
 
 // parseFile reads one file into declarations, imports and bindings.

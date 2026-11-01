@@ -48,6 +48,11 @@ const (
 	KindComponent Kind = "component"
 	KindHook      Kind = "hook"
 	KindService   Kind = "service"
+
+	// A backend is read from its entry points inward: the HTTP controller, the
+	// GraphQL resolver, the WebSocket gateway are where a request lands, and
+	// what a reader looks for first. Kept apart from KindClass for that reason.
+	KindController Kind = "controller"
 )
 
 // Rel is the type of relation an edge represents. Every edge is explicit:
