@@ -44,7 +44,7 @@ func TestChangeNewCheckApprove(t *testing.T) {
 
 	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Mudança — criar-pedidos\n\n## Por quê\n\nNão há pedidos.\n\n## O que muda\n\nREQ-01 novo.\n")
-	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Delta — pedidos\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Total zero\n- DADO um carrinho vazio\n- QUANDO o cliente fecha\n- ENTÃO recebe recusa\n")
+	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Delta — pedidos\n\n## Propósito\n\nPedidos do cliente.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Total zero\n- DADO um carrinho vazio\n- QUANDO o cliente fecha\n- ENTÃO recebe recusa\n")
 	writeFile(t, filepath.Join(dir, "design.md"), "---\ntipo: design\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Design\n\n## Abordagem\n\nUm serviço.\n\n## Mapa de requisitos\n\n| REQ-01 | Service.Create |\n")
 
 	if out, err := runChange(t, root, "approve", "criar-pedidos"); err != nil || strings.Count(out, "sha256:") != 3 {
@@ -60,5 +60,20 @@ func TestChangeNewCheckApprove(t *testing.T) {
 	}
 	if _, err := runChange(t, root, "approve", "sumida"); err == nil {
 		t.Error("approving an unknown change passed")
+	}
+
+	// Edited after its approval, it is not archived; approved again, it is.
+	if _, err := runChange(t, root, "archive", "criar-pedidos"); err == nil {
+		t.Fatal("an edited change was archived")
+	}
+	if _, err := runChange(t, root, "approve", "criar-pedidos"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runChange(t, root, "archive", "criar-pedidos")
+	if err != nil || !strings.Contains(out, "specs/pedidos/spec.md") || !strings.Contains(out, "specs/changes/archive/") {
+		t.Fatalf("archive: err=%v\n%s", err, out)
+	}
+	if out, err := runSpec(t, root, "check", "pedidos"); err != nil {
+		t.Errorf("the living spec an archive wrote does not pass the check: %v\n%s", err, out)
 	}
 }

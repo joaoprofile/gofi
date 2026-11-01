@@ -194,3 +194,21 @@ func TestALivingSpecEditedByHand(t *testing.T) {
 	write(t, root, "specs/pedidos/spec.md", strings.Replace(approved, "total zero.", "total negativo.", 1))
 	mustHave(t, findingsOf(t, root, "specs/pedidos/spec.md"), "error spec viva editada fora de uma mudança")
 }
+
+// REQ-01 numbered in two contexts of one change is two requirements: a bare
+// REQ-01 in the design is ambiguous, ctx/REQ-01 is not.
+func TestARepeatedIDIsQualifiedInTheDesign(t *testing.T) {
+	root := archiveFixture(t, false)
+	deltaPedidos := read(t, root, "specs/changes/adicionar-rate-limit/deltas/pedidos.md")
+	write(t, root, "specs/changes/adicionar-rate-limit/deltas/pedidos.md", strings.Replace(deltaPedidos, "## REMOVIDO", "## MODIFICADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO zero\n- QUANDO fecha\n- ENTÃO recusa\n\n## REMOVIDO", 1))
+	design := "specs/changes/adicionar-rate-limit/design.md"
+	write(t, root, design, strings.Replace(designRateLimit, "| estoque/REQ-01 | Estoque.Baixa |", "| REQ-01 | Os dois |", 1))
+	mustHave(t, findingsOf(t, root, design),
+		"estoque/REQ-01 não está no ## Mapa de requisitos — REQ-01 existe em mais de um contexto da mudança",
+		"pedidos/REQ-01 não está no ## Mapa de requisitos")
+
+	write(t, root, design, strings.Replace(designRateLimit, "| estoque/REQ-01 | Estoque.Baixa |", "| estoque/REQ-01 | Estoque |\n| pedidos/REQ-01 | Pedido |", 1))
+	if got := findingsOf(t, root, design); strings.Contains(got, "Mapa de requisitos") {
+		t.Errorf("qualified ids still reported:\n%s", got)
+	}
+}
