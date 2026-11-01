@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,9 +21,10 @@ be approved. A spec that does not pass is a spec the implementation would have
 to guess at, so this runs before any model reads it — and costs no tokens.`,
 		Example: `gofi spec check
 gofi spec check pedidos
-gofi spec approve pedidos`,
+gofi spec approve pedidos
+gofi spec order`,
 	}
-	cmd.AddCommand(newSpecCheckCmd(), newSpecApproveCmd())
+	cmd.AddCommand(newSpecCheckCmd(), newSpecApproveCmd(), newSpecOrderCmd())
 	return cmd
 }
 
@@ -71,7 +73,7 @@ func runSpecCheck(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	findings := contract.CheckAll(root, specs)
+	findings := contract.CheckAll(root, all, specs)
 	for _, f := range findings {
 		kind := i18n.T("index.check.warn")
 		if f.Error {
@@ -137,7 +139,7 @@ func runSpecApprove(cmd *cobra.Command, args []string) error {
 	placeholders, _ := contract.Placeholders(root)
 	blocked := 0
 	for _, s := range specs {
-		for _, f := range contract.Blocking(root, s, placeholders) {
+		for _, f := range contract.Blocking(root, corpus, s, placeholders) {
 			fmt.Fprintf(out, "  %s %s: %s\n", i18n.T("index.check.error"), f.Path, f.Message)
 			blocked++
 		}
@@ -155,6 +157,69 @@ func runSpecApprove(cmd *cobra.Command, args []string) error {
 			key = "spec.approve.already"
 		}
 		fmt.Fprintln(out, "  "+i18n.T(key, s.Path, contract.Seal(s.Body)[:15]))
+	}
+	return nil
+}
+
+func newSpecOrderCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "order",
+		Short: i18n.T("cmd.spec.order.short"),
+		Long: `The order the contexts are built in, from the dependencies their specs declare
+(depende_de: [clientes] in the frontmatter). Each level depends only on the
+levels before it, so the contexts of one level can be built side by side;
+within a level they are sorted by name, so the same specs always give the same
+order.
+
+The order comes from declared dependencies only. Two contexts describing the
+same table say nothing about which one comes first — gofi spec check warns
+about them instead. A cycle has no order: it is an error, and the command
+exits 1.`,
+		Example: `gofi spec order
+gofi spec order --json`,
+		Args: cobra.NoArgs,
+		RunE: runSpecOrder,
+	}
+	cmd.Flags().Bool("json", false, i18n.T("cmd.spec.flag.json"))
+	return cmd
+}
+
+func runSpecOrder(cmd *cobra.Command, _ []string) error {
+	root, err := findProjectRoot()
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	specs, err := contract.Specs(root)
+	if err != nil {
+		return err
+	}
+	levels, err := contract.Order(specs)
+	if err != nil {
+		return &ExitCodeError{Code: 1, Err: err}
+	}
+	if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+		if levels == nil {
+			levels = [][]string{}
+		}
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{"levels": levels, "depends_on": contract.Deps(specs)})
+	}
+	if len(levels) == 0 {
+		fmt.Fprintln(out, "  "+i18n.T("spec.none"))
+		return nil
+	}
+	deps := contract.Deps(specs)
+	for i, level := range levels {
+		fmt.Fprintf(out, "  %s\n", i18n.T("spec.order.level", i))
+		for _, c := range level {
+			if d := deps[c]; len(d) > 0 {
+				fmt.Fprintf(out, "    %s  ← %s\n", c, strings.Join(d, ", "))
+			} else {
+				fmt.Fprintf(out, "    %s\n", c)
+			}
+		}
 	}
 	return nil
 }

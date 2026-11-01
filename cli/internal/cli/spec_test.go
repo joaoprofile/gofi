@@ -78,3 +78,29 @@ func TestSpecApprove(t *testing.T) {
 		t.Errorf("an edited approved spec passed: err=%v\n%s", err, out)
 	}
 }
+
+func TestSpecOrder(t *testing.T) {
+	root := configuredProject(t)
+	ready := "# x\n\n## 1. Visão Geral\n\nx\n\n## 4. Operações\n\nx\n\n## 5. Regras de Negócio\n\n### RN-01 — Total\n> Maior que zero.\n"
+	front := func(ctx, deps string) string {
+		return strings.Replace(strings.Replace(specFront, "contexto: pedidos", "contexto: "+ctx, 1), "keywords:", "depende_de: ["+deps+"]\nkeywords:", 1)
+	}
+	writeFile(t, filepath.Join(root, "specs", "pedidos", "sdd-pedidos.md"), front("pedidos", "clientes")+ready)
+	writeFile(t, filepath.Join(root, "specs", "clientes", "sdd-clientes.md"), front("clientes", "")+ready)
+
+	out, err := runSpec(t, root, "order")
+	if err != nil || !strings.Contains(out, "clientes\n") || !strings.Contains(out, "pedidos  ← clientes") ||
+		strings.Index(out, "clientes\n") > strings.Index(out, "pedidos") {
+		t.Fatalf("err=%v output:\n%s", err, out)
+	}
+	out, err = runSpec(t, root, "order", "--json")
+	if err != nil || !strings.Contains(out, `"levels": [`) || !strings.Contains(out, `"pedidos": [`) {
+		t.Fatalf("err=%v output:\n%s", err, out)
+	}
+
+	writeFile(t, filepath.Join(root, "specs", "clientes", "sdd-clientes.md"), front("clientes", "pedidos")+ready)
+	var exit *ExitCodeError
+	if _, err := runSpec(t, root, "order"); !errors.As(err, &exit) || exit.Code != 1 {
+		t.Errorf("a cycle did not fail: %v", err)
+	}
+}

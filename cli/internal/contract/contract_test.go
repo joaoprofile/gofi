@@ -87,7 +87,7 @@ func messages(fs []docs.Finding) string {
 func TestAReadySpecHasNoFindings(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/sdd-pedidos.md", readySpec)
-	if got := CheckAll(root, []Spec{only(t, root)}); len(got) != 0 {
+	if got := CheckAll(root, []Spec{only(t, root)}, []Spec{only(t, root)}); len(got) != 0 {
 		t.Errorf("findings:\n%s", messages(got))
 	}
 }
@@ -139,7 +139,7 @@ func TestRulesSectionWithoutRulesIsAWarning(t *testing.T) {
 func TestCorpusFindingsComeWithTheCheck(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/sdd-pedidos.md", strings.Replace(readySpec, "keywords:", "palavras: [x]\nkeywords:", 1))
-	got := messages(CheckAll(root, []Spec{only(t, root)}))
+	got := messages(CheckAll(root, []Spec{only(t, root)}, []Spec{only(t, root)}))
 	if !strings.Contains(got, `error campo desconhecido "palavras"`) {
 		t.Errorf("findings:\n%s", got)
 	}
@@ -148,7 +148,7 @@ func TestCorpusFindingsComeWithTheCheck(t *testing.T) {
 func TestWithoutTheTemplateThePlaceholdersAreNotChecked(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "specs/pedidos/sdd-pedidos.md", readySpec)
-	got := CheckAll(root, []Spec{only(t, root)})
+	got := CheckAll(root, []Spec{only(t, root)}, []Spec{only(t, root)})
 	if len(got) != 1 || got[0].Error || !strings.Contains(got[0].Message, "template ausente") {
 		t.Errorf("findings:\n%s", messages(got))
 	}

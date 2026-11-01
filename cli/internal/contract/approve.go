@@ -85,12 +85,13 @@ func StaleSeals(root string) []docs.Finding {
 	return out
 }
 
-// Blocking is what keeps a spec from being approved: the content and corpus
-// findings that are errors. A stale seal is not among them — approving again
-// is how a stale seal is cleared.
-func Blocking(root string, s Spec, placeholders map[string]bool) []docs.Finding {
+// Blocking is what keeps a spec from being approved, out of the whole corpus
+// (all): the content, dependency and corpus findings that are errors. A stale
+// seal is not among them — approving again is how a stale seal is cleared.
+func Blocking(root string, all []Spec, s Spec, placeholders map[string]bool) []docs.Finding {
 	var out []docs.Finding
-	for _, f := range content(s, placeholders) {
+	found := append(content(s, placeholders), depFindings(all, map[string]bool{s.Path: true})...)
+	for _, f := range found {
 		if f.Error {
 			out = append(out, f)
 		}

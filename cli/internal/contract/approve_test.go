@@ -58,7 +58,7 @@ func TestTheSealHoldsUntilTheBodyChanges(t *testing.T) {
 		t.Errorf("stale seals = %+v", got)
 	}
 	// A stale seal does not block approving again: that is how it is cleared.
-	if got := Blocking(root, only(t, root), mustPlaceholders(t, root)); len(got) != 0 {
+	if got := Blocking(root, []Spec{only(t, root)}, only(t, root), mustPlaceholders(t, root)); len(got) != 0 {
 		t.Errorf("blocking = %+v", got)
 	}
 
