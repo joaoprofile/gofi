@@ -59,13 +59,13 @@ Pedidos do cliente.
 func project(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, root, layout.Templates().Path(TemplateFile), "### RN-01 — {Nome da Regra}\n`Err{Contexto}Validation`\n")
+	write(t, root, layout.Templates().Path("sdd-template.md"), "### RN-01 — {Nome da Regra}\n`Err{Contexto}Validation`\n")
 	return root
 }
 
-func only(t *testing.T, root string) Spec {
+func only(t *testing.T, root string) Doc {
 	t.Helper()
-	all, err := Specs(root)
+	all, err := Docs(root)
 	if err != nil || len(all) != 1 {
 		t.Fatalf("specs = %+v, err %v", all, err)
 	}
@@ -87,7 +87,7 @@ func messages(fs []docs.Finding) string {
 func TestAReadySpecHasNoFindings(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/sdd-pedidos.md", readySpec)
-	if got := CheckAll(root, []Spec{only(t, root)}, []Spec{only(t, root)}); len(got) != 0 {
+	if got := CheckAll(root, []Doc{only(t, root)}, []Doc{only(t, root)}); len(got) != 0 {
 		t.Errorf("findings:\n%s", messages(got))
 	}
 }
@@ -139,7 +139,7 @@ func TestRulesSectionWithoutRulesIsAWarning(t *testing.T) {
 func TestCorpusFindingsComeWithTheCheck(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/sdd-pedidos.md", strings.Replace(readySpec, "keywords:", "palavras: [x]\nkeywords:", 1))
-	got := messages(CheckAll(root, []Spec{only(t, root)}, []Spec{only(t, root)}))
+	got := messages(CheckAll(root, []Doc{only(t, root)}, []Doc{only(t, root)}))
 	if !strings.Contains(got, `error campo desconhecido "palavras"`) {
 		t.Errorf("findings:\n%s", got)
 	}
@@ -148,8 +148,8 @@ func TestCorpusFindingsComeWithTheCheck(t *testing.T) {
 func TestWithoutTheTemplateThePlaceholdersAreNotChecked(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "specs/pedidos/sdd-pedidos.md", readySpec)
-	got := CheckAll(root, []Spec{only(t, root)}, []Spec{only(t, root)})
-	if len(got) != 1 || got[0].Error || !strings.Contains(got[0].Message, "template ausente") {
+	got := CheckAll(root, []Doc{only(t, root)}, []Doc{only(t, root)})
+	if len(got) != 1 || got[0].Error || !strings.Contains(got[0].Message, "nenhum template") {
 		t.Errorf("findings:\n%s", messages(got))
 	}
 }
@@ -162,7 +162,7 @@ func TestSpecsAndSelect(t *testing.T) {
 	write(t, root, "specs/INDEX.md", "# índice gerado\n")
 	write(t, root, "specs/pedidos/notas.md", "---\ntipo: nota\n---\n")
 
-	all, err := Specs(root)
+	all, err := Docs(root)
 	if err != nil || len(all) != 3 {
 		t.Fatalf("specs = %+v, err %v", all, err)
 	}

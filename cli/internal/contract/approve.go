@@ -40,7 +40,7 @@ const (
 
 // SealOf reads the approval a spec carries against what it says now. The
 // reason says why a seal is stale.
-func SealOf(s Spec) (state SealState, reason string) {
+func SealOf(s Doc) (state SealState, reason string) {
 	seal := value(s.Front, FieldSeal)
 	if seal == "" {
 		return Unsealed, ""
@@ -56,7 +56,7 @@ func SealOf(s Spec) (state SealState, reason string) {
 
 // sealFindings are the approval's own findings: a stale seal blocks the loop,
 // an approved status no seal backs is worth knowing.
-func sealFindings(s Spec) []docs.Finding {
+func sealFindings(s Doc) []docs.Finding {
 	switch state, reason := SealOf(s); {
 	case state == Stale:
 		return []docs.Finding{{Path: s.Path, Error: true,
@@ -72,7 +72,7 @@ func sealFindings(s Spec) []docs.Finding {
 // check. An approved spec with no seal is left out there: that is every spec
 // written before approvals were sealed, and the check would be noise.
 func StaleSeals(root string) []docs.Finding {
-	specs, err := Specs(root)
+	specs, err := Docs(root)
 	if err != nil {
 		return nil
 	}
@@ -88,7 +88,7 @@ func StaleSeals(root string) []docs.Finding {
 // Blocking is what keeps a spec from being approved, out of the whole corpus
 // (all): the content, dependency and corpus findings that are errors. A stale
 // seal is not among them — approving again is how a stale seal is cleared.
-func Blocking(root string, all []Spec, s Spec, placeholders map[string]bool) []docs.Finding {
+func Blocking(root string, all []Doc, s Doc, placeholders map[string]bool) []docs.Finding {
 	var out []docs.Finding
 	found := append(content(s, placeholders), depFindings(all, map[string]bool{s.Path: true})...)
 	for _, f := range found {
@@ -107,7 +107,7 @@ func Blocking(root string, all []Spec, s Spec, placeholders map[string]bool) []d
 // Approve seals a spec: status aprovado, the version approved and the hash of
 // its body, written into its frontmatter in place. It reports false when the
 // spec was already sealed as it is, and writes nothing then.
-func Approve(root string, s Spec) (bool, error) {
+func Approve(root string, s Doc) (bool, error) {
 	if state, _ := SealOf(s); state == Sealed && value(s.Front, "status") == StatusApproved {
 		return false, nil
 	}
