@@ -28,6 +28,10 @@ const (
 	LangGo         = "go"
 	LangTypeScript = "typescript"
 	LangJavaScript = "javascript"
+	// LangNodeJS is what .gofi.yaml declares for a Node backend (NestJS,
+	// Express). It is TypeScript or JavaScript underneath, read by the same
+	// scanner as a front end.
+	LangNodeJS = "nodejs"
 )
 
 // OutDir is where the graphs are written, relative to the project root.

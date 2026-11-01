@@ -29,6 +29,21 @@ func TestRegistryPrefersNative(t *testing.T) {
 	}
 }
 
+// A Node backend declares nodejs, not typescript: it must still be read
+// natively, and the graph carries the language the project declared.
+func TestNodeBackendIsNative(t *testing.T) {
+	ex := Extractors.For(LangNodeJS)
+	if _, ok := ex.(tsjsExtractor); !ok {
+		t.Fatalf("nodejs resolved to %T, want the native TypeScript scanner", ex)
+	}
+	if ex.Language() != LangNodeJS {
+		t.Errorf("Language() = %q, want %q", ex.Language(), LangNodeJS)
+	}
+	if !slices.Contains(Extractors.Native(), LangNodeJS) {
+		t.Errorf("Native() = %v, want it to list nodejs", Extractors.Native())
+	}
+}
+
 // An unregistered language is not an error: it falls through to the external
 // protocol, which is how a language gofi cannot read natively is meant to
 // arrive. Registering one later replaces that fallback with no change to Build.
