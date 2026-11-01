@@ -336,6 +336,11 @@ func (f *finder) design(all []Doc) {
 	}
 	cited := map[string]int{}
 	for i, ln := range f.doc.Body {
+		// A quote is guidance — the template's own, or a writer's note — not
+		// a requirement the design answers to.
+		if strings.HasPrefix(strings.TrimSpace(ln), ">") {
+			continue
+		}
 		for _, id := range reReqCited.FindAllString(ln, -1) {
 			if _, ok := cited[id]; !ok {
 				cited[id] = f.doc.Offset + i

@@ -70,9 +70,17 @@ func isFieldName(s string) bool {
 	return true
 }
 
-// List reads a [a, b, c] field. Missing or empty yields nil.
+// List reads a [a, b, c] field. Missing or empty yields nil. A comment after
+// the list — the templates write one (depende_de: []  # …) — is not part of it.
 func (f Frontmatter) List(key string) []string {
 	v := strings.TrimSpace(f[key])
+	if strings.HasPrefix(v, "[") {
+		if end := strings.Index(v, "]"); end >= 0 {
+			v = v[:end+1]
+		}
+	} else {
+		v = uncomment(v)
+	}
 	v = strings.TrimPrefix(v, "[")
 	v = strings.TrimSuffix(v, "]")
 	if v == "" {
@@ -88,11 +96,20 @@ func (f Frontmatter) List(key string) []string {
 }
 
 // Get returns a scalar field, with "n/a" normalized to empty since the corpus
-// uses it to mean "none".
+// uses it to mean "none", and without the comment a template writes after
+// some values (status: proposto  # ou em_revisao).
 func (f Frontmatter) Get(key string) string {
-	v := strings.Trim(strings.TrimSpace(f[key]), `"`)
+	v := strings.Trim(uncomment(strings.TrimSpace(f[key])), `"`)
 	if v == "n/a" {
 		return ""
+	}
+	return v
+}
+
+// uncomment drops a trailing " # comment" from a scalar value.
+func uncomment(v string) string {
+	if i := strings.Index(v, " #"); i >= 0 {
+		return strings.TrimSpace(v[:i])
 	}
 	return v
 }

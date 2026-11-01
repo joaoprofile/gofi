@@ -85,6 +85,27 @@ func TestInstallSDKContent_RefreshesUntouchedFiles(t *testing.T) {
 	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/go/knowledge/k.md"), "v2 knowledge")
 }
 
+// A pack's templates/ — the design of a change in that stack (decision 0003)
+// — is installed with the rest of the pack, and refreshed by gofi update sdk
+// like it.
+func TestInstallSDKContent_InstallsThePackTemplates(t *testing.T) {
+	projectRoot := t.TempDir()
+	src := fstest.MapFS{
+		"sdk/go/knowledge/k.md":               {Data: []byte("k")},
+		"sdk/go/templates/design-template.md": {Data: []byte("# Design Go v1")},
+	}
+	if _, err := InstallSDKContent(src, "sdk/go", projectRoot, "go", InstallNew); err != nil {
+		t.Fatal(err)
+	}
+	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/go/templates/design-template.md"), "# Design Go v1")
+
+	src["sdk/go/templates/design-template.md"] = &fstest.MapFile{Data: []byte("# Design Go v2")}
+	if _, err := InstallSDKContent(src, "sdk/go", projectRoot, "go", InstallUpdate); err != nil {
+		t.Fatal(err)
+	}
+	mustContain(t, filepath.Join(projectRoot, ".claude/sdk/go/templates/design-template.md"), "# Design Go v2")
+}
+
 // TestInstallUIContent_UntrackedTreeIsTheTeams covers a project scaffolded
 // before the manifest existed: nothing is recorded, so an SDK file that differs
 // from upstream is assumed to be the team's.

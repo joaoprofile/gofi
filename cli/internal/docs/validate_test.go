@@ -143,3 +143,17 @@ func TestGraphHoldsRequirementsAndScenarios(t *testing.T) {
 		t.Errorf("REQ-07, only in a delta = %+v", n)
 	}
 }
+
+// The templates write a comment after some values; it is not part of them.
+func TestFrontmatterValuesDropTheirComment(t *testing.T) {
+	fm, _ := Parse("---\ncontextos: [pedidos, clientes]   # todo contexto que a mudança toca\ndepende_de: []   # contextos\nstatus: proposto   # ou em_revisao\nversao: \"1.0\"\n---\n")
+	if got := fm.List("contextos"); len(got) != 2 || got[1] != "clientes" {
+		t.Errorf("contextos = %q", got)
+	}
+	if got := fm.List("depende_de"); got != nil {
+		t.Errorf("depende_de = %q", got)
+	}
+	if fm.Get("status") != "proposto" || fm.Get("versao") != "1.0" {
+		t.Errorf("status = %q, versao = %q", fm.Get("status"), fm.Get("versao"))
+	}
+}

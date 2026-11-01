@@ -47,8 +47,9 @@ var known = map[string]bool{
 	"aprovacao_versao": true, "aprovacao_sha": true,
 	// The contexts whose code this one consumes: the order the loop builds in.
 	"depende_de": true,
-	// A change names every context it touches (0003, S3.2).
-	"contextos": true,
+	// A change names every context it touches, and design: n/a when it
+	// touches no code (0003, S3.2).
+	"contextos": true, "design": true,
 }
 
 // facetAxes are the fields whose terms must exist in the lexicon. This is what
