@@ -74,7 +74,7 @@ func TestTheSealHoldsUntilTheBodyChanges(t *testing.T) {
 func TestAnApprovedStatusWithoutASeal(t *testing.T) {
 	root := project(t)
 	write(t, root, specPath, strings.Replace(readySpec, "status: proposto", "status: aprovado", 1))
-	got := Check(root, only(t, root), mustPlaceholders(t, root))
+	got := Check(root, corpus(t, root), only(t, root), mustPlaceholders(t, root))
 	if len(got) != 1 || got[0].Error || !strings.Contains(got[0].Message, "sem selo") {
 		t.Errorf("findings:\n%s", messages(got))
 	}

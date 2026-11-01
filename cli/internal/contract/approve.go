@@ -58,6 +58,11 @@ func SealOf(s Doc) (state SealState, reason string) {
 // an approved status no seal backs is worth knowing.
 func sealFindings(s Doc) []docs.Finding {
 	switch state, reason := SealOf(s); {
+	case state == Stale && s.Kind == KindSpec && s.Format >= FormatSplit && s.Change == "":
+		// A living spec changes only by an archived change, which seals it
+		// again; a broken seal means someone edited it by hand.
+		return []docs.Finding{{Path: s.Path, Error: true,
+			Message: "spec viva editada fora de uma mudança: " + reason + " — desfaça a edição, ou proponha a mudança com `gofi change new`"}}
 	case state == Stale:
 		return []docs.Finding{{Path: s.Path, Error: true,
 			Message: "aprovação vencida: " + reason + " — revise e rode `gofi spec approve " + s.Context + "`"}}
@@ -90,7 +95,7 @@ func StaleSeals(root string) []docs.Finding {
 // seal is not among them — approving again is how a stale seal is cleared.
 func Blocking(root string, all []Doc, s Doc, placeholders map[string]bool) []docs.Finding {
 	var out []docs.Finding
-	found := append(content(s, placeholders), depFindings(all, map[string]bool{s.Path: true})...)
+	found := append(content(root, all, s, placeholders), depFindings(all, map[string]bool{s.Path: true})...)
 	for _, f := range found {
 		if f.Error {
 			out = append(out, f)
