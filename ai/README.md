@@ -15,7 +15,7 @@ você recebeu **dentro do projeto** e em como usá-lo.
 ## O Que É Este Harness
 
 ```
-DDA  =  SDD                  ← especificação formal antes do código
+DDA  =  SDD                  ← o contrato antes do código: spec viva + mudanças (decisão 0003)
       + SDK                  ← única fonte de verdade para implementação
       + Padrões + SOLID + DDD ← invariantes de design
       + Boilerplates         ← estrutura por camada
@@ -33,9 +33,17 @@ corrigidos.
 ## Pipeline das Skills
 
 ```
-problema bruto  →  /gofi-pd   →  /gofi-spec  →  /gofi-eng  →  /gofi-qa  →  contexto pronto
-                   (PRD)         (SDD)          (código)      (auditoria)
+problema bruto  →  /gofi-pd  →  /gofi-spec  →  aprovação  →  /gofi-eng  →  /gofi-qa  →  arquivamento
+                   (PRD)        (mudança)     (a pessoa)     (código)      (auditoria)   (spec viva)
 ```
+
+**O contrato.** `specs/{contexto}/spec.md` é a verdade viva de cada contexto —
+requisitos `REQ-NN` com DEVE e cenários DADO/QUANDO/ENTÃO, sem tecnologia — e
+não se edita à mão. Todo trabalho é uma **mudança** em `specs/changes/{id}/`:
+proposta, um delta por contexto (ADICIONADO / MODIFICADO / REMOVIDO) e o design
+no template do pack da linguagem. A pessoa aprova (`gofi change approve`), o
+loop implementa e audita por cenário, e `gofi change archive` aplica os deltas
+às specs vivas — sem modelo. Contexto novo é a mudança que só adiciona.
 
 - **Camada de apresentação:** `/gofi-ui` após a spec (e o contrato do `gofi-eng`).
 - **Plataforma / infra:** `/gofi-spec` (spec de infra) → `/gofi-ops`.
@@ -73,11 +81,11 @@ Detalhe completo no [`AGENTS.md`](../AGENTS.md) da raiz do projeto.
 | Skill          | Função                                                                                     | NÃO faz                |
 |----------------|--------------------------------------------------------------------------------------------|------------------------|
 | `/gofi-pd`     | Product Discovery — transforma problema bruto em PRD navegável                              | não escreve spec       |
-| `/gofi-spec`   | Specification Architect — transforma PRD em SDD técnico (inclui spec de infra)             | não escreve código     |
+| `/gofi-spec`   | Specification Architect — escreve mudanças (proposta, deltas, design) e a baseline da spec viva (inclui infra) | não escreve código nem aprova |
 | `/gofi-eng`    | Context Engineer — implementa o contexto Go (model → repository → service → handler)        | não decide arquitetura |
-| `/gofi-ui`     | Context UI/UX — implementa a camada de apresentação a partir da spec + contrato            | não toca backend       |
-| `/gofi-ops`    | Platform & Delivery — DevOps (IaC, build, CI/CD) a partir da spec de infra                 | não escolhe cloud      |
-| `/gofi-qa`     | Quality Auditor — audita implementação contra spec, SDK e regras absolutas                 | não reescreve código   |
+| `/gofi-ui`     | Context UI/UX — implementa a camada de apresentação de uma mudança aprovada                | não toca backend       |
+| `/gofi-ops`    | Platform & Delivery — DevOps (IaC, build, CI/CD) a partir de uma mudança de infra aprovada | não escolhe cloud      |
+| `/gofi-qa`     | Quality Auditor — audita a mudança cenário a cenário, contra o design, o SDK e as regras    | não reescreve código   |
 | `/gofi-doc`    | Documentation Generator — gera doc de contrato a partir dos handlers Go                     | read-only sobre código |
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama lendo o frontmatter dos `contexts/*.md` | não edita memória      |
 
@@ -88,18 +96,18 @@ jobs-to-be-done, métricas de sucesso e escopo.
 
 ### [`/gofi-spec`](.claude/skills/gofi-spec/SKILL.md) — Specification Architect
 
-Transforma PRD em SDD técnico completo.
+Escreve o contrato como **mudanças** (decisão 0003).
 
-- Eliciação estruturada (serviço, domínio, regras, integrações, infra)
-- Identifica serviço-alvo no monorepo (nome, module path, porta, prefixo de rotas)
-- Modela entidades, DTOs, endpoints e contratos de camada
-- Decide padrões de infra (cache, mensageria, IAM) com base no SDK
-- Produz também a **spec de infra/plataforma** consumida pelo `gofi-ops`
-- **Não escreve código** — só especifica
+- Elicitação estruturada; cada fase alimenta um documento da mudança
+- Requisitos `REQ-NN` (DEVE / NÃO DEVE) com cenários DADO/QUANDO/ENTÃO — o quê, sem tecnologia
+- Design da mudança no template do pack: dados, contratos, erros, mapa de requisitos
+- Baseline da spec viva de um contexto que já roda, pelo código, pelo grafo e pelos testes
+- Produz também as mudanças de **infra/plataforma** consumidas pelo `gofi-ops`
+- **Não escreve código e não aprova** — `gofi spec check` em zero erros, e a pessoa aprova
 
 ### [`/gofi-eng`](.claude/skills/gofi-eng/SKILL.md) — Context Engineer
 
-Transforma SDD em implementação Go por camadas.
+Implementa uma mudança aprovada, em camadas, na linguagem do `.gofi.yaml`.
 
 - Implementa model, repository, service, handler e testes
 - Usa estritamente os módulos do SDK (`sqln`, `netx`, `base`, `obs`, `iam`, `msq`)
@@ -172,8 +180,7 @@ PRD), derivado do frontmatter de cada `contexts/*.md`.
 │   ├── shared/                     — vale para todos os papéis
 │   └── {eng,ui,...}/               — de um papel (protocolo de aprendizado)
 ├── institutional/{project.name}/   — RAG de negócio (INDEX.md + chunks) — espelho do repo da empresa (pull-only) ou mantido à mão
-├── specs-template/sdd-template.md
-├── prd-template/prd-template.md
+├── templates/                      — spec, proposal, delta, design (neutro), tasks e prd (*-template.md)
 └── memory/
     ├── project.md                  — visão global (serviços + convenções)
     └── contexts/{contexto}.md      — estado por-contexto (frontmatter) + handoff entre skills
@@ -365,17 +372,18 @@ Output típico do pipeline no serviço-alvo (backend):
 ## Como Usar
 
 1. **Descoberta** — `/gofi-pd` transforma problema em PRD em `prd/{contexto}/`
-2. **Especificação** — `/gofi-spec` lê o PRD e gera SDD em `specs/{contexto}/`
-3. **Implementação (backend)** — `/gofi-eng` lê a SDD e escreve o contexto Go completo
-4. **Apresentação** — `/gofi-ui` lê a SDD + contrato e implementa a UI
-5. **Plataforma** — `/gofi-ops` lê a spec de infra e provisiona IaC + pipelines
-6. **Auditoria** — `/gofi-qa` valida contra spec, SDK, boilerplates e knowledge
+2. **Especificação** — `/gofi-spec` escreve a mudança em `specs/changes/{id}/`; `gofi spec check {id}`; a pessoa aprova com `gofi change approve {id}`
+3. **Implementação (backend)** — `/gofi-eng` implementa a mudança aprovada
+4. **Apresentação** — `/gofi-ui` implementa a UI da mudança, sobre o contrato do backend
+5. **Plataforma** — `/gofi-ops` provisiona IaC + pipelines de uma mudança de infra
+6. **Auditoria** — `/gofi-qa` valida cenário a cenário, contra o design, o SDK e o knowledge; aprovado limpo, `gofi change archive {id}` aplica a mudança às specs vivas
 7. **Documentação** — `/gofi-doc` gera doc de contrato a partir dos handlers
 8. **Panorama** — `/gofi-status` mostra o estado de todos os contextos
 9. **Iteração** — correções do usuário alimentam `knowledge/`, pelo protocolo de aprendizado
 
 > Você pode entrar pelo passo 2 se já tiver clareza de produto, ou pelo passo 3
-> se já tiver SDD escrita à mão. `/gofi-qa`, `/gofi-doc` e `/gofi-status` rodam
+> se já tiver uma mudança aprovada. Um projeto com specs no formato antigo
+> (`sdd-{contexto}.md`) migra com `gofi spec migrate` (ver `/gofi-migrate`). `/gofi-qa`, `/gofi-doc` e `/gofi-status` rodam
 > em qualquer momento sobre contextos existentes.
 
 ---

@@ -171,7 +171,7 @@ language for one run; `GOFI_NO_SETUP=1` skips the wizard; CI never sees it.
 Gofi's formula for AI that writes production code:
 
 ```
-DDA  =  SDD            ← WHAT to build (formal specification)
+DDA  =  SDD            ← WHAT to build: living specs and changes
       + SDK            ← HOW to build it (the single source of truth)
       + Architecture   ← Clean/Hexagonal, CQRS where it fits, SOLID, DDD
       + Boilerplates   ← the STRUCTURE of each layer (model, repo, service…)
@@ -251,22 +251,38 @@ routed like gofi's, with no change to the CLI.
 
 | Agent | Tier | Delivers | Does not |
 |---|---|---|---|
-| `/gofi-pd` | deep | PRD — problem, actors, rules, acceptance criteria | write a spec |
-| `/gofi-spec` | deep | SDD spec — model, API, architecture, data profile | write code |
-| `/gofi-eng` | standard | backend, through the SDK and the spec | decide architecture |
+| `/gofi-pd` | deep | lean PRD — problem, metrics, personas, scope, journeys | write requirements |
+| `/gofi-spec` | deep | changes — proposal, deltas of requirements and scenarios, design in the stack's template — and the baseline of a living spec | write code, approve |
+| `/gofi-eng` | standard | backend for an approved change, through the SDK | decide architecture, edit the contract |
 | `/gofi-ui` | standard | web/mobile UI, through the design system | decide architecture |
-| `/gofi-ops` | standard | IaC, build and CI/CD, from an infra spec | choose cloud or sizing |
-| `/gofi-qa` | standard | audit against the spec and the SDK rules | change code |
+| `/gofi-ops` | standard | IaC, build and CI/CD, from an approved infra change | choose cloud or sizing |
+| `/gofi-qa` | standard | audit scenario by scenario, against the design and the SDK rules | change code or the contract |
 | `/gofi-doc` | light | API contract docs for front-end and QA | edit code |
 | `/gofi-status` | light | the panorama of contexts, from their memory | write anything |
 | `/gofi-migrate` | standard | migrates an older document corpus to the indexed format | — |
 | `/gofi-full` | deep | runs `pd → spec → eng → qa` inside the agent, back to the phase at fault when QA fails | skip QA |
 
 ```
-Requirement → gofi-pd → gofi-spec → gofi-eng → gofi-qa
-              (PRD)     (SDD)       (backend)  (audit)
-                            └──────→ gofi-ui ──→ gofi-qa
+Requirement → gofi-pd → gofi-spec → approval → gofi-eng → gofi-qa → archive
+              (PRD)     (change)    (person)   (backend)  (audit)   (living spec)
+                                        └────→ gofi-ui ──→ gofi-qa
 ```
+
+**The contract** (decision 0003, after the community's spec-driven practice —
+OpenSpec's living specs and changes, Spec Kit's clarification markers):
+
+- `specs/<context>/spec.md` is the **living truth** of a context: requirements
+  `### Requisito: REQ-NN` with DEVE/NÃO DEVE and scenarios `#### Cenário:
+  REQ-NN.n` with DADO/QUANDO/ENTÃO — no technology. It is never edited by hand.
+- Work is a **change** in `specs/changes/<id>/`: a proposal, a delta per context
+  (ADICIONADO / MODIFICADO / REMOVIDO, by id) and the design of how, written in
+  the template of the language's pack. A new context is a change that only adds.
+- `gofi spec check` validates every document with no model; the person approves
+  (`gofi change approve`), which seals each document with a hash — editing it
+  afterwards breaks the approval. Accepted, `gofi change archive` applies the
+  deltas to the living specs, by id, with no model.
+- Ids are stable, so code and tests point at them: `// gofi:implements REQ-04`,
+  `// gofi:tests REQ-04.1`.
 
 Skills are **generic and portable**: they carry methodology only. Anything
 specific to a product lives in `specs/`, `memory/` and `institutional/`.
@@ -437,7 +453,8 @@ share the orders table?*
 
 ```sh
 gofi show ctx:pricing                    # documents, tables, packages, neighbours, versions
-gofi show specs/pricing/sdd-pricing.md   # the document and its sections, with lines
+gofi show specs/pricing/spec.md          # the living spec and its requirements, with lines
+gofi show specs/pricing/spec.md#REQ-04   # one requirement with its scenarios
 gofi show table:order_order              # who describes the table and who implements it
 ```
 
@@ -576,6 +593,8 @@ and knowledge with no extra wiring.
 | `gofi find` · `show` · `path` | Where is it · what is it · how does A reach B |
 | `gofi index [code\|docs]` | Build the code graph and the document index (`status`, `check`, `open`, `install`, `migrate`) |
 | `gofi mcp` | Serve the index to an agent over MCP |
+| `gofi spec check` · `approve` · `order` · `migrate` | Check the contract (no model) · seal a living spec · the order contexts and changes are built in · move format-2 specs to living specs |
+| `gofi change new` · `list` · `approve` · `archive` | Create a change from the templates · list the open ones · seal one · apply it to the living specs |
 | `gofi memory write <context>` | Write a context's memory from stdin, checking its frontmatter |
 | `gofi guard [warn\|enforce\|off]` | Show or change the guard mode |
 | `gofi install [extensions\|mcp\|guard\|hooks]` | Install (or repair) what wires gofi into the editor and the agent |
@@ -653,11 +672,11 @@ repository.
 │   ├── AGENTS.md             — root instructions, read by any agent
 │   ├── skills/<role>/        — SKILL.md + contract.yaml + reference/
 │   ├── expertise/<pack>/     — PACK.md + sections
-│   ├── templates/            — sdd-template.md, prd-template.md
+│   ├── templates/            — spec, proposal, delta, design, tasks and prd templates
 │   ├── institutional/        — seed of the business knowledge base
 │   ├── memory/               — project.md template + contexts/
 │   └── sdk/
-│       ├── go/               — boilerplates/, api/ (generated from the SDK), knowledge/
+│       ├── go/               — boilerplates/, api/ (generated from the SDK), knowledge/, templates/ (design of a change)
 │       ├── web/              — gofi-ui/ design system, boilerplates/, knowledge/
 │       └── mobile/           — gofi-ui-native/ design system, boilerplates/, knowledge/
 ├── cli/                      — the Go CLI

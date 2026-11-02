@@ -1,7 +1,7 @@
 # Convenções de diagramas — cross-agent
 
 Aplica-se a **todo agent** que produz artefato com diagrama (gofi-pd no
-PRD, gofi-spec na spec SDD, gofi-eng/gofi-qa quando precisarem desenhar
+PRD, gofi-spec no design da mudança, gofi-eng/gofi-qa quando precisarem desenhar
 fluxo num ADR ou laudo de auditoria, gofi-ui em handoff de UX). É regra
 universal do toolchain — **não** decisão de domínio.
 
@@ -33,7 +33,7 @@ Hierarquia de preferência:
 
 | Quando | Tipo recomendado | Por quê |
 |---|---|---|
-| Visão arquitetural / como as peças se conectam (§2 de SDD, "como o sistema é montado") | **Componente** (`component`, `database`, `queue`, `package`) | Mostra topologia em uma olhada; setas etiquetadas substituem prosa de "X chama Y" |
+| Visão arquitetural / como as peças se conectam (§Abordagem do design, "como o sistema é montado") | **Componente** (`component`, `database`, `queue`, `package`) | Mostra topologia em uma olhada; setas etiquetadas substituem prosa de "X chama Y" |
 | Fluxo de processo com decisões / branches / loops (sync, login, ciclo de vida, fluxo de erro) | **Atividade** (`start`, `if/then/else`, `while`, `:ação;`) | Lê como fluxograma — natural para decisões de negócio, branches de validação, retry |
 | Ciclo de vida de entidade (estados de um pedido, status de um job) | **Estado** (`[*] -> A -> B`) | Único formato que comunica "quais transições são possíveis" sem ambiguidade |
 | Troca de **uma** sequência específica entre 2-3 atores que se quer documentar exata e cronologicamente (ex: handshake OAuth) | **Sequência** (`participant`, `-> / -->`) | Use **só** quando a ordem temporal e quem-fala-com-quem é a coisa principal a comunicar |
@@ -114,7 +114,7 @@ Apresentado na ordem de preferência (ver §"Escolha do tipo de diagrama").
 
 ### Componente — visão arquitetural / diagrama de contexto
 
-Default para §2 de SDD e qualquer "como o sistema se monta".
+Default para a §Abordagem do design e qualquer "como o sistema se monta".
 
 ```plantuml
 @startuml
@@ -147,7 +147,7 @@ Workers -up-> DB : escritas\n(cross-context)
 
 ### Atividade — fluxo com decisões / branches / loops
 
-Default para §4 de SDD quando há guards, validações encadeadas ou
+Default para os §Contratos do design quando há guards, validações encadeadas ou
 ramos de erro a documentar.
 
 ```plantuml
@@ -234,9 +234,9 @@ Handler --> Client : 201 Created
 
 | Artefato | Seção | Responsável |
 |----------|-------|-------------|
-| PRD | §10 BPMN — Fluxo de Negócio | gofi-pd |
-| Spec SDD | §2 Diagrama de Contexto + qualquer §X com fluxo | gofi-spec |
-| ADR dentro da spec | quando ADR descreve trade-off de fluxo | gofi-spec |
+| PRD | §5 Jornadas, quando o fluxo tem ramificação real (opcional) | gofi-pd |
+| Design da mudança | §Abordagem (como as peças se conectam) + qualquer seção com fluxo | gofi-spec |
+| ADR dentro do design | quando ADR descreve trade-off de fluxo | gofi-spec |
 | Laudo de QA | quando o laudo precisa demonstrar divergência de fluxo | gofi-qa |
 | Handoff de UX | jornada do usuário multi-tela | gofi-ui |
 
