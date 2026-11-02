@@ -145,6 +145,7 @@ func TestDocMissingFrontmatterKeys(t *testing.T) {
 func TestDocComplete(t *testing.T) {
 	const doc = `---
 tipo: spec
+formato: 3
 contexto: billing
 versao: "1.0"
 status: aprovado
@@ -154,14 +155,35 @@ atualizado: 2026-08-03
 # SDD — billing
 `
 	root := project(t, map[string]string{
-		".gofi.yaml":                   currentConfig,
-		"specs/billing/sdd-billing.md": doc,
-		"specs/INDEX.md":               "index\n",
+		".gofi.yaml":            currentConfig,
+		"specs/billing/spec.md": doc,
+		"specs/INDEX.md":        "index\n",
 	})
 	for _, f := range Run(root, Options{}) {
 		if f.Area == "specs" {
 			t.Errorf("a complete spec should raise nothing, got %+v", f)
 		}
+	}
+}
+
+// A spec written before decision 0003 still works, so it is info: the audit
+// names the command that migrates it. The old document a migration archives
+// on purpose is history and raises nothing.
+func TestFormatTwoSpecIsReported(t *testing.T) {
+	const v2 = "---\ntipo: spec\nformato: 2\ncontexto: billing\nversao: \"1.0\"\nstatus: aprovado\nkeywords: [a]\n---\n# SDD\n"
+	root := project(t, map[string]string{
+		".gofi.yaml":                   currentConfig,
+		"specs/billing/sdd-billing.md": v2,
+		"specs/changes/archive/2026-01-01-baseline-loja/sdd-loja.md": strings.Replace(v2, "billing", "loja", 1),
+		"specs/INDEX.md": "index\n",
+	})
+	findings := Run(root, Options{})
+	f, ok := find(findings, "specs/billing/sdd-billing.md")
+	if !ok || f.Severity != SeverityInfo || !strings.Contains(f.Hint, "gofi spec migrate billing") {
+		t.Errorf("finding = %+v, %v", f, ok)
+	}
+	if _, ok := find(findings, "specs/changes/archive/2026-01-01-baseline-loja/sdd-loja.md"); ok {
+		t.Error("an archived baseline was reported")
 	}
 }
 

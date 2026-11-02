@@ -13,7 +13,8 @@ documentos e busca. Trabalha em qualquer projeto gofi — detecta o estado, não
 o assume.
 
 Você **não** toca em código de aplicação, IaC ou schema. Só `specs/`, `prd/`,
-`.claude/memory/`, `.claude/lexicon/` e o `AGENTS.md` do projeto.
+`.claude/memory/`, `.claude/lexicon/` e o `AGENTS.md` do projeto. Também leva um
+corpus do formato 2 para o formato 3 de specs vivas e mudanças (passo 6).
 
 ---
 
@@ -156,6 +157,35 @@ código no commit; os `INDEX.md` são do `gofi index docs`.
 
 > Índice desatualizado é **pior** que índice nenhum: sem índice o agente sabe
 > que não sabe; com índice velho ele aponta com confiança para o lugar errado.
+
+### 6. Formato 2 → formato 3 (specs vivas e mudanças)
+
+O formato 3 (decisão 0003) troca o `sdd-{contexto}.md` — o quê e o como num
+documento só — pela **spec viva** `specs/{contexto}/spec.md`, só de requisitos
+e cenários, que muda por mudanças. `gofi update audit` lista o que ainda está
+no formato 2. A conversão tem duas metades, e só a segunda é sua:
+
+1. **A mecânica é da CLI:** `gofi spec migrate {contexto}` (ou `--all`). O §1
+   vira `## Propósito`; cada `RN-NN` vira `REQ-NN` com o mesmo texto, sem as
+   notas de implementação (renumerado em ordem quando o contexto tinha várias
+   specs — a CLI imprime o mapa); os documentos antigos vão inteiros para
+   `specs/changes/archive/<data>-baseline-{contexto}/`; a memória passa a
+   apontar a spec viva. Cada requisito sai com um cenário marcado
+   `[PRECISA ESCLARECER]`: a regra antiga não tinha critério verificável.
+2. **Os cenários são seus — e da pessoa.** Para cada `REQ-NN` marcado:
+   - leia o comportamento pelo grafo e pelos **testes** que o exercitam
+     (`gofi show <símbolo>`): cada caso de teste é um DADO/QUANDO/ENTÃO
+     candidato;
+   - escreva o cenário no lugar do marcador, um comportamento por cenário,
+     com o ENTÃO que um teste verifica;
+   - requisito sem teste e sem comportamento claro no código: **mantenha o
+     marcador** e diga à pessoa qual decisão falta. Não invente cenário.
+   - Um requisito que diz o como (tabela, rota, arquivo) é reescrito no o quê;
+     o como já está no código e no arquivo de baseline.
+3. `gofi spec check {contexto}` em zero erros; a **pessoa** aprova com
+   `gofi spec approve {contexto}`. Não aprove por ela.
+
+Meça como nos passos 0 e 3: a migração não pode piorar a busca.
 
 ---
 

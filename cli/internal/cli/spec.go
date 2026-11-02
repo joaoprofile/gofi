@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -24,7 +26,7 @@ gofi spec check pedidos
 gofi spec approve pedidos
 gofi spec order`,
 	}
-	cmd.AddCommand(newSpecCheckCmd(), newSpecApproveCmd(), newSpecOrderCmd())
+	cmd.AddCommand(newSpecCheckCmd(), newSpecApproveCmd(), newSpecOrderCmd(), newSpecMigrateCmd())
 	return cmd
 }
 
@@ -235,4 +237,85 @@ func runSpecOrder(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	return nil
+}
+
+func newSpecMigrateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "migrate <context>... | --all",
+		Short: i18n.T("cmd.spec.migrate.short"),
+		Long: `Turn the format-2 specs of a context (sdd-<ctx>.md) into its living spec,
+specs/<ctx>/spec.md, in format 3 (decision 0003). Deterministic, no model:
+
+  - §1 becomes ## Propósito;
+  - each RN-NN of §5 becomes REQ-NN with its text — the same number when the
+    context had one spec, renumbered in order when it had several (the map is
+    printed) — without the implementation notes the rule carried;
+  - each requirement gets a scenario marked [PRECISA ESCLARECER], since a
+    format-2 rule had none: the spec does not pass gofi spec check until a
+    person writes them, and that is the point;
+  - the old documents are the how, already in the code: they move whole to
+    specs/changes/archive/<date>-baseline-<ctx>/, marked arquivado;
+  - the context's memory points at the new spec.
+
+The living spec is born proposto. Write the scenarios (the gofi-migrate skill
+drafts them from the code and its tests), then gofi spec check and gofi spec
+approve.`,
+		Example: `gofi spec migrate pedidos
+gofi spec migrate --all`,
+		RunE: runSpecMigrate,
+	}
+	cmd.Flags().Bool("all", false, i18n.T("cmd.spec.flag.migrate_all"))
+	return cmd
+}
+
+func runSpecMigrate(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	if all == (len(args) > 0) {
+		return errors.New(i18n.T("spec.migrate.which"))
+	}
+	root, err := findProjectRoot()
+	if err != nil {
+		return err
+	}
+	corpus, err := contract.Docs(root)
+	if err != nil {
+		return err
+	}
+	contexts := args
+	if all {
+		seen := map[string]bool{}
+		for _, d := range corpus {
+			if d.Kind == contract.KindSpec && d.Change == "" && d.Format < contract.FormatSplit && !seen[d.Context] {
+				seen[d.Context] = true
+				contexts = append(contexts, d.Context)
+			}
+		}
+	}
+	out := cmd.OutOrStdout()
+	if len(contexts) == 0 {
+		fmt.Fprintln(out, "  "+i18n.T("spec.migrate.none"))
+		return nil
+	}
+	date := time.Now().Format("2006-01-02")
+	for _, ctx := range contexts {
+		res, err := contract.Migrate(root, corpus, ctx, date)
+		if err != nil {
+			return &ExitCodeError{Code: 1, Err: err}
+		}
+		fmt.Fprintln(out, "  "+i18n.T("spec.migrate.done", res.Spec, res.Archive))
+		for _, old := range sortedKeys(res.Renamed) {
+			fmt.Fprintf(out, "    %s → %s\n", old, res.Renamed[old])
+		}
+		fmt.Fprintln(out, "  "+i18n.T("spec.migrate.next", res.Pending, ctx))
+	}
+	return nil
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
