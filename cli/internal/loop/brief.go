@@ -3,6 +3,9 @@ package loop
 import (
 	"fmt"
 	"strings"
+
+	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 // DefaultBrief is the turn an agent node sends: the role's skill, invoked on
@@ -10,10 +13,16 @@ import (
 // output that failed, the findings still open — and where to write a
 // decision it cannot find. Assembled from the state, never from what a model
 // said before: each turn runs in a fresh session and reads the rest on disk.
-func DefaultBrief(n Node, s *State, elicitFile string) string {
+func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "/%s Implemente e verifique a mudança aprovada `%s` do contexto %s — `gofi change list`, os deltas e o design em `specs/changes/%s/`. Iteração %d da execução %s.\n\n",
-		n.Role, s.Change, s.Context, s.Change, s.Iter, s.Run)
+	// An internal role is no slash command: the agent follows it.
+	if rl.Contract.Internal() {
+		fmt.Fprintf(&b, "Siga o papel descrito em %s.\n\n", layout.RoleSkill(rl.Name, true))
+	} else {
+		fmt.Fprintf(&b, "/%s ", rl.Name)
+	}
+	fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list`, os deltas e o design em `specs/changes/%s/`. Iteração %d da execução %s.\n\n",
+		s.Change, s.Context, s.Change, s.Iter, s.Run)
 	if s.Sensor != nil && len(s.Sensor.Failed) > 0 {
 		fmt.Fprintf(&b, "**Os sensores falharam em %s.** Corrija antes de qualquer outra coisa:\n\n```\n%s\n```\n\n",
 			strings.Join(s.Sensor.Failed, ", "), clip(s.Sensor.Output, 4000))

@@ -63,12 +63,7 @@ func runFlowCheck(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	var roles []string
-	if rs, _ := role.Load(layout.RoleDirs(root)...); rs != nil {
-		for _, r := range rs {
-			roles = append(roles, r.Name)
-		}
-	}
+	roles, _ := role.Load(layout.RoleDirs(root)...)
 	errs := 0
 	for _, a := range args {
 		var f *loop.Flow

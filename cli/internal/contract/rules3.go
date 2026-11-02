@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -200,6 +201,11 @@ func (f *finder) proposal(all []Doc, root string) {
 	noDesign := strings.Trim(strings.TrimSpace(f.doc.Front["design"]), `"'`) == "n/a"
 	if touchesCode && c.design == nil && !noDesign {
 		f.add(0, true, "a mudança adiciona ou modifica requisitos e não tem design.md (ou declare design: n/a)")
+	}
+	for _, s := range f.doc.Front.List(FieldSurfaces) {
+		if !slices.Contains(Surfaces, s) {
+			f.add(0, true, "%s: %q não é uma superfície (%s)", FieldSurfaces, s, strings.Join(Surfaces, ", "))
+		}
 	}
 	for _, dep := range f.doc.Front.List(FieldDepends) {
 		if dep == f.doc.Change {

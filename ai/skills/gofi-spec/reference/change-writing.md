@@ -96,6 +96,10 @@ não tinha.
 - **Fora desta mudança** — o que fica para outra.
 - `contextos: [...]` lista **todo** contexto com delta; `depende_de` lista
   mudanças abertas que precisam ser aceitas antes desta.
+- `superficies: [...]` diz o que a mudança toca — `backend`, `web`, `mobile`,
+  `infra`. É o que o loop usa para despachar quem implementa: uma mudança só de
+  tela que não declara `web` vai para o implementador do backend. Vazio vale a
+  única superfície do projeto; num projeto com mais de uma, declare sempre.
 - Mudança sem código a mudar (só remover um requisito, corrigir texto de
   cenário): `design: n/a`.
 

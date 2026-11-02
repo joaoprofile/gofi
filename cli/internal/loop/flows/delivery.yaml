@@ -5,9 +5,11 @@ name: delivery
 start: implement
 
 nodes:
-  implement: {kind: agent, role: gofi-eng}
+  # Who implements and who audits is dispatched by the change's facts —
+  # change.surface, sensor.green — from the roles' contracts (0002, D18).
+  implement: {kind: agent, stage: implement}
   sense:     {kind: sensor, stages: [build, test]}
-  audit:     {kind: agent, role: gofi-qa}
+  audit:     {kind: agent, stage: audit}
   policy:    {kind: policy}
   decide:    {kind: gate}
   accepted:  {kind: terminal, outcome: accepted}

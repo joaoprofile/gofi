@@ -5,6 +5,7 @@ contextos: [{contextos}]          # todo contexto que a mudança toca — um del
 versao: "1.0"
 status: proposto                  # aprovado só por `gofi change approve`; em_implementacao, aceito e arquivado pelo loop
 depende_de: []                    # mudanças que precisam ser aceitas antes desta
+superficies: []                   # o que a mudança toca: backend | web | mobile | infra (despacha quem implementa); vazio = a única do projeto
 keywords: [{até 12 termos}]
 atualizado: {YYYY-MM-DD}
 ---

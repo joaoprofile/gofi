@@ -58,7 +58,8 @@ type Flow struct {
 // Node is one step of a flow.
 type Node struct {
 	Kind    string   `yaml:"kind"`
-	Role    string   `yaml:"role,omitempty"`    // agent
+	Role    string   `yaml:"role,omitempty"`    // agent: one role, fixed
+	Stage   string   `yaml:"stage,omitempty"`   // agent: the roles its facts dispatch
 	Stages  []string `yaml:"stages,omitempty"`  // sensor
 	Outcome string   `yaml:"outcome,omitempty"` // terminal
 }
@@ -168,6 +169,22 @@ func (f *Flow) outgoing(node string) []Edge {
 	return out
 }
 
+// Walk is the flow's nodes in the order a run first reaches them, from the
+// start along the edges as written: how a flow reads top to bottom.
+func (f *Flow) Walk() []string {
+	seen := map[string]bool{f.Start: true}
+	out := []string{f.Start}
+	for i := 0; i < len(out); i++ {
+		for _, e := range f.outgoing(out[i]) {
+			if !seen[e.To] {
+				seen[e.To] = true
+				out = append(out, e.To)
+			}
+		}
+	}
+	return out
+}
+
 // limit is the bound of an edge; 0 when it has none.
 func (f *Flow) limit(from, to string) int {
 	for _, l := range f.Limits {
@@ -178,20 +195,20 @@ func (f *Flow) limit(from, to string) int {
 	return 0
 }
 
-// flowOf is the built-in flow that delivers each artifact a plan builds.
-var flowOf = map[string]string{"code": "delivery", "ui": "delivery-ui", "infra": "delivery-ops"}
+// builds are the artifacts a plan builds: the loop delivers them.
+var builds = map[string]bool{"code": true, "ui": true, "infra": true}
 
 // FlowFor names the flow that delivers an artifact — code, ui or infra — and
-// reports whether the artifact is one the loop delivers at all.
+// reports whether the artifact is one the loop delivers at all. It is one
+// flow for all of them: which role implements is the change's surfaces,
+// dispatched inside it (0002, D18).
 func FlowFor(artifact string) (string, bool) {
-	f, ok := flowOf[artifact]
-	return f, ok
+	return "delivery", builds[artifact]
 }
 
 // Delivers reports whether a plan phase producing artifact is part of a
 // delivery the loop carries out: the build itself, or the audit that the
 // flow already holds.
 func Delivers(artifact string) bool {
-	_, build := flowOf[artifact]
-	return build || artifact == "audit"
+	return builds[artifact] || artifact == "audit"
 }

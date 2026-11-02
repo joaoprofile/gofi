@@ -3,7 +3,10 @@ package loop
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
+
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 var reName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -20,7 +23,7 @@ type Problem struct {
 // edges out of a node can be decided — and that every cycle is bounded, so no
 // run can loop forever. roles are the roles installed, to warn about an agent
 // node no role answers; nil skips that check.
-func Check(f *Flow, roles []string) []Problem {
+func Check(f *Flow, roles []role.Role) []Problem {
 	var out []Problem
 	errf := func(format string, a ...any) {
 		out = append(out, Problem{Message: fmt.Sprintf(format, a...), Error: true})
@@ -34,17 +37,23 @@ func Check(f *Flow, roles []string) []Problem {
 	if _, ok := f.Nodes[f.Start]; !ok {
 		errf("start %q is not a node", f.Start)
 	}
-	installed := map[string]bool{}
+	installed, staged := map[string]bool{}, map[string]bool{}
 	for _, r := range roles {
-		installed[r] = true
+		installed[r.Name] = true
+		staged[r.Contract.Stage] = true
 	}
 	for _, name := range sortedNodes(f) {
 		n := f.Nodes[name]
 		switch n.Kind {
 		case KindAgent:
-			if n.Role == "" {
-				errf("%s: an agent node names its role", name)
-			} else if roles != nil && !installed[n.Role] {
+			switch {
+			case (n.Role == "") == (n.Stage == ""):
+				errf("%s: an agent node names its role or its stage — one of them", name)
+			case n.Stage != "" && !slices.Contains(role.Stages, n.Stage):
+				errf("%s: stage %q is not a stage of the loop", name, n.Stage)
+			case n.Stage != "" && roles != nil && !staged[n.Stage]:
+				out = append(out, Problem{Message: fmt.Sprintf("%s: no installed role works in stage %s", name, n.Stage)})
+			case n.Role != "" && roles != nil && !installed[n.Role]:
 				out = append(out, Problem{Message: fmt.Sprintf("%s: role %s is not installed", name, n.Role)})
 			}
 		case KindSensor:

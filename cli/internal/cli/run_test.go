@@ -16,6 +16,7 @@ import (
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
 
@@ -30,7 +31,7 @@ var reVerdictCmd = regexp.MustCompile(`gofi verdict write (\S+) --run (\S+) --it
 
 func (f fakeSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event, error) {
 	*f.prompts = append(*f.prompts, t.Prompt)
-	if strings.HasPrefix(t.Prompt, "/gofi-qa ") {
+	if isRole(t.Prompt, "gofi-qa") {
 		m := reVerdictCmd.FindStringSubmatch(t.Prompt)
 		iter, _ := strconv.Atoi(m[3])
 		v, _ := verdict.Parse([]byte(`{"result":"aprovado"}`), m[1])
@@ -42,6 +43,28 @@ func (f fakeSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event
 	close(ch)
 	return ch, nil
 }
+
+// isRole reports whether a turn runs a role, as a slash command or as the
+// internal role the agent is told to follow.
+func isRole(prompt, name string) bool {
+	first, _, _ := strings.Cut(prompt, "\n")
+	return strings.HasPrefix(first, "/"+name+" ") || strings.Contains(first, "/"+name+"/SKILL.md")
+}
+
+// shippedSkills is ai/skills/ of this repository, resolved before any test
+// changes into a project folder.
+var shippedSkills, _ = filepath.Abs(filepath.Join("..", "..", "..", "ai", "skills"))
+
+// installRoles puts the implement and audit roles gofi ships in a project,
+// where the loop dispatches them from.
+func installRoles(t *testing.T, root string) {
+	t.Helper()
+	for _, name := range []string{"gofi-eng", "gofi-qa"} {
+		writeFile(t, layout.Roles().Abs(root, name, "contract.yaml"), readFile(t, filepath.Join(shippedSkills, name, "contract.yaml")))
+		writeFile(t, layout.Roles().Abs(root, name, "SKILL.md"), "# /"+name+"\n")
+	}
+}
+
 func (fakeSession) Cancel()      {}
 func (fakeSession) Close() error { return nil }
 
@@ -51,6 +74,7 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	var prompts []string
 	runPorts.open = func(root string) engine.Session { return fakeSession{root: root, prompts: &prompts} }
 	t.Cleanup(func() { runPorts.open = nil })
+	installRoles(t, root)
 	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  sensors:\n    test: \"true\"\n")
 
 	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
@@ -75,11 +99,22 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := run(newRunCmd, "criar-pedidos")
+	// --explain says who the run would dispatch, and why, running nothing.
+	out, err := run(newRunCmd, "criar-pedidos", "--explain")
+	if err != nil || len(prompts) != 0 {
+		t.Fatalf("explain: %v, %d turns\n%s", err, len(prompts), out)
+	}
+	for _, want := range []string{"change.surface(backend)", "✓ gofi-eng — change.surface(backend)", "✓ gofi-qa — sensor.green"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("explain lacks %q:\n%s", want, out)
+		}
+	}
+
+	out, err = run(newRunCmd, "criar-pedidos")
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	if len(prompts) != 2 || !strings.HasPrefix(prompts[0], "/gofi-eng ") || !strings.HasPrefix(prompts[1], "/gofi-qa ") {
+	if len(prompts) != 2 || !isRole(prompts[0], "gofi-eng") || !isRole(prompts[1], "gofi-qa") {
 		t.Errorf("turns: %q", prompts)
 	}
 	if !strings.Contains(out, "accepted") || !strings.Contains(out, "specs/changes/archive/") {

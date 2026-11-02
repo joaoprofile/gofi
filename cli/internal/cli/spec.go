@@ -10,7 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/contract"
+	"github.com/joaoprofile/gofi/cli/internal/docs"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 )
 
@@ -91,6 +93,9 @@ func runSpecCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	findings := contract.CheckAll(root, all, specs)
+	if cfg, _, err := loadProjectConfig(); err == nil {
+		findings = append(findings, undeclaredSurfaces(cfg, specs)...)
+	}
 	for _, f := range findings {
 		kind := i18n.T("index.check.warn")
 		if f.Error {
@@ -104,6 +109,23 @@ func runSpecCheck(cmd *cobra.Command, args []string) error {
 		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("spec.check.failed", errs))}
 	}
 	return nil
+}
+
+// undeclaredSurfaces warns about a change that says nothing of the surfaces
+// it touches in a project with more than one: the loop then dispatches the
+// backend's implementer, which is wrong for a change to the screens.
+func undeclaredSurfaces(cfg *config.GofiConfig, picked []contract.Doc) []docs.Finding {
+	project := projectSurfaces(cfg)
+	if len(project) < 2 {
+		return nil
+	}
+	var out []docs.Finding
+	for _, d := range picked {
+		if d.Kind == contract.KindChange && len(d.Front.List(contract.FieldSurfaces)) == 0 {
+			out = append(out, docs.Finding{Path: d.Path, Message: i18n.T("spec.check.surfaces", contract.FieldSurfaces, strings.Join(project, ", "), project[0])})
+		}
+	}
+	return out
 }
 
 func newSpecApproveCmd() *cobra.Command {

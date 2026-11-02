@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
 
@@ -117,6 +118,7 @@ func newWorld(t *testing.T) *world {
 	w := &world{root: root, agent: &fakeAgent{root: root, steps: map[string][]step{}}, sensors: &fakeSensors{}, gate: &fakeGate{answer: true}}
 	clock := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
 	w.runner = &Runner{Root: root, Flow: f, Agent: w.agent, Sensors: w.sensors, Verdicts: diskVerdicts{root}, Gate: w.gate,
+		Roles: shippedRoles(), Facts: role.Facts{"change.surface(backend)": true},
 		Brief: DefaultBrief, Now: func() time.Time { clock = clock.Add(time.Second); return clock }}
 	return w
 }
@@ -323,4 +325,41 @@ func lastEdgeWhy(t *testing.T, root string) string {
 		}
 	}
 	return ""
+}
+
+// The roles that implement and audit are dispatched by the change's facts,
+// and the log says which and why (0002, D18).
+func TestTheStageDispatchesByTheChangesFacts(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Facts = role.Facts{"change.surface(web)": true}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" {
+		t.Fatalf("outcome %s", s.Outcome)
+	}
+	if w.agent.turns[0].Role != "gofi-ui" || !strings.HasPrefix(w.agent.turns[0].Prompt, "Siga o papel descrito em ") {
+		t.Errorf("first turn: %s\n%s", w.agent.turns[0].Role, w.agent.turns[0].Prompt)
+	}
+	evs, _ := Events(w.root, "r-1")
+	var got []string
+	for _, e := range evs {
+		if e.Ev == "dispatch" {
+			got = append(got, e.Node+">"+e.To+" ("+e.Why+")")
+		}
+	}
+	if strings.Join(got, "; ") != "implement>gofi-ui (change.surface(web)); audit>gofi-qa (sensor.green)" {
+		t.Errorf("dispatch events = %v", got)
+	}
+}
+
+// A change no role implements stops the run, saying what each role lacked.
+func TestAStageNobodyAnswersStopsTheRun(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Facts = role.Facts{"change.surface(infra)": true}
+	_, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos")
+	if err == nil || !strings.Contains(err.Error(), "nenhum papel do estágio implement") || !strings.Contains(err.Error(), "✗ gofi-eng") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(w.agent.turns) != 0 {
+		t.Error("a turn ran with nobody dispatched")
+	}
 }
