@@ -114,7 +114,7 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	if err != nil || len(prompts) != 0 {
 		t.Fatalf("explain: %v, %d turns\n%s", err, len(prompts), out)
 	}
-	for _, want := range []string{"change.surface(backend)", "✓ gofi-eng — change.surface(backend)", "✓ gofi-qa — sensor.green"} {
+	for _, want := range []string{"change.surface(backend)", "✓ gofi-eng — change.surface(backend) e plan.none", "✓ gofi-qa — sensor.green"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("explain lacks %q:\n%s", want, out)
 		}

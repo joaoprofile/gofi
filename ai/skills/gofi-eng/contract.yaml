@@ -31,6 +31,9 @@ intents: [implemente, implementar, implementa, codifique, codificar, programe, p
 needs: [context, change]
 visibility: internal
 stage: implement
+layer: domain
 triggers:
-  - any: [change.surface(backend)]
+  # The domain layer of the run's plan; with no plan, every layer.
+  - all: [change.surface(backend), layer(domain)]
+  - all: [change.surface(backend), plan.none]
 tools: [read, edit, write, search, gofi, verify, memory]

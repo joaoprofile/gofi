@@ -22,7 +22,7 @@ func TestRoleListShowsWhatDispatchesEachRole(t *testing.T) {
 	if err := c.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"gofi-eng", "internal", "implement", "um de change.surface(backend)", "gofi-qa", "todos de sensor.green"} {
+	for _, want := range []string{"gofi-eng", "internal", "implement", "todos de change.surface(backend), layer(domain)", "gofi-qa", "todos de sensor.green"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("list lacks %q:\n%s", want, out.String())
 		}

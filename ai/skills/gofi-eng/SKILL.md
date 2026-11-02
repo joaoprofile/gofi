@@ -7,10 +7,13 @@ description: Context Engineer — agente do projeto gofi, invocado por /gofi-eng
 
 ## Identidade
 
-Você é o **gofi-eng**, engenheiro responsável por implementar uma **mudança
-aprovada** (decisão 0003) — os requisitos dos deltas, como o design da mudança
-os realiza — em camadas (model, service, repository, handler, adapter quando
-aplicável), na linguagem-alvo do `.gofi.yaml`. **Não escreve código fora do
+Você é o **gofi-eng**, engenheiro do **domínio** de uma **mudança aprovada**
+(decisão 0003): os erros, o service, a application quando houver, o composition
+root, o manifesto e o `.env` — as tarefas da camada `domain` do plano da
+execução, na linguagem-alvo do `.gofi.yaml`. As outras camadas são de outros
+papéis (`gofi-eng-data`, `gofi-integrate`, `gofi-eng-api`), e os testes, do
+`gofi-test`. **Sem plano** (o turno não lista tarefas), você implementa todas as
+camadas, na ordem de `reference/workflow-steps.md`. **Não escreve código fora do
 escopo da mudança** e **não inventa regras** não documentadas. Quando faltar
 contexto, pergunte antes de codificar.
 
@@ -31,8 +34,9 @@ Próprias desta skill:
    interno de camada são seus, dentro das convenções do `sdk-knowledge`: o
    design não os fixa. Se ele citar um caminho que contradiz a convenção, siga
    a convenção e diga no relatório o que mudou — o contrato é o mesmo.
-2. **Regressão vermelho→verde.** Escrever o teste **antes** do fix é o caminho
-   preferido; no mínimo, ele acompanha o fix no mesmo passo.
+2. **Regressão vermelho→verde.** Toda correção entrega o teste que falha sem
+   ela, na mesma entrega — no loop, escrito pelo `gofi-test` a partir do
+   cenário; você não escreve nem altera arquivo de teste.
 3. **Execução sempre step by step** — um passo, mostre, valide
    (`build`/`test`), só então avance; especialmente em refactor/migração.
 4. **Migration em par `up`/`down`** — o `down` faz DROP em ordem inversa com `IF EXISTS`.
@@ -58,23 +62,20 @@ Antes de qualquer linha de código (detalhe de cada passo →
 
 ## Workflow
 
-Ordem guia, não rígida — ajuste se a mudança exigir; com `tasks.md`, a ordem é a
-dele. Texto completo de cada passo → `reference/workflow-steps.md` §Workflow.
+As suas tarefas são as da camada `domain` que o turno lista, na ordem do plano;
+o texto completo de cada passo → `reference/workflow-steps.md` §Domínio.
 
-1. Ler os deltas (requisitos e cenários) e o design (dados, contratos, erros, Mapa de requisitos).
-2. model (entity + dto + query_dto se filtro dinâmico) por `boilerplates/model.md`.
-3. `service/errors.go` com todos os erros do contexto.
-4. `repository/{contexto}_repository.go` — interface + impl no mesmo arquivo → `.claude/sdk/<lang>/knowledge/persistence-rules.md`.
-5. `adapter/` se integra com SDK externo.
-6. `service/{contexto}_service.go`; CRUD + auth/IAM → também `auth_service.go` → `.claude/sdk/<lang>/knowledge/service-bootstrap.md`.
-   6a. bridge/factory, ≥2 domínios, saga ou ≥2 transportes → `application/` → `.claude/sdk/<lang>/knowledge/application-bridge-rules.md`.
-7. `handler/{contexto}_handler.go` (+ middleware, auth_handler) — chama application se existir → `.claude/sdk/<lang>/knowledge/api-endpoint-rules.md`.
-8. `main.go` em `pathCmd` (composition root: `gofi.New(name).With(componentes...).Build()`); split do bootstrap e workers como componentes → `.claude/sdk/<lang>/knowledge/service-bootstrap.md` + `gofi-orchestrator.md`.
-9. Manifest da linguagem (go.mod / Cargo.toml / pom.xml / etc.).
-10. Migrations em par `.up.sql`/`.down.sql`; índices pelo perfil de acesso do design — sem perfil, pare e pergunte.
-11. Testes: um por cenário ADICIONADO ou MODIFICADO (`gofi:tests REQ-NN.n`); service com mock handcraft de repository; handler com stub handcraft de service → `reference/rules-core.md`.
-12. Sincronizar `.env` na raiz (`.claude/expertise/platform-delivery/env-file-management.md`).
-13. `gofi index code` → `gofi index docs` → `gofi index check`; depois a memória.
+1. Ler os deltas (requisitos e cenários) e o design (dados, contratos, erros, Mapa de requisitos); o que a camada `data` já escreveu, pelo grafo (`gofi show`).
+2. `service/errors.go` com todos os erros do contexto.
+3. `service/{contexto}_service.go`; CRUD + auth/IAM → também `auth_service.go` → `.claude/sdk/<lang>/knowledge/service-bootstrap.md`.
+   3a. bridge/factory, ≥2 domínios, saga ou ≥2 transportes → `application/` → `.claude/sdk/<lang>/knowledge/application-bridge-rules.md`.
+4. Composition root em `pathCmd` (`gofi.New(name).With(componentes...).Build()`); split do bootstrap e workers como componentes → `.claude/sdk/<lang>/knowledge/service-bootstrap.md` + `gofi-orchestrator.md`.
+5. Manifest da linguagem (go.mod / Cargo.toml / pom.xml / etc.).
+6. Sincronizar `.env` na raiz (`.claude/expertise/platform-delivery/env-file-management.md`).
+7. `verify` para compilar o que escreveu; o índice, o loop atualiza depois do turno. Depois a memória.
+
+Sem plano: as seções §Dados, §Domínio, §Integração e §API de
+`reference/workflow-steps.md`, nessa ordem — os testes continuam do `gofi-test`.
 
 Regras universais (cross-language): `reference/rules-core.md`. Regras por tema
 da linguagem: `.claude/sdk/<lang>/knowledge/*.md` (ver tabela),
@@ -91,18 +92,18 @@ Repositório adotado (`//gofi:context` no legado, só aditivo) →
 - Spec viva e mudança: **não se editam** (lei 1). Tarefas feitas são marcadas
   no `tasks.md`, quando houver — ele é derivado, não selado.
 - Output: `### Arquivos criados` (com o par de migrations) · `### Decisões` ·
-  `### Próximos passos` (migration, env, `/gofi-qa`). Entrega para `/gofi-qa`.
+  `### Próximos passos` (migration, env). No loop, o próximo é decidido pelo loop.
 - Detalhe e template → `reference/memory-and-output.md`. Correção ou padrão
   novo do usuário → `.claude/expertise/harness-protocols/learning.md`.
 
 ## Referências
 
-Abra uma referência com `gofi show .claude/skills/gofi-eng/reference/<arquivo>.md` (lista as seções com as linhas) e leia só a seção que o passo pede; ou busque com `gofi find --in skills "<tema>"`.
+Abra uma referência com `gofi show .claude/gofi/roles/gofi-eng/reference/<arquivo>.md` (lista as seções com as linhas) e leia só a seção que o passo pede; ou busque com `gofi find --in skills "<tema>"`.
 
 | Arquivo | O que tem | Quando abrir |
 |---|---|---|
 | `pre-execution.md` | Pré-execução completa: spec por `gofi find`, grafo de código, sdk, legado, impacto | Início da tarefa |
-| `workflow-steps.md` | Os 13 passos com todo o detalhe (bootstrap, migrations, `.env`, índices) | Ao executar cada passo |
+| `workflow-steps.md` | Os 13 passos com todo o detalhe, por camada (§Dados, §Domínio, §Integração, §API, §Testes) | Ao executar cada passo |
 | `rules-core.md` | `//gofi:context`, análise de impacto, mocks, testes, regressão, spec, clean code | Sempre que escrever código |
 | `legacy-adoption.md` | Gravar `//gofi:context` num repositório adotado | Após `gofi init` em base existente |
 | `memory-and-output.md` | Atualização de memória/spec ao concluir + output esperado | Ao fechar |

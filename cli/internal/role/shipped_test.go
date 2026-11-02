@@ -14,10 +14,26 @@ func TestTheShippedRolesCoverEverySurface(t *testing.T) {
 		t.Error(p)
 	}
 	for _, surface := range predicates["change.surface"] {
-		got := Dispatch(roles, "implement", Facts{"change.surface(" + surface + ")": true})
+		// A run with no plan: one role implements the whole surface.
+		got := Dispatch(roles, "implement", Facts{"change.surface(" + surface + ")": true, "plan.none": true})
 		if len(got) != 1 {
 			t.Errorf("surface %s dispatches %+v, want exactly one role", surface, got)
 		}
+	}
+	// A backend change is planned, and each layer of the plan has exactly
+	// the one role that implements it; the tests have their own.
+	backend := Facts{"change.surface(backend)": true}
+	if got := Dispatch(roles, "plan", backend); len(got) != 1 || got[0].Role != "gofi-plan" {
+		t.Errorf("plan dispatches %+v", got)
+	}
+	for _, layer := range Layers {
+		got := Dispatch(roles, "implement", Facts{"change.surface(backend)": true, "layer(" + layer + ")": true})
+		if len(got) != 1 {
+			t.Errorf("layer %s dispatches %+v, want exactly one role", layer, got)
+		}
+	}
+	if got := Dispatch(roles, "test", Facts{"change.surface(backend)": true, "tests.due": true}); len(got) != 1 || got[0].Role != "gofi-test" {
+		t.Errorf("test dispatches %+v", got)
 	}
 	if got := Dispatch(roles, "audit", Facts{"sensor.green": true}); len(got) != 1 || got[0].Role != "gofi-qa" {
 		t.Errorf("audit dispatches %+v", got)

@@ -1,0 +1,18 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by the flow alone (0002, D19).
+#   stage      implement, layer api: the run dispatches it when the plan has
+#              api tasks in this pass (0002, D17, D18).
+#   triggers   a backend change, with work in its layer.
+#   tools      what the role may use in its turn (0002, D15): read, edit, write,
+#              search, gofi (the index), verify (the loop's sensors), verdict,
+#              memory, shell. Exactly these are granted; no role gets a shell.
+tier: standard
+visibility: internal
+stage: implement
+layer: api
+triggers:
+  - all: [change.surface(backend), layer(api)]
+tools: [read, edit, write, search, gofi, verify, memory]

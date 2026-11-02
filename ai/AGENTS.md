@@ -113,13 +113,18 @@ Os comandos de **entrada** — o que a pessoa chama:
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
 | `/gofi-migrate` | Corpus Migration — traz specs, PRDs e memória de um formato antigo para o atual (facetas, índice em dois níveis, grafo); orquestra `gofi index migrate` |
 
-Os **papéis internos** — implementar, reparar, triar, auditar, documentar — não são slash
+Os **papéis internos** — planejar, implementar por camada, testar, reparar, triar, auditar, documentar — não são slash
 commands: ficam em `.claude/gofi/roles/` e o loop os despacha pelos fatos da
 mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 
 | Papel | Estágio | Faz |
 |-------|---------|-----|
-| `gofi-eng` | implement | implementa a mudança no backend |
+| `gofi-plan` | plan | decompõe a mudança de backend em tarefas por camada (`data`, `domain`, `integration`, `api`) |
+| `gofi-eng-data` | implement | camada `data`: modelo, migrations em par, repositório |
+| `gofi-eng` | implement | camada `domain`: erros, service, application, composition root — sem plano, todas as camadas |
+| `gofi-integrate` | implement | camada `integration`: adapters, SDKs externos, eventos, workers |
+| `gofi-eng-api` | implement | camada `api`: handler, middleware, autorização |
+| `gofi-test` | test | os testes, por cenário, a partir dos deltas — nunca quem escreveu o código |
 | `gofi-ui` | implement | implementa a camada de apresentação (web, mobile) |
 | `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
 | `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados — começa no tier light e sobe quando não progride |
