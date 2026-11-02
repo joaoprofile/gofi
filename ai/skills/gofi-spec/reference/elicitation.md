@@ -2,6 +2,18 @@
 
 ## Processo de Elicitação
 
+> **Cada fase alimenta um documento da mudança** (decisão 0003). O que é do
+> domínio vira requisito; o que é do stack vira design.
+>
+> | Fase | Alimenta |
+> |---|---|
+> | 1 — Identificação | a proposta (contextos, impacto) e o design §Abordagem |
+> | 2 — Modelagem DDD | requisitos e cenários (invariante → NÃO DEVE); entidades → design §Modelo de dados |
+> | 3 — Operações e API | requisitos (cada capacidade, com cenários) e design §Contratos |
+> | 4 — Arquitetura e infraestrutura | design (cache, mensageria, perfil de acesso, auth, env) |
+> | 5 — Confirmação | o resumo abaixo, antes de escrever |
+> | 6 — Escrita | `gofi change new` + `reference/change-writing.md` |
+
 ### Fase 1 — Identificação do serviço (sempre primeiro)
 
 Antes de modelar qualquer domínio, identifique **onde** o contexto vive.
@@ -197,7 +209,7 @@ Antes de gerar a spec, apresente um resumo estruturado e peça confirmação:
 |--------|------|--------|
 | ...    | ...  | ...    |
 
-**Regras de negócio:** {lista numerada}
+**Requisitos (REQ-NN, com o cenário principal):** {lista numerada}
 **Segurança:** {cookies? refresh token? IDP? RBAC? multi-tenant?}
 
 **Decisões de arquitetura:**
@@ -207,7 +219,9 @@ Antes de gerar a spec, apresente um resumo estruturado e peça confirmação:
 Está correto?
 ```
 
-### Fase 6 — Geração da spec
+### Fase 6 — Escrita da mudança
 
-Com o modelo confirmado, gere a spec em `specs/{contexto}/sdd-{contexto}.md`
-seguindo o template em `.claude/templates/sdd-template.md`.
+Com o modelo confirmado, crie a mudança — `gofi change new <id> --context
+<ctx>...` — e preencha a proposta, um delta por contexto e o design pelo
+template do pack, seguindo `reference/change-writing.md`. Feche com
+`gofi spec check <id>` em zero erros.

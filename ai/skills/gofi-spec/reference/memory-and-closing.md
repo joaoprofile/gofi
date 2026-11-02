@@ -2,6 +2,11 @@
 
 ## Versionamento — a versão conta estados de produção
 
+> **No formato 3 a versão da spec viva sobe sozinha:** o `gofi change archive`
+> a sobe um passo menor ao aplicar uma mudança aceita. Mudança nasce em `1.0` e
+> não é versionada à mão. O que segue vale para documentos do formato 2, até a
+> migração.
+
 Política completa em `.claude/expertise/harness-protocols/document-versioning.md` — **leia
 antes de tocar o frontmatter**. O essencial:
 
@@ -52,7 +57,8 @@ versao: "1.0"
 versao_prd: "{X.Y}" | n/a
 versao_spec: "{X.Y}"
 prd: prd/{contexto}/prd-{contexto}.md | n/a
-spec: specs/{contexto}/sdd-{contexto}.md
+spec: specs/{contexto}/spec.md        # a spec viva; ou sdd-{contexto}.md no formato 2
+mudanca: {id}                          # a mudança aberta, quando há uma
 diretorio: services/domain/{contexto}/
 atualizado: {data}
 ---
@@ -70,7 +76,7 @@ Conteúdo mínimo:
 
 - **Cabeçalho:**
   - `Status:` valor mais recente (`spec criada` | `spec criada **v{X.Y}**` | `em implementação` | `implementado` | `em QA`)
-  - `Próximo passo:` qual agente roda em seguida (ex.: `/gofi-eng para implementar a partir de specs/{contexto}/sdd-{contexto}.md`)
+  - `Próximo passo:` o que vem em seguida (ex.: `aprovar com gofi change approve {id}; depois /gofi-eng implementa a mudança`)
   - `PRD origem:` caminho do PRD
 - **Manifesto do serviço** (nome, module, banco, porta, prefixo, redis, auth)
 - **Resumo do contexto** (3–5 linhas — o que faz, principais decisões)
@@ -88,9 +94,9 @@ Conteúdo mínimo:
 
 ### Checklist de fechamento (rode mentalmente antes de devolver "spec gerada")
 
-- [ ] `specs/{contexto}/sdd-{contexto}.md` foi criado/atualizado
-- [ ] `gofi spec check {contexto}` sai com 0 erros
-- [ ] `specs/{outros-contextos}/sdd-*.md` afetados foram bumpados (se houve cross-spec impact)
+- [ ] A mudança está em `specs/changes/{id}/` — proposta, um delta por contexto tocado, design (ou `design: n/a`)
+- [ ] `gofi spec check {id}` sai com 0 erros
+- [ ] Nenhuma spec viva foi editada à mão — o que muda está nos deltas
 - [ ] `.claude/memory/contexts/{contexto}.md` frontmatter (`status: spec`, `versao_spec`, `atualizado`) + histórico refletem o estado atual
 - [ ] `.claude/memory/project.md` só tocado se nasceu serviço/binário novo
 - [ ] `.claude/memory/contexts/{outros-afetados}.md` foram atualizados (cross-spec)
@@ -115,7 +121,7 @@ Ver `.claude/expertise/harness-protocols/learning.md`.
 
 Em particular:
 - Correções nas perguntas de elicitação → atualize esta skill
-- Mudanças no formato da spec → atualize `templates/sdd-template.md`
+- Mudanças no formato dos documentos → atualize os templates (`templates/*-template.md`, e o design do pack em `sdk/<lang>/templates/`)
 - Lições de modelagem cross-language → atualize `knowledge/shared/` (genéricas, sem domínio)
 - Lições language-specific → atualize `.claude/sdk/<lang>/knowledge/` (genéricas, sem domínio)
 - Generalize qualquer trecho domínio-específico antes de salvar em knowledge

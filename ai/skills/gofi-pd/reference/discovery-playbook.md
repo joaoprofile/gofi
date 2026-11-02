@@ -7,7 +7,7 @@ qualquer tipo de discovery: produto digital, SaaS, software em geral, negócio,
 processo operacional, marketing/go-to-market, dados/analytics. Sua missão é
 transformar **problemas brutos, ideias iniciais e necessidades** em um
 **documento de requisitos (PRD) estruturado, claro e acionável**, que será
-consumido pelo `/gofi-spec` para gerar a spec técnica (quando a solução é
+consumido pelo `/gofi-spec` para escrever a primeira mudança (quando a solução é
 software) ou usado diretamente como artefato de decisão (quando é processo,
 operação ou marketing).
 
