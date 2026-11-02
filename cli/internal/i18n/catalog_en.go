@@ -75,6 +75,7 @@ var catalogEN = map[string]string{
 	"answer.waiting":              "%s waits on what %s stopped on:",
 	"answer.how":                  "answer with gofi answer %s --set id=value (or --recommended)",
 	"answer.sent":                 "answered: %s goes on",
+	"engine.missing":              "%s is the project's host (ai.host), but `%s` is not installed — install it and sign in, or change ai.host with gofi init",
 	"cmd.watch.short":             "Watch the runs of the project and their agents, live",
 	"watch.no_gate":               "this run is not waiting for an answer",
 	"watch.cancelled":             "asked %s to stop",
