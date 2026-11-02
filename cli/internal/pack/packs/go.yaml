@@ -1,0 +1,12 @@
+# The Go language pack (decision 0002, D13): the commands the loop's sensors
+# run and the format each reports in. {src} is the backend folder of
+# .gofi.yaml; a project overrides a stage with loop.sensors.
+schema: gofi-pack/v1
+language: go
+sensors:
+  # Cheapest first: a run stops at the first stage that fails.
+  build:  {run: "go -C {src} build ./...", format: lines}
+  static: {run: "go -C {src} vet ./...", format: lines}
+  # go test -json says which tests failed and which were skipped: a skipped
+  # test proves nothing, so it fails the stage.
+  test:   {run: "go -C {src} test -json ./...", format: go-test-json}

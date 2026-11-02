@@ -24,8 +24,22 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list`, os deltas e o design em `specs/changes/%s/`. Iteração %d da execução %s.\n\n",
 		s.Change, s.Context, s.Change, s.Iter, s.Run)
 	if s.Sensor != nil && len(s.Sensor.Failed) > 0 {
-		fmt.Fprintf(&b, "**Os sensores falharam em %s.** Corrija antes de qualquer outra coisa:\n\n```\n%s\n```\n\n",
-			strings.Join(s.Sensor.Failed, ", "), clip(s.Sensor.Output, 4000))
+		fmt.Fprintf(&b, "**Os sensores falharam em %s.** Corrija antes de qualquer outra coisa:\n\n", strings.Join(s.Sensor.Failed, ", "))
+		if len(s.Sensor.Findings) > 0 {
+			for _, f := range s.Sensor.Findings {
+				where := f.File
+				if f.Line > 0 {
+					where = fmt.Sprintf("%s:%d", f.File, f.Line)
+				}
+				if where == "" {
+					where = f.Rule
+				}
+				fmt.Fprintf(&b, "- `%s` %s\n", where, clip(f.Message, 1200))
+			}
+			b.WriteString("\n")
+		} else {
+			fmt.Fprintf(&b, "```\n%s\n```\n\n", clip(s.Sensor.Output, 4000))
+		}
 	}
 	if len(s.Open) > 0 {
 		b.WriteString("**Achados abertos da auditoria** — corrija todos, sem ampliar o escopo:\n\n")

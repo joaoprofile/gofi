@@ -71,6 +71,20 @@ type TurnResult struct {
 type SensorResult struct {
 	Failed []string `json:"failed,omitempty"`
 	Output string   `json:"output,omitempty"`
+	// Findings are the failure read into places — file, line, what is wrong
+	// — from the tool's own report: what the next turn is given instead of
+	// the raw output (0002, D6).
+	Findings []SensorFinding `json:"findings,omitempty"`
+}
+
+// SensorFinding is one thing a sensor found.
+type SensorFinding struct {
+	Stage    string `json:"stage"`
+	File     string `json:"file,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Rule     string `json:"rule,omitempty"`
+	Severity string `json:"severity"` // blocker | major
+	Message  string `json:"message"`
 }
 
 // Finding is the part of a verdict's finding the policy keeps.

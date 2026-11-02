@@ -45,6 +45,7 @@ func TestARunInAWorktreeLandsOnTheCurrentBranch(t *testing.T) {
 	runPorts.regenerate = func(context.Context, string) error { regenerated++; return nil }
 	t.Cleanup(func() { runPorts.open, runPorts.regenerate = nil, nil })
 	installRoles(t, root)
+	quietPorts(t)
 	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  sensors:\n    test: \"true\"\n    build: \"true\"\n")
 	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\ndesign: n/a\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
