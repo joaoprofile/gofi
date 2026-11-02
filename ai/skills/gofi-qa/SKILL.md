@@ -71,7 +71,8 @@ Segue a *Convenção de leitura dos agents* do AGENTS.md, com estes pontos do QA
 
 ## Saída e memória
 
-- **Memória do contexto:** refresh do `## Estado atual` + 1 linha no `## Histórico de versões`; `status`, `ressalvas` e `atualizado` no frontmatter (sem tocar `project.md`). O veredicto vira frontmatter assim — é o que o condutor lê para aceitar ou reabrir:
+- **Veredicto como dado:** `gofi verdict write {contexto}` com o JSON pela entrada padrão — `result` (`aprovado` | `reprovado`) e um achado por problema: `severity` (blocker, major, minor, suggestion), `rule` (o cenário `{ctx}/REQ-NN.n`, o princípio ou a regra do checklist), `symbol` quando há um nó do grafo, `file`/`line`, `owner` e `message`. O `owner` diz quem corrige: `eng` (o código não cumpre a mudança), `spec` (o contrato está errado ou incompleto — cenário, requisito, design) ou `pd` (lacuna de negócio). O comando confere a coerência, calcula a impressão digital e grava `status` e `ressalvas` na memória — é o que o condutor lê. → `reference/memory-and-spec-update.md` §3
+- **Memória do contexto:** refresh do `## Estado atual` + 1 linha no `## Histórico de versões` (`gofi memory write`), **antes** do veredicto — ele grava `status`, `ressalvas` e `atualizado` por cima.
 
   | Veredicto | `status` | `ressalvas` |
   |---|---|---|

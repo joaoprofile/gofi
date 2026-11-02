@@ -1,6 +1,7 @@
 package docs
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -112,4 +113,43 @@ func uncomment(v string) string {
 		return strings.TrimSpace(v[:i])
 	}
 	return v
+}
+
+// SetFields writes top-level frontmatter fields: a field that exists is
+// replaced on its line, one that does not goes before the closing fence. Every
+// other line, comments included, stays as it was, and so do line endings.
+func SetFields(doc string, fields [][2]string) (string, error) {
+	eol := "\n"
+	if strings.Contains(doc, "\r\n") {
+		eol = "\r\n"
+	}
+	lines := strings.Split(strings.ReplaceAll(doc, "\r\n", "\n"), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return "", fmt.Errorf("sem frontmatter")
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return "", fmt.Errorf("frontmatter sem a linha --- de fechamento")
+	}
+	for _, f := range fields {
+		line := f[0] + ": " + f[1]
+		found := false
+		for i := 1; i < end; i++ {
+			if strings.HasPrefix(lines[i], f[0]+":") {
+				lines[i], found = line, true
+				break
+			}
+		}
+		if !found {
+			lines = append(lines[:end], append([]string{line}, lines[end:]...)...)
+			end++
+		}
+	}
+	return strings.Join(lines, eol), nil
 }

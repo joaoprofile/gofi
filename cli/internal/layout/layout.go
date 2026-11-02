@@ -15,6 +15,9 @@ const (
 	DocsDir       = IndexDir + "/docs"
 	ManifestFile  = IndexDir + "/manifest.json"
 	ExtractorsDir = ".gofi/extractors"
+	// VerdictDir holds the audit's last structured verdict per context —
+	// local state of a run, like the run records, never versioned.
+	VerdictDir = ".gofi/verdict"
 )
 
 // Targets the index is built for, in build order.
