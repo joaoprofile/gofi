@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-	runIntakeKept, phaseTurn, nextStep, readVerdict, statusOf, rejected,
+	runIntakeKept, phaseTurn, nextStep, deliveryFlow, deliverable, deliverContext,
 	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract,
 } = require('./intake.js');
 const { RunRecord } = require('./runs.js');
@@ -62,7 +62,7 @@ const conduct = {
 		}
 		const answered = Boolean(answers && Object.keys(answers).length > 0);
 		const step = nextStep(result, answered);
-		this.plan = { text, result, next: 0, answers: answers || {}, stash: null, run: null, retried: false, outcome: '', verdict: '', decisions: {}, asking: [], askingFor: '' };
+		this.plan = { text, result, next: 0, answers: answers || {}, stash: null, run: null, outcome: '', verdict: '', decisions: {}, asking: [], askingFor: '' };
 		// A question about the project goes with the sections that answer it.
 		const turn = step === 'raw' && result.turn ? result.turn : text;
 		if (step !== 'direct' && turn === text) {
@@ -150,7 +150,11 @@ const conduct = {
 		if (!plan.run && i === 0) {
 			plan.run = new RunRecord(this.projectRoot, plan.result);
 		}
-		plan.before = readVerdict(this.projectRoot, plan.result);
+		const flow = deliveryFlow(phase.produces);
+		if (flow && !phase.elicit) {
+			this.conductDelivery(flow);
+			return;
+		}
 		let { text, model } = phaseTurn(phase);
 		plan.model = model;
 		if (phase.elicit_file) {
@@ -171,9 +175,60 @@ const conduct = {
 	},
 
 	/**
-	 * Takes the end of a phase's turn: stop on a failure, run the retry a
-	 * failed audit carries, wait for review after a PRD or a spec, run the
-	 * next phase, or end the plan.
+	 * Hands what the plan builds to the loop — every sealed change of the
+	 * context through the flow — and skips the build and audit phases the flow
+	 * holds. Accepted, the plan goes on; otherwise it ends with the outcome.
+	 *
+	 * @param {string} flow
+	 */
+	async conductDelivery(flow) {
+		const plan = this.plan;
+		const phases = plan.result.plan;
+		const context = plan.result.context && plan.result.context.name;
+		while (plan.next < phases.length && deliverable(phases[plan.next])) {
+			plan.next++;
+		}
+		if (!context) {
+			this.endPlan('Sem contexto, nada pode ser entregue: o plano para aqui.');
+			return;
+		}
+		this.running = true;
+		this.setRunning(true);
+		this.post({ type: 'notice', text: `Entrega: o loop executa as mudanças seladas de ${context} (fluxo ${flow}).` });
+		const done = await this.deliveryRunner(this.gofiPath(), this.projectRoot, flow, context, (e) => {
+			if (e.ev === 'node.start') {
+				this.post({ type: 'notice', text: `● ${e.node}` });
+			} else if (e.ev === 'edge') {
+				this.post({ type: 'notice', text: `→ ${e.to}  (${e.why})` });
+			} else if (e.ev === 'node.failed') {
+				this.post({ type: 'notice', text: `${e.node}: ${e.why}` });
+			}
+		});
+		if (plan.run) {
+			plan.run.phase({ role: 'gofi run', tier: '', why: flow, tier_why: '', seconds: 0, cost_usd: 0, ok: done.ok && done.outcome === 'accepted' });
+		}
+		plan.verdict = done.outcome;
+		if (!done.ok || done.outcome !== 'accepted') {
+			this.running = false;
+			this.setRunning(false);
+			plan.outcome = done.outcome === 'accepted' ? 'failed' : 'escalated';
+			this.endPlan(`A entrega não foi aceita (${done.outcome || 'falhou'}): o plano para aqui.${done.output ? `\n${done.output}` : ''}`);
+			return;
+		}
+		if (plan.next >= phases.length) {
+			this.running = false;
+			this.setRunning(false);
+			plan.outcome = 'done';
+			this.endPlan('Plano concluído: a mudança foi entregue e arquivada.');
+			return;
+		}
+		this.conductNext();
+	},
+
+	/**
+	 * Takes the end of a phase's turn: stop on a failure, ask what an
+	 * elicitation left, wait for review after a PRD or a spec, run the next
+	 * phase, or end the plan.
 	 *
 	 * @param {{isError?: boolean, costUsd?: number, durationMs?: number, error?: string}} event
 	 */
@@ -184,7 +239,7 @@ const conduct = {
 		const done = phases[plan.next - 1];
 		let elicited = null;
 		let elicitError = null;
-		if (done.elicit_file && !event.isError) {
+		if (done.elicit && done.elicit_file && !event.isError) {
 			try {
 				elicited = readElicitation(this.projectRoot, done.elicit_file);
 			} catch (err) {
@@ -219,54 +274,6 @@ const conduct = {
 			this.setRunning(false);
 			this.askNextDecision();
 			return;
-		}
-		if (elicited && elicited.questions.length > 0) {
-			this.running = false;
-			this.setRunning(false);
-			if (!done.on_block || done.on_block.length === 0) {
-				// Stopped again after the spec was completed: the person's to look at.
-				plan.outcome = 'stopped';
-				this.endPlan(`/${done.role} parou de novo por decisões que a spec não cobre (em ${done.elicit_file}): o plano para aqui.`);
-				return;
-			}
-			// The implementation stopped on decisions the spec does not cover:
-			// asked here, recorded in the spec, and the implementation runs again.
-			const recorder = done.on_block[0].role;
-			plan.decisions[recorder] = { e: elicited, answers: {} };
-			phases.splice(plan.next, 0, ...done.on_block);
-			plan.asking = elicitQuestions(elicited);
-			plan.askingFor = recorder;
-			this.post({
-				type: 'notice',
-				text: recorder === done.role
-					? `/${done.role} parou por decisões que o projeto não responde: responda, e ela roda de novo com as respostas.`
-					: `/${done.role} parou por decisões que a spec não cobre: /${recorder} as registra na spec, e a implementação roda de novo.`,
-			});
-			this.askNextDecision();
-			return;
-		}
-		if (done.produces === 'audit') {
-			const now = readVerdict(this.projectRoot, plan.result);
-			plan.verdict = statusOf(now);
-			if (rejected(plan.before, now)) {
-				if (done.on_reject && done.on_reject.length > 0) {
-					// The retry the plan carries: the implementation one tier up,
-					// then the audit again.
-					phases.splice(plan.next, 0, ...done.on_reject);
-					plan.retried = true;
-					const fix = done.on_reject[0];
-					this.post({ type: 'notice', text: `O QA reprovou a entrega: /${fix.role} de novo, no nível ${fix.tier}, e a auditoria de novo.` });
-					setImmediate(() => this.conductNext());
-					return;
-				}
-				if (plan.retried) {
-					this.running = false;
-					this.setRunning(false);
-					plan.outcome = 'escalated';
-					this.endPlan('Reprovado de novo depois da correção: o plano para aqui para você ver os achados.');
-					return;
-				}
-			}
 		}
 		if (plan.next >= phases.length) {
 			this.running = false;
@@ -414,6 +421,7 @@ function installConduct(ChatClass) {
 	Object.assign(ChatClass.prototype, conduct);
 	ChatClass.prototype.intakeRunner = runIntakeKept;
 	ChatClass.prototype.sealRunner = sealContract;
+	ChatClass.prototype.deliveryRunner = deliverContext;
 }
 
 module.exports = { installConduct };
