@@ -35,7 +35,8 @@ versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1
 versao_prd: "{X.Y}"               # ou n/a
 versao_spec: "{X.Y}"              # ou n/a (contexto sem spec / eng-reverse)
 prd: prd/{contexto}/prd-{contexto}.md      # ou n/a
-spec: specs/{contexto}/sdd-{contexto}.md   # ou n/a
+spec: specs/{contexto}/spec.md            # a spec viva; formato 2: sdd-{contexto}.md; ou n/a
+mudanca: {id}                            # a mudança aberta, quando há uma
 diretorio: services/domain/{contexto}/
 keywords: [{8-14 termos kebab-case de busca — sinal de descoberta RAG}]
 atualizado: {YYYY-MM-DD}
@@ -88,7 +89,7 @@ status: {prd|spec|em_implementacao|implementado|aprovado|reprovado}
 ressalvas: {N}                    # só após QA
 versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
 versao_prd: "{X.Y}" | n/a         # ponteiro p/ o doc PRD (versão própria dele)
-versao_spec: "{X.Y}" | n/a        # ponteiro p/ o doc SDD (versão própria dele)
+versao_spec: "{X.Y}" | n/a        # ponteiro p/ a versão da spec viva (sobe no arquivamento de uma mudança)
 prd: {path} | n/a
 spec: {path} | n/a
 diretorio: {path}

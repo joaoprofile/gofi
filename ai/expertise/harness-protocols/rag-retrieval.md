@@ -16,7 +16,8 @@ no código). **Pergunte; não carregue.**
 ```bash
 gofi find "ordem de delete chave estrangeira"
 gofi show table:core_company     # quem documenta + quem implementa
-gofi show sdd-churn.md      # backlinks e saídas
+gofi show specs/churn/spec.md         # requisitos, backlinks e saídas
+gofi show specs/churn/spec.md#REQ-04  # um requisito, com os cenários
 gofi show ctx:pricing         # a árvore do contexto
 ```
 
@@ -67,7 +68,7 @@ do frontmatter) + N documentos, cada um com **frontmatter + `keywords`**. Você
 
 | Corpus | INDEX | Regenerado por |
 |--------|-------|----------------|
-| Specs (SDD) | `specs/INDEX.md` | `gofi index docs` |
+| Specs vivas e mudanças | `specs/INDEX.md` | `gofi index docs` |
 | PRDs | `prd/INDEX.md` | `gofi index docs` |
 | Institucional (negócio) | `.claude/institutional/{project.name}/INDEX.md` | manual (um fato = uma linha) |
 | Estado por-contexto | *(sem índice commitado)* | `/gofi-status` lê o frontmatter dos `contexts/*.md` sob demanda |

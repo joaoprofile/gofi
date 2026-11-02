@@ -41,10 +41,20 @@
 |---------|---------|-------|-------|
 {{end}}---
 
+## Princípios
+
+> Os portões que todo design de mudança respeita e o `gofi-qa` audita — a
+> *constitution* do projeto. Uma linha cada, verificável. Um design que viola um
+> diz por quê, em ADR. Ex.: "toda entidade carrega o tenant", "toda escrita é
+> idempotente", "nenhum dado pessoal sai do serviço sem máscara".
+
+- {princípio}
+
 ## Convenções
 
-Specs em `specs/{contexto}/sdd-{contexto}.md` e PRDs em `prd/{contexto}/prd-{contexto}.md`
-(raiz do projeto, fora de `.claude/`) — ambos **corpora RAG**: descubra pelos
+Specs vivas em `specs/{contexto}/spec.md`, mudanças em `specs/changes/{id}/` e PRDs
+em `prd/{contexto}/prd-{contexto}.md` (raiz do projeto, fora de `.claude/`) — **corpora
+RAG** (decisão 0003): descubra pelos
 `specs/INDEX.md` / `prd/INDEX.md` (case por `keywords`), nunca varra a pasta.
 Protocolo em `.claude/knowledge/shared/rag-retrieval-protocol.md`.
 Rastreio por contexto em `memory/contexts/{contexto}.md` (frontmatter + histórico).

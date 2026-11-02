@@ -106,9 +106,9 @@ as leis que são dela. Numeradas para serem citadas (`Lei comum 3`).
 | Comando | Função |
 |---------|--------|
 | `/gofi-pd` | Product Discovery — gera PRD a partir de problema bruto |
-| `/gofi-spec` | Specification Architect — gera spec SDD a partir do PRD |
-| `/gofi-eng` | Context Engineer — implementa contexto a partir da spec |
-| `/gofi-ui` | Context UI/UX — implementa a camada de apresentação a partir da spec |
+| `/gofi-spec` | Specification Architect — escreve o contrato: mudanças (proposta, deltas, design) e a baseline da spec viva |
+| `/gofi-eng` | Context Engineer — implementa uma mudança aprovada |
+| `/gofi-ui` | Context UI/UX — implementa a camada de apresentação de uma mudança aprovada |
 | `/gofi-ops` | Platform & Delivery — DevOps especialista (Terraform, OCI, Go build, CI/CD Azure DevOps/GitHub Actions); provisiona IaC + pipelines a partir da spec de infra |
 | `/gofi-qa` | Quality Auditor — audita implementação contra spec e padrões |
 | `/gofi-doc` | Documentation Generator (Frontend & QA) — gera doc de contrato a partir de handlers Go |
@@ -116,7 +116,18 @@ as leis que são dela. Numeradas para serem citadas (`Lei comum 3`).
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
 | `/gofi-full` | Full-Cycle Orchestrator — encadeia `gofi-pd → gofi-spec → gofi-eng → gofi-qa` em fluxo contínuo, volta à fase anterior quando reprova e segue até o QA aprovar sem ressalvas |
 
-Pipeline típico: `/gofi-pd → /gofi-spec → /gofi-eng → /gofi-qa` (ou `/gofi-full` para o ciclo inteiro orquestrado).
+Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-eng → /gofi-qa → gofi change archive` (ou `/gofi-full` para o ciclo inteiro orquestrado).
+
+**O contrato (decisão 0003, formato 3).** `specs/{contexto}/spec.md` é a
+**verdade viva** de um contexto: só requisitos `### Requisito: REQ-NN` com
+DEVE / NÃO DEVE e cenários `#### Cenário: REQ-NN.n` com DADO / QUANDO /
+ENTÃO — neutra de linguagem. **Ela não se edita**: todo trabalho é uma
+**mudança** em `specs/changes/{id}/` (proposta, um delta por contexto, design no
+template do pack), aprovada pela pessoa (`gofi change approve`), implementada e
+aplicada às specs vivas no arquivamento (`gofi change archive`). Contexto novo é
+a mudança que só ADICIONA. Leia um requisito com `gofi show
+specs/{contexto}/spec.md#REQ-NN`; valide qualquer documento do contrato com
+`gofi spec check`. Aprovar nunca é do agente.
 Camada de apresentação: `/gofi-ui` após a spec (e o contrato do `gofi-eng`).
 Plataforma/infra: `/gofi-spec` (infra) → `/gofi-ops`.
 Doc de contrato: abrir o handler no IDE → `/gofi-doc`.
@@ -162,11 +173,12 @@ vale neste projeto — nunca entra em skill).
 | Estado por-contexto (cabeça: frontmatter + Estado atual consolidado + Histórico de versões) | `.claude/memory/contexts/{contexto}.md` | Específico |
 | Versões antigas transbordadas (só quando o changelog cresce) | `.claude/memory/contexts/{contexto}/history.md` | Específico |
 | Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |
-| Specs do projeto | `specs/{contexto}/sdd-{contexto}.md` | Específico |
+| Spec viva de um contexto (requisitos + cenários) | `specs/{contexto}/spec.md` (formato 2, até migrar: `sdd-{contexto}.md`) | Específico |
+| Mudanças (o contrato em andamento) | `specs/changes/{id}/` — `proposal.md`, `deltas/{ctx}.md`, `design.md`, `tasks.md`; aplicadas em `specs/changes/archive/` | Específico |
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
 | Índice de retrieval de specs/PRDs (2 níveis) | `specs/INDEX.md` (roteador de contextos) + `specs/{contexto}/INDEX.md` (shard); idem `prd/`. Derivado: `gofi index docs` | Específico (derivado) |
 | **Busca e navegação no corpus** | `gofi find "<pergunta>"` — busca documentos e código de uma vez e devolve doc/§/linhas (`--in` estreita as áreas); `gofi show` descreve um doc, §seção, `ctx:`, `table:` ou símbolo; `gofi index check` aponta os órfãos | Específico (derivado) |
-| Grafo de documentos | `.gofi/index/docs/graph.json` — `declara`/`cita`/`wikilink`/`toca`/`pertence`/`implementa`. Derivado, fora do git: `gofi find`/`gofi show` o reconstroem sozinhos quando falta ou quando algum documento muda | Específico (derivado) |
+| Grafo de documentos | `.gofi/index/docs/graph.json` — `declara`/`cita`/`wikilink`/`toca`/`pertence`/`implementa`/`depende`, e requisitos e cenários (`req:`/`cen:`) com `especifica`/`adiciona`/`modifica`/`remove`. Derivado, fora do git: `gofi find`/`gofi show` o reconstroem sozinhos quando falta ou quando algum documento muda | Específico (derivado) |
 | Léxico controlado das facetas | `.claude/lexicon/*.md` — `entidades` (do schema), `operacoes`, `marketplaces`, `sinonimos` (ponte entre a língua da pergunta e a do identificador) | Específico |
 | Protocolo de retrieval (ler os corpora gastando poucos tokens) | `.claude/expertise/harness-protocols/rag-retrieval.md` | Portável |
 | Grafo de código (mapa derivado: quem chama quem, a que contexto pertence) | `.gofi/index/code/` — **um escopo por árvore**: `gofi_graph_index.json` na raiz lista todos (backend em `.`, cada superfície de UI em `{nome}/`, SDK em `sdk/`), e cada escopo tem o seu `gofi_graph_report.md`. Consulta por `gofi find --in code` (achar) e `gofi show` (entender quem chama). Gerado por `gofi index code`, **nunca** editado à mão | Específico (derivado) |
@@ -244,7 +256,7 @@ e arquivos variam por agent); aqui fica o denominador comum:
 Ao concluir uma fase, cada agent **deve atualizar**:
 - `.claude/memory/contexts/{contexto}.md` — **frontmatter** (`versao`, `status`, `versao_*`, `atualizado`, `keywords`) + reescrita do `## Estado atual` + 1 linha no `## Histórico de versões` (baseline consolidada — **sem** journal datado `gofi-{nome}: {data}`). É o **único** lugar de estado por-contexto.
 - `.claude/memory/project.md` **só** quando nasce um serviço/binário novo (tabela "Serviços").
-- A spec em `specs/{contexto}/sdd-{contexto}.md` quando o agent é gofi-eng ou gofi-qa
+- **Nunca** a spec viva nem uma mudança aprovada: ambas são seladas. O que muda o contrato é uma mudança nova (gofi-spec); a versão da spec viva sobe no arquivamento.
 
 > Estado por-contexto **nunca** vai para `project.md` (evita conflito de git entre devs em contextos diferentes). O índice global é gerado por `/gofi-status`. Protocolo completo em `expertise/harness-protocols/memory.md`.
 
