@@ -17,6 +17,11 @@ Próprias do `/gofi-test`:
 1. **Um teste por cenário** ADICIONADO ou MODIFICADO, com `gofi:tests REQ-NN.n`
    (com o contexto, `pedidos/REQ-04.1`, quando a mudança toca mais de um). O
    DADO vira o arranjo, o QUANDO a chamada, o ENTÃO e cada `E` as asserções.
+   **E a regressão que a auditoria pedir.** Num retorno, um achado que pede
+   teste — um caso que trava um defeito corrigido, um limite que o cenário
+   implica — é seu: escreva-o ancorado no requisito (`gofi:tests REQ-NN`),
+   com o esperado derivado do requisito, nunca do código. Só um caso que
+   contradiz o requisito é pergunta.
 2. **Do código, só a superfície.** Leia as assinaturas públicas que o teste
    chama (`gofi show <símbolo>`), nunca o corpo das funções para escolher o
    valor esperado: o esperado vem do cenário.
@@ -27,6 +32,9 @@ Próprias do `/gofi-test`:
    se testa como está escrito (ambíguo, sem ENTÃO verificável), grave a
    pergunta no arquivo de decisões do turno.
 5. **Mocks handcraft**, sem framework de mock — `.claude/gofi/roles/gofi-eng/reference/rules-core.md`.
+
+6. **O turno é um só.** Tudo o que você vai entregar, entrega neste turno: não
+   deixe trabalho para depois nem para outro agente.
 
 ## Workflow
 

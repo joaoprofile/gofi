@@ -474,6 +474,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		Gate:     gate,
 		Policy:   policy,
 		IsTest:   langPack.IsTest,
+		IsSource: langPack.IsSource,
 		OnEvent:  report,
 	}
 	if !o.Events {

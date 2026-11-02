@@ -93,9 +93,11 @@ var claudeGrants = map[string][]string{
 	"shell":   {"Bash"},
 }
 
-// gated are the tools that change the project or reach past it: refused to
-// a role whose contract does not grant them.
-var gated = []string{"Bash", "Edit", "MultiEdit", "NotebookEdit", "Write"}
+// gated are the tools that change the project or reach past it, refused to
+// a role whose contract does not grant them — and the subagents: a turn is
+// one session, and work handed to a subagent in the background is lost when
+// the turn ends.
+var gated = []string{"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "NotebookEdit", "Write", "Task", "Agent", "WebFetch", "WebSearch"}
 
 // claudeTools turns a contract's grant into Claude Code's allowed tools and
 // the gated ones it refuses.
