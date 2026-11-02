@@ -171,6 +171,26 @@ type deliverOpts struct {
 	RunID string
 }
 
+// agentsCallThisGofi puts the folder of the running gofi first on the PATH
+// the agents inherit: the commands a turn is told to run — gofi verdict
+// write, gofi index — must be this version's, not an older gofi installed
+// elsewhere on the PATH.
+func agentsCallThisGofi() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	dir := filepath.Dir(exe)
+	path := os.Getenv("PATH")
+	if first, _, _ := strings.Cut(path, string(os.PathListSeparator)); first == dir {
+		return
+	}
+	_ = os.Setenv("PATH", dir+string(os.PathListSeparator)+path)
+}
+
 // newRunID names a new run by the time it starts, made unique when another
 // started in the same second.
 func newRunID(root string) string {
@@ -254,6 +274,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 			return "", fmt.Errorf("%s: %s — gofi flow check %s", f.Source, p.Message, o.Flow)
 		}
 	}
+	agentsCallThisGofi()
 	open := runPorts.open
 	if open == nil {
 		mode := o.Mode
@@ -426,13 +447,17 @@ func sealedChange(root, change string) (string, error) {
 }
 
 // sensorCommands are the commands of each stage: loop.sensors, with test
-// defaulting to the test section's default task.
+// defaulting to the test section's default task and build, on a Go backend,
+// to building it.
 func sensorCommands(cfg *config.GofiConfig) map[string]string {
 	cmds := map[string]string{}
 	if cfg.Loop != nil {
 		for k, v := range cfg.Loop.Sensors {
 			cmds[k] = v
 		}
+	}
+	if _, ok := cmds["build"]; !ok && backendLanguage(cfg) == config.LanguageGo {
+		cmds["build"] = "go -C " + cfg.Backend.Path + " build ./..."
 	}
 	if _, ok := cmds["test"]; !ok {
 		if t, ok := cfg.Test.Tasks[cfg.Test.Default]; ok && !strings.HasPrefix(strings.TrimSpace(t.Run), "echo ") {

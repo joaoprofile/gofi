@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
@@ -112,5 +113,33 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	var exit *ExitCodeError
 	if _, err := run(newRunCmd); !errors.As(err, &exit) && err == nil {
 		t.Error("run with nothing named passed")
+	}
+}
+
+// On a Go backend the build sensor builds it unless loop.sensors says
+// otherwise; test is the test section's default task.
+func TestTheSensorsDefaultToTheProjectsBuildAndTests(t *testing.T) {
+	cfg := &config.GofiConfig{Backend: &config.Backend{Language: config.LanguageGo, Path: "backend"},
+		Test: config.DefaultTestSection(config.LanguageGo, "backend")}
+	got := sensorCommands(cfg)
+	if got["build"] != "go -C backend build ./..." || !strings.Contains(got["test"], "test ./...") {
+		t.Errorf("sensors = %v", got)
+	}
+	cfg.Loop = &config.Loop{Sensors: map[string]string{"build": "make build"}}
+	if got := sensorCommands(cfg); got["build"] != "make build" {
+		t.Errorf("loop.sensors did not win: %v", got)
+	}
+}
+
+// The agents of a run call the gofi that supervises it, first on their PATH.
+func TestTheAgentsCallTheGofiThatSupervisesThem(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin")
+	agentsCallThisGofi()
+	agentsCallThisGofi()
+	exe, _ := os.Executable()
+	exe, _ = filepath.EvalSymlinks(exe)
+	want := filepath.Dir(exe) + string(os.PathListSeparator) + "/usr/bin"
+	if os.Getenv("PATH") != want {
+		t.Errorf("PATH = %q, want %q", os.Getenv("PATH"), want)
 	}
 }

@@ -282,6 +282,23 @@ func TestAMissingVerdictStopsAndTheRunResumes(t *testing.T) {
 	}
 }
 
+// Resumed still without its verdict, the run goes back to the audit, which
+// writes it this time: reading the policy again would only fail again.
+func TestAResumeWithoutTheVerdictRunsTheAuditAgain(t *testing.T) {
+	w := newWorld(t)
+	if _, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos"); err == nil {
+		t.Fatal("the run went on without a verdict")
+	}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	s, err := w.runner.Resume(context.Background(), "r-1")
+	if err != nil || s.Outcome != "accepted" {
+		t.Fatalf("resume: %+v, %v", s, err)
+	}
+	if got := path(t, w.root); got != "implement sense audit policy audit policy accepted" {
+		t.Errorf("path %s", got)
+	}
+}
+
 // The same world gives the same log, byte for byte.
 func TestTheRunIsDeterministic(t *testing.T) {
 	logs := []string{}

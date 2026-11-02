@@ -93,6 +93,9 @@ type State struct {
 	// Taken counts how many times each edge was taken ("from>to").
 	Taken map[string]int `json:"taken"`
 	Iter  int            `json:"iter"`
+	// Agent is the last agent node run: where a resume goes back to when its
+	// turn did not leave what the node after it reads.
+	Agent string `json:"agent,omitempty"`
 
 	Sensor   *SensorResult `json:"sensor,omitempty"`
 	Verdict  string        `json:"verdict,omitempty"` // clean | caveats | rejected
@@ -166,6 +169,15 @@ func (r *Runner) Resume(ctx context.Context, run string) (*State, error) {
 		return s, fmt.Errorf("run %s ended (%s)", run, s.Outcome)
 	}
 	r.seq = countEvents(r.Root, run)
+	if n := r.Flow.Nodes[s.Node]; n.Kind == KindPolicy && s.Agent != "" {
+		// Stopped for a verdict the audit never wrote: reading it again finds
+		// nothing, so the audit runs again.
+		if v, _ := r.Verdicts.Read(s.Context); v == nil || v.Run != s.Run || v.Iter != s.Iter {
+			r.emit(s, Event{Ev: "run.resume", Node: s.Agent, Why: "sem veredicto desta iteração: " + s.Agent + " roda de novo"})
+			s.Node = s.Agent
+			return r.Continue(ctx, s)
+		}
+	}
 	r.emit(s, Event{Ev: "run.resume", Node: s.Node})
 	return r.Continue(ctx, s)
 }
@@ -208,6 +220,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 	switch n.Kind {
 	case KindAgent:
 		s.Iter++
+		s.Agent = name
 		elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
 		prompt := r.Brief(n, s, elicit)
 		if s.Answered && s.Elicit != "" {
