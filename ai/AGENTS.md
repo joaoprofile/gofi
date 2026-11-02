@@ -103,20 +103,29 @@ as leis que são dela. Numeradas para serem citadas (`Lei comum 3`).
 
 ## Skills disponíveis
 
+Os comandos de **entrada** — o que a pessoa chama:
+
 | Comando | Função |
 |---------|--------|
 | `/gofi-pd` | Product Discovery — gera PRD a partir de problema bruto |
 | `/gofi-spec` | Specification Architect — escreve o contrato: mudanças (proposta, deltas, design) e a baseline da spec viva |
-| `/gofi-eng` | Context Engineer — implementa uma mudança aprovada |
-| `/gofi-ui` | Context UI/UX — implementa a camada de apresentação de uma mudança aprovada |
-| `/gofi-ops` | Platform & Delivery — DevOps especialista (Terraform, OCI, Go build, CI/CD Azure DevOps/GitHub Actions); provisiona IaC + pipelines a partir da spec de infra |
-| `/gofi-qa` | Quality Auditor — audita implementação contra spec e padrões |
-| `/gofi-doc` | Documentation Generator (Frontend & QA) — gera doc de contrato a partir de handlers Go |
-| `/gofi-migrate` | Corpus Migration — traz specs, PRDs e memória de um formato antigo para o atual (facetas, índice em dois níveis, grafo); orquestra `gofi index migrate` |
+| `/gofi-run` | Delivery Runner — leva uma mudança aprovada ao loop (`gofi run`), acompanha e repassa as perguntas do portão |
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
-| `/gofi-full` | Full-Cycle Orchestrator — encadeia `gofi-pd → gofi-spec → gofi-eng → gofi-qa` em fluxo contínuo, volta à fase anterior quando reprova e segue até o QA aprovar sem ressalvas |
+| `/gofi-migrate` | Corpus Migration — traz specs, PRDs e memória de um formato antigo para o atual (facetas, índice em dois níveis, grafo); orquestra `gofi index migrate` |
 
-Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-eng → /gofi-qa → gofi change archive` (ou `/gofi-full` para o ciclo inteiro orquestrado).
+Os **papéis internos** — implementar, auditar, documentar — não são slash
+commands: ficam em `.claude/gofi/roles/` e o loop os despacha pelos fatos da
+mudança (`gofi run <mudança> --explain` mostra quem e por quê):
+
+| Papel | Estágio | Faz |
+|-------|---------|-----|
+| `gofi-eng` | implement | implementa a mudança no backend |
+| `gofi-ui` | implement | implementa a camada de apresentação (web, mobile) |
+| `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
+| `gofi-qa` | audit | audita a implementação contra a mudança e os padrões |
+| `gofi-doc` | deliver | doc de contrato para front e QA a partir dos handlers |
+
+Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-run` — o loop implementa, verifica, audita, corrige e arquiva sozinho.
 
 **O contrato (decisão 0003, formato 3).** `specs/{contexto}/spec.md` é a
 **verdade viva** de um contexto: só requisitos `### Requisito: REQ-NN` com

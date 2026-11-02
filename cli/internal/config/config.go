@@ -54,7 +54,7 @@ const (
 	AgentQA     = "gofi-qa"
 	AgentDoc    = "gofi-doc"
 	AgentStatus = "gofi-status"
-	AgentFull   = "gofi-full"
+	AgentRun    = "gofi-run"
 
 	// UI design systems, keyed by surface.
 	DSWeb    = "gofi-ui"

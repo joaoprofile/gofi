@@ -40,7 +40,7 @@ type Contract struct {
 	// Tier is the capability the role needs; the host turns it into a model.
 	Tier host.Tier `yaml:"tier"`
 	// Produces is the artifact the role delivers. A role that produces none
-	// — a conductor such as gofi-full — is never planned as a phase.
+	// — an entry such as gofi-run — is never planned as a phase.
 	Produces string `yaml:"produces"`
 	// Requires lists what has to exist before the role runs; the planner puts
 	// the role that produces each missing one first.

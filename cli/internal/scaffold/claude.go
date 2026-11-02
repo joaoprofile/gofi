@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -20,7 +21,14 @@ import (
 var allSkills = []string{
 	"gofi-pd", "gofi-spec", "gofi-eng", "gofi-ui",
 	"gofi-ops", "gofi-qa", "gofi-doc", "gofi-status",
-	"gofi-full",
+	"gofi-run",
+}
+
+// retiredSkills are skills gofi no longer ships, with what replaced them: an
+// update retires the copy a project has, as it does a role that moved — what
+// nobody edited goes, an edit stays for the audit.
+var retiredSkills = []string{
+	"gofi-full", // replaced by gofi-run: the in-session pipeline called slash commands that are internal roles now
 }
 
 // Skills returns every skill gofi ships, for TemplateData.Agents: the memory
@@ -223,6 +231,11 @@ func installSkills(agentsFS fs.FS, srcRoot, dest string, p *preserver) ([]string
 	skills, err := listSkillNames(agentsFS, srcRoot)
 	if err != nil {
 		return created, fmt.Errorf("list skills: %w", err)
+	}
+	for _, old := range retiredSkills {
+		if !slices.Contains(skills, old) {
+			retireTree(p, filepath.Join(dest, skillsDirName, old))
+		}
 	}
 	for _, skill := range skills {
 		body, err := readSkillSource(agentsFS, srcRoot, skill)

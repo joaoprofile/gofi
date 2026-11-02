@@ -74,7 +74,7 @@ atualizado: {data}
 ```
 
 `⚠️ Aprovado com ressalvas` deixa `status: aprovado` com `ressalvas` maior que
-zero — e **não** encerra o ciclo: o condutor (CLI, painel e `/gofi-full`) só
+zero — e **não** encerra o ciclo: o loop (`gofi run`, como quer que tenha sido iniciado) só
 aceita `aprovado` com `ressalvas: 0` e reabre a implementação nos demais casos.
 
 > O índice global (panorama de todos os contextos) é gerado por `/gofi-status`

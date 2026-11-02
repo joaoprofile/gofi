@@ -152,7 +152,7 @@ o invariante "1 dono por contexto = zero conflito de git".
 
 `ressalvas` acompanha o veredicto do QA: MAJOR + MINOR pendentes. Só
 `aprovado` com `ressalvas: 0` encerra o ciclo — `aprovado` com ressalvas reabre
-a implementação, na CLI, no painel e no `/gofi-full`.
+a implementação no loop (`gofi run`), seja quem o tenha iniciado.
 
 ## Regras de escrita por agent
 
