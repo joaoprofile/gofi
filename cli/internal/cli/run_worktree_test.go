@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,7 +41,9 @@ func TestARunInAWorktreeLandsOnTheCurrentBranch(t *testing.T) {
 		sessionDirs = append(sessionDirs, dir)
 		return fakeSession{root: dir, prompts: &prompts}
 	}
-	t.Cleanup(func() { runPorts.open = nil })
+	regenerated := 0
+	runPorts.regenerate = func(context.Context, string) error { regenerated++; return nil }
+	t.Cleanup(func() { runPorts.open, runPorts.regenerate = nil, nil })
 	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  sensors:\n    test: \"true\"\n    build: \"true\"\n")
 	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\ndesign: n/a\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
@@ -92,6 +95,9 @@ func TestARunInAWorktreeLandsOnTheCurrentBranch(t *testing.T) {
 	runs, _ := loop.List(root)
 	if len(runs) != 1 || runs[0].State.Landing != "integrada" {
 		t.Fatalf("runs = %+v", runs)
+	}
+	if regenerated == 0 {
+		t.Error("the commit did not regenerate the worktree's derived files")
 	}
 	if _, err := os.Stat(runs[0].State.Worktree); err == nil {
 		t.Error("the landed worktree was left")

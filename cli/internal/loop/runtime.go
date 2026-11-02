@@ -537,6 +537,22 @@ func Events(root, run string) ([]Event, error) {
 	return out, nil
 }
 
+// AppendEvent writes one more event to a run's log, after the runtime's:
+// what happens to a run past its terminal node — landing — is in the same
+// log gofi logs and gofi watch read.
+func AppendEvent(root, run string, e Event) Event {
+	e.Seq = countEvents(root, run) + 1
+	if e.T.IsZero() {
+		e.T = time.Now().UTC()
+	}
+	line, _ := json.Marshal(e)
+	if f, err := os.OpenFile(filepath.Join(Dir(root, run), "events.ndjson"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		_, _ = f.Write(append(line, '\n'))
+		_ = f.Close()
+	}
+	return e
+}
+
 func countEvents(root, run string) int {
 	evs, _ := Events(root, run)
 	if len(evs) == 0 {
