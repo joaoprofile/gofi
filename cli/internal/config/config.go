@@ -185,6 +185,10 @@ type Loop struct {
 	// recorded as not checked — never as passed. test defaults to the test
 	// section's default task.
 	Sensors map[string]string `yaml:"sensors,omitempty"`
+	// GateTimeout is how long a run waits for a decision to be answered
+	// (gofi answer) before it ends in impasse: a Go duration, 30m when
+	// empty, 0 not to wait.
+	GateTimeout string `yaml:"gate_timeout,omitempty"`
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.

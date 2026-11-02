@@ -54,6 +54,7 @@ func ReadLock(root, run string) (Lock, bool) {
 // Liveness of a run, as gofi ps shows it.
 const (
 	Running     = "rodando"
+	Blocked     = "bloqueada"    // running, waiting at its gate: gofi answer
 	Interrupted = "interrompida" // a supervisor held it and is gone: resume it
 	Ended       = "encerrada"
 	Paused      = "parada" // stopped at a node, nobody carrying it: resume it
@@ -91,6 +92,9 @@ func List(root string) ([]Info, error) {
 			info.Liveness = Ended
 		case locked && alive(l.PID):
 			info.Liveness, info.PID = Running, l.PID
+			if _, open := OpenGate(root, e.Name()); open {
+				info.Liveness = Blocked
+			}
 		case locked:
 			info.Liveness = Interrupted
 		default:

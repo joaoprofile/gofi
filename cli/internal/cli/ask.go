@@ -102,7 +102,7 @@ func runAsk(cmd *cobra.Command, request string) error {
 		if !interactive {
 			return &ExitCodeError{Code: exitQuestions, Err: errors.New(i18n.T("ask.questions_open"))}
 		}
-		answers, err := askQuestions(res.Questions)
+		answers, err := askQuestions(context.Background(), res.Questions)
 		if err != nil {
 			return err
 		}
@@ -155,7 +155,7 @@ func runAsk(cmd *cobra.Command, request string) error {
 	}
 	elicit := func(qs []intake.Question) (map[string]string, bool) {
 		if interactive {
-			answers, err := askQuestions(qs)
+			answers, err := askQuestions(context.Background(), qs)
 			return answers, err == nil
 		}
 		for _, q := range qs {
@@ -176,26 +176,21 @@ func runAsk(cmd *cobra.Command, request string) error {
 
 // askQuestions asks each open question in the terminal: its options to pick
 // from, or a line of text when it has none.
-func askQuestions(qs []intake.Question) (map[string]string, error) {
+func askQuestions(ctx context.Context, qs []intake.Question) (map[string]string, error) {
 	answers := map[string]string{}
 	for _, q := range qs {
-		if len(q.Options) == 0 {
-			v, err := flow.Ask(q.Text, "", nil)
-			if err != nil {
-				return nil, err
+		var v string
+		step := flow.Step{Kind: flow.Input, Title: q.Text, Text: &v}
+		if len(q.Options) > 0 {
+			step = flow.Step{Kind: flow.Select, Title: q.Text, Choice: &v}
+			for _, o := range q.Options {
+				step.Options = append(step.Options, flow.Option{Label: o, Value: o})
 			}
-			answers[q.ID] = v
-			continue
 		}
-		var choice string
-		options := make([]flow.Option, 0, len(q.Options))
-		for _, o := range q.Options {
-			options = append(options, flow.Option{Label: o, Value: o})
-		}
-		if err := flow.Run(flow.Header{}, []flow.Step{{Kind: flow.Select, Title: q.Text, Options: options, Choice: &choice}}); err != nil {
+		if err := flow.RunContext(ctx, flow.Header{}, []flow.Step{step}); err != nil {
 			return nil, err
 		}
-		answers[q.ID] = choice
+		answers[q.ID] = strings.TrimSpace(v)
 	}
 	return answers, nil
 }

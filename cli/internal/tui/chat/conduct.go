@@ -272,6 +272,8 @@ func (m model) onDeliveryEvent(e loop.Event) (tea.Model, tea.Cmd) {
 		line = k.nested([]string{"→ " + e.To + "  (" + e.Why + ")"}, k.dim)
 	case "node.failed", "run.cancelled":
 		line = k.nested([]string{e.Ev + " " + e.Why}, k.warn)
+	case "gate.open":
+		line = k.nested([]string{i18n.T("chat.delivery.gate", e.Why)}, k.warn)
 	case "run.result":
 		p.delivery.outcome = e.Why
 	}

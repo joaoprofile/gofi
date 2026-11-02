@@ -50,8 +50,11 @@ agent's turn to agents/<node>-<iter>.ndjson.
 --context delivers every sealed change of a context, in the order their
 dependencies allow, and stops at the first not accepted.
 
-A decision the change does not cover stops the implementation: in a terminal
-the question is asked, in a script nobody answers and the run ends in impasse.
+A decision the change does not cover stops the implementation at the gate:
+the question goes to .gofi/runs/<run>/gate.json and is answered with
+gofi answer <run> from any terminal — or right there, when the run has one.
+The run waits for --gate-timeout (loop.gate_timeout, 30m by default; 0 does
+not wait) and, unanswered, ends in impasse.
 The sensors run the commands of loop.sensors in .gofi.yaml; test defaults to
 the test section's default task, and a stage with no command is recorded as
 not checked, never as passed.`,
@@ -68,6 +71,7 @@ gofi run adicionar-rate-limit --no-archive`,
 	cmd.Flags().Bool("no-archive", false, i18n.T("cmd.run.flag.no_archive"))
 	cmd.Flags().String("permission-mode", "acceptEdits", "Claude Code permission mode for the agent turns")
 	cmd.Flags().Bool("events", false, i18n.T("cmd.run.flag.events"))
+	cmd.Flags().String("gate-timeout", "", i18n.T("cmd.run.flag.gate_timeout"))
 	return cmd
 }
 
@@ -102,6 +106,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	o.NoArchive, _ = cmd.Flags().GetBool("no-archive")
 	o.Events, _ = cmd.Flags().GetBool("events")
 	o.Mode, _ = cmd.Flags().GetString("permission-mode")
+	o.GateTimeout, _ = cmd.Flags().GetString("gate-timeout")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var outcome string
@@ -126,6 +131,8 @@ type deliverOpts struct {
 	// Events writes the run's events as NDJSON, one per line, ending with a
 	// run.result line — what the panel and the chat read.
 	Events bool
+	// GateTimeout overrides loop.gate_timeout (a duration; 0 does not wait).
+	GateTimeout string
 }
 
 // deliver carries one approved change out through a flow and, accepted,
@@ -158,9 +165,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 				AllowedTools: append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...)})
 		}
 	}
-	gate := runPorts.gate
-	if gate == nil {
-		gate = termGate{interactive: !o.Events && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))}
+	wait, err := gateTimeout(cfg, o.GateTimeout)
+	if err != nil {
+		return "", err
 	}
 
 	run, change, ctxName := o.Resume, o.Change, ""
@@ -181,6 +188,14 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		return "", err
 	}
 	defer release()
+	gate := runPorts.gate
+	if gate == nil {
+		g := &loop.FileGate{Root: root, Run: run, Timeout: wait}
+		if !o.Events && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+			g.Local = askAtTerminal(out, run)
+		}
+		gate = g
+	}
 
 	report := humanReport(out)
 	if o.Events {
@@ -335,9 +350,9 @@ type engineAgent struct {
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
 	s := a.open(a.root)
 	defer s.Close()
-	dir := filepath.Join(loop.Dir(a.root, a.run), "agents")
-	_ = os.MkdirAll(dir, 0o755)
-	transcript, err := os.Create(filepath.Join(dir, fmt.Sprintf("%s-%d.ndjson", t.Node, t.Iter)))
+	path := loop.Transcript(a.root, a.run, loop.AgentID(t.Node, t.Iter))
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	transcript, err := os.Create(path)
 	if err != nil {
 		return loop.TurnResult{}, err
 	}
@@ -423,15 +438,36 @@ type diskVerdicts struct{ root string }
 
 func (d diskVerdicts) Read(ctx string) (*verdict.Verdict, error) { return verdict.Read(d.root, ctx) }
 
-// termGate asks the person at the terminal; in a script nobody is there.
-type termGate struct{ interactive bool }
+// defaultGateTimeout is how long a run waits at its gate when neither the
+// flag nor loop.gate_timeout says: long enough to answer from another
+// terminal, short enough that a forgotten run ends in impasse, not forever.
+const defaultGateTimeout = 30 * time.Minute
 
-func (g termGate) Ask(_ context.Context, e *intake.Elicitation) (map[string]string, bool) {
-	if !g.interactive {
-		return nil, false
+// gateTimeout is the wait of the gate: the flag, else loop.gate_timeout,
+// else the default. 0 does not wait — a script nobody answers.
+func gateTimeout(cfg *config.GofiConfig, flag string) (time.Duration, error) {
+	v := flag
+	if v == "" && cfg.Loop != nil {
+		v = cfg.Loop.GateTimeout
 	}
-	answers, err := askQuestions(e.AsQuestions())
-	return answers, err == nil
+	if v == "" {
+		return defaultGateTimeout, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("gate timeout %q: %s", v, i18n.T("run.gate_timeout_invalid"))
+	}
+	return d, nil
+}
+
+// askAtTerminal asks the gate's question at the supervisor's terminal, while
+// it also waits for gofi answer from any other: whichever answers first.
+func askAtTerminal(out io.Writer, run string) func(context.Context, *intake.Elicitation) (map[string]string, bool) {
+	return func(ctx context.Context, e *intake.Elicitation) (map[string]string, bool) {
+		fmt.Fprintln(out, "\n  "+i18n.T("run.gate_open", run))
+		answers, err := askQuestions(ctx, e.AsQuestions())
+		return answers, err == nil
+	}
 }
 
 // spawnDelivery starts the delivery of a context as its own gofi process —

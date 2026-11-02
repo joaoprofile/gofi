@@ -55,7 +55,7 @@ type fakeGate struct {
 	asked  int
 }
 
-func (g *fakeGate) Ask(_ context.Context, e *intake.Elicitation) (map[string]string, bool) {
+func (g *fakeGate) Ask(_ context.Context, e Question) (map[string]string, bool) {
 	g.asked++
 	if !g.answer {
 		return nil, false

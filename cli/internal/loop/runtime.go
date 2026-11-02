@@ -41,9 +41,9 @@ type (
 		Read(ctx string) (*verdict.Verdict, error)
 	}
 	// Gate asks the person a decision an agent stopped on. ok is false when
-	// nobody is there to answer: the run cannot go on on its own.
+	// nobody answered in time: the run cannot go on on its own.
 	Gate interface {
-		Ask(ctx context.Context, e *intake.Elicitation) (answers map[string]string, ok bool)
+		Ask(ctx context.Context, q Question) (answers map[string]string, ok bool)
 	}
 )
 
@@ -102,12 +102,13 @@ type State struct {
 	Resolved []string      `json:"resolved,omitempty"`
 	Blocked  bool          `json:"blocked,omitempty"`
 	Answered bool          `json:"answered,omitempty"`
-	// Elicit is the file the last blocked agent wrote its decisions to, and
-	// Answers what the person answered at the gate.
-	Elicit  string            `json:"elicit,omitempty"`
-	Answers map[string]string `json:"answers,omitempty"`
-	CostUSD float64           `json:"cost_usd"`
-	Updated time.Time         `json:"updated"`
+	// Elicit is the file the last blocked agent wrote its decisions to,
+	// BlockedBy that agent, and Answers what the person answered at the gate.
+	Elicit    string            `json:"elicit,omitempty"`
+	BlockedBy string            `json:"blocked_by,omitempty"`
+	Answers   map[string]string `json:"answers,omitempty"`
+	CostUSD   float64           `json:"cost_usd"`
+	Updated   time.Time         `json:"updated"`
 }
 
 // Event is one line of a run's log.
@@ -214,17 +215,24 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 				prompt = intake.WithDecisions(prompt, e, s.Answers)
 			}
 		}
+		a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: n.Role, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
+		_ = saveAgent(r.Root, s.Run, a)
 		res, err := r.Agent.Run(ctx, Turn{Node: name, Role: n.Role, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit})
 		s.CostUSD += res.CostUSD
+		a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
 		if err != nil {
+			a.Status, a.Error = AgentFailed, err.Error()
+			_ = saveAgent(r.Root, s.Run, a)
 			return err
 		}
 		e, _ := intake.ReadElicitation(r.Root, elicit)
 		s.Blocked = e != nil && len(e.Questions) > 0
 		s.Answered, s.Answers = false, nil
+		a.Status = AgentDone
 		if s.Blocked {
-			s.Elicit = elicit
+			s.Elicit, s.BlockedBy, a.Status = elicit, a.ID, AgentBlocked
 		}
+		_ = saveAgent(r.Root, s.Run, a)
 	case KindSensor:
 		res := r.Sensors.Run(ctx, n.Stages)
 		s.Sensor = &res
@@ -245,14 +253,35 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 			s.Answered = false
 			break
 		}
-		answers, ok := r.Gate.Ask(ctx, e)
+		r.emit(s, Event{Ev: "gate.open", Node: name, Why: s.BlockedBy + ": gofi answer " + s.Run})
+		answers, ok := r.Gate.Ask(ctx, Question{Run: s.Run, Node: name, Agent: s.BlockedBy, Questions: e.Questions})
 		s.Answered = ok
 		if ok {
 			s.Answers = answers
+			r.emit(s, Event{Ev: "gate.answered", Node: name})
+			r.unblock(s)
+		} else {
+			r.emit(s, Event{Ev: "gate.unanswered", Node: name})
 		}
 		s.Blocked = false
 	}
 	return nil
+}
+
+// unblock marks the agent that stopped as done once its decisions are
+// answered: what it left is now the next agent's to carry on.
+func (r *Runner) unblock(s *State) {
+	if s.BlockedBy == "" {
+		return
+	}
+	agents, _ := Agents(r.Root, s.Run)
+	for _, a := range agents {
+		if a.ID == s.BlockedBy && a.Status == AgentBlocked {
+			a.Status = AgentDone
+			_ = saveAgent(r.Root, s.Run, &a)
+		}
+	}
+	s.BlockedBy = ""
 }
 
 var weight = map[string]int{"blocker": 8, "major": 4, "minor": 1}
