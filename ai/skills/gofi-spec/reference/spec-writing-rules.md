@@ -1,6 +1,21 @@
-# Regras de escrita da spec
+# Regras de conteúdo do design
 
-## Regras de escrita da spec
+## Regras de conteúdo do design
+
+> No formato 3 (decisão 0003) estas regras valem para o **design da mudança**:
+> é ele que traz tabela, migração, contrato e camada. Os requisitos e cenários
+> seguem `reference/change-writing.md`. Onde o texto abaixo cita uma seção do
+> sdd antigo, o destino é:
+>
+> | sdd (formato 2) | formato 3 |
+> |---|---|
+> | §0 Manifesto | tabela Serviços de `project.md` |
+> | §0.1 Decisões, §2 Diagrama, §8 Estrutura | design §Abordagem |
+> | §3 Modelo de dados | design §Modelo de dados |
+> | §4 Operações | requisitos (o quê) + design §Contratos (rota, request, respostas) |
+> | §5 Regras de negócio (RN) | requisitos NÃO DEVE, com cenários |
+> | §6 Validações, §7 Erros | design §Contratos e §Erros |
+> | §9 ADR | design §Decisões |
 
 ### Nomenclatura — segue convenção da linguagem
 
@@ -13,7 +28,7 @@ Para Go: ver `.claude/sdk/go/knowledge/naming.md`. Em geral:
 
 ### Conteúdo obrigatório
 
-- RNs numeradas sequencialmente (RN-01, RN-02, ...)
+- Requisitos numerados por contexto (REQ-01, REQ-02, ...), estáveis — ver `reference/change-writing.md` §IDs
 - Campos de entidade com tipo da linguagem-alvo
 - Filtros de listagem com comportamento exato (ILIKE, eq, range...)
 - HTTP responses mapeados por caso (200, 201, 204, 400, 401, 403, 404, 409, 500)
@@ -133,11 +148,12 @@ Para Go: ver `.claude/sdk/go/knowledge/naming.md`. Em geral:
     o consumer. Quando confundir, perguntar: "esse evento é um dado factual
     que chegou de fora ou é um comando que o domínio emitiu?".
 
-### Manifesto do Serviço (§0)
+### Manifesto do Serviço
 
-Toda spec abre com a seção §0 — campos derivados das respostas da Fase 1.
-O formato exato vem do `templates/sdd-template.md`. Para Go, os
-nomes de path (`pathService`, `pathCmd`, `pathContext`) seguem
+O manifesto (nome, módulo, caminho, porta, banco) é do **serviço**, não da
+mudança: mora na tabela Serviços de `.claude/memory/project.md`, uma linha por
+serviço, escrita quando o serviço nasce. O design só o cita em §Abordagem. Para
+Go, os nomes de path (`pathService`, `pathCmd`, `pathContext`) seguem
 `.claude/sdk/go/knowledge/structure.md`.
 
 > **Bootstrap do binário (`pathCmd`):** quando o serviço carrega providers

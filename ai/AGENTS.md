@@ -157,7 +157,7 @@ vale neste projeto — nunca entra em skill).
 | Especialidades (packs) | `.claude/expertise/<pack>/` — `PACK.md` (contrato: quando se aplica, a quais papéis serve) + seções; `harness-protocols` vale para toda tarefa. Idem: pelo `INDEX.md` | Portável |
 | Aprendizado do time | `.claude/knowledge/shared/` (todos os papéis) e `.claude/knowledge/{agent}/` (um papel) — gravado pelo protocolo de aprendizado; vence `expertise/` e `sdk/` e declara `overrides:` quando corrige regra do gofi. O `gofi update` nunca reescreve | Específico |
 | Conhecimento institucional (negócio específico do produto/empresa) | `.claude/institutional/{project.name}/` — RAG: `INDEX.md` (sempre) + chunks sob demanda. **Espelho pull-only** do repo `sources.institutional` quando configurado (atualizado por `gofi update institutional`, que **substitui a pasta por completo**); **sem repo**, mantido à mão no git do projeto | Específico |
-| Templates SDD/PRD | `.claude/templates/` (`sdd-template.md`, `prd-template.md`) | Portável |
+| Templates do corpus | `.claude/templates/` (`spec`, `proposal`, `delta`, `design`, `tasks`, `prd` — `*-template.md`); design no stack em `.claude/sdk/<lang>/templates/` | Portável |
 | Memória global (visão, serviços, convenções) | `.claude/memory/project.md` | Específico |
 | Estado por-contexto (cabeça: frontmatter + Estado atual consolidado + Histórico de versões) | `.claude/memory/contexts/{contexto}.md` | Específico |
 | Versões antigas transbordadas (só quando o changelog cresce) | `.claude/memory/contexts/{contexto}/history.md` | Específico |

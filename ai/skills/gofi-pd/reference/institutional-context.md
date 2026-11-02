@@ -38,7 +38,7 @@ coluna "Carregar quando", e leia **só os chunks relevantes**:
 | `actors.md` | Atores/personas/tenancy → não re-elicitar persona já mapeada |
 | `business-rules.md` | Regras conhecidas → validar só se o PRD as afeta |
 | `integrations.md` | Sistemas/stack/restrições → dependências e premissas |
-| `metrics.md` | Métricas a elicitar → alimenta critérios de aceite |
+| `metrics.md` | Métricas a elicitar → alimenta §2 Objetivo e métricas de sucesso |
 | `roadmap.md` | Itens previstos → antecipar dependências, evitar redundância |
 
 **Escrita (ao aprender):** fato de negócio novo e durável vai no chunk correto +
