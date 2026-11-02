@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -123,12 +125,19 @@ func planSkills(cfg *config.GofiConfig) (*skillsPlan, error) {
 }
 
 func (p *skillsPlan) scope(force bool) updateScope {
-	var added, changed int
+	// The internal roles install in their own area: each area says what it
+	// gets, so "skills/" never counts files that land elsewhere.
+	type count struct{ added, changed int }
+	areas := map[string]*count{layout.Skills().Dir + "/": {}, layout.Roles().Dir + "/": {}}
 	for _, c := range p.changes {
+		area := layout.Skills().Dir + "/"
+		if strings.HasPrefix(filepath.ToSlash(c.RelPath), layout.Roles().Dir+"/") {
+			area = layout.Roles().Dir + "/"
+		}
 		if c.Kind == scaffold.ChangeNew {
-			added++
+			areas[area].added++
 		} else {
-			changed++
+			areas[area].changed++
 		}
 	}
 	s := updateScope{
@@ -140,8 +149,10 @@ func (p *skillsPlan) scope(force bool) updateScope {
 			"knowledge/", "memory/", "institutional/", "go.work",
 		},
 	}
-	if len(p.changes) > 0 || force {
-		s.write(layout.Skills().Dir+"/", planNote(added, changed))
+	for _, area := range []string{layout.Skills().Dir + "/", layout.Roles().Dir + "/"} {
+		if c := areas[area]; c.added+c.changed > 0 || (force && area == layout.Skills().Dir+"/") {
+			s.write(area, planNote(c.added, c.changed))
+		}
 	}
 	return s
 }
