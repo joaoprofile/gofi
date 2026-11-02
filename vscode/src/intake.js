@@ -25,7 +25,6 @@ const TIMEOUT_MS = 90000;
  * @property {string} [role_turn]   The same, for a phase the router raised
  * @property {string} [model]       The raised tier's model, set for that phase
  * @property {boolean} [review_after] The plan stops for review after this phase
- * @property {IntakePhase[]} [on_reject] What to run when this audit fails the delivery
  * @property {boolean} [elicit]      A cheaper phase that gathers the next role's open decisions
  * @property {string} [elicit_file]  Where that phase writes them
  */
@@ -284,65 +283,62 @@ function nextStep(result, answered) {
 	return 'go';
 }
 
+/** The flow that delivers what a plan phase builds (gofi decision 0002). */
+const DELIVERY_FLOWS = { code: 'delivery', ui: 'delivery-ui', infra: 'delivery-ops' };
+
+/** The flow that delivers an artifact, or null when the loop does not build it. */
+function deliveryFlow(produces) {
+	return DELIVERY_FLOWS[produces] || null;
+}
+
+/** Whether a phase is part of a delivery: the build, or the audit the flow holds. */
+function deliverable(phase) {
+	return !phase.elicit && (Boolean(deliveryFlow(phase.produces)) || phase.produces === 'audit');
+}
+
 /**
- * The context's memory as it is now, where the QA writes its verdict — to
- * tell a verdict the audit just wrote from one left by an earlier run. Null
- * when there is none.
+ * Hands what a plan builds to the loop: `gofi run --context <context> --flow
+ * <flow> --events` delivers every sealed change of the context, in order, and
+ * writes its events as NDJSON — each one handed to onEvent as it comes. The
+ * panel runs nothing of the delivery itself.
  *
+ * @param {string} gofiPath
  * @param {string} root
- * @param {any} result
- * @returns {string|null}
+ * @param {string} flow
+ * @param {string} context
+ * @param {(e: {ev: string, node?: string, to?: string, why?: string}) => void} onEvent
+ * @returns {Promise<{ok: boolean, outcome: string, output: string}>}
  */
-function readVerdict(root, result) {
-	if (!result.verdict_file) {
-		return null;
-	}
-	try {
-		return fs.readFileSync(path.join(root, result.verdict_file), 'utf8');
-	} catch {
-		return null;
-	}
-}
-
-/** One key of a document's frontmatter, lowercased and unquoted; null when absent. */
-function fieldOf(doc, key) {
-	const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(doc || ''));
-	if (!m) {
-		return null;
-	}
-	const line = m[1].split(/\r?\n/).find((l) => l.startsWith(key + ':'));
-	return line ? line.slice(key.length + 1).trim().replace(/^["']|["']$/g, '').toLowerCase() : null;
-}
-
-/** The status field of a document's frontmatter. */
-function statusOf(doc) {
-	return fieldOf(doc, 'status') || '';
-}
-
-/**
- * Whether the audit that just ran failed the delivery: the memory changed
- * since before the phase, and it is now reprovado, or aprovado with ressalvas
- * still open — only a clean audit is accepted, as in the CLI and /gofi-full.
- * A memory written before the field existed has no ressalvas; a value that is
- * not a plain zero counts as open. An audit that wrote nothing rejects nothing.
- *
- * @param {string|null} before
- * @param {string|null} now
- */
-function rejected(before, now) {
-	if (now === null || now === before) {
-		return false;
-	}
-	switch (statusOf(now)) {
-		case 'reprovado':
-			return true;
-		case 'aprovado': {
-			const caveats = fieldOf(now, 'ressalvas');
-			return caveats !== null && caveats !== '0';
-		}
-		default:
-			return false;
-	}
+function deliverContext(gofiPath, root, flow, context, onEvent) {
+	return new Promise((resolve) => {
+		const child = spawn(gofiPath || 'gofi', ['run', '--context', context, '--flow', flow, '--events'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+		let buffer = '';
+		let stderr = '';
+		let outcome = '';
+		child.stdout.on('data', (chunk) => {
+			buffer += chunk;
+			let nl;
+			while ((nl = buffer.indexOf('\n')) >= 0) {
+				const line = buffer.slice(0, nl).trim();
+				buffer = buffer.slice(nl + 1);
+				if (!line) {
+					continue;
+				}
+				try {
+					const e = JSON.parse(line);
+					if (e.ev === 'run.result') {
+						outcome = e.why || '';
+					}
+					onEvent(e);
+				} catch {
+					// Not an event: the process said something else; stderr explains a failure.
+				}
+			}
+		});
+		child.stderr.on('data', (chunk) => { stderr += chunk; });
+		child.on('error', (err) => resolve({ ok: false, outcome: '', output: err.message }));
+		child.on('close', (code) => resolve({ ok: code === 0, outcome, output: stderr.trim() }));
+	});
 }
 
 /**
@@ -440,6 +436,6 @@ function withDecisions(turn, e, answers) {
 }
 
 module.exports = {
-	SCHEMA, shouldPlan, intakeArgs, runIntake, runIntakeKept, stopIntakeServers, IntakeServer, phaseTurn, nextStep, readVerdict, statusOf, rejected,
+	SCHEMA, shouldPlan, intakeArgs, runIntake, runIntakeKept, stopIntakeServers, IntakeServer, phaseTurn, nextStep, deliveryFlow, deliverable, deliverContext,
 	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract,
 };

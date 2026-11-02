@@ -16,7 +16,7 @@ const { installVscodeStub, makeContext, runner } = require('./vscode-stub.js');
 installVscodeStub();
 
 const { Chat } = require('../src/chat.js');
-const { shouldPlan, intakeArgs, nextStep, phaseTurn, rejected } = require('../src/intake.js');
+const { shouldPlan, intakeArgs, nextStep, phaseTurn } = require('../src/intake.js');
 const { test, run } = runner();
 
 function phase(role, produces, extra = {}) {
@@ -25,7 +25,7 @@ function phase(role, produces, extra = {}) {
 
 function threePhases() {
 	return {
-		schema: 'gofi.intake/v1', request: 'altere o pricing', intent: 'change', artifact: 'code',
+		schema: 'gofi.intake/v1', request: 'altere o pricing', intent: 'change', artifact: 'code', context: { name: 'pricing' },
 		plan: [phase('gofi-spec', 'spec', { review_after: true }), phase('gofi-eng', 'code'), phase('gofi-qa', 'audit')],
 		questions: [], assumptions: [], ask: false,
 	};
@@ -50,7 +50,16 @@ function makeChat(script) {
 		calls.push({ text, opts });
 		return script.length > 1 ? script.shift() : script[0];
 	};
-	return { chat, posted, turns, calls };
+	// The contract is sealed and the delivery is the loop's — gofi spec
+	// approve and gofi run --context — so both are recorded, not run.
+	const deliveries = [];
+	chat.sealRunner = async () => ({ ok: true, output: '' });
+	chat.deliveryRunner = async (gofi, root, flow, context, onEvent) => {
+		deliveries.push(`${flow} ${context}`);
+		onEvent({ ev: 'node.start', node: 'implement' });
+		return { ok: true, outcome: chat.deliveryOutcome || 'accepted', output: '' };
+	};
+	return { chat, posted, turns, calls, deliveries };
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -68,8 +77,8 @@ test('shouldPlan: só texto livre, sem anexos, passa pelo plano', () => {
 	assert.deepStrictEqual(phaseTurn(phase('gofi-eng', 'code', { role_turn: 'Siga', model: 'opus' })), { text: 'Siga', model: 'opus' });
 });
 
-test('o plano é conduzido: spec, parada para revisão, depois eng e qa sozinhos', async () => {
-	const { chat, posted, turns } = makeChat([threePhases()]);
+test('o plano é conduzido: spec, parada para revisão, depois a entrega é do loop', async () => {
+	const { chat, posted, turns, deliveries } = makeChat([threePhases()]);
 	await chat.send('altere o pricing');
 	await tick();
 	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido']);
@@ -77,12 +86,26 @@ test('o plano é conduzido: spec, parada para revisão, depois eng e qa sozinhos
 	assert.ok(posted.some((m) => m.type === 'planReview' && m.next === 'gofi-eng'), 'depois da spec, o painel pede revisão');
 	assert.strictEqual(turns.length, 1, 'nada roda antes da revisão');
 	chat.onWebviewMessage({ type: 'planContinue' });
-	done(chat);
+	await tick();
+	await tick();
+	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido'], 'implementação e auditoria não são turnos do painel');
+	assert.deepStrictEqual(deliveries, ['delivery pricing']);
+	assert.strictEqual(chat.plan, null);
+	assert.ok(posted.some((m) => m.type === 'planEnded' && /entregue/.test(m.text)));
+});
+
+test('uma entrega não aceita para o plano com o resultado', async () => {
+	const { chat, posted, turns, deliveries } = makeChat([threePhases()]);
+	chat.deliveryOutcome = 'impasse';
+	await chat.send('altere o pricing');
 	await tick();
 	done(chat);
-	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido', '/gofi-eng pedido', '/gofi-qa pedido']);
-	assert.strictEqual(chat.plan, null);
-	assert.ok(posted.some((m) => m.type === 'planEnded' && /concluído/.test(m.text)));
+	chat.onWebviewMessage({ type: 'planContinue' });
+	await tick();
+	await tick();
+	assert.strictEqual(deliveries.length, 1);
+	assert.strictEqual(turns.length, 1);
+	assert.ok(posted.some((m) => m.type === 'planEnded' && /impasse/.test(m.text)));
 });
 
 test('passada a revisão do contrato, o painel sela o que a pessoa aprovou antes de seguir', async () => {
@@ -99,7 +122,7 @@ test('passada a revisão do contrato, o painel sela o que a pessoa aprovou antes
 	chat.onWebviewMessage({ type: 'planContinue' });
 	await tick();
 	assert.deepStrictEqual(sealed, ['pricing'], 'o contexto revisado é selado, uma vez');
-	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido', '/gofi-eng pedido']);
+	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido'], 'a entrega é do loop, não um turno');
 	assert.ok(posted.some((m) => m.type === 'notice' && /aprovada/.test(m.text)));
 });
 
@@ -138,15 +161,16 @@ test('uma pergunta respondida por botão volta ao intake e espera confirmação'
 	assert.deepStrictEqual(calls[1].opts.answers, { context: 'shipping' });
 	assert.strictEqual(turns.length, 0, 'plano respondido espera confirmação');
 	chat.onWebviewMessage({ type: 'planConduct' });
-	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-eng pedido']);
+	await tick();
+	assert.deepStrictEqual(turns.map((t) => t.prompt), [], 'confirmado, o que o plano constrói vai ao loop');
 });
 
 test('uma fase de nível subido roda no modelo dela, e o modelo volta no fim', async () => {
-	const raised = { ...threePhases(), plan: [phase('gofi-eng', 'code', { tier: 'deep', role_turn: 'Siga o papel', model: 'claude-opus-5-5' })] };
+	const raised = { ...threePhases(), plan: [phase('gofi-doc', 'docs', { tier: 'standard', role_turn: 'Siga o papel', model: 'claude-sonnet-5-5' })] };
 	const { chat, turns } = makeChat([raised]);
-	await chat.send('corrija o cancelamento');
+	await chat.send('documente o cancelamento');
 	await tick();
-	assert.deepStrictEqual(turns[0], { prompt: 'Siga o papel', model: 'claude-opus-5-5' });
+	assert.deepStrictEqual(turns[0], { prompt: 'Siga o papel', model: 'claude-sonnet-5-5' });
 	done(chat);
 	assert.strictEqual(chat.modelOverride, null, 'o modelo da sessão volta ao fim do plano');
 });
@@ -176,60 +200,10 @@ test('uma fase que falha para o plano', async () => {
 	assert.strictEqual(chat.plan, null);
 });
 
-test('uma auditoria reprovada roda a nova tentativa um nível acima e o run fica registrado', async () => {
-	const fs = require('fs');
-	const os = require('os');
-	const path = require('path');
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gofi-conduct-'));
-	const mem = path.join(root, 'mem', 'pricing.md');
-	fs.mkdirSync(path.dirname(mem), { recursive: true });
-	const qa = phase('gofi-qa', 'audit', {
-		on_reject: [
-			phase('gofi-eng', 'code', { tier: 'deep', turn: '/gofi-eng refaça', role_turn: 'Siga o papel: refaça', model: 'claude-opus-5-5' }),
-			phase('gofi-qa', 'audit', { turn: '/gofi-qa de novo' }),
-		],
-	});
-	const plan = {
-		schema: 'gofi.intake/v1', request: 'corrija o pricing', intent: 'fix', artifact: 'code', context: { name: 'pricing' },
-		verdict_file: 'mem/pricing.md', plan: [phase('gofi-eng', 'code'), qa], questions: [], assumptions: [], ask: false,
-	};
-	const { chat, turns } = makeChat([plan]);
-	chat.projectRoot = root;
-	const verdicts = ['reprovado', 'aprovado'];
-	const audit = () => fs.writeFileSync(mem, `---\nstatus: ${verdicts.shift()}\n---\n`);
-	await chat.planRequest('corrija o pricing');
-	done(chat);
-	await tick();
-	audit();
-	done(chat);
-	await tick();
-	assert.strictEqual(turns[2].prompt, 'Siga o papel: refaça');
-	assert.strictEqual(turns[2].model, 'claude-opus-5-5');
-	done(chat);
-	await tick();
-	assert.strictEqual(turns[3].prompt, '/gofi-qa de novo');
-	audit();
-	done(chat);
-	await tick();
-	assert.strictEqual(turns.length, 4);
-	assert.strictEqual(chat.plan, null);
-	const dir = path.join(root, '.gofi', 'runs');
-	const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-	assert.strictEqual(files.length, 1);
-	const rec = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
-	assert.strictEqual(rec.schema, 'gofi.run/v1');
-	assert.strictEqual(rec.surface, 'panel');
-	assert.strictEqual(rec.outcome, 'done');
-	assert.strictEqual(rec.verdict, 'aprovado');
-	assert.strictEqual(rec.phases.length, 4);
-	assert.strictEqual(rec.phases[2].model, 'claude-opus-5-5');
-	fs.rmSync(root, { recursive: true, force: true });
-});
-
 test('cada fase roda numa sessão nova; a da conversa fica guardada e volta no fim', async () => {
 	const plan = {
 		schema: 'gofi.intake/v1', request: 'corrija o pricing', intent: 'fix', artifact: 'code',
-		plan: [phase('gofi-eng', 'code'), phase('gofi-qa', 'audit')], questions: [], assumptions: [], ask: false,
+		plan: [phase('gofi-spec', 'spec'), phase('gofi-doc', 'docs')], questions: [], assumptions: [], ask: false,
 	};
 	const { chat, turns } = makeChat([plan]);
 	const disposed = [];
@@ -314,50 +288,6 @@ test('a elicitação roda antes; as decisões viram cartões e chegam ao papel n
 	assert.ok(turns[1].prompt.includes('Listagem paginada? → simples'));
 	assert.ok(turns[1].prompt.includes('Cache? → não (assumido'));
 	assert.ok(turns[1].prompt.includes('banco: PostgreSQL'));
-	fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('uma implementação que para por decisão: pergunta, registro na spec e nova rodada', async () => {
-	const fs = require('fs');
-	const os = require('os');
-	const path = require('path');
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gofi-block-'));
-	const file = '.gofi/elicit/order-gofi-eng.json';
-	const eng = phase('gofi-eng', 'code', { turn: '/gofi-eng corrija', elicit_file: file });
-	eng.on_block = [
-		phase('gofi-spec', '', { tier: 'standard', base_tier: 'deep', turn: 'registre', role_turn: 'registre', model: 'claude-sonnet-5-5' }),
-		phase('gofi-eng', 'code', { turn: '/gofi-eng retome', elicit_file: file }),
-	];
-	const plan = {
-		schema: 'gofi.intake/v1', request: 'corrija o cancelamento', intent: 'fix', artifact: 'code', context: { name: 'order' },
-		plan: [eng], questions: [], assumptions: [], ask: false,
-	};
-	const { chat, posted, turns } = makeChat([plan]);
-	chat.projectRoot = root;
-	const block = () => {
-		fs.mkdirSync(path.join(root, '.gofi', 'elicit'), { recursive: true });
-		fs.writeFileSync(path.join(root, file), JSON.stringify({
-			schema: 'gofi.elicit/v1',
-			questions: [{ id: 'idx', text: 'Perfil de acesso?', options: ['append-only', 'hot UPDATE'], recommended: 'hot UPDATE', why: 'atualiza' }],
-		}));
-	};
-	await chat.planRequest('corrija o cancelamento');
-	block();
-	done(chat);
-	await tick();
-	assert.strictEqual(posted.filter((m) => m.type === 'planDecision').length, 1);
-	chat.onPlanMessage({ type: 'planElicitAnswer', id: 'idx', value: 'append-only' });
-	assert.strictEqual(turns[1].prompt.split('\n')[0], 'registre');
-	assert.ok(turns[1].prompt.includes('Perfil de acesso? → append-only'));
-	assert.strictEqual(turns[1].model, 'claude-sonnet-5-5');
-	done(chat);
-	await tick();
-	assert.strictEqual(turns[2].prompt, '/gofi-eng retome');
-	block();
-	done(chat);
-	await tick();
-	assert.strictEqual(chat.plan, null, 'parado de novo, o plano devia acabar');
-	assert.ok(posted.some((m) => m.type === 'planEnded' && m.text.includes('parou de novo')));
 	fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -480,23 +410,6 @@ test('o arquivo em foco continua enquanto está aberto e vai como referência na
 	assert.strictEqual(posted.filter((m) => m.type === 'activeFile').pop().file, null);
 	vscode.window.tabGroups.all = [];
 	vscode.window.activeTextEditor = undefined;
-});
-
-test('só a auditoria limpa é aceita: aprovado com ressalvas reabre a entrega', () => {
-	const before = '---\nstatus: implementado\n---\n';
-	const cases = [
-		['---\nstatus: reprovado\n---\n', true],
-		['---\nstatus: aprovado\nressalvas: 2\n---\n', true],
-		['---\nstatus: aprovado\nressalvas: "0"\n---\n', false],
-		['---\nstatus: aprovado\nressalvas: alguns\n---\n', true],
-		['---\nstatus: aprovado\n---\n', false],
-		['---\nstatus: implementado\nressalvas: 3\n---\n', false],
-	];
-	for (const [now, want] of cases) {
-		assert.strictEqual(rejected(before, now), want, now);
-	}
-	assert.strictEqual(rejected(before, before), false, 'veredicto de uma rodada anterior');
-	assert.strictEqual(rejected(before, null), false, 'auditoria que não escreveu nada');
 });
 
 run();
