@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -305,6 +306,13 @@ func inspectDoc(rel, body string) []Finding {
 			Hint:   "without contexto the INDEX files it under sem-contexto, and keywords are what search matches",
 		})
 	}
+	if formatTwoSpec(rel, front) {
+		out = append(out, Finding{
+			Area: area(rel), Item: rel, Severity: SeverityInfo,
+			Detail: "spec in format 2 — the loop works from living specs and changes (decision 0003)",
+			Hint:   "gofi spec migrate " + fieldValue(front, "contexto") + ", then write the scenarios it marks (the gofi-migrate skill)",
+		})
+	}
 	for _, m := range legacyMarkers {
 		if strings.Contains(body, m) {
 			out = append(out, Finding{
@@ -316,6 +324,31 @@ func inspectDoc(rel, body string) []Finding {
 		}
 	}
 	return out
+}
+
+// formatTwoSpec reports a spec written before decision 0003: tipo spec with a
+// formato below 3, outside an archived change (an archive is history, and a
+// baseline keeps the old document there on purpose).
+func formatTwoSpec(rel, front string) bool {
+	if strings.Contains(rel, "/changes/archive/") || fieldValue(front, "tipo") != "spec" {
+		return false
+	}
+	n, err := strconv.Atoi(fieldValue(front, "formato"))
+	return err != nil || n < 3
+}
+
+// fieldValue reads a scalar from a raw frontmatter block, without quotes or
+// the comment a template writes after it.
+func fieldValue(front, key string) string {
+	for line := range strings.Lines(front) {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), key+":"); ok {
+			if i := strings.Index(v, " #"); i >= 0 {
+				v = v[:i]
+			}
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return ""
 }
 
 func area(rel string) string {
