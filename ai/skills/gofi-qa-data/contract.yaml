@@ -1,0 +1,18 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by the flow alone (0002, D19).
+#   stage      audit: a lens of the audit — it runs beside the others, reads
+#              only, writes its own verdict, and gofi merges them (0002, D17).
+#   tools      what the role may use in its turn (0002, D15). A lens reads and
+#              writes its verdict: no edit, no write, no memory, no shell.
+#   triggers   sensors green, and the part of the change this lens is about.
+tier: standard
+reads_only: true
+visibility: internal
+stage: audit
+triggers:
+  - all: [sensor.green, layer(data)]
+  - all: [sensor.green, change.surface(backend), plan.none]
+tools: [read, search, gofi, verify, verdict]

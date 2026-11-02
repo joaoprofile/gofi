@@ -129,7 +129,16 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 | `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
 | `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados — começa no tier light e sobe quando não progride |
 | `gofi-triage` | triage | quando o loop não pode seguir (achado do contrato, ou sem progresso no tier mais alto): classifica a causa-raiz e redige a proposta de emenda em `.gofi/proposals/` |
-| `gofi-qa` | audit | audita a implementação contra a mudança e os padrões |
+| `gofi-qa` | audit | lente geral: checklist do SDK, camadas, knowledge — sozinho, audita tudo |
+| `gofi-qa-conformance` | audit | lente: cada requisito realizado como a mudança e o design dizem |
+| `gofi-qa-tests` | audit | lente: cada cenário provado por um teste que prova; regressão |
+| `gofi-qa-security` | audit | lente: autorização, injeção, segredos (camadas `api`/`integration`) |
+| `gofi-qa-data` | audit | lente: transação, migrations, índices, dinheiro (camada `data`) |
+| `gofi-qa-ui` | audit | lente: acessibilidade e design system (web, mobile) |
+
+As lentes rodam ao mesmo tempo, só lendo, e o gofi junta os veredictos por
+impressão digital — a maior severidade vence; dono divergente fica com o do
+contrato e vai à triagem.
 | `gofi-doc` | deliver | doc de contrato para front e QA a partir dos handlers |
 
 Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-run` — o loop implementa, verifica, audita, corrige e arquiva sozinho.

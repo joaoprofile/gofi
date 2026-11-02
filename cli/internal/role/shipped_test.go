@@ -2,6 +2,9 @@ package role
 
 import (
 	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -35,8 +38,29 @@ func TestTheShippedRolesCoverEverySurface(t *testing.T) {
 	if got := Dispatch(roles, "test", Facts{"change.surface(backend)": true, "tests.due": true}); len(got) != 1 || got[0].Role != "gofi-test" {
 		t.Errorf("test dispatches %+v", got)
 	}
-	if got := Dispatch(roles, "audit", Facts{"sensor.green": true}); len(got) != 1 || got[0].Role != "gofi-qa" {
-		t.Errorf("audit dispatches %+v", got)
+	// A domain change is audited by the general lens, conformance and tests;
+	// data and the API bring their own lenses; a screen, the UI's.
+	audit := func(f Facts) string {
+		var out []string
+		for _, c := range Dispatch(roles, "audit", f) {
+			out = append(out, c.Role)
+		}
+		sort.Strings(out)
+		return strings.Join(out, " ")
+	}
+	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "layer(domain)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-tests" {
+		t.Errorf("a domain change is audited by %s", got)
+	}
+	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "layer(data)": true, "layer(api)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-data gofi-qa-security gofi-qa-tests" {
+		t.Errorf("a data and API change is audited by %s", got)
+	}
+	if got := audit(Facts{"sensor.green": true, "change.surface(web)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-tests gofi-qa-ui" {
+		t.Errorf("a screen is audited by %s", got)
+	}
+	for _, r := range roles {
+		if r.Contract.Stage == "audit" && (slices.Contains(r.Contract.Tools, "edit") || slices.Contains(r.Contract.Tools, "write")) {
+			t.Errorf("the lens %s may write: it would not run beside the others", r.Name)
+		}
 	}
 	for _, r := range roles {
 		if r.Contract.Stage == "implement" && !r.Contract.Internal() {
