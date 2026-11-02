@@ -31,14 +31,17 @@ atualizado: {data}
 > O índice global é gerado por `/gofi-status`. **`project.md` só é tocado**
 > se nasceu um **serviço/binário novo** (tabela "Serviços").
 
-### 3. `specs/{infra|platform}/sdd-*.md`
+### 3. A mudança de infra e a spec viva — não se editam
 
-- **Histórico de versões** — **nenhuma linha por fase.** A versão sobe, e o
-  histórico ganha a sua linha, uma vez: quando o fluxo inteiro fecha (lei
-  comum 4). A divergência entra na seção a que pertence, não num registro dela.
-- **Topologia** — registrar recursos/outputs reais quando diferirem do previsto
-- **Migração** — atualizar o estado do corte legado→novo (o que coexiste, o
-  que já saiu)
+Ambas são seladas (decisão 0003). O que a entrega revela vai para a memória
+do contexto de infra:
+
+- **Topologia** — recursos e outputs reais quando diferirem do previsto, no
+  `## Estado atual`.
+- **Migração** — o estado do corte legado→novo (o que coexiste, o que já saiu),
+  no `## Estado atual`.
+- Divergir do design da mudança (região, sizing, topologia) é decisão: pare e
+  pergunte.
 
 ---
 

@@ -173,6 +173,18 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 	case waitConfirm, waitContinue:
 		if yes(t) {
 			m.wait = waitNone
+			// Past a review stop on the contract, the conductor seals what the
+			// person approved; one that does not pass stops the plan.
+			if p := m.plan; p != nil && p.next > 0 {
+				sealed, err := intake.SealContract(m.opts.Root, p.res, p.next-1)
+				if err != nil {
+					m.stopPlan()
+					return m, tea.Sequence(echo, tea.Println(k.nested([]string{err.Error()}, k.warn)))
+				}
+				for _, s := range sealed {
+					echo = tea.Sequence(echo, tea.Println(k.nested([]string{i18n.T("ask.sealed", s)}, k.dim)))
+				}
+			}
 			return m.startPhase(echo)
 		}
 		if no(t) {

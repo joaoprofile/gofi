@@ -52,14 +52,19 @@ atualizado: {data}
 > no `project.md`. **`project.md` só é tocado** se nasceu um **serviço/binário novo**
 > (linha na tabela "Serviços").
 
-### 3. `specs/{contexto}/sdd-{contexto}.md`
+### 3. A mudança e a spec viva — não se editam
 
-- **Histórico de versões** — **nenhuma linha por fase.** A versão sobe, e o
-  histórico ganha a sua linha, uma vez: quando o fluxo inteiro fecha (lei
-  comum 4). A divergência entra na seção a que pertence, não num registro dela.
-- **Modelo de Dados §3** — **tabela nova criada por divergência entra no §3 com DDL + perfil de acesso**, não só citada no Histórico. Citar a tabela apenas no Histórico/ADR deixa a fonte da verdade incompleta (o `gofi-qa` aponta como MAJOR: "tabela do contexto sem perfil declarado na spec").
-- **Estrutura §8** — adicionar arquivos não previstos (ex: `_test.go`, repos/adapters criados por divergência)
-- **Contratos §0.1** — corrigir assinaturas se diferem do código (a spec é a verdade pós-implementação)
+A mudança aprovada e a spec viva são seladas (decisão 0003): editá-las desfaz
+a aprovação. A implementação não as corrige para casar com o código.
+
+- **Divergiu de contrato, dado ou Mapa de requisitos?** É decisão: pare e
+  pergunte (conduzido pelo gofi, no arquivo de `.gofi/elicit/`). O `/gofi-spec`
+  registra a resposta na mudança e ela volta a pedir `gofi change approve`.
+- **Arquivo a mais, helper, teste** — é o como, e é seu: o design não fixa a
+  estrutura de arquivos.
+- **`tasks.md`** é derivado: marque `[x]` nas tarefas concluídas.
+- A spec viva só muda quando a mudança é aceita e arquivada
+  (`gofi change archive`), e a versão sobe aí.
 
 ## Output esperado
 

@@ -96,6 +96,7 @@ cd .claude/memory/contexts && awk '
      Colunas: Contexto · Serviços · Versão spec · Spec · Atualizado.
    - **PRD criado (aguardando spec)** — `status = prd`
      Colunas: Contexto · Serviços · Versão PRD · PRD · Atualizado.
+   - **Mudanças abertas** — `gofi change list` (id · status · contextos · selada); omita se não houver.
 
 3. **Checagem de consistência** (reporte como lista de avisos ao final; não bloqueia):
    - Contexto sem frontmatter ou com campo obrigatório vazio (`status`, `contexto`, `servicos`).

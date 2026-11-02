@@ -10,7 +10,7 @@ import (
 // doneWhen is the done criterion of each artifact, with the context's name.
 var doneWhen = map[string]string{
 	"prd":       "PRD em prd/%[1]s/prd-%[1]s.md, com frontmatter e keywords, pronto para a spec",
-	"spec":      "spec em specs/%[1]s/sdd-%[1]s.md cobrindo a mudança, com frontmatter e keywords",
+	"spec":      "mudança em specs/changes/<id>/ para %[1]s — proposta, um delta por contexto, design — passando em `gofi spec check <id>`",
 	"code":      "código de %[1]s implementado conforme a spec, com testes passando, e auditado",
 	"ui":        "telas de %[1]s implementadas conforme a spec e o design system, e auditadas",
 	"infra":     "IaC e pipeline de %[1]s aplicáveis conforme a spec de infra",
@@ -23,7 +23,7 @@ var doneWhen = map[string]string{
 // later lists what a plan that ends at an artifact leaves out of scope.
 var later = map[string]string{
 	"prd":  "spec, código e auditoria — oferecidos ao concluir",
-	"spec": "código e auditoria — oferecidos ao concluir",
+	"spec": "aprovação, código e auditoria — oferecidos ao concluir",
 }
 
 // brief assembles the request the first phase receives (0001 D6): a template
@@ -68,7 +68,7 @@ func brief(r *Result) string {
 	}
 	b.WriteString("**Restrições:** as leis comuns do `AGENTS.md`")
 	if r.Context != nil && strings.Contains(strings.Join(r.Context.Has, ","), "spec") {
-		fmt.Fprintf(&b, "; a spec `specs/%[1]s/sdd-%[1]s.md` é a fonte da verdade", r.Context.Name)
+		fmt.Fprintf(&b, "; a spec viva de %[1]s (`gofi show ctx:%[1]s`) e as mudanças abertas (`gofi change list`) são a fonte da verdade — spec viva não se edita: o que muda vai num delta", r.Context.Name)
 	}
 	b.WriteString(".\n\n")
 	if r.Context != nil {
@@ -189,7 +189,9 @@ func approvedDoc(r *Result, i int) string {
 	case "prd":
 		return layout.PRD().Path(name, "prd-"+name+".md")
 	case "spec":
-		return layout.Specs().Path(name, "sdd-"+name+".md")
+		// The conductor seals the contract itself (SealContract): an agent
+		// is never the one to approve it.
+		return ""
 	}
 	return ""
 }

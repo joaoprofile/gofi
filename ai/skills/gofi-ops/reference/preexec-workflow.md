@@ -21,14 +21,16 @@ Antes de qualquer recurso:
 3. Ler `.claude/memory/project.md` — **inventário de serviços/binários**
    (o que precisa ser empacotado e deployado) + convenções. Índice de
    contextos via `/gofi-status`.
-4. Ler a **spec de infra/plataforma**. Ache por busca, não por glob de caminho:
-   `gofi find "<tópico de infra>"` ou `gofi show ctx:infra` — o nome do
-   contexto de infra varia por projeto, e adivinhar o caminho falha em silêncio
-   — **fonte da verdade da topologia**: recursos a provisionar, sizing,
+4. Ler a **mudança aprovada de infra/plataforma** (decisão 0003): os deltas
+   do contexto de infra em `specs/changes/{id}/` (o que a plataforma deve
+   garantir) e o `design.md` (o como). Ache por busca, não por glob de caminho:
+   `gofi change list`, `gofi find "<tópico de infra>"` ou `gofi show ctx:infra` —
+   o nome do contexto de infra varia por projeto, e adivinhar o caminho falha em
+   silêncio — **fonte da verdade da topologia**: recursos a provisionar, sizing,
    rede/sub-redes, ambientes (dev/staging/prod), política de secrets,
-   domínios/DNS, estratégia de migração do que já existe. Se a spec **não
-   existir**, **pare**: topologia é decisão de spec, não se infere. Ofereça
-   rodar `/gofi-spec` para a infra (ou elicitar e escrever a spec primeiro).
+   domínios/DNS, estratégia de migração do que já existe. Se a mudança **não
+   existir** (ou não estiver selada), **pare**: topologia é decisão do contrato, não se infere. Ofereça
+   rodar `/gofi-spec` para a infra (ou elicitar e escrever a mudança primeiro).
 5. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui
    `.claude/expertise/diagramming/conventions.md` — diagramas de arquitetura/topologia em
    ADR/README devem ser PlantUML).
@@ -51,7 +53,7 @@ Antes de qualquer recurso:
    `gofi-eng` pede o código legado). Leia o setup atual antes de gerar.
 10. Confirmar ambiguidades com o dev **antes** de provisionar.
 
-> Se a spec for ambígua, contradizer um princípio inviolável (`.claude/expertise/platform-delivery/iac-principles.md`), ou não
+> Se a mudança for ambígua, contradizer um princípio inviolável (`.claude/expertise/platform-delivery/iac-principles.md`), ou não
 > declarar ambientes/secrets/rede, **pare e pergunte**. Nunca infira
 > topologia, credencial, região ou conta.
 

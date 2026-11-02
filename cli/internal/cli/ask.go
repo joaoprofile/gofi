@@ -330,8 +330,18 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 				}
 			}
 		}
-		if phaseReview(&r, i) && !approve(ph.Produces, r.Plan[i+1].Role) {
-			return nil
+		if phaseReview(&r, i) {
+			if !approve(ph.Produces, r.Plan[i+1].Role) {
+				return nil
+			}
+			sealed, err := intake.SealContract(root, &r, i)
+			if err != nil {
+				fmt.Fprintln(out, "\n  "+err.Error())
+				return nil
+			}
+			for _, p := range sealed {
+				fmt.Fprintln(out, "  "+i18n.T("ask.sealed", p))
+			}
 		}
 	}
 	outcome = runs.OutcomeDone

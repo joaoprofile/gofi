@@ -64,8 +64,13 @@ Aplicam-se em todo contexto, em qualquer linguagem suportada:
   verde no `test` do pacote. Fix sem teste de regressão é entrega incompleta —
   nunca empurrar pro QA nem deixar "pra depois".
 - **Adapters de SDK externo** vão em `adapter/`, nunca dentro de `repository/`.
-- **Spec é fonte da verdade**: o que não está na spec não é implementado;
-  divergências durante a implementação são registradas no Histórico.
+- **A mudança aprovada é a fonte da verdade**: o que não está nos deltas e no
+  design não é implementado. Divergência de contrato, dado ou mapa de
+  requisitos é decisão da pessoa — pare e pergunte; a mudança volta a ser
+  aprovada. Nunca corrija a spec ou o design para casar com o código.
+- **Rastreio**: `gofi:implements REQ-NN` no símbolo que realiza o requisito,
+  `gofi:tests REQ-NN.n` no teste do cenário — uma linha, na sintaxe de
+  comentário da linguagem. É por ele que um cenário se liga ao teste que o prova.
 - **Clean code — código fala por si; comentários só quando WHY for não-óbvio.**
   Default: **zero comentários**. Identificadores bem escolhidos + funções
   pequenas + early returns substituem narração. Antes de escrever um

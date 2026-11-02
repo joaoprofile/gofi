@@ -71,6 +71,7 @@ var catalogEN = map[string]string{
 	"ask.questions_open":         "open questions: answer with --answer id=value, or go on with --proceed",
 	"ask.stopped_for_review":     "stopped after the %s for review — run it again with --yes to go on to /%s",
 	"ask.review_question":        "The %s is written. Go on to /%s?",
+	"ask.sealed":                 "approved and sealed: %s",
 	"cmd.update.short":           "Update what gofi owns in the project: skills, agents, expertise, templates, SDK, design system",
 	"cmd.update.templates.short": "Refresh the PRD and spec templates from upstream",
 	"cmd.update.skills.short":    "Reinstall the agent skills from the configured source",

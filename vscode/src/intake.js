@@ -342,6 +342,26 @@ function rejected(before, now) {
 	}
 }
 
+/**
+ * Seals the contract the person approved at a review stop: `gofi spec approve
+ * <context>` approves the context's spec and every open change that touches it
+ * (decision 0003). The panel does it, never the agent; a document with an
+ * error seals nothing, and the command's output says what to fix.
+ *
+ * @param {string} gofiPath
+ * @param {string} root
+ * @param {string} context
+ * @returns {Promise<{ok: boolean, output: string}>}
+ */
+function sealContract(gofiPath, root, context) {
+	return new Promise((resolve) => {
+		execFile(gofiPath || 'gofi', ['spec', 'approve', context], { cwd: root, timeout: TIMEOUT_MS }, (err, stdout, stderr) => {
+			const output = `${stdout || ''}${stderr || ''}`.trim();
+			resolve({ ok: !err, output });
+		});
+	});
+}
+
 /** The shape of an elicitation file (`gofi.elicit/v1`). */
 const ELICIT_SCHEMA = 'gofi.elicit/v1';
 
@@ -418,5 +438,5 @@ function withDecisions(turn, e, answers) {
 
 module.exports = {
 	SCHEMA, shouldPlan, intakeArgs, runIntake, runIntakeKept, stopIntakeServers, IntakeServer, phaseTurn, nextStep, readVerdict, statusOf, rejected,
-	readElicitation, clearElicitation, elicitQuestions, withDecisions,
+	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract,
 };

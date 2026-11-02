@@ -40,7 +40,7 @@ Base: AGENTS.md §Convenção de leitura dos agents. **Sempre, na ordem** → `r
 4b. O grafo (`.gofi/index/code/`) — para **escolher o que abrir**; nunca `gofi_graph.json`.
 5. `.claude/knowledge/INDEX.md` (núcleo ⬤ + módulos pedidos) + `sdk/{lang}/knowledge/` — **convenções reais do projeto**, não suposições.
 6. `.claude/sdk/{lang}/knowledge/{pagination,dynamic-filter,lookup-endpoints,error-handling}.md` + API gerada (`.claude/sdk/{lang}/api/INDEX.md` → pacote pertinente) — paginação, filtro dinâmico, erros.
-7. `specs/{contexto}/sdd-{contexto}.md` se existe — regras explícitas do contrato.
+7. `specs/{contexto}/spec.md` se existe — requisitos e cenários do contrato (`gofi show …#REQ-NN`); formato 2: `sdd-{contexto}.md`.
 8. `prd/{contexto}/prd-{contexto}.md` se existe — visão, glossário, motivação.
 
 Layout convencional de `services/` e a regra de ouro do `wire.go` → `reference/project-discovery.md` §Layout convencional do projeto.

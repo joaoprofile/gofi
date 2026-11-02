@@ -2,7 +2,7 @@
 
 const {
 	runIntakeKept, phaseTurn, nextStep, readVerdict, statusOf, rejected,
-	readElicitation, clearElicitation, elicitQuestions, withDecisions,
+	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract,
 } = require('./intake.js');
 const { RunRecord } = require('./runs.js');
 
@@ -110,8 +110,10 @@ const conduct = {
 				this.planRequest(plan.text, plan.answers, true);
 				break;
 			case 'planConduct':
-			case 'planContinue':
 				this.conductNext();
+				break;
+			case 'planContinue':
+				this.continuePastReview();
 				break;
 			case 'planRaw':
 				this.plan = null;
@@ -299,6 +301,28 @@ const conduct = {
 	},
 
 	/** Ends the plan, closing its record and giving the chat its own session back. */
+	/**
+	 * Goes on past a review stop. When the phase reviewed wrote the contract,
+	 * what the person approved is sealed first; one that does not pass the
+	 * check stops the plan, with what to fix.
+	 */
+	async continuePastReview() {
+		const plan = this.plan;
+		const reviewed = plan && plan.result.plan[plan.next - 1];
+		const context = plan && plan.result.context && plan.result.context.name;
+		if (reviewed && reviewed.produces === 'spec' && context) {
+			const sealed = await this.sealRunner(this.gofiPath(), this.projectRoot, context);
+			if (!sealed.ok) {
+				this.endPlan(`O contrato de ${context} não pode ser aprovado como está: o plano para aqui.\n${sealed.output}`);
+				return;
+			}
+			if (sealed.output) {
+				this.post({ type: 'notice', text: sealed.output });
+			}
+		}
+		this.conductNext();
+	},
+
 	endPlan(message) {
 		const plan = this.plan;
 		if (plan && plan.run) {
@@ -386,6 +410,7 @@ const conduct = {
 function installConduct(ChatClass) {
 	Object.assign(ChatClass.prototype, conduct);
 	ChatClass.prototype.intakeRunner = runIntakeKept;
+	ChatClass.prototype.sealRunner = sealContract;
 }
 
 module.exports = { installConduct };

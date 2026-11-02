@@ -44,8 +44,8 @@ ordem:**
    código (paginação, filtro dinâmico, erros). O *como usar* está em
    `.claude/sdk/{lang}/knowledge/` (`pagination.md`, `dynamic-filter.md`,
    `lookup-endpoints.md`, `error-handling.md`).
-7. **`specs/{contexto}/sdd-{contexto}.md`** se existe — regras de negócio
-   explícitas que estão no contrato mas podem não aparecer no código (ex.:
+7. **`specs/{contexto}/spec.md`** se existe (formato 2: `sdd-{contexto}.md`) — os
+   requisitos e cenários do contrato, que podem não aparecer no código (ex.:
    ordem de prioridade, política de retry, garantias de idempotência).
 8. **`prd/{contexto}/prd-{contexto}.md`** se existe — visão de produto,
    glossário, motivação de negócio. Útil para a "Visão geral" da doc e para

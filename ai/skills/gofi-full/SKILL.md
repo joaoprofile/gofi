@@ -73,11 +73,11 @@ Próprias do `/gofi-full` (texto completo → `reference/orchestrator-laws.md`):
 |----------------|-----------|----------|
 | inexistente / problema bruto | `gofi-pd` | discovery do zero |
 | `prd` | `gofi-spec` | PRD pronto, falta spec |
-| `spec` | `gofi-eng` | spec pronta, falta implementar |
+| `spec` | `gofi-eng` | mudança escrita — **só se selada** (`gofi change list` diz "selada"); senão pare: aprovar é da pessoa (`gofi change approve <id>`) |
 | `em_implementacao` | `gofi-eng` | retoma implementação |
 | `implementado` | `gofi-qa` | implementado, falta auditar |
 | `reprovado` | `gofi-eng` | corrigir pendências do laudo |
-| `aprovado` | — | já concluído; **confirme** com o usuário antes de re-rodar |
+| `aprovado` | — | concluído; se a mudança ainda está aberta, o próximo passo é `gofi change archive <id>`; para re-rodar, **confirme** com o usuário |
 
 O padrão é **avançar a partir da fase incompleta mais cedo** — não refazer
 discovery/spec já válidos. Se o usuário pedir explicitamente o ciclo completo
@@ -99,6 +99,12 @@ do zero, comece em `gofi-pd`.
    → `reference/pipeline-loop.md` §Gate por fase (notas de índice, grafo e modo)
 6. **Reprovou** → volte à fase **dona da causa-raiz** com a lista concreta do que
    corrigir e re-avance pela sequência. → `reference/pipeline-loop.md` §Roteamento de reprovação
+6a. **Entre `gofi-spec` e `gofi-eng`, o portão é da pessoa:** a mudança só é
+   implementada selada (`gofi change approve <id>`, decisão 0003). Você não
+   aprova — pare e peça.
+6b. **Aprovado limpo** → a mudança é aplicada às specs vivas com
+   `gofi change archive <id>` (determinístico, sem modelo). Proponha à pessoa
+   e rode quando ela confirmar.
 7. **Guarda de loop** — mesma fase 2× pelo mesmo motivo, ou 3 ciclos completos
    sem aprovação limpa → escale ao usuário. → `reference/pipeline-loop.md` §Guarda de loop
 

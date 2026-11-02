@@ -417,21 +417,13 @@ func TestTheLexiconReadsEverydayRequests(t *testing.T) {
 
 // The phase after a review stop records the person's approval of the
 // document they reviewed; no other phase does.
-func TestThePhaseAfterAReviewRecordsTheApproval(t *testing.T) {
+// The contract is sealed by the conductor at the review stop (SealContract),
+// never by an agent: the phase after a spec is not told to write aprovado.
+func TestThePhaseAfterAReviewDoesNotApproveTheContract(t *testing.T) {
 	r := runIntake(t, project(t), "altere o fluxo de pricing, adicionando um rate limit", Options{})
-	var eng, qa Phase
 	for _, ph := range r.Plan {
-		switch ph.Role {
-		case "gofi-eng":
-			eng = ph
-		case "gofi-qa":
-			qa = ph
+		if strings.Contains(ph.Turn, "status: aprovado` no frontmatter") {
+			t.Errorf("/%s is told to approve a document: %q", ph.Role, ph.Turn[:200])
 		}
-	}
-	if !strings.Contains(eng.Turn, "aprovou `specs/pricing/sdd-pricing.md`") || !strings.Contains(eng.Turn, "status: aprovado") {
-		t.Errorf("eng is not told to record the approval: %q", eng.Turn[:200])
-	}
-	if strings.Contains(qa.Turn, "status: aprovado` no frontmatter") {
-		t.Error("a phase after no review stop records an approval")
 	}
 }
