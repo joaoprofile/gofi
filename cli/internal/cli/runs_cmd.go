@@ -12,8 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
+	"github.com/joaoprofile/gofi/cli/internal/tui/watch"
 )
 
 func newPsCmd() *cobra.Command {
@@ -227,4 +229,59 @@ func printGate(out io.Writer, q *loop.Question) {
 			fmt.Fprintln(out)
 		}
 	}
+}
+
+func newWatchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "watch",
+		Short: i18n.T("cmd.watch.short"),
+		Long: `The runs of this project as a multiplexer shows agents: each run a tab with
+its state — running, blocked at its gate, stopped, ended — and under it each
+agent it ran, with its own (trabalhando, concluido, falhou, bloqueado). The
+row in focus shows what is happening: a run's facts, its open question and
+its events; an agent's live transcript.
+
+Keys: a answers the question a run waits on, c cancels it, r resumes an
+interrupted or stopped run, n starts a sealed change — both in the
+background (gofi run --detach). The screen only reads the disk: closing it
+stops nothing.`,
+		Example: `gofi watch`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, root, err := loadProjectConfig()
+			if err != nil {
+				return err
+			}
+			return watch.Run(watch.Options{
+				Root: root, Project: cfg.Project.Name,
+				Start:   func(args ...string) (string, error) { return detachRun(root, args...) },
+				Changes: func() ([]string, error) { return startable(root) },
+			})
+		},
+	}
+}
+
+// startable are the sealed changes with no run that is still going.
+func startable(root string) ([]string, error) {
+	all, err := contract.Docs(root)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := loop.List(root)
+	if err != nil {
+		return nil, err
+	}
+	going := map[string]bool{}
+	for _, r := range runs {
+		if r.Liveness != loop.Ended {
+			going[r.State.Change] = true
+		}
+	}
+	var out []string
+	for _, c := range contract.Changes(all) {
+		if c.Sealed && !going[c.ID] {
+			out = append(out, c.ID)
+		}
+	}
+	return out, nil
 }
