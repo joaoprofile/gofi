@@ -203,6 +203,8 @@ type Loop struct {
 	// on_no_progress (the default — after two iterations without
 	// progress), on_first_reject (at once), never.
 	Escalate string `yaml:"escalate,omitempty"`
+	// AuditParallel is how many lenses of an audit run at once; 0, all.
+	AuditParallel int `yaml:"audit_parallel,omitempty"`
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.

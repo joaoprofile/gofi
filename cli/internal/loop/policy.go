@@ -20,6 +20,8 @@ type Policy struct {
 	BudgetUSD     float64
 	Accept        string
 	Escalate      string
+	// AuditParallel is how many lenses of an audit run at once; 0, all.
+	AuditParallel int
 }
 
 // The verdicts a change is accepted on, and when a tier is raised.

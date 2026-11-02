@@ -92,6 +92,7 @@ var catalogPT = map[string]string{
 	"run.land.waiting":            "%s espera para integrar: %s",
 	"run.land.gave_up":            "%s não foi integrada a tempo — gofi run --resume %s integra",
 	"run.explain.layers":          "(as camadas com trabalho vêm do plano da execução: cada papel abaixo roda se a sua tiver tarefas)",
+	"cmd.verdict.flag.lens":       "a lente que grava, quando a auditoria roda em lentes: o veredicto vai para o arquivo dela e o gofi junta as lentes",
 	"run.dirty":                   "a árvore tem mudanças fora da mudança %s: %s — faça commit ou stash antes, ou rode com --worktree",
 	"run.checkpoint.done":         "commit %q em %s",
 	"run.checkpoint.kept":         "o trabalho não aceito ficou na branch %s; a árvore voltou ao início da execução",

@@ -55,7 +55,8 @@ EOF`,
 			}
 			run, _ := cmd.Flags().GetString("run")
 			iter, _ := cmd.Flags().GetInt("iter")
-			said, err := writeVerdict(root, args[0], data, run, iter)
+			lens, _ := cmd.Flags().GetString("lens")
+			said, err := writeVerdict(root, args[0], data, run, iter, lens)
 			if err != nil {
 				return &ExitCodeError{Code: 1, Err: err}
 			}
@@ -65,14 +66,16 @@ EOF`,
 	}
 	write.Flags().String("run", "", i18n.T("cmd.verdict.flag.run"))
 	write.Flags().Int("iter", 0, i18n.T("cmd.verdict.flag.iter"))
+	write.Flags().String("lens", "", i18n.T("cmd.verdict.flag.lens"))
 	cmd.AddCommand(write)
 	return cmd
 }
 
 // writeVerdict checks a verdict, writes it and carries it into the context's
 // memory: what gofi verdict write and the MCP tool both do. It returns the
-// line that says what was written.
-func writeVerdict(root, context string, data []byte, run string, iter int) (string, error) {
+// line that says what was written. A lens's verdict is one part of an audit:
+// it goes to its own file, and the memory waits for the merge.
+func writeVerdict(root, context string, data []byte, run string, iter int, lens string) (string, error) {
 	if !contextName.MatchString(context) {
 		return "", fmt.Errorf("%q is not a context name (lowercase letters, digits, - and _)", context)
 	}
@@ -86,9 +89,14 @@ func writeVerdict(root, context string, data []byte, run string, iter int) (stri
 	if iter > 0 {
 		v.Iter = iter
 	}
+	v.Lens = lens
 	path, err := verdict.Write(root, v)
 	if err != nil {
 		return "", err
+	}
+	if lens != "" {
+		rel, _ := filepath.Rel(root, path)
+		return i18n.T("verdict.written", filepath.ToSlash(rel), v.Result, v.Caveats(), len(v.Findings)), nil
 	}
 	if err := recordVerdict(root, v); err != nil {
 		return "", err

@@ -38,9 +38,12 @@ type (
 	Sensors interface {
 		Run(ctx context.Context, stages []string) SensorResult
 	}
-	// Verdicts reads the audit's last verdict of a context.
+	// Verdicts reads the audit's last verdict of a context — or one lens's
+	// of it — and writes the one merged from the lenses.
 	Verdicts interface {
 		Read(ctx string) (*verdict.Verdict, error)
+		ReadLens(ctx, lens string) (*verdict.Verdict, error)
+		Write(v *verdict.Verdict) error
 	}
 	// Gate asks the person a decision an agent stopped on. ok is false when
 	// nobody answered in time: the run cannot go on on its own.
@@ -52,6 +55,8 @@ type (
 // Turn is what an agent node sends.
 type Turn struct {
 	Node, Role string
+	// Agent is the agent's id, where its transcript goes.
+	Agent string
 	// Tier is the role's, for the engine to pick its model; Tools what its
 	// contract grants, nil for the engine's defaults.
 	Tier   host.Tier
@@ -141,6 +146,10 @@ type State struct {
 	// the tests were written by the test stage once.
 	Plan   *Plan `json:"plan,omitempty"`
 	Tested bool  `json:"tested,omitempty"`
+	// Lenses are the roles auditing this iteration as lenses; Ambiguous the
+	// findings whose owner they disagreed on.
+	Lenses    []string `json:"lenses,omitempty"`
+	Ambiguous []string `json:"ambiguous,omitempty"`
 	// Proposal is the amendment the run proposes when it cannot go on — the
 	// contract is wrong, or the work is stuck — relative to the root (D9).
 	Proposal string `json:"proposal,omitempty"`
@@ -321,6 +330,9 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 		if err != nil {
 			return err
 		}
+		if lensable(n, roles) {
+			return r.runLenses(ctx, name, roles, s)
+		}
 		for _, rl := range roles {
 			if err := r.runAgent(ctx, name, rl, s); err != nil {
 				return err
@@ -458,6 +470,7 @@ func (r *Runner) facts(s *State) role.Facts {
 func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *State) error {
 	s.Iter++
 	s.Agent = name
+	s.Lenses = nil
 	elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
 	prompt := r.Brief(rl, s, elicit)
 	if s.Answered && s.Elicit != "" {
@@ -474,7 +487,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	if guard != nil {
 		before = snapshot(r.work(), guard)
 	}
-	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools})
+	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools})
 	s.CostUSD += res.CostUSD
 	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
 	if err != nil {

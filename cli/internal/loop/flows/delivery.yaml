@@ -25,7 +25,9 @@ nodes:
   # the highest tier: triage proposes what to change, the person decides
   # (0002, D9).
   triage:    {kind: agent, stage: triage}
-  audit:     {kind: agent, stage: audit}
+  # The audit runs in lenses, at once — each reads, none writes — and gofi
+  # merges their verdicts by fingerprint (D17).
+  audit:     {kind: agent, stage: audit, parallel: true}
   policy:    {kind: policy}
   plan-decide: {kind: gate}
   decide:      {kind: gate}

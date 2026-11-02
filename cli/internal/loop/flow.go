@@ -62,7 +62,10 @@ type Node struct {
 	Stage string `yaml:"stage,omitempty"` // agent: the roles its facts dispatch
 	// Optional lets a stage nobody answers pass: a change that has no plan
 	// or tests of its own — a screen, a pipeline — goes through it.
-	Optional bool     `yaml:"optional,omitempty"`
+	Optional bool `yaml:"optional,omitempty"`
+	// Parallel runs the roles a stage dispatches at once when none of them
+	// writes: the lenses of an audit (0002, D17).
+	Parallel bool     `yaml:"parallel,omitempty"`
 	Stages   []string `yaml:"stages,omitempty"`  // sensor
 	Outcome  string   `yaml:"outcome,omitempty"` // terminal
 }

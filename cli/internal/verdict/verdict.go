@@ -37,11 +37,15 @@ var owners = map[string]bool{"eng": true, "spec": true, "pd": true}
 
 // Verdict is one audit of a context.
 type Verdict struct {
-	Schema   string    `json:"schema"`
-	Context  string    `json:"contexto"`
-	Change   string    `json:"mudanca,omitempty"`
-	Run      string    `json:"run,omitempty"`
-	Iter     int       `json:"iter,omitempty"`
+	Schema  string `json:"schema"`
+	Context string `json:"contexto"`
+	Change  string `json:"mudanca,omitempty"`
+	Run     string `json:"run,omitempty"`
+	Iter    int    `json:"iter,omitempty"`
+	// Lens is the audit lens that wrote it, when the audit ran in lenses;
+	// Lenses, on the verdict merged from them, the lenses it holds.
+	Lens     string    `json:"lente,omitempty"`
+	Lenses   []string  `json:"lentes,omitempty"`
 	Result   string    `json:"result"`
 	Findings []Finding `json:"findings"`
 }
@@ -166,13 +170,23 @@ func Path(root, ctx string) string {
 	return filepath.Join(root, filepath.FromSlash(layout.VerdictDir), ctx+".json")
 }
 
-// Write stores a verdict, atomically.
+// LensPath is where one lens's verdict of a context lives, beside the
+// context's verdict.
+func LensPath(root, ctx, lens string) string {
+	return filepath.Join(root, filepath.FromSlash(layout.VerdictDir), ctx, lens+".json")
+}
+
+// Write stores a verdict, atomically: a lens's in its own file, the
+// context's where the loop reads it.
 func Write(root string, v *Verdict) (string, error) {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return "", err
 	}
 	p := Path(root, v.Context)
+	if v.Lens != "" {
+		p = LensPath(root, v.Context, v.Lens)
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return "", err
 	}
@@ -184,8 +198,13 @@ func Write(root string, v *Verdict) (string, error) {
 }
 
 // Read loads a context's verdict; nil when there is none.
-func Read(root, ctx string) (*Verdict, error) {
-	data, err := os.ReadFile(Path(root, ctx))
+func Read(root, ctx string) (*Verdict, error) { return read(Path(root, ctx)) }
+
+// ReadLens loads one lens's verdict of a context; nil when there is none.
+func ReadLens(root, ctx, lens string) (*Verdict, error) { return read(LensPath(root, ctx, lens)) }
+
+func read(path string) (*Verdict, error) {
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}

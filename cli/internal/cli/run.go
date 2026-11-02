@@ -949,7 +949,11 @@ type engineAgent struct {
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
 	s := a.open(a.work, t.Tier, t.Tools)
 	defer s.Close()
-	path := loop.Transcript(a.root, a.run, loop.AgentID(t.Node, t.Iter))
+	id := t.Agent
+	if id == "" {
+		id = loop.AgentID(t.Node, t.Iter)
+	}
+	path := loop.Transcript(a.root, a.run, id)
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	transcript, err := os.Create(path)
 	if err != nil {
@@ -1002,6 +1006,21 @@ type diskVerdicts struct{ root string }
 
 func (d diskVerdicts) Read(ctx string) (*verdict.Verdict, error) { return verdict.Read(d.root, ctx) }
 
+func (d diskVerdicts) ReadLens(ctx, lens string) (*verdict.Verdict, error) {
+	return verdict.ReadLens(d.root, ctx, lens)
+}
+
+// Write records the verdict merged from the lenses as gofi verdict write
+// does: checked, and carried into the context's memory.
+func (d diskVerdicts) Write(v *verdict.Verdict) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = writeVerdict(d.root, v.Context, data, v.Run, v.Iter, "")
+	return err
+}
+
 // loopPolicy is the project's convergence policy, from loop in .gofi.yaml:
 // absent, the defaults — no budget, the flow's limits, clean, on_no_progress.
 func loopPolicy(cfg *config.GofiConfig) loop.Policy {
@@ -1009,7 +1028,7 @@ func loopPolicy(cfg *config.GofiConfig) loop.Policy {
 		return loop.Policy{}
 	}
 	l := cfg.Loop
-	return loop.Policy{MaxIterations: l.MaxIterations, BudgetUSD: l.BudgetUSD, Accept: l.Accept, Escalate: l.Escalate}
+	return loop.Policy{MaxIterations: l.MaxIterations, BudgetUSD: l.BudgetUSD, Accept: l.Accept, Escalate: l.Escalate, AuditParallel: l.AuditParallel}
 }
 
 // defaultGateTimeout is how long a run waits at its gate when neither the
