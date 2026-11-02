@@ -47,6 +47,8 @@ var known = map[string]bool{
 	"aprovacao_versao": true, "aprovacao_sha": true,
 	// The contexts whose code this one consumes: the order the loop builds in.
 	"depende_de": true,
+	// A change's proposal: the surfaces it touches.
+	"superficies": true,
 	// A change names every context it touches, and design: n/a when it
 	// touches no code (0003, S3.2).
 	"contextos": true, "design": true,

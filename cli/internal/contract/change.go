@@ -159,7 +159,16 @@ type Change struct {
 	Docs  []string `json:"documentos"`
 	// DependsOn are the changes that must be accepted before this one.
 	DependsOn []string `json:"depende_de,omitempty"`
+	// Surfaces are what the change touches, as the proposal declares them;
+	// the loop dispatches the role that implements each (0002, D18).
+	Surfaces []string `json:"superficies,omitempty"`
 }
+
+// FieldSurfaces lists, in a proposal, the surfaces the change touches.
+const FieldSurfaces = "superficies"
+
+// Surfaces a change can touch: what a role implements.
+var Surfaces = []string{"backend", "web", "mobile", "infra"}
 
 // Changes lists the open changes, sorted by id.
 func Changes(all []Doc) []Change {
@@ -178,6 +187,7 @@ func Changes(all []Doc) []Change {
 			c.Status = value(d.Front, "status")
 			c.Contexts = d.Contexts
 			c.DependsOn = d.Front.List(FieldDepends)
+			c.Surfaces = d.Front.List(FieldSurfaces)
 		}
 		switch state, _ := SealOf(d); state {
 		case Unsealed:

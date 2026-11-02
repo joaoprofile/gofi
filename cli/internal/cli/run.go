@@ -23,9 +23,12 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/guard"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
@@ -88,6 +91,7 @@ gofi run adicionar-rate-limit --detach`,
 	cmd.Flags().Bool("events", false, i18n.T("cmd.run.flag.events"))
 	cmd.Flags().String("gate-timeout", "", i18n.T("cmd.run.flag.gate_timeout"))
 	cmd.Flags().Bool("detach", false, i18n.T("cmd.run.flag.detach"))
+	cmd.Flags().Bool("explain", false, i18n.T("cmd.run.flag.explain"))
 	cmd.Flags().Bool("worktree", false, i18n.T("cmd.run.flag.worktree"))
 	cmd.Flags().String("run-id", "", "name of the new run (set by --detach)")
 	_ = cmd.Flags().MarkHidden("run-id")
@@ -119,6 +123,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	if named != 1 {
 		return errors.New(i18n.T("run.which"))
+	}
+	if explain, _ := cmd.Flags().GetBool("explain"); explain {
+		if len(args) == 0 {
+			return errors.New(i18n.T("run.explain_which"))
+		}
+		flowName, _ := cmd.Flags().GetString("flow")
+		return explainRun(cmd.OutOrStdout(), root, cfg, args[0], flowName)
 	}
 	if detach, _ := cmd.Flags().GetBool("detach"); detach {
 		if ctxName != "" {
@@ -362,8 +373,10 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		return landRun(ctx, out, root, prior, tree, wait, o.Events, report)
 	}
 
-	open := runPorts.open
-	if open == nil {
+	// Each role's turn runs on its tier's model: an internal role has no
+	// skill frontmatter to name one.
+	open := func(dir string, _ host.Tier) engine.Session { return runPorts.open(dir) }
+	if runPorts.open == nil {
 		mode := o.Mode
 		if mode == "" {
 			mode = "acceptEdits"
@@ -373,7 +386,22 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		if err != nil {
 			return "", err
 		}
-		open = func(string) engine.Session { return session("") }
+		h, _ := host.Get(cfg.AI.Host)
+		open = func(_ string, t host.Tier) engine.Session {
+			model := ""
+			if h.SkillModel && t != "" {
+				model = h.Model(t, cfg.AI.Tiers)
+			}
+			return session(model)
+		}
+	}
+	roles, problems := role.Load(layout.RoleDirs(work)...)
+	if len(problems) > 0 {
+		return "", errors.Join(problems...)
+	}
+	facts, err := changeFacts(cfg, work, change)
+	if err != nil {
+		return "", err
 	}
 	gate := runPorts.gate
 	if gate == nil {
@@ -385,7 +413,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 
 	r := &loop.Runner{
-		Root: root, Work: work, Flow: f, Brief: loop.DefaultBrief,
+		Root: root, Work: work, Flow: f, Brief: loop.DefaultBrief, Roles: roles, Facts: facts,
 		Agent:    &engineAgent{root: root, work: work, run: run, open: open, out: out, quiet: o.Events},
 		Sensors:  commandSensors{root: work, commands: sensorCommands(cfg)},
 		Verdicts: diskVerdicts{root: work},
@@ -453,6 +481,100 @@ const (
 	waiting  = "aguardando"
 	conflict = "conflito"
 )
+
+// explainRun shows, without running anything, what a change's run would
+// dispatch: its facts, and at each agent node of the flow the roles of its
+// stage, whether each runs and why (0002, D18). A node past the sensors is
+// read as the sensors left it green — the only way the flow reaches it.
+func explainRun(out io.Writer, root string, cfg *config.GofiConfig, change, flowName string) error {
+	if _, err := sealedChange(root, change); err != nil {
+		return err
+	}
+	f, err := loop.Load(root, flowName)
+	if err != nil {
+		return err
+	}
+	roles, problems := role.Load(layout.RoleDirs(root)...)
+	if len(problems) > 0 {
+		return errors.Join(problems...)
+	}
+	facts, err := changeFacts(cfg, root, change)
+	if err != nil {
+		return err
+	}
+	var held []string
+	for k := range facts {
+		held = append(held, k)
+	}
+	slices.Sort(held)
+	fmt.Fprintf(out, "  %s %s\n", i18n.T("run.explain.facts", change), strings.Join(held, ", "))
+	for _, name := range f.Walk() {
+		n := f.Nodes[name]
+		if n.Kind != loop.KindAgent {
+			continue
+		}
+		if n.Role != "" {
+			fmt.Fprintf(out, "\n  %s — %s\n", name, i18n.T("run.explain.fixed", n.Role))
+			continue
+		}
+		at := role.Facts{}
+		for k, v := range facts {
+			at[k] = v
+		}
+		at["sensor.green"] = true
+		fmt.Fprintf(out, "\n  %s — %s %s\n", name, i18n.T("run.explain.stage"), n.Stage)
+		for _, line := range role.Explain(roles, n.Stage, at) {
+			fmt.Fprintln(out, "    "+line)
+		}
+	}
+	return nil
+}
+
+// changeFacts are what holds about a change before its run starts: the
+// surfaces it touches, as its proposal declares them — or, declaring none,
+// the project's backend, else its one other surface.
+func changeFacts(cfg *config.GofiConfig, root, change string) (role.Facts, error) {
+	all, err := contract.Docs(root)
+	if err != nil {
+		return nil, err
+	}
+	var surfaces []string
+	for _, c := range contract.Changes(all) {
+		if c.ID == change {
+			surfaces = c.Surfaces
+		}
+	}
+	if len(surfaces) == 0 {
+		if project := projectSurfaces(cfg); len(project) > 0 {
+			surfaces = project[:1]
+		}
+	}
+	facts := role.Facts{}
+	for _, s := range surfaces {
+		facts["change.surface("+s+")"] = true
+	}
+	return facts, nil
+}
+
+// projectSurfaces are the surfaces a project has, backend first: what a
+// change can touch.
+func projectSurfaces(cfg *config.GofiConfig) []string {
+	var out []string
+	if cfg.Backend != nil {
+		out = append(out, "backend")
+	}
+	for _, s := range cfg.UISurfaces() {
+		if s.Name == "mobile" {
+			out = append(out, "mobile")
+		} else {
+			out = append(out, "web")
+		}
+	}
+	if cfg.Ops != nil {
+		out = append(out, "infra")
+	}
+	return out
+}
 
 // derivedFile is a file gofi generates from the rest of the tree: the index
 // and graph under .gofi/index/, and the INDEX.md of each document folder.
@@ -655,13 +777,13 @@ func sensorCommands(cfg *config.GofiConfig) map[string]string {
 type engineAgent struct {
 	root, run string
 	work      string // where the session runs: the run's worktree, or root
-	open      func(root string) engine.Session
+	open      func(dir string, tier host.Tier) engine.Session
 	out       io.Writer
 	quiet     bool // events mode: the transcript holds the tool calls
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
-	s := a.open(a.work)
+	s := a.open(a.work, t.Tier)
 	defer s.Close()
 	path := loop.Transcript(a.root, a.run, loop.AgentID(t.Node, t.Iter))
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)

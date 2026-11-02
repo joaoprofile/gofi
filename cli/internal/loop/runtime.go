@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/runs"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
@@ -50,8 +52,10 @@ type (
 // Turn is what an agent node sends.
 type Turn struct {
 	Node, Role string
-	Iter       int
-	Prompt     string
+	// Tier is the role's, for the engine to pick its model.
+	Tier   host.Tier
+	Iter   int
+	Prompt string
 	// ElicitFile is where the agent writes a decision it cannot find, relative
 	// to the project root.
 	ElicitFile string
@@ -142,8 +146,12 @@ type Runner struct {
 	Sensors  Sensors
 	Verdicts Verdicts
 	Gate     Gate
-	// Brief writes the prompt of an agent node from the state.
-	Brief func(n Node, s *State, elicitFile string) string
+	// Brief writes the prompt of a role's turn from the state.
+	Brief func(rl role.Role, s *State, elicitFile string) string
+	// Roles are the installed roles a stage dispatches from; Facts what
+	// holds about the change, computed when the run starts.
+	Roles []role.Role
+	Facts role.Facts
 	// Now is the clock; tests fix it.
 	Now func() time.Time
 	// OnEvent sees every event as it is written, for a live view.
@@ -244,33 +252,18 @@ func (r *Runner) Continue(ctx context.Context, s *State) (*State, error) {
 func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) error {
 	switch n.Kind {
 	case KindAgent:
-		s.Iter++
-		s.Agent = name
-		elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
-		prompt := r.Brief(n, s, elicit)
-		if s.Answered && s.Elicit != "" {
-			if e, err := intake.ReadElicitation(r.work(), s.Elicit); err == nil && e != nil {
-				prompt = intake.WithDecisions(prompt, e, s.Answers)
-			}
-		}
-		a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: n.Role, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
-		_ = saveAgent(r.Root, s.Run, a)
-		res, err := r.Agent.Run(ctx, Turn{Node: name, Role: n.Role, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit})
-		s.CostUSD += res.CostUSD
-		a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
+		roles, err := r.dispatch(name, n, s)
 		if err != nil {
-			a.Status, a.Error = AgentFailed, err.Error()
-			_ = saveAgent(r.Root, s.Run, a)
 			return err
 		}
-		e, _ := intake.ReadElicitation(r.work(), elicit)
-		s.Blocked = e != nil && len(e.Questions) > 0
-		s.Answered, s.Answers = false, nil
-		a.Status = AgentDone
-		if s.Blocked {
-			s.Elicit, s.BlockedBy, a.Status = elicit, a.ID, AgentBlocked
+		for _, rl := range roles {
+			if err := r.runAgent(ctx, name, rl, s); err != nil {
+				return err
+			}
+			if s.Blocked {
+				break // the person answers before the next role builds on it
+			}
 		}
-		_ = saveAgent(r.Root, s.Run, a)
 	case KindSensor:
 		res := r.Sensors.Run(ctx, n.Stages)
 		s.Sensor = &res
@@ -320,6 +313,92 @@ func (r *Runner) unblock(s *State) {
 		}
 	}
 	s.BlockedBy = ""
+}
+
+// dispatch is the roles an agent node runs: the one it names, or those of
+// its stage whose triggers hold on the run's facts (0002, D18) — recorded,
+// with why, in the run's log. A stage nobody answers stops the run: a change
+// nobody can implement is not accepted by skipping it.
+func (r *Runner) dispatch(name string, n Node, s *State) ([]role.Role, error) {
+	if n.Role != "" {
+		for _, rl := range r.Roles {
+			if rl.Name == n.Role {
+				return []role.Role{rl}, nil
+			}
+		}
+		return []role.Role{{Name: n.Role}}, nil
+	}
+	facts := r.facts(s)
+	choices := role.Dispatch(r.Roles, n.Stage, facts)
+	if len(choices) == 0 {
+		return nil, fmt.Errorf("nenhum papel do estágio %s dispara nesta mudança:\n  %s", n.Stage, strings.Join(role.Explain(r.Roles, n.Stage, facts), "\n  "))
+	}
+	var out []role.Role
+	for _, c := range choices {
+		r.emit(s, Event{Ev: "dispatch", Node: name, To: c.Role, Why: c.Why})
+		for _, rl := range r.Roles {
+			if rl.Name == c.Role {
+				out = append(out, rl)
+			}
+		}
+	}
+	return out, nil
+}
+
+// facts are the run's facts now: the change's, given when the run started,
+// and the run's own — the last sensor run, the verdict, the open findings'
+// owners. Computed, never read from what a model said.
+func (r *Runner) facts(s *State) role.Facts {
+	f := role.Facts{}
+	for k, v := range r.Facts {
+		f[k] = v
+	}
+	if s.Sensor != nil {
+		f["sensor.green"] = len(s.Sensor.Failed) == 0
+		for _, st := range s.Sensor.Failed {
+			f["sensor.failed("+st+")"] = true
+		}
+	}
+	if s.Verdict != "" {
+		f["verdict("+s.Verdict+")"] = true
+	}
+	for _, o := range s.Open {
+		f["owner("+o.Owner+")"] = true
+	}
+	return f
+}
+
+// runAgent runs one role's turn in a session of its own and records the
+// agent: its state, its cost, whether it stopped on a decision.
+func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *State) error {
+	s.Iter++
+	s.Agent = name
+	elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
+	prompt := r.Brief(rl, s, elicit)
+	if s.Answered && s.Elicit != "" {
+		if e, err := intake.ReadElicitation(r.work(), s.Elicit); err == nil && e != nil {
+			prompt = intake.WithDecisions(prompt, e, s.Answers)
+		}
+	}
+	a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: rl.Name, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
+	_ = saveAgent(r.Root, s.Run, a)
+	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: rl.Contract.Tier})
+	s.CostUSD += res.CostUSD
+	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
+	if err != nil {
+		a.Status, a.Error = AgentFailed, err.Error()
+		_ = saveAgent(r.Root, s.Run, a)
+		return err
+	}
+	e, _ := intake.ReadElicitation(r.work(), elicit)
+	s.Blocked = e != nil && len(e.Questions) > 0
+	s.Answered, s.Answers = false, nil
+	a.Status = AgentDone
+	if s.Blocked {
+		s.Elicit, s.BlockedBy, a.Status = elicit, a.ID, AgentBlocked
+	}
+	_ = saveAgent(r.Root, s.Run, a)
+	return nil
 }
 
 var weight = map[string]int{"blocker": 8, "major": 4, "minor": 1}

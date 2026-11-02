@@ -284,7 +284,8 @@ function nextStep(result, answered) {
 }
 
 /** The flow that delivers what a plan phase builds (gofi decision 0002). */
-const DELIVERY_FLOWS = { code: 'delivery', ui: 'delivery-ui', infra: 'delivery-ops' };
+// One flow delivers every build: which role implements is dispatched inside it.
+const DELIVERY_FLOWS = { code: 'delivery', ui: 'delivery', infra: 'delivery' };
 
 /** The flow that delivers an artifact, or null when the loop does not build it. */
 function deliveryFlow(produces) {

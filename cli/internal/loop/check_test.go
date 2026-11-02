@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"github.com/joaoprofile/gofi/cli/internal/role"
 	"strings"
 	"testing"
 )
@@ -24,7 +25,7 @@ func TestTheBuiltinFlowsAreValid(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := Check(f, []string{"gofi-eng", "gofi-ui", "gofi-ops", "gofi-qa"}); len(got) != 0 {
+		if got := Check(f, shippedRoles()); len(got) != 0 {
 			t.Errorf("%s:\n%s", name, messages(got))
 		}
 	}
@@ -56,9 +57,9 @@ func problems(t *testing.T, yaml string, roles ...string) string {
 	if err != nil {
 		return "parse " + err.Error()
 	}
-	var r []string
-	if len(roles) > 0 {
-		r = roles
+	var r []role.Role
+	for _, name := range roles {
+		r = append(r, role.Role{Name: name})
 	}
 	return messages(Check(f, r))
 }
