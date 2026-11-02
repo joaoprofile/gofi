@@ -29,20 +29,10 @@ type Phase struct {
 	RoleTurn    string `json:"role_turn,omitempty"`
 	Model       string `json:"model,omitempty"`
 	ReviewAfter bool   `json:"review_after,omitempty"`
-	// OnReject are the phases to run right after this audit when the QA fails
-	// the delivery: the implementation one tier up, and the audit again. The
-	// conductor reads the verdict at Result.VerdictFile (see Rejected).
-	OnReject []Phase `json:"on_reject,omitempty"`
-
 	// Elicit marks the cheaper phase the role's contract puts before it: it
 	// walks Checklist and writes the open decisions to ElicitFile, relative
 	// to the project root, for the person to answer before the role runs
 	// (see Elicitation). It writes no document.
-	// OnBlock are the phases to run when an implementation stops on a
-	// decision the spec does not cover and writes it to ElicitFile: the spec
-	// records the person's answer, and the implementation runs again.
-	OnBlock []Phase `json:"on_block,omitempty"`
-
 	Elicit     bool   `json:"elicit,omitempty"`
 	Checklist  string `json:"checklist,omitempty"`
 	ElicitFile string `json:"elicit_file,omitempty"`
