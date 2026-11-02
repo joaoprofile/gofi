@@ -23,6 +23,7 @@ func TestUpdateScope_AnswersAllThreeQuestions(t *testing.T) {
 		"This run:",
 		"WRITES        .claude/skills/  9 file(s): 2 new, 3 changed",
 		"KEEPS         1 file(s) you edited",
+		"                .claude/skills/gofi-eng/SKILL.md",
 		"LEAVES ALONE  .gofi.yaml, memory/",
 	} {
 		if !strings.Contains(out, want) {

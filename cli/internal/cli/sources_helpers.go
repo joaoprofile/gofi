@@ -198,7 +198,7 @@ func generateSDKReference(projectRoot, language, sdkRef string) error {
 	if _, err := sdkdoc.WriteExamples(checkout, out, checkoutRel, version); err != nil {
 		return fmt.Errorf("index the SDK examples: %w", err)
 	}
-	return nil
+	return scaffold.RecordGenerated(projectRoot, layout.SDK().Path(language, "api"))
 }
 
 // sdkVersion is the part of a source ref after the @: the tag or branch the

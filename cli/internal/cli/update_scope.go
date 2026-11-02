@@ -98,8 +98,12 @@ func (s updateScope) String() string {
 		b.WriteString("  KEEPS         nothing — this target is an authoritative mirror\n")
 	case len(s.Keeps) > 0 && s.Force:
 		fmt.Fprintf(&b, "  OVERWRITES    %d file(s) you edited — copy kept in .gofi/backup/\n", len(s.Keeps))
+		fmt.Fprintf(&b, "                %s\n", wrapList(s.Keeps, 16, 62))
 	case len(s.Keeps) > 0:
+		// Named, not only counted: "a file you edited" in a project nobody
+		// touched is a question only the path answers.
 		fmt.Fprintf(&b, "  KEEPS         %d file(s) you edited\n", len(s.Keeps))
+		fmt.Fprintf(&b, "                %s\n", wrapList(s.Keeps, 16, 62))
 		if s.Hint != "" {
 			fmt.Fprintf(&b, "                %s\n", wrapWords(s.Hint, 16, 62))
 		}
