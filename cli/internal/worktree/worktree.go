@@ -48,7 +48,8 @@ type Tree struct {
 // from the commit, not from the files on disk.
 var ErrNotCommitted = errors.New("not committed")
 
-// Prepare creates the worktree of a run on a new branch gofi/<change> from the
+// Prepare creates the worktree of a run on a new branch gofi/<change> — or
+// gofi/<change>-<n> when that one is taken — from the
 // base branch's head, or reopens it when the run is resumed. The change, and
 // the project's gofi files, must be committed: what is only on disk is not in
 // the worktree.
@@ -59,8 +60,14 @@ func Prepare(ctx context.Context, root, run, change string) (*Tree, error) {
 	}
 	t := &Tree{Root: root, Dir: filepath.Join(root, filepath.FromSlash(Dir), run), Branch: "gofi/" + change, Base: base}
 	if _, err := os.Stat(t.Dir); err == nil {
+		if b, err := git(ctx, t.Dir, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
+			t.Branch = b
+		}
 		return t, nil
 	}
+	// A change run again after an impasse: the first run's branch keeps its
+	// work, and this one gets a branch of its own.
+	t.Branch = FreeBranch(ctx, root, t.Branch)
 	if err := Ready(ctx, root, change); err != nil {
 		return nil, err
 	}
