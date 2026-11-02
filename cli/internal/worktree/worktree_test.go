@@ -167,3 +167,96 @@ func TestLandedReadsTheArchiveOnTheBase(t *testing.T) {
 		t.Error("Landed misread the archive")
 	}
 }
+
+// Two runs both rewrite a derived file — the graph: the second lands
+// rebased on the first, the file written again from both changes, never a
+// conflict for the person. A conflict in anything else still is one.
+func TestADerivedFileIsRegeneratedNotAConflict(t *testing.T) {
+	ctx := context.Background()
+	root := project(t)
+	write(t, filepath.Join(root, "graph.txt"), "app.txt\n")
+	write(t, filepath.Join(root, "specs/changes/c/proposal.md"), "c\n")
+	write(t, filepath.Join(root, "specs/changes/d/proposal.md"), "d\n")
+	run(t, root, "add", "-A")
+	run(t, root, "commit", "--quiet", "-m", "graph")
+	// regenerate lists the .txt files of the tree, as an index lists the code.
+	regenerate := func(_ context.Context, dir string) error {
+		names, _ := filepath.Glob(filepath.Join(dir, "*.txt"))
+		var b strings.Builder
+		for _, n := range names {
+			if base := filepath.Base(n); base != "graph.txt" {
+				b.WriteString(base + "\n")
+			}
+		}
+		return os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(b.String()), 0o644)
+	}
+	derived := func(p string) bool { return p == "graph.txt" }
+	tree := func(run, change, file string) *Tree {
+		tr, err := Prepare(ctx, root, run, change)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr.Derived, tr.Regenerate = derived, regenerate
+		write(t, filepath.Join(tr.Dir, file), "x\n")
+		_ = regenerate(ctx, tr.Dir)
+		_ = tr.Commit(ctx, change)
+		return tr
+	}
+	a, b := tree("r-1", "a", "a.txt"), tree("r-2", "b", "b.txt")
+	if err := a.Land(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Land(ctx); err != nil {
+		t.Fatalf("b did not land over a derived file: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, "graph.txt"))
+	if string(got) != "a.txt\napp.txt\nb.txt\n" {
+		t.Errorf("graph.txt on main = %q: not regenerated from both changes", got)
+	}
+
+	// The same file conflicting outside the derived set is still a conflict.
+	c := tree("r-3", "c", "c.txt")
+	d, _ := Prepare(ctx, root, "r-4", "d")
+	d.Derived, d.Regenerate = derived, regenerate
+	write(t, filepath.Join(c.Dir, "app.txt"), "c\n")
+	_ = c.Commit(ctx, "c2")
+	write(t, filepath.Join(d.Dir, "app.txt"), "d\n")
+	_ = d.Commit(ctx, "d")
+	if err := c.Land(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Land(ctx); !errors.Is(err, ErrConflict) {
+		t.Errorf("a real conflict: %v", err)
+	}
+}
+
+// A derived file only one side has — an index the base never wrote — is
+// taken from the base too: removed, and written again if it should exist.
+func TestADerivedFileTheBaseLacksIsNotAConflict(t *testing.T) {
+	ctx := context.Background()
+	root := project(t)
+	regenerate := func(context.Context, string) error { return nil }
+	derived := func(p string) bool { return filepath.Base(p) == "INDEX.md" }
+	a, _ := Prepare(ctx, root, "r-1", "a")
+	b, _ := Prepare(ctx, root, "r-2", "b")
+	for _, tr := range []*Tree{a, b} {
+		tr.Derived, tr.Regenerate = derived, regenerate
+	}
+	// a writes the index and lands; b writes and then deletes it.
+	write(t, filepath.Join(a.Dir, "docs/INDEX.md"), "a\n")
+	_ = a.Commit(ctx, "a")
+	if err := a.Land(ctx); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(b.Dir, "docs/INDEX.md"), "b\n")
+	write(t, filepath.Join(b.Dir, "b.txt"), "b\n")
+	_ = b.Commit(ctx, "b")
+	run(t, root, "rm", "--quiet", "docs/INDEX.md")
+	run(t, root, "commit", "--quiet", "-m", "the base drops the index")
+	if err := b.Land(ctx); err != nil {
+		t.Fatalf("a derived file the base lacks: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "b.txt")); err != nil {
+		t.Error("b did not land")
+	}
+}

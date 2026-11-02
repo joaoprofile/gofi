@@ -28,7 +28,7 @@ var shared = []string{".gofi/gofi-sdk-go", ".gofi/gofi-sdk-ts", ".gofi/cache"}
 // copied are the ignored files and folders a worktree starts from a copy of:
 // each run writes its own. The code graph is versioned, so the worktree has
 // it from the commit; only the parts of the index git ignores are copied.
-var copied = []string{".gofi/index/docs", ".gofi/index/manifest.json", ".env"}
+var copied = []string{".gofi/index/docs", ".gofi/index/manifest.json", ".gofi/installed.yaml", ".gofi/installed-files.yaml", ".env"}
 
 // Tree is one run's worktree.
 type Tree struct {
@@ -36,6 +36,12 @@ type Tree struct {
 	Dir    string // the worktree
 	Branch string // gofi/<change>
 	Base   string // the branch it lands on
+	// Derived says a path is generated from the rest of the tree — an index,
+	// a graph. Two runs side by side both rewrite such a file; a rebase that
+	// conflicts only on derived files takes the base's and lets Regenerate
+	// write them again from the code they both changed.
+	Derived    func(path string) bool
+	Regenerate func(ctx context.Context, dir string) error
 }
 
 // ErrNotCommitted is a change the worktree would not see: a worktree starts
@@ -94,9 +100,15 @@ func Ready(ctx context.Context, root, change string) error {
 	return nil
 }
 
-// Commit records what the run changed on its branch. Nothing to commit is not
-// an error: a change can be accepted with no file touched.
+// Commit records what the run changed on its branch, the derived files
+// written again first so the commit holds the index of its own code. Nothing
+// to commit is not an error: a change can be accepted with no file touched.
 func (t *Tree) Commit(ctx context.Context, message string) error {
+	if t.Regenerate != nil {
+		if err := t.Regenerate(ctx, t.Dir); err != nil {
+			return fmt.Errorf("regenerate the derived files: %w", err)
+		}
+	}
 	if _, err := git(ctx, t.Dir, "add", "-A"); err != nil {
 		return err
 	}
@@ -105,6 +117,12 @@ func (t *Tree) Commit(ctx context.Context, message string) error {
 	}
 	_, err := git(ctx, t.Dir, "commit", "--quiet", "-m", message)
 	return err
+}
+
+// Ahead reports whether the branch already has commits the base does not.
+func (t *Tree) Ahead(ctx context.Context) bool {
+	n, err := git(ctx, t.Dir, "rev-list", "--count", t.Base+".."+t.Branch)
+	return err == nil && n != "0"
 }
 
 // Why a branch cannot land yet. Each is a wait, not a failure: the caller
@@ -129,7 +147,7 @@ func (t *Tree) Land(ctx context.Context) error {
 	if out, _ := git(ctx, t.Root, "status", "--porcelain", "--untracked-files=no"); out != "" {
 		return ErrDirty
 	}
-	if _, err := git(ctx, t.Dir, "rebase", "--quiet", t.Base); err != nil {
+	if err := t.rebase(ctx); err != nil {
 		_, _ = git(ctx, t.Dir, "rebase", "--abort")
 		return fmt.Errorf("%w: %v", ErrConflict, err)
 	}
@@ -137,6 +155,49 @@ func (t *Tree) Land(ctx context.Context) error {
 		return fmt.Errorf("%w: %v", ErrRaced, err)
 	}
 	return nil
+}
+
+// rebase replays the branch on the base. Each commit that stops on
+// conflicts in derived files only is taken with the base's version of them,
+// and once the branch is replayed they are generated again and committed.
+// A conflict in anything else is the person's: an error, the rebase left for
+// Land to abort.
+func (t *Tree) rebase(ctx context.Context) error {
+	_, err := git(ctx, t.Dir, "rebase", "--quiet", t.Base)
+	regenerate := false
+	for err != nil {
+		out, _ := git(ctx, t.Dir, "diff", "--name-only", "--diff-filter=U")
+		conflicted := strings.Fields(out)
+		if len(conflicted) == 0 || t.Derived == nil || t.Regenerate == nil {
+			return err
+		}
+		for _, p := range conflicted {
+			if !t.Derived(p) {
+				return fmt.Errorf("%s: %w", p, err)
+			}
+		}
+		// In a rebase, "ours" is the base the commit is replayed on: its
+		// version is taken, and a derived file the base does not have is
+		// removed. Regenerate writes what should be there at the end.
+		for _, p := range conflicted {
+			if _, e := git(ctx, t.Dir, "checkout", "--ours", "--", p); e == nil {
+				_, e = git(ctx, t.Dir, "add", "--", p)
+				if e != nil {
+					return e
+				}
+				continue
+			}
+			if _, e := git(ctx, t.Dir, "rm", "--quiet", "--force", "--", p); e != nil {
+				return e
+			}
+		}
+		regenerate = true
+		_, err = gitEnv(ctx, t.Dir, []string{"GIT_EDITOR=true"}, "rebase", "--continue")
+	}
+	if !regenerate {
+		return nil
+	}
+	return t.Commit(ctx, "chore: regenerate the indexes after rebasing on "+t.Base)
 }
 
 // Landed reports whether the base branch holds a change already: its
@@ -166,8 +227,21 @@ func (t *Tree) Remove(ctx context.Context) error {
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
+	return gitEnv(ctx, dir, nil, args...)
+}
+
+// gitEnv runs git with the repository's hooks off. The project's hooks keep
+// the graph current around a person's commits, checkouts and merges; inside
+// the loop's own commit, rebase and fast-forward they would rewrite derived
+// files mid-operation — a rebase aborted for "local changes", a base left
+// dirty after landing. Here gofi regenerates the derived files itself.
+func gitEnv(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+	args = append([]string{"-c", "core.hooksPath=" + os.DevNull}, args...)
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	if err := cmd.Run(); err != nil {

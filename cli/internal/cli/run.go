@@ -99,6 +99,9 @@ gofi run adicionar-rate-limit --detach`,
 var runPorts = struct {
 	open func(root string) engine.Session
 	gate loop.Gate
+	// regenerate writes a worktree's derived files; in a test, the running
+	// binary is the test binary and must not be run as gofi.
+	regenerate func(ctx context.Context, dir string) error
 }{}
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -237,7 +240,7 @@ func detachRun(root string, args ...string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if s.Node == "" {
+		if s.Node == "" && !landable(s) {
 			return "", fmt.Errorf("run %s ended (%s)", run, s.Outcome)
 		}
 		if l, ok := loop.ReadLock(root, run); ok && loop.Alive(l.PID) {
@@ -336,6 +339,10 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	work := root
 	if tree != nil {
 		work = tree.Dir
+		tree.Derived, tree.Regenerate = derivedFile, regenerateIndexes
+		if runPorts.regenerate != nil {
+			tree.Regenerate = runPorts.regenerate
+		}
 	}
 	// What the run starts — the agents, the gofi MCP server, the git hooks
 	// of its commit — works on the worktree, not on the project it was
@@ -351,7 +358,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	// Accepted and archived, a run in a worktree that has not landed yet
 	// only lands: resuming it runs no agent again.
-	if prior != nil && prior.Node == "" && prior.Outcome == "accepted" && tree != nil && prior.Landing != landed {
+	if prior != nil && tree != nil && landable(prior) {
 		return landRun(ctx, out, root, prior, tree, wait, o.Events, report)
 	}
 
@@ -447,6 +454,38 @@ const (
 	conflict = "conflito"
 )
 
+// derivedFile is a file gofi generates from the rest of the tree: the index
+// and graph under .gofi/index/, and the INDEX.md of each document folder.
+// Two runs side by side both rewrite them; on landing they are generated
+// again, never a conflict.
+func derivedFile(path string) bool {
+	return strings.HasPrefix(path, ".gofi/index/") || filepath.Base(path) == "INDEX.md"
+}
+
+// regenerateIndexes writes the derived files of a worktree again, with the
+// gofi that supervises the run.
+func regenerateIndexes(ctx context.Context, dir string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	for _, target := range []string{"code", "docs"} {
+		cmd := exec.CommandContext(ctx, exe, "index", target)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), config.EnvRoot+"="+dir)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("gofi index %s: %v\n%s", target, err, out)
+		}
+	}
+	return nil
+}
+
+// landable is a run accepted in a worktree that has not landed: resumed, it
+// only lands.
+func landable(s *loop.State) bool {
+	return s.Node == "" && s.Outcome == "accepted" && s.Worktree != "" && s.Landing != landed
+}
+
 // landPoll is how often a waiting landing looks again.
 var landPoll = 10 * time.Second
 
@@ -457,12 +496,16 @@ var landPoll = 10 * time.Second
 // only when it landed.
 func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tree *worktree.Tree, wait time.Duration, events bool, report func(loop.Event)) (string, error) {
 	say := func(ev, why string) {
-		report(loop.Event{Ev: ev, Node: s.Run, Why: why})
+		report(loop.AppendEvent(root, s.Run, loop.Event{Ev: ev, Node: s.Run, Why: why}))
 	}
 	// Committed here, not where the run was accepted: a resume that lands a
 	// run whose commit failed commits it first. Nothing left to commit is
 	// not an error.
-	if err := tree.Commit(ctx, fmt.Sprintf("feat(%s): %s", s.Context, s.Change)); err != nil {
+	message := fmt.Sprintf("feat(%s): %s", s.Context, s.Change)
+	if tree.Ahead(ctx) {
+		message = "chore: regenerate the indexes of " + s.Change
+	}
+	if err := tree.Commit(ctx, message); err != nil {
 		return waiting, fmt.Errorf("commit %s: %w", tree.Branch, err)
 	}
 	var deps []string
@@ -493,7 +536,7 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 			s.Landing = conflict
 			_ = loop.SaveState(root, s)
 			say("land.conflict", err.Error())
-			return conflict, errors.New(i18n.T("run.land.conflict", tree.Branch, tree.Base, tree.Dir))
+			return conflict, fmt.Errorf("%s: %w", i18n.T("run.land.conflict", tree.Branch, tree.Base, tree.Dir), err)
 		} else if errors.Is(err, worktree.ErrDirty) || errors.Is(err, worktree.ErrMoved) || errors.Is(err, worktree.ErrRaced) {
 			why = err.Error()
 		} else {
@@ -552,7 +595,7 @@ func humanReport(out io.Writer) func(loop.Event) {
 			fmt.Fprintf(out, "\n● %s\n", e.Node)
 		case "edge":
 			fmt.Fprintf(out, "  → %s  (%s)\n", e.To, e.Why)
-		case "node.failed", "run.end", "run.cancelled":
+		case "node.failed", "run.end", "run.cancelled", "land.conflict":
 			fmt.Fprintf(out, "  %s %s\n", e.Ev, e.Why)
 		}
 	}
