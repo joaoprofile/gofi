@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
@@ -21,18 +23,26 @@ import (
 type step func(t Turn) // what an agent turn does on disk
 
 type fakeAgent struct {
+	mu    sync.Mutex // lenses run at once
 	root  string
-	steps map[string][]step // by node, consumed in order
+	steps map[string][]step // by node — or node/role for a lens — consumed in order
 	turns []Turn
 }
 
 func (a *fakeAgent) Run(_ context.Context, t Turn) (TurnResult, error) {
+	a.mu.Lock()
 	a.turns = append(a.turns, t)
-	if q := a.steps[t.Node]; len(q) > 0 {
-		a.steps[t.Node] = q[1:]
-		if q[0] != nil {
-			q[0](t)
-		}
+	key := t.Node
+	if _, ok := a.steps[t.Node+"/"+t.Role]; ok {
+		key = t.Node + "/" + t.Role
+	}
+	var s step
+	if q := a.steps[key]; len(q) > 0 {
+		a.steps[key], s = q[1:], q[0]
+	}
+	a.mu.Unlock()
+	if s != nil {
+		s(t)
 	}
 	return TurnResult{CostUSD: 0.01}, nil
 }
@@ -51,6 +61,12 @@ func (s *fakeSensors) Run(context.Context, []string) SensorResult {
 type diskVerdicts struct{ root string }
 
 func (d diskVerdicts) Read(ctx string) (*verdict.Verdict, error) { return verdict.Read(d.root, ctx) }
+
+func (d diskVerdicts) ReadLens(ctx, lens string) (*verdict.Verdict, error) {
+	return verdict.ReadLens(d.root, ctx, lens)
+}
+
+func (d diskVerdicts) Write(v *verdict.Verdict) error { _, err := verdict.Write(d.root, v); return err }
 
 type fakeGate struct {
 	answer bool
@@ -743,5 +759,97 @@ func TestTheAuthorshipOfCodeAndTestsIsGuarded(t *testing.T) {
 	}
 	if !hasEvent(t, w.root, "guard", "gofi-eng") || !hasEvent(t, w.root, "guard", "gofi-test") {
 		t.Error("the guard is not in the log")
+	}
+}
+
+// lensAudit writes one lens's verdict of this turn, its findings as
+// severity:owner:rule:file.
+func lensAudit(root, result string, findings ...string) step {
+	return func(t Turn) {
+		v := &verdict.Verdict{Schema: verdict.Schema, Context: "pedidos", Result: result, Findings: []verdict.Finding{}}
+		for _, f := range findings {
+			p := strings.SplitN(f, ":", 4)
+			v.Findings = append(v.Findings, verdict.Finding{Severity: p[0], Owner: p[1], Rule: p[2], File: p[3], Message: "m"})
+		}
+		data, _ := json.Marshal(v)
+		parsed, err := verdict.Parse(data, "pedidos")
+		if err != nil {
+			panic(err)
+		}
+		parsed.Run, parsed.Iter, parsed.Lens = "r-1", t.Iter, t.Role
+		if _, err := verdict.Write(root, parsed); err != nil {
+			panic(err)
+		}
+	}
+}
+
+// lensWorld audits in lenses: the general one and security, both reading
+// only.
+func lensWorld(t *testing.T) *world {
+	w := newWorld(t)
+	reads := []string{"read", "search", "gofi", "verify", "verdict"}
+	var roles []role.Role
+	for _, r := range shippedRoles() {
+		if r.Contract.Stage != "audit" {
+			roles = append(roles, r)
+		}
+	}
+	w.runner.Roles = append(roles,
+		role.Role{Name: "gofi-qa", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "audit", Tools: reads,
+			Triggers: []role.Trigger{{All: []string{"sensor.green"}}}}},
+		role.Role{Name: "gofi-qa-security", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "audit", Tools: reads,
+			Triggers: []role.Trigger{{All: []string{"sensor.green", "change.surface(backend)"}}}}})
+	return w
+}
+
+// The audit runs in lenses, each in its own session on the same iteration,
+// told it is a lens; gofi merges their verdicts, and the policy reads the
+// merge (0002, D17).
+func TestTheAuditRunsInLensesAndTheirVerdictsMerge(t *testing.T) {
+	w := lensWorld(t)
+	w.agent.steps["audit/gofi-qa"] = []step{lensAudit(w.root, "aprovado"), lensAudit(w.root, "aprovado")}
+	w.agent.steps["audit/gofi-qa-security"] = []step{lensAudit(w.root, "reprovado", "blocker:eng:pedidos/REQ-01:backend/pedidos/handler/h.go"), lensAudit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" || path(t, w.root) != "implement sense audit policy implement sense audit policy accepted" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	var audits []Turn
+	for _, turn := range w.agent.turns {
+		if turn.Node == "audit" {
+			audits = append(audits, turn)
+		}
+	}
+	if len(audits) != 4 || audits[0].Iter != audits[1].Iter || audits[0].Agent == audits[1].Agent {
+		t.Fatalf("lens turns = %+v", audits)
+	}
+	if !strings.Contains(audits[0].Prompt, "lens "+audits[0].Role) {
+		t.Errorf("a lens is not told its lens:\n%s", audits[0].Prompt)
+	}
+	var fixes []Turn
+	for _, turn := range w.agent.turns {
+		if turn.Node == "implement" {
+			fixes = append(fixes, turn)
+		}
+	}
+	if len(fixes) != 2 || !strings.Contains(fixes[1].Prompt, "pedidos/REQ-01") {
+		t.Errorf("the fix turn does not carry the security lens's finding: %+v", fixes)
+	}
+	v, _ := verdict.Read(w.root, "pedidos")
+	if v == nil || strings.Join(v.Lenses, ",") != "gofi-qa,gofi-qa-security" || !v.Clean() {
+		t.Errorf("merged verdict = %+v", v)
+	}
+	agents, _ := Agents(w.root, "r-1")
+	if len(agents) != 6 {
+		t.Errorf("agents = %d, want an agent per lens per audit", len(agents))
+	}
+}
+
+// A lens that wrote no verdict stops the run, as an audit that wrote none.
+func TestALensWithoutItsVerdictStopsTheRun(t *testing.T) {
+	w := lensWorld(t)
+	w.agent.steps["audit/gofi-qa"] = []step{lensAudit(w.root, "aprovado")}
+	w.agent.steps["audit/gofi-qa-security"] = []step{nil}
+	if _, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos"); err == nil || !strings.Contains(err.Error(), "a lente gofi-qa-security não gravou") {
+		t.Errorf("err = %v", err)
 	}
 }

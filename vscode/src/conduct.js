@@ -210,6 +210,10 @@ const conduct = {
 				this.post({ type: 'notice', text: 'A entrega não pode seguir: há uma proposta de emenda para você decidir.', hint: e.to });
 			} else if (e.ev === 'land.done') {
 				this.post({ type: 'notice', text: `Mudança integrada em ${e.why}.` });
+			} else if (e.ev === 'merge') {
+				this.post({ type: 'notice', text: `Auditoria em lentes: ${e.why}.` });
+			} else if (e.ev === 'guard') {
+				this.post({ type: 'notice', text: `${e.to}: ${e.why}` });
 			} else if (e.ev === 'work.kept') {
 				this.post({ type: 'notice', text: `O trabalho não aceito ficou na branch ${e.to}; a árvore voltou ao início.` });
 			}

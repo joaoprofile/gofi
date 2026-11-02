@@ -124,7 +124,7 @@ func newMCPServer(root, language string) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "verdict_write", Title: "Record an audit's verdict",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
-		Description: `Record a context's verdict: json is the verdict (` + verdict.Schema + `: result aprovado or reprovado, findings with severity, owner, rule and message); run and iter are the ones the turn names. Checked before it is written; status and ressalvas go into the context's memory. What gofi verdict write does.`,
+		Description: `Record a context's verdict: json is the verdict (` + verdict.Schema + `: result aprovado or reprovado, findings with severity, owner, rule and message); run, iter and lens are the ones the turn names. Checked before it is written; status and ressalvas go into the context's memory. What gofi verdict write does.`,
 	}, g.verdictWrite)
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "memory_write", Title: "Write a context's memory",
@@ -143,6 +143,7 @@ type verdictArgs struct {
 	JSON    string `json:"json" jsonschema:"the verdict as JSON text"`
 	Run     string `json:"run,omitempty" jsonschema:"the run the turn names"`
 	Iter    int    `json:"iter,omitempty" jsonschema:"the iteration the turn names"`
+	Lens    string `json:"lens,omitempty" jsonschema:"the lens the turn names, when the audit runs in lenses"`
 }
 
 type memoryArgs struct {
@@ -192,7 +193,7 @@ func (g *gofiMCP) verify(ctx context.Context, _ *mcp.CallToolRequest, a verifyAr
 }
 
 func (g *gofiMCP) verdictWrite(_ context.Context, _ *mcp.CallToolRequest, a verdictArgs) (*mcp.CallToolResult, any, error) {
-	said, err := writeVerdict(g.root, a.Context, []byte(a.JSON), a.Run, a.Iter)
+	said, err := writeVerdict(g.root, a.Context, []byte(a.JSON), a.Run, a.Iter, a.Lens)
 	if err != nil {
 		return nil, nil, err
 	}

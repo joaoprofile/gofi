@@ -68,6 +68,9 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		if s.Stuck {
 			why = "o trabalho não progride nem no tier mais alto"
 		}
+		if len(s.Ambiguous) > 0 {
+			why += fmt.Sprintf("; as lentes divergiram sobre o dono de %s", strings.Join(s.Ambiguous, ", "))
+		}
 		fmt.Fprintf(&b, "**A execução não pode seguir:** %s. Grave a proposta de emenda em `%s` — é a única escrita deste turno — e encerre: a execução para em impasse e a pessoa decide pela sua proposta.\n\n", why, s.Proposal)
 	}
 	fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s`, exatamente neste formato, e encerre o turno:\n\n```json\n%s\n```\n\n", elicitFile, intake.ElicitExample)
@@ -75,6 +78,11 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	// turn is not spent on commands that are refused.
 	if len(rl.Contract.Tools) > 0 && !slices.Contains(rl.Contract.Tools, "shell") {
 		b.WriteString("Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi; para achar e entender código e documentos, `find`, `show` e `path`. O índice, o loop atualiza depois do seu turno.\n\n")
+	}
+	if slices.Contains(s.Lenses, rl.Name) {
+		// One lens of several: its verdict is a part, merged by gofi.
+		fmt.Fprintf(&b, "Você é uma das lentes desta auditoria (%s): audite só o que o seu papel cobre — as outras lentes cobrem o resto. Grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d, lens %s) — o mesmo que `gofi verdict write %s --run %s --iter %d --lens %s`. Não grave a memória do contexto: o gofi junta as lentes.\n", strings.Join(s.Lenses, ", "), s.Context, s.Run, s.Iter, rl.Name, s.Context, s.Run, s.Iter, rl.Name)
+		return b.String()
 	}
 	fmt.Fprintf(&b, "Se o seu papel audita: grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
 	return b.String()
