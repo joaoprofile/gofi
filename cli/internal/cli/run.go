@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
+	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
 
 // sensorTimeout bounds one sensor stage: a test suite that hangs must not
@@ -59,6 +61,14 @@ not wait) and, unanswered, ends in impasse.
 --detach carries the run out in the background and prints its id: follow it
 with gofi watch or gofi logs -f; what the supervisor prints goes to
 .gofi/runs/<run>/supervisor.log.
+
+--worktree — always the case with --detach — runs it in a git worktree of its
+own, on the branch gofi/<change>, so several changes run at the same time.
+The change must be committed. Accepted, the branch is committed, rebased on
+the current branch once every change it depends on has landed, and
+fast-forwarded into it — only while the project's tree is clean, waiting up
+to --gate-timeout otherwise; never merged, never pushed. A conflict ends in
+"conflito", the branch kept for the person.
 The sensors run the commands of loop.sensors in .gofi.yaml; test defaults to
 the test section's default task, and a stage with no command is recorded as
 not checked, never as passed.`,
@@ -78,6 +88,7 @@ gofi run adicionar-rate-limit --detach`,
 	cmd.Flags().Bool("events", false, i18n.T("cmd.run.flag.events"))
 	cmd.Flags().String("gate-timeout", "", i18n.T("cmd.run.flag.gate_timeout"))
 	cmd.Flags().Bool("detach", false, i18n.T("cmd.run.flag.detach"))
+	cmd.Flags().Bool("worktree", false, i18n.T("cmd.run.flag.worktree"))
 	cmd.Flags().String("run-id", "", "name of the new run (set by --detach)")
 	_ = cmd.Flags().MarkHidden("run-id")
 	return cmd
@@ -135,6 +146,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		o.Change = args[0]
 	}
 	o.RunID, _ = cmd.Flags().GetString("run-id")
+	o.Worktree, _ = cmd.Flags().GetBool("worktree")
 	o.Flow, _ = cmd.Flags().GetString("flow")
 	o.NoArchive, _ = cmd.Flags().GetBool("no-archive")
 	o.Events, _ = cmd.Flags().GetBool("events")
@@ -166,6 +178,9 @@ type deliverOpts struct {
 	Events bool
 	// GateTimeout overrides loop.gate_timeout (a duration; 0 does not wait).
 	GateTimeout string
+	// Worktree carries the run out in a worktree of its own, on the branch
+	// gofi/<change>, and lands it on the current branch once accepted.
+	Worktree bool
 	// RunID names a new run; empty, one is made. A detached run is named by
 	// the process that started it, so it can say which run it started.
 	RunID string
@@ -232,8 +247,13 @@ func detachRun(root string, args ...string) (string, error) {
 		if _, err := sealedChange(root, args[0]); err != nil {
 			return "", err
 		}
+		// In the background, every run has a worktree of its own: two of
+		// them in the same tree would write over each other.
+		if err := worktree.Ready(context.Background(), root, args[0]); err != nil {
+			return "", err
+		}
 		run = newRunID(root)
-		args = append(args, "--run-id", run)
+		args = append(args, "--run-id", run, "--worktree")
 	default:
 		return "", errors.New(i18n.T("run.detach_which"))
 	}
@@ -275,25 +295,13 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		}
 	}
 	agentsCallThisGofi()
-	open := runPorts.open
-	if open == nil {
-		mode := o.Mode
-		if mode == "" {
-			mode = "acceptEdits"
-		}
-		// Every agent of the run works on the project's host (ai.host).
-		session, err := agentEngine(cfg, root, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
-		if err != nil {
-			return "", err
-		}
-		open = func(string) engine.Session { return session("") }
-	}
 	wait, err := gateTimeout(cfg, o.GateTimeout)
 	if err != nil {
 		return "", err
 	}
 
 	run, change, ctxName := o.Resume, o.Change, ""
+	var prior *loop.State
 	if o.Resume == "" {
 		if ctxName, err = sealedChange(root, change); err != nil {
 			return "", err
@@ -302,17 +310,56 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 			run = newRunID(root)
 		}
 	} else {
-		s, err := loop.LoadState(root, o.Resume)
-		if err != nil {
+		if prior, err = loop.LoadState(root, o.Resume); err != nil {
 			return "", err
 		}
-		change, ctxName = s.Change, s.Context
+		change, ctxName = prior.Change, prior.Context
 	}
 	release, err := loop.Acquire(root, run)
 	if err != nil {
 		return "", err
 	}
 	defer release()
+
+	// In a worktree the agents, the sensors, the verdict and the archive work
+	// on the run's own tree and branch; the state stays at the root, where
+	// gofi ps and gofi watch read every run.
+	var tree *worktree.Tree
+	switch {
+	case prior != nil && prior.Worktree != "":
+		tree = &worktree.Tree{Root: root, Dir: prior.Worktree, Branch: prior.Branch, Base: prior.Base}
+	case prior == nil && o.Worktree:
+		if tree, err = worktree.Prepare(ctx, root, run, change); err != nil {
+			return "", err
+		}
+	}
+	work := root
+	if tree != nil {
+		work = tree.Dir
+	}
+	report := humanReport(out)
+	if o.Events {
+		report = eventReport(out)
+	}
+	// Accepted and archived, a run in a worktree that has not landed yet
+	// only lands: resuming it runs no agent again.
+	if prior != nil && prior.Node == "" && prior.Outcome == "accepted" && tree != nil && prior.Landing != landed {
+		return landRun(ctx, out, root, prior, tree, wait, o.Events, report)
+	}
+
+	open := runPorts.open
+	if open == nil {
+		mode := o.Mode
+		if mode == "" {
+			mode = "acceptEdits"
+		}
+		// Every agent of the run works on the project's host (ai.host).
+		session, err := agentEngine(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
+		if err != nil {
+			return "", err
+		}
+		open = func(string) engine.Session { return session("") }
+	}
 	gate := runPorts.gate
 	if gate == nil {
 		g := &loop.FileGate{Root: root, Run: run, Timeout: wait}
@@ -322,15 +369,11 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		gate = g
 	}
 
-	report := humanReport(out)
-	if o.Events {
-		report = eventReport(out)
-	}
 	r := &loop.Runner{
-		Root: root, Flow: f, Brief: loop.DefaultBrief,
-		Agent:    &engineAgent{root: root, run: run, open: open, out: out, quiet: o.Events},
-		Sensors:  commandSensors{root: root, commands: sensorCommands(cfg)},
-		Verdicts: diskVerdicts{root: root},
+		Root: root, Work: work, Flow: f, Brief: loop.DefaultBrief,
+		Agent:    &engineAgent{root: root, work: work, run: run, open: open, out: out, quiet: o.Events},
+		Sensors:  commandSensors{root: work, commands: sensorCommands(cfg)},
+		Verdicts: diskVerdicts{root: work},
 		Gate:     gate,
 		OnEvent:  report,
 	}
@@ -339,7 +382,13 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	var s *loop.State
 	if o.Resume == "" {
-		s, err = r.Start(ctx, run, change, ctxName)
+		if tree != nil {
+			s, err = r.StartIn(ctx, run, change, ctxName, func(s *loop.State) {
+				s.Worktree, s.Branch, s.Base = tree.Dir, tree.Branch, tree.Base
+			})
+		} else {
+			s, err = r.Start(ctx, run, change, ctxName)
+		}
 	} else {
 		s, err = r.Resume(ctx, run)
 	}
@@ -363,11 +412,11 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if s.Outcome != "accepted" || o.NoArchive {
 		return s.Outcome, nil
 	}
-	all, err := contract.Docs(root)
+	all, err := contract.Docs(work)
 	if err != nil {
 		return s.Outcome, err
 	}
-	res, err := contract.Archive(root, all, change, time.Now().Format("2006-01-02"))
+	res, err := contract.Archive(work, all, change, time.Now().Format("2006-01-02"))
 	if err != nil {
 		return s.Outcome, fmt.Errorf("%s — gofi change archive %s: %w", i18n.T("run.archive_failed"), change, err)
 	}
@@ -375,7 +424,87 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if !o.Events {
 		fmt.Fprintln(out, "  "+i18n.T("change.archive.moved", res.Dir))
 	}
-	return s.Outcome, nil
+	if tree == nil {
+		return s.Outcome, nil
+	}
+	if err := tree.Commit(ctx, fmt.Sprintf("feat(%s): %s", ctxName, change)); err != nil {
+		return s.Outcome, fmt.Errorf("commit %s: %w", tree.Branch, err)
+	}
+	outcome, err := landRun(ctx, out, root, s, tree, wait, o.Events, report)
+	result.Why = outcome
+	return outcome, err
+}
+
+// How a run in a worktree ended on the base branch.
+const (
+	landed   = "integrada"
+	waiting  = "aguardando"
+	conflict = "conflito"
+)
+
+// landPoll is how often a waiting landing looks again.
+var landPoll = 10 * time.Second
+
+// landRun lands an accepted run's branch on the base: once every change it
+// depends on has landed, and while the project's tree is clean — waiting up
+// to wait otherwise, the person's work never touched. Landed, the worktree
+// goes; a conflict keeps the branch for the person. The outcome is accepted
+// only when it landed.
+func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tree *worktree.Tree, wait time.Duration, events bool, report func(loop.Event)) (string, error) {
+	say := func(ev, why string) {
+		report(loop.Event{Ev: ev, Node: s.Run, Why: why})
+	}
+	var deps []string
+	if all, err := contract.Docs(tree.Dir); err == nil {
+		for _, c := range contract.Changes(all) {
+			if c.ID == s.Change {
+				deps = c.DependsOn
+			}
+		}
+	}
+	deadline := time.Now().Add(wait)
+	for {
+		var why string
+		pending := slices.IndexFunc(deps, func(d string) bool { return !worktree.Landed(ctx, root, tree.Base, d) })
+		err := error(nil)
+		if pending >= 0 {
+			why = i18n.T("run.land.depends", deps[pending])
+		} else if err = tree.Land(ctx); err == nil {
+			s.Landing = landed
+			_ = loop.SaveState(root, s)
+			say("land.done", tree.Base)
+			if !events {
+				fmt.Fprintln(out, "  "+i18n.T("run.land.done", tree.Branch, tree.Base))
+			}
+			_ = tree.Remove(ctx)
+			return "accepted", nil
+		} else if errors.Is(err, worktree.ErrConflict) {
+			s.Landing = conflict
+			_ = loop.SaveState(root, s)
+			say("land.conflict", err.Error())
+			return conflict, errors.New(i18n.T("run.land.conflict", tree.Branch, tree.Base, tree.Dir))
+		} else if errors.Is(err, worktree.ErrDirty) || errors.Is(err, worktree.ErrMoved) {
+			why = err.Error()
+		} else {
+			return waiting, err
+		}
+		if s.Landing != waiting {
+			s.Landing = waiting
+			_ = loop.SaveState(root, s)
+			say("land.waiting", why)
+			if !events {
+				fmt.Fprintln(out, "  "+i18n.T("run.land.waiting", tree.Branch, why))
+			}
+		}
+		if time.Now().After(deadline) {
+			return waiting, errors.New(i18n.T("run.land.gave_up", tree.Branch, s.Run))
+		}
+		select {
+		case <-ctx.Done():
+			return waiting, ctx.Err()
+		case <-time.After(landPoll):
+		}
+	}
 }
 
 // deliverContext delivers every sealed change of a context, in the order
@@ -471,13 +600,14 @@ func sensorCommands(cfg *config.GofiConfig) map[string]string {
 // the agent did in agents/<node>-<iter>.ndjson.
 type engineAgent struct {
 	root, run string
+	work      string // where the session runs: the run's worktree, or root
 	open      func(root string) engine.Session
 	out       io.Writer
 	quiet     bool // events mode: the transcript holds the tool calls
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
-	s := a.open(a.root)
+	s := a.open(a.work)
 	defer s.Close()
 	path := loop.Transcript(a.root, a.run, loop.AgentID(t.Node, t.Iter))
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)

@@ -344,6 +344,9 @@ func (m model) runPane(t tab) []string {
 	if s.Outcome != "" {
 		out = append(out, k.dim.Render(i18n.T("watch.outcome"))+" "+s.Outcome)
 	}
+	if s.Branch != "" {
+		out = append(out, k.dim.Render(i18n.T("watch.branch"))+" "+s.Branch+" → "+s.Base+k.dim.Render("  "+s.Landing))
+	}
 	if s.Verdict != "" {
 		out = append(out, k.dim.Render(i18n.T("watch.verdict"))+" "+s.Verdict+k.dim.Render(fmt.Sprintf("  (%d)", len(s.Open))))
 	}
@@ -459,6 +462,9 @@ func (m model) treeLine(i int) string {
 		if state == loop.Ended {
 			state, where = s.Outcome, "—"
 		}
+		if s.Landing != "" {
+			state += "/" + s.Landing
+		}
 		return mark + k.dot(runColor(t.info)) + fmt.Sprintf("%-22s %-26s %-13s %s", s.Run, s.Change, state, where) +
 			k.dim.Render(fmt.Sprintf("  US$ %.3f", s.CostUSD))
 	}
@@ -518,7 +524,10 @@ func runColor(i loop.Info) lipgloss.TerminalColor {
 	case loop.Blocked:
 		return styles.Amber
 	case loop.Ended:
-		if i.State.Outcome == "accepted" {
+		switch {
+		case i.State.Landing == "aguardando":
+			return styles.Amber
+		case i.State.Outcome == "accepted" && i.State.Landing != "conflito":
 			return styles.Good
 		}
 		return styles.Bad

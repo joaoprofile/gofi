@@ -49,6 +49,9 @@ node, or ended with its outcome.`,
 				if state == loop.Ended {
 					state, where = r.State.Outcome, "—"
 				}
+				if r.State.Landing != "" {
+					state += "/" + r.State.Landing
+				}
 				fmt.Fprintf(out, "  %-20s %-24s %-14s %-12s %4d %8.3f\n", r.State.Run, r.State.Change, state, where, r.State.Iter, r.State.CostUSD)
 			}
 			return nil

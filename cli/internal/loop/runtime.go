@@ -110,8 +110,14 @@ type State struct {
 	Elicit    string            `json:"elicit,omitempty"`
 	BlockedBy string            `json:"blocked_by,omitempty"`
 	Answers   map[string]string `json:"answers,omitempty"`
-	CostUSD   float64           `json:"cost_usd"`
-	Updated   time.Time         `json:"updated"`
+	// Worktree, Branch and Base say where a run in a worktree works and
+	// lands; Landing is how that went: landed, waiting, conflict.
+	Worktree string    `json:"worktree,omitempty"`
+	Branch   string    `json:"branch,omitempty"`
+	Base     string    `json:"base,omitempty"`
+	Landing  string    `json:"landing,omitempty"`
+	CostUSD  float64   `json:"cost_usd"`
+	Updated  time.Time `json:"updated"`
 }
 
 // Event is one line of a run's log.
@@ -126,7 +132,11 @@ type Event struct {
 
 // Runner carries out a flow over one change.
 type Runner struct {
+	// Root is the project root, where the run's state, events and agents are
+	// kept for gofi ps and gofi watch; Work is where the agents work — the
+	// run's worktree, or the root when it has none.
 	Root     string
+	Work     string
 	Flow     *Flow
 	Agent    Agent
 	Sensors  Sensors
@@ -142,13 +152,28 @@ type Runner struct {
 	seq int
 }
 
+// SaveState writes a run's state as the runtime does after each node: for
+// what happens to a run past its terminal node — archived, landed.
+func SaveState(root string, s *State) error {
+	return (&Runner{Root: root}).save(s)
+}
+
 // Dir is where a run keeps its files.
 func Dir(root, run string) string { return filepath.Join(root, filepath.FromSlash(RunsDir), run) }
 
 // Start begins a run of the flow over a change.
 func (r *Runner) Start(ctx context.Context, run, change, context string) (*State, error) {
+	return r.StartIn(ctx, run, change, context, nil)
+}
+
+// StartIn is Start with setup filling the state before it is first saved:
+// where a run in a worktree works is on record from its first node.
+func (r *Runner) StartIn(ctx context.Context, run, change, context string, setup func(*State)) (*State, error) {
 	s := &State{Schema: StateSchema, Run: run, Flow: r.Flow.Name, Change: change, Context: context,
 		Node: r.Flow.Start, Taken: map[string]int{}}
+	if setup != nil {
+		setup(s)
+	}
 	if err := os.MkdirAll(Dir(r.Root, run), 0o755); err != nil {
 		return nil, err
 	}
@@ -224,7 +249,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 		elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
 		prompt := r.Brief(n, s, elicit)
 		if s.Answered && s.Elicit != "" {
-			if e, err := intake.ReadElicitation(r.Root, s.Elicit); err == nil && e != nil {
+			if e, err := intake.ReadElicitation(r.work(), s.Elicit); err == nil && e != nil {
 				prompt = intake.WithDecisions(prompt, e, s.Answers)
 			}
 		}
@@ -238,7 +263,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 			_ = saveAgent(r.Root, s.Run, a)
 			return err
 		}
-		e, _ := intake.ReadElicitation(r.Root, elicit)
+		e, _ := intake.ReadElicitation(r.work(), elicit)
 		s.Blocked = e != nil && len(e.Questions) > 0
 		s.Answered, s.Answers = false, nil
 		a.Status = AgentDone
@@ -261,7 +286,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 		}
 		r.judge(s, v)
 	case KindGate:
-		e, err := intake.ReadElicitation(r.Root, s.Elicit)
+		e, err := intake.ReadElicitation(r.work(), s.Elicit)
 		if err != nil || e == nil {
 			s.Answered = false
 			break
@@ -458,6 +483,13 @@ func (r *Runner) save(s *State) error {
 		return err
 	}
 	return os.Rename(tmp, p)
+}
+
+func (r *Runner) work() string {
+	if r.Work != "" {
+		return r.Work
+	}
+	return r.Root
 }
 
 func (r *Runner) now() time.Time {
