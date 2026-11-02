@@ -19,7 +19,7 @@ Stack de 1ª classe (Terraform, OCI, build Go, Azure DevOps/GitHub Actions) e id
 - **Cloud-neutro (LEI).** Valor concreto (provedor, topologia, sizing, região, OCID/ARN, secret) → spec de infra/memória/`ops:`; padrão em `.claude/knowledge/` e `.claude/sdk/<iac>/` com placeholders (`<cloud>`, `<env>`, `{capability}`, `{service}`). Teste: *serviria a outro projeto em outro cloud com outra ferramenta de IaC?* → `.claude/expertise/harness-protocols/learning.md`.
 - **Plan antes de apply; nunca `apply` em staging/prod** sem `plan` aprovado **e** confirmação explícita do dev para aquele ambiente.
 - **Secret nunca no git; state remoto + lock; artefato imutável por SHA; coexistência > substituição.** Princípios invioláveis completos → `.claude/expertise/platform-delivery/iac-principles.md`.
-- **Step by step.** Passos pequenos e verificáveis (`validate`/`plan`/`diff` por etapa), confirmados com o dev. Nunca infira topologia, credencial, região ou conta. Conduzido pelo gofi (o turno indica um arquivo em `.gofi/elicit/`): não pergunte na conversa — grave a pergunta ali e encerre a fase; a resposta volta pela spec.
+- **Step by step.** Passos pequenos e verificáveis (`validate`/`plan`/`diff` por etapa), confirmados com o dev. Nunca infira topologia, credencial, região ou conta. Conduzido pelo gofi (o turno indica um arquivo em `.gofi/elicit/`): não pergunte na conversa — grave a pergunta ali e encerre a fase; a resposta volta pela mudança.
 
 ## Pré-execução
 
@@ -36,7 +36,7 @@ Segue a convenção de leitura do AGENTS.md, com estes pontos próprios (detalhe
 ## Workflow
 
 1. Ler spec de infra → inventariar recursos, ambientes, rede, secrets, domínios.
-2. Mapear o estado atual → o que coexiste, migra ou sai (só com corte declarado na spec).
+2. Mapear o estado atual → o que coexiste, migra ou sai (só com corte declarado na mudança).
 3. Desenhar a topologia (PlantUML no README do `ops/`) → validar com o dev. Layout → `reference/ops-layout.md`.
 4. IaC bottom-up em módulos: `global/` → `modules/` (uma capability por vez) → `envs/dev` com `validate` → `plan`. → `reference/preexec-workflow.md` §Workflow
 5. Empacotamento: Dockerfile por serviço + build no CI (artefato por SHA, sem binário no git).
@@ -50,7 +50,7 @@ Segue a convenção de leitura do AGENTS.md, com estes pontos próprios (detalhe
 
 - **Output:** arquivos criados sob `{ops.path}/`, resumo do plan (add/change/destroy + stateful afetado), coexistência com o legado, decisões, próximos passos. Template → `reference/output-memory.md` §Output esperado.
 - **Memória:** `.claude/memory/contexts/{contexto-infra}.md` — refresh do `## Estado atual`, 1 linha no `## Histórico de versões`, frontmatter `status`/`atualizado`. `project.md` só se nasceu serviço/binário novo.
-- **Spec:** `specs/{infra|platform}/sdd-*.md` — topologia real, estado da migração (sem marca de fase nem linha de histórico por fase).
+- **Contrato:** a mudança aprovada de infra (`specs/changes/{id}/` — deltas do contexto `infra`/`platform` e design) é lida, nunca editada; a topologia real e o estado da migração vão para o `## Estado atual` da memória.
 - **Aprendizado:** correção ou padrão novo → `.claude/expertise/harness-protocols/learning.md`.
 
 ## Referências

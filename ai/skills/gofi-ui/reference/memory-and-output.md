@@ -41,13 +41,15 @@ atualizado: {data}
 > O índice global é gerado por `/gofi-status`. **`project.md` só é tocado** se
 > nasceu um **frontend/app novo** (tabela própria de Frontends, se existir).
 
-### 3. `specs/{contexto}/sdd-{contexto}.md`
+### 3. A mudança e a spec viva — não se editam
 
-- **Histórico de versões** — **nenhuma linha por fase.** A versão sobe, e o
-  histórico ganha a sua linha, uma vez: quando o fluxo inteiro fecha (lei
-  comum 4). A divergência entra na seção a que pertence, não num registro dela.
-- **Estrutura UI** — adicionar pages/features/components não previstos
-- **Microcopy oficial** — registrar textos finais (PT-BR) usados nas telas
+Ambas são seladas (decisão 0003). O que a implementação da UI produz de novo
+vai para a memória do contexto:
+
+- **Estrutura UI** — pages/features/components criados, no `## Estado atual`.
+- **Microcopy oficial** — os textos finais das telas, no `## Estado atual`;
+  texto que um cenário prescreve é usado como está, nunca reescrito.
+- Divergir de um contrato de API ou de um cenário é decisão: pare e pergunte.
 
 ## Output esperado
 

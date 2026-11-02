@@ -27,8 +27,8 @@ loop:
 | Fase | Passou quando | Reprova quando |
 |------|---------------|----------------|
 | `gofi-pd`  | PRD gerado, sem ambiguidade bloqueante de escopo; frontmatter `status: prd` | discovery incompleto a ponto de impedir a spec |
-| `gofi-spec`| spec SDD completa e internamente consistente; `status: spec` | spec não fecha por **lacuna de negócio** no PRD |
-| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes), **todo bug fix/melhoria vem com teste de regressão** e o **grafo foi reconstruído** (`gofi index code`); `status: implementado` | spec **ambígua/contraditória**, impossível implementar como especificado, **ou fix/melhoria sem teste de regressão** |
+| `gofi-spec`| mudança completa (proposta, deltas, design) com `gofi spec check <id>` em 0 erros; `status: spec` — **e selada pela pessoa** (`gofi change approve <id>`) antes do `gofi-eng` | mudança não fecha por **lacuna de negócio** no PRD |
+| `gofi-eng` | implementação compila e testes passam (`build`+`test` verdes), **todo cenário ADICIONADO ou MODIFICADO tem teste (`gofi:tests REQ-NN.n`)**, **todo bug fix/melhoria vem com teste de regressão** e o **grafo foi reconstruído** (`gofi index code`); `status: implementado` | mudança **ambígua/contraditória**, impossível implementar como especificado, **ou cenário/fix sem teste** |
 | `gofi-qa`  | veredicto **✅ Aprovado** com **0 blockers, 0 majors e sem ressalvas** — na memória, `status: aprovado` **e** `ressalvas: 0` (o mesmo critério da CLI e do painel) | qualquer blocker/major, **⚠️ com ressalvas** (`aprovado` com `ressalvas` > 0), ou ❌ reprovado |
 
 > **Índice de documentos entre fases.** Cada fase escreve documento que a
@@ -67,9 +67,11 @@ A reprovação **não** volta sempre uma casa: volta à fase **dona da causa**.
 - **Bug de implementação / violação de camada / padrão do SDK / conformidade
   com spec** → volta para **`gofi-eng`** (a spec está certa, o código não a
   cumpre). Maioria dos casos.
-- **Spec errada / drift spec↔código onde a spec é que está errada / RN faltando
-  na spec / contrato mal especificado** → volta para **`gofi-spec`**; depois
-  **`gofi-eng`** re-implementa e **`gofi-qa`** reaudita.
+- **Contrato errado / cenário que não testa o requisito / requisito faltando /
+  contrato mal especificado** → volta para **`gofi-spec`**, que corrige **na
+  mudança** (delta ou design) — nunca na spec viva; a mudança volta a pedir
+  `gofi change approve`; depois **`gofi-eng`** re-implementa e **`gofi-qa`**
+  reaudita.
 - **Lacuna de negócio / requisito ausente / intenção errada / regra de domínio
   que ninguém definiu** → volta para **`gofi-pd`**; depois desce spec → eng → qa.
 

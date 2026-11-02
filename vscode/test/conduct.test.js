@@ -85,6 +85,37 @@ test('o plano é conduzido: spec, parada para revisão, depois eng e qa sozinhos
 	assert.ok(posted.some((m) => m.type === 'planEnded' && /concluído/.test(m.text)));
 });
 
+test('passada a revisão do contrato, o painel sela o que a pessoa aprovou antes de seguir', async () => {
+	const plan = { ...threePhases(), context: { name: 'pricing' } };
+	const { chat, posted, turns } = makeChat([plan]);
+	const sealed = [];
+	chat.sealRunner = async (gofi, root, context) => {
+		sealed.push(context);
+		return { ok: true, output: 'aprovada: specs/changes/x/proposal.md' };
+	};
+	await chat.send('altere o pricing');
+	await tick();
+	done(chat);
+	chat.onWebviewMessage({ type: 'planContinue' });
+	await tick();
+	assert.deepStrictEqual(sealed, ['pricing'], 'o contexto revisado é selado, uma vez');
+	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido', '/gofi-eng pedido']);
+	assert.ok(posted.some((m) => m.type === 'notice' && /aprovada/.test(m.text)));
+});
+
+test('um contrato que não passa no check não é selado e o plano para', async () => {
+	const plan = { ...threePhases(), context: { name: 'pricing' } };
+	const { chat, posted, turns } = makeChat([plan]);
+	chat.sealRunner = async () => ({ ok: false, output: 'ERROR specs/changes/x/deltas/pricing.md: REQ-07 sem cenário' });
+	await chat.send('altere o pricing');
+	await tick();
+	done(chat);
+	chat.onWebviewMessage({ type: 'planContinue' });
+	await tick();
+	assert.strictEqual(turns.length, 1, 'nada implementa um contrato não aprovado');
+	assert.ok(posted.some((m) => m.type === 'planEnded' && /REQ-07 sem cenário/.test(m.text)));
+});
+
 test('uma pergunta respondida por botão volta ao intake e espera confirmação', async () => {
 	const first = { schema: 'gofi.intake/v1', request: 'altere as regras', plan: [], ask: true,
 		questions: [{ id: 'context', text: 'Em qual contexto?', options: ['invoice', 'shipping'] }], assumptions: [] };

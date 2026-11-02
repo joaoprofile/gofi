@@ -1,4 +1,4 @@
-# Atualização de memória e spec
+# Atualização de memória ao fechar a auditoria
 
 > **Como gravar:** `gofi memory write {contexto}` com o arquivo inteiro pela entrada
 > padrão — não `Edit`/`Write`. O Claude Code trata `.claude/` como sensível e pede
@@ -16,33 +16,21 @@ Pós-baseline v1.0, a auditoria **não** apende entrada datada. Ao concluir:
 
 Protocolo em `.claude/expertise/harness-protocols/memory.md`.
 
-### 2. `specs/{contexto}/sdd-{contexto}.md`
+### 2. A spec viva e a mudança — não se editam
 
-**Frontmatter: não toque.** O `status` da spec é da **aprovação da pessoa**
-(gravado na parada de revisão); o veredito da auditoria vai para a memória do
-contexto (§3 abaixo), não para a spec.
+A mudança aprovada e a spec viva são seladas (decisão 0003): editá-las desfaz
+a aprovação, e a auditoria é independente justamente porque não mexe no que
+audita.
 
-**Versão: você fecha o fluxo.** Ninguém bumpou no meio dele. Ao **aprovar**, se o
-fluxo passou no teste — mudou comportamento que já roda em produção —, suba a
-`versao` da spec (e a do PRD, se ele mudou) **uma vez** e escreva a linha do
-Histórico. Se a solução ainda não foi a produção, ou se nada muda no
-comportamento, nada sobe. Reprovou: nada sobe. Política em
-`.claude/expertise/harness-protocols/document-versioning.md` §Quando o bump acontece.
-
-**Nada de marca de auditoria na spec** — nem ✅, nem data, nem nome de agent:
-proveniência vive no git e o resultado, na memória.
-
-**Histórico de versões:** uma linha por versão — só a do bump acima, quando
-houver. A auditoria em si não cria linha. Se a auditoria levou a
-uma mudança de comportamento em código **já em produção**, aí sim há bump — e
-a linha descreve a mudança, sem citar agent nem pessoa (proveniência vive no
-git; ver `.claude/expertise/harness-protocols/rag-retrieval.md`).
-
-**Contratos §0.1:** se a auditoria revelou drift entre spec e implementação,
-corrigir a spec (a spec é a verdade pós-QA).
-
-**Estrutura §8:** se arquivos foram adicionados durante a implementação
-(ex: `_test.go`), atualizar.
+- **Drift** entre o código e a mudança (contrato, dado, erro, Mapa de
+  requisitos) é achado com severidade — nunca uma correção no documento.
+- **Lacuna do contrato** (cenário que não testa o requisito, requisito que
+  falta, contradição entre dois REQ) é achado também, marcado como do
+  contrato: quem corrige é o `/gofi-spec`, numa mudança.
+- **Versão:** a da spec viva sobe sozinha quando a mudança aceita é arquivada
+  (`gofi change archive`). A auditoria não bumpa nada.
+- **Nada de marca de auditoria** em documento algum — nem ✅, nem data, nem
+  nome de agent: proveniência vive no git e o resultado, na memória.
 
 ### 3. `.claude/memory/contexts/{contexto}.md` — frontmatter
 

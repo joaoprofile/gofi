@@ -35,7 +35,7 @@ Antes de qualquer linha de código:
    **não** lê `//gofi:context` (o campo vem vazio — ali a ponte para a spec ainda
    é o nome da pasta) e o escopo só existe se o `path` da superfície existir no
    disco. Protocolo: `.claude/expertise/harness-protocols/graph-retrieval.md`
-5. Ler a spec — **fonte da verdade**. **Procurar documento é `gofi find`:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Protocolo: `.claude/expertise/harness-protocols/rag-retrieval.md`
+5. Ler a **mudança aprovada** — **fonte da verdade**: os deltas em `specs/changes/{id}/deltas/` (requisitos e cenários que a UI realiza) e o `design.md` (contratos de API); requisito vivo citado por `gofi show specs/{ctx}/spec.md#REQ-NN`. **Procurar documento é `gofi find`:** `gofi find "<o que você precisa saber>"` — devolve o documento, a §seção e a **faixa de linhas**; leia com `Read(offset, limit)`, nunca o arquivo inteiro. Vazio quase sempre é vocabulário, não documento faltando: tente o termo técnico e registre o par que faltou em `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um contexto, não para **achar** um assunto. Protocolo: `.claude/expertise/harness-protocols/rag-retrieval.md`
 6. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui `expertise/diagramming/conventions.md` — jornada do usuário e fluxos de UX devem ser PlantUML)
 7. Ler **UX e design**: `.claude/expertise/ui-design/` (princípios e regras de UX, theming) +
    `.claude/knowledge/ui/*.md` — aprendizado do time, que vence o pack quando diverge
@@ -69,6 +69,6 @@ Antes de qualquer linha de código:
 10. Verificar se já existem arquivos no path da feature/page —
    **nunca sobrescrever sem confirmar**
 
-> Se a spec for ambígua, contradizer um padrão das `absolute-rules` ou não
+> Se a mudança for ambígua, contradizer um padrão das `absolute-rules` ou não
 > mencionar estados de UI (loading/empty/error/success), pare e pergunte.
 > Nunca infira UX.

@@ -48,11 +48,14 @@ antes de qualquer workflow.
    produto), procure **primeiro** em:
    - `prd/{contexto}/prd-{contexto}.md` — visão de produto, regras,
      motivação, glossário
-   - a spec técnica, ADRs e contrato — ache pela busca, não pelo caminho adivinhado:
-     `gofi find "<endpoint ou entidade>"` devolve o documento, a §seção e a faixa de
-     linhas. Um contexto pode ter várias specs, e `sdd-{contexto}.md` nem sempre é a
-     que descreve o endpoint que você está documentando.
-     formal
+   - a spec viva (`specs/{contexto}/spec.md`) — o que o endpoint deve
+     garantir, por requisito: `gofi show specs/{contexto}/spec.md#REQ-NN` lê um
+     requisito com os seus cenários; a regra que o código aplica costuma ter
+     cenário ali, e o cenário é a melhor fonte para a seção de Armadilhas
+   - o design das mudanças arquivadas (`specs/changes/archive/*/design.md`) —
+     contrato e ADRs de quando o endpoint nasceu ou mudou. Ache pela busca, não
+     pelo caminho adivinhado: `gofi find "<endpoint ou entidade>"` devolve o
+     documento, a §seção e a faixa de linhas
    - `.claude/memory/contexts/{contexto}.md` — handoffs entre fases
    - `.claude/memory/project.md` — visão global do projeto
 
