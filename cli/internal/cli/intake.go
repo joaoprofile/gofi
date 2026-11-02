@@ -220,13 +220,6 @@ func fillPhaseModels(r *intake.Result, cfg *config.GofiConfig) {
 		if intake.Raised(r, i) {
 			r.Plan[i].Model = h.Model(r.Plan[i].Tier, cfg.AI.Tiers)
 		}
-		for _, more := range [][]intake.Phase{r.Plan[i].OnReject, r.Plan[i].OnBlock} {
-			for j, ph := range more {
-				if ph.Tier != ph.Base {
-					more[j].Model = h.Model(ph.Tier, cfg.AI.Tiers)
-				}
-			}
-		}
 	}
 }
 

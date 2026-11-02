@@ -101,17 +101,10 @@ type Result struct {
 	// Blocked says why the plan cannot run, and what unblocks it: no phase
 	// runs while it is set.
 	Blocked string `json:"blocked,omitempty"`
-	// VerdictFile is where the QA writes its verdict — the context's memory,
-	// relative to the project root — when a phase has OnReject.
-	VerdictFile string `json:"verdict_file,omitempty"`
 
 	// intentGuessed is set when no word of the request named the intent.
 	intentGuessed bool
 	related       []candidate
-	// specRole is the role that writes the spec, and specTier its contract's
-	// tier: a blocked implementation's decisions are recorded there.
-	specRole string
-	specTier host.Tier
 }
 
 // Question is something the rules could not settle, with the options the
@@ -332,8 +325,6 @@ func run(root, text string, opts Options, s settled) (*Result, error) {
 		res.Signals = append(res.Signals, "consulta de estado: o índice responde, sem papel")
 	} else if len(roles) > 0 {
 		p := newPlanner(roles)
-		res.specRole = p.producers["spec"]
-		res.specTier = p.roles[res.specRole].Tier
 		phases, err := p.plan(res.Intent, res.Artifact, res.Context)
 		if err != nil {
 			res.Missing = append(res.Missing, err.Error())
@@ -404,8 +395,6 @@ func fillTurns(r *Result) {
 			}
 		}
 	}
-	fillBlocks(r)
-	fillRetries(r)
 }
 
 // prependBrief puts note right before the assembled request in a turn.
