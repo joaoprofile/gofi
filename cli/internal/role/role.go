@@ -62,7 +62,17 @@ type Contract struct {
 	// and the role writes its document at once instead of interviewing on
 	// its own, more expensive tier.
 	Elicit *Elicit `yaml:"elicit"`
+	// Visibility is user (a slash command, the default) or internal (run by
+	// the flow alone, installed outside the host's skills).
+	Visibility string `yaml:"visibility"`
+	// Stage is where in the loop the role works; a flow's agent node of that
+	// stage dispatches it when one of its Triggers holds.
+	Stage    string    `yaml:"stage"`
+	Triggers []Trigger `yaml:"triggers"`
 }
+
+// Internal reports whether the role is run by the flow alone.
+func (c Contract) Internal() bool { return c.Visibility == VisibilityInternal }
 
 // Elicit is how a role's open decisions are gathered before it runs.
 type Elicit struct {
@@ -121,6 +131,25 @@ func Parse(b []byte) (Contract, error) {
 			return c, errors.New("elicit.checklist: the reference the elicitation walks is required")
 		}
 	}
+	if c.Visibility != "" && c.Visibility != VisibilityUser && c.Visibility != VisibilityInternal {
+		return c, fmt.Errorf("visibility: %q (expected user or internal)", c.Visibility)
+	}
+	if c.Stage != "" && !slices.Contains(Stages, c.Stage) {
+		return c, fmt.Errorf("stage: %q is not a stage (expected %s)", c.Stage, strings.Join(Stages, ", "))
+	}
+	if len(c.Triggers) > 0 && c.Stage == "" {
+		return c, errors.New("triggers: a role with triggers needs the stage they dispatch it in")
+	}
+	for i, t := range c.Triggers {
+		if len(t.All)+len(t.Any) == 0 {
+			return c, fmt.Errorf("triggers[%d]: empty — give all, any or both", i)
+		}
+		for _, p := range append(slices.Clone(t.All), t.Any...) {
+			if err := checkPredicate(p); err != nil {
+				return c, fmt.Errorf("triggers[%d]: %w", i, err)
+			}
+		}
+	}
 	for _, r := range c.Requires {
 		if !slices.Contains(Artifacts, r.Artifact) {
 			return c, fmt.Errorf("requires: %q is not an artifact", r.Artifact)
@@ -136,34 +165,42 @@ func Parse(b []byte) (Contract, error) {
 
 // Role is an installed role and its contract.
 type Role struct {
-	Name     string
+	Name string
+	// Dir is the folder the role was read from: its SKILL.md is there.
+	Dir      string
 	Contract Contract
 }
 
-// Load reads the contract of every role installed under skillsDir, sorted by
-// name. A skill without a contract is left out — it runs when invoked, it is
-// just not planned. A contract that does not parse is returned as a problem.
-func Load(skillsDir string) ([]Role, []error) {
-	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
-		return nil, nil
-	}
+// Load reads the contract of every role installed under the given folders —
+// the host's skills and gofi's internal roles — sorted by name. A skill
+// without a contract is left out — it runs when invoked, it is just not
+// planned. A contract that does not parse is returned as a problem. A role
+// found in two folders is read from the first.
+func Load(dirs ...string) ([]Role, []error) {
 	var roles []Role
 	var problems []error
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(skillsDir, e.Name(), ContractFile))
+	seen := map[string]bool{}
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
 		}
-		c, err := Parse(b)
-		if err != nil {
-			problems = append(problems, fmt.Errorf("%s: %w", e.Name(), err))
-			continue
+		for _, e := range entries {
+			if !e.IsDir() || seen[e.Name()] {
+				continue
+			}
+			b, err := os.ReadFile(filepath.Join(dir, e.Name(), ContractFile))
+			if err != nil {
+				continue
+			}
+			seen[e.Name()] = true
+			c, err := Parse(b)
+			if err != nil {
+				problems = append(problems, fmt.Errorf("%s: %w", e.Name(), err))
+				continue
+			}
+			roles = append(roles, Role{Name: e.Name(), Dir: filepath.Join(dir, e.Name()), Contract: c})
 		}
-		roles = append(roles, Role{Name: e.Name(), Contract: c})
 	}
 	sort.Slice(roles, func(i, j int) bool { return roles[i].Name < roles[j].Name })
 	return roles, problems

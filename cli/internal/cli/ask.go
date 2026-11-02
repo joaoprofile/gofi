@@ -260,7 +260,7 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 		// A raised phase runs on its tier's model, as the role; any other
 		// invokes its skill, whose own model wins for the turn.
 		model, asRole := sessionModel, false
-		if ph.Tier != ph.Base && tierModel != nil {
+		if ph.AsRole() && tierModel != nil {
 			if m := tierModel(ph.Tier); m != "" {
 				model, asRole = m, true
 			}

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ChangeKind describes the relationship between an upstream file and the
@@ -61,11 +62,21 @@ func planSkills(agentsFS fs.FS, srcRoot string, add func(rel string, content []b
 		if err != nil {
 			return err
 		}
-		if err := add(skillRelPath(skill), renderSkill(skill, body, model)); err != nil {
+		internal, err := internalRole(agentsFS, srcRoot, skill)
+		if err != nil {
+			return err
+		}
+		// Relative to the home folder, as skillRelPath is: an internal role
+		// is planned where installSkills writes it.
+		base := filepath.Join(skillsDirName, skill)
+		if internal {
+			base = filepath.FromSlash(strings.TrimPrefix(layout.Roles().Path(skill), layout.Home()+"/"))
+		}
+		if err := add(filepath.Join(base, skillFileName), renderSkill(skill, body, model)); err != nil {
 			return err
 		}
 		err = walkSkillResources(agentsFS, srcRoot, skill, func(rel string, content []byte) error {
-			return add(filepath.Join(skillsDirName, skill, filepath.FromSlash(rel)), content)
+			return add(filepath.Join(base, filepath.FromSlash(rel)), content)
 		})
 		if err != nil {
 			return fmt.Errorf("plan resources of skill %s: %w", skill, err)

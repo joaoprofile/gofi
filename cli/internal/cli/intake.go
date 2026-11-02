@@ -217,7 +217,7 @@ func fillPhaseModels(r *intake.Result, cfg *config.GofiConfig) {
 		return
 	}
 	for i := range r.Plan {
-		if intake.Raised(r, i) {
+		if r.Plan[i].AsRole() {
 			r.Plan[i].Model = h.Model(r.Plan[i].Tier, cfg.AI.Tiers)
 		}
 	}

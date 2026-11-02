@@ -184,7 +184,7 @@ func run(root, text string, opts Options, s settled) (*Result, error) {
 	res := &Result{Schema: Schema, Request: text, Plan: []Phase{}, Packs: []PackChoice{},
 		Questions: []Question{}, Assumptions: []string{}, Evidence: []Pointer{}, Signals: []string{}, Missing: []string{}}
 
-	roles, problems := role.Load(layout.Skills().Abs(root))
+	roles, problems := role.Load(layout.RoleDirs(root)...)
 	for _, p := range problems {
 		res.Missing = append(res.Missing, "contract: "+p.Error())
 	}
@@ -381,8 +381,8 @@ func fillTurns(r *Result) {
 			ph.RoleTurn = ph.Turn
 			continue
 		}
-		ph.Turn = PhaseTurn(r, i, false)
-		if Raised(r, i) {
+		ph.Turn = PhaseTurn(r, i, ph.Internal)
+		if ph.AsRole() {
 			ph.RoleTurn = PhaseTurn(r, i, true)
 		}
 		ph.ReviewAfter = ApprovalAfter(r, i)

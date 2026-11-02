@@ -232,7 +232,20 @@ func installSkills(agentsFS fs.FS, srcRoot, dest string, p *preserver) ([]string
 			}
 			return created, fmt.Errorf("read skill %s: %w", skill, err)
 		}
-		target := filepath.Join(dest, skillRelPath(skill))
+		internal, err := internalRole(agentsFS, srcRoot, skill)
+		if err != nil {
+			return created, err
+		}
+		// An internal role is run by the flow alone: it goes where the host
+		// does not look for skills, and its copy under skills/ from before
+		// the move is retired (0002, D19).
+		base := filepath.Join(dest, skillsDirName, skill)
+		if internal {
+			old := base
+			base = layout.Roles().Abs(p.root, skill)
+			retireTree(p, old)
+		}
+		target := filepath.Join(base, skillFileName)
 		model, err := modelFor(agentsFS, srcRoot, skill)
 		if err != nil {
 			return created, err
@@ -249,7 +262,7 @@ func installSkills(agentsFS fs.FS, srcRoot, dest string, p *preserver) ([]string
 			created = append(created, target)
 		}
 		err = walkSkillResources(agentsFS, srcRoot, skill, func(rel string, content []byte) error {
-			resource := filepath.Join(dest, skillsDirName, skill, filepath.FromSlash(rel))
+			resource := filepath.Join(base, filepath.FromSlash(rel))
 			written, err := p.write(resource, content)
 			if err != nil {
 				return err
@@ -264,6 +277,32 @@ func installSkills(agentsFS fs.FS, srcRoot, dest string, p *preserver) ([]string
 		}
 	}
 	return created, nil
+}
+
+// retireTree retires every file under dir that nobody edited, and the folders
+// left empty. What was edited stays, for the audit to point at.
+func retireTree(p *preserver, dir string) {
+	var files []string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			files = append(files, path)
+		}
+		return nil
+	})
+	for _, f := range files {
+		p.retire(f)
+	}
+	// Deepest first: a folder empties once its children are gone.
+	var dirs []string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			dirs = append(dirs, path)
+		}
+		return nil
+	})
+	for i := len(dirs) - 1; i >= 0; i-- {
+		_ = os.Remove(dirs[i]) // fails, as it should, on a folder still holding an edit
+	}
 }
 
 // institutionalNameToken is the literal placeholder in the guided institutional
