@@ -110,8 +110,11 @@ func (t *Tree) Commit(ctx context.Context, message string) error {
 // Why a branch cannot land yet. Each is a wait, not a failure: the caller
 // tries again until it can, or gives up.
 var (
-	ErrDirty    = errors.New("the base branch's tree has uncommitted changes")
-	ErrMoved    = errors.New("the project is no longer on the base branch")
+	ErrDirty = errors.New("the base branch's tree has uncommitted changes")
+	ErrMoved = errors.New("the project is no longer on the base branch")
+	// ErrRaced is the base moving between the rebase and the fast-forward:
+	// another run landed first, and this one rebases again.
+	ErrRaced    = errors.New("the base branch moved while landing")
 	ErrConflict = errors.New("the change conflicts with the base branch")
 )
 
@@ -131,7 +134,7 @@ func (t *Tree) Land(ctx context.Context) error {
 		return fmt.Errorf("%w: %v", ErrConflict, err)
 	}
 	if _, err := git(ctx, t.Root, "merge", "--quiet", "--ff-only", t.Branch); err != nil {
-		return fmt.Errorf("fast-forward %s to %s: %w", t.Base, t.Branch, err)
+		return fmt.Errorf("%w: %v", ErrRaced, err)
 	}
 	return nil
 }
