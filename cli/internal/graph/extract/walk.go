@@ -156,12 +156,17 @@ func (m modules) has(relDir string) bool {
 // module that file lists. go.work is the developer's own statement that these
 // modules are one unit of work, which is exactly the question the graph is
 // asking — so it is honoured rather than guessed at by walking for go.mod files.
+// A root that is only a workspace — a go.work and no go.mod, as a repository
+// of sibling modules is published — is the modules its go.work lists.
 func loadModules(root string) (modules, error) {
+	var out modules
 	path, err := ModulePath(root)
-	if err != nil {
+	switch {
+	case err == nil:
+		out = modules{{Dir: ".", Path: path}}
+	case len(workUses(root)) == 0:
 		return nil, err
 	}
-	out := modules{{Dir: ".", Path: path}}
 	for _, dir := range workUses(root) {
 		if dir == "." {
 			continue
@@ -171,6 +176,9 @@ func loadModules(root string) (modules, error) {
 			continue
 		}
 		out = append(out, moduleRef{Dir: dir, Path: p})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("go.mod nao encontrado em %s, e nenhum modulo do go.work tem um", root)
 	}
 	return out, nil
 }
