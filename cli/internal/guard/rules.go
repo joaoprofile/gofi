@@ -31,6 +31,7 @@ var ReadOnlyRules = []string{
 // sensitive whatever the rules say (see gofi memory write).
 var WriteRules = []string{
 	"Bash(gofi memory write *)",
+	"Bash(gofi verdict write *)",
 }
 
 // A read-only gofi command, optionally after a cd, and nothing else.

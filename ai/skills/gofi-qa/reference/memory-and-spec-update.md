@@ -32,9 +32,40 @@ audita.
 - **Nada de marca de auditoria** em documento algum — nem ✅, nem data, nem
   nome de agent: proveniência vive no git e o resultado, na memória.
 
-### 3. `.claude/memory/contexts/{contexto}.md` — frontmatter
+### 3. O veredicto — `gofi verdict write {contexto}`
 
-Atualizar `status` e `ressalvas` no frontmatter (sem tocar `project.md`):
+Depois da memória (§1), grave o veredicto. É ele que fecha `status` e
+`ressalvas` no frontmatter da memória — não os escreva à mão.
+
+```sh
+gofi verdict write {contexto} <<'JSON'
+{"result": "reprovado", "findings": [
+  {"severity": "major", "rule": "{contexto}/REQ-04.1", "symbol": "{pacote}.{Tipo}.{Método}",
+   "file": "{arquivo}", "line": 88, "owner": "eng",
+   "message": "cancelamento após envio não é recusado",
+   "evidence": "specs/changes/{id}/deltas/{contexto}.md#REQ-04"}
+]}
+JSON
+```
+
+| Veredicto do laudo | `result` | Achados |
+|---|---|---|
+| ✅ Aprovado | `aprovado` | nenhum blocker, major ou minor (suggestion pode) |
+| ⚠️ Aprovado com ressalvas | `aprovado` | majors e/ou minors, nenhum blocker |
+| ❌ Reprovado | `reprovado` | ao menos um blocker |
+
+- **`owner`**: `eng` quando o código não cumpre a mudança; `spec` quando o
+  contrato está errado ou incompleto (cenário que não testa o requisito,
+  requisito que falta, design contraditório); `pd` quando falta decisão de
+  negócio. É por ele que o loop volta à fase certa.
+- **`rule`** é a âncora do achado: o cenário (`{ctx}/REQ-NN.n`), o princípio do
+  projeto ou a regra do checklist. Achado sem âncora é SUGGESTION.
+- **`symbol`** é o nó do grafo (`gofi show`): com ele, o mesmo defeito é
+  reconhecido na próxima auditoria mesmo que as linhas mudem.
+- O comando recusa o que não fecha (blocker num aprovado, reprovado sem nada
+  que reprove) — corrija o JSON, não o laudo.
+
+O frontmatter que ele deixa na memória:
 
 ```yaml
 status: aprovado    # ou: reprovado (algum BLOCKER)
@@ -42,10 +73,9 @@ ressalvas: 0        # MAJOR + MINOR pendentes; 0 só no ✅ Aprovado
 atualizado: {data}
 ```
 
-`⚠️ Aprovado com ressalvas` grava `status: aprovado` com `ressalvas` maior que
+`⚠️ Aprovado com ressalvas` deixa `status: aprovado` com `ressalvas` maior que
 zero — e **não** encerra o ciclo: o condutor (CLI, painel e `/gofi-full`) só
 aceita `aprovado` com `ressalvas: 0` e reabre a implementação nos demais casos.
-SUGGESTION não entra na contagem.
 
 > O índice global (panorama de todos os contextos) é gerado por `/gofi-status`
 > lendo esse frontmatter. Nenhuma tabela por-contexto no `project.md`.
