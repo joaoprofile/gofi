@@ -72,7 +72,15 @@ to --gate-timeout otherwise; never merged, never pushed. A conflict ends in
 "conflito", the branch kept for the person.
 The sensors run the commands of loop.sensors in .gofi.yaml; test defaults to
 the test section's default task, and a stage with no command is recorded as
-not checked, never as passed.`,
+not checked, never as passed.
+
+The policy is loop in .gofi.yaml: budget_usd stops the agents once spent,
+max_iterations bounds the ways back to work, accept is clean or ressalvas,
+and escalate (on_no_progress, on_first_reject, never) says when a role that
+does not progress runs one tier up. When the run cannot go on — the contract
+is wrong, or nothing progresses on the highest tier — gofi-triage proposes
+the amendment in .gofi/proposals/<context>-<n>.md and the run ends in
+impasse: the person decides.`,
 		Example: `gofi run adicionar-rate-limit
 gofi run --context pedidos
 gofi run --resume r-20261102-101500
@@ -326,6 +334,10 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if err != nil {
 		return "", err
 	}
+	policy := loopPolicy(cfg)
+	if err := policy.Check(); err != nil {
+		return "", err
+	}
 
 	run, change, ctxName := o.Resume, o.Change, ""
 	var prior *loop.State
@@ -438,6 +450,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		Sensors:  sensor.Runner{Root: work, Commands: sensors},
 		Verdicts: diskVerdicts{root: work},
 		Gate:     gate,
+		Policy:   policy,
 		OnEvent:  report,
 	}
 	if !o.Events {
@@ -866,6 +879,16 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 type diskVerdicts struct{ root string }
 
 func (d diskVerdicts) Read(ctx string) (*verdict.Verdict, error) { return verdict.Read(d.root, ctx) }
+
+// loopPolicy is the project's convergence policy, from loop in .gofi.yaml:
+// absent, the defaults — no budget, the flow's limits, clean, on_no_progress.
+func loopPolicy(cfg *config.GofiConfig) loop.Policy {
+	if cfg.Loop == nil {
+		return loop.Policy{}
+	}
+	l := cfg.Loop
+	return loop.Policy{MaxIterations: l.MaxIterations, BudgetUSD: l.BudgetUSD, Accept: l.Accept, Escalate: l.Escalate}
+}
 
 // defaultGateTimeout is how long a run waits at its gate when neither the
 // flag nor loop.gate_timeout says: long enough to answer from another

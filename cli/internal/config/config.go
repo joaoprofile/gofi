@@ -189,6 +189,20 @@ type Loop struct {
 	// (gofi answer) before it ends in impasse: a Go duration, 30m when
 	// empty, 0 not to wait.
 	GateTimeout string `yaml:"gate_timeout,omitempty"`
+	// MaxIterations bounds how many times a run goes back to work after a
+	// sensor or the audit refused it — repairs and fixes alike. 0: only the
+	// flow's own limits.
+	MaxIterations int `yaml:"max_iterations,omitempty"`
+	// BudgetUSD is what a run may spend on its agents; once spent, no agent
+	// runs again and the run ends exhausted. 0: no budget.
+	BudgetUSD float64 `yaml:"budget_usd,omitempty"`
+	// Accept is the verdict a change is accepted on: clean (the default — no
+	// finding open) or ressalvas (approved with minors or majors open).
+	Accept string `yaml:"accept,omitempty"`
+	// Escalate is when a role that does not progress runs one tier up:
+	// on_no_progress (the default — after two iterations without
+	// progress), on_first_reject (at once), never.
+	Escalate string `yaml:"escalate,omitempty"`
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.

@@ -123,8 +123,24 @@ type State struct {
 	Score    *int          `json:"score,omitempty"`
 	Previous *int          `json:"previous,omitempty"`
 	Resolved []string      `json:"resolved,omitempty"`
-	Blocked  bool          `json:"blocked,omitempty"`
-	Answered bool          `json:"answered,omitempty"`
+	// Rounds is how many times the work went back after a sensor or the
+	// audit refused it; Stalled and SensorStalled the audit's and the
+	// sensors' judgments in a row without progress, SensorMark how far the
+	// last failing sensor run got. Raised is how many tiers each role runs
+	// above its own, Worked the turns the next audit judges, and Stuck that
+	// nothing progresses and no tier is left to raise (0002, D8).
+	Rounds        int            `json:"rounds,omitempty"`
+	Stalled       int            `json:"stalled,omitempty"`
+	SensorStalled int            `json:"sensor_stalled,omitempty"`
+	SensorMark    *int           `json:"sensor_mark,omitempty"`
+	Raised        map[string]int `json:"raised,omitempty"`
+	Worked        []Ran          `json:"worked,omitempty"`
+	Stuck         bool           `json:"stuck,omitempty"`
+	// Proposal is the amendment the run proposes when it cannot go on — the
+	// contract is wrong, or the work is stuck — relative to the root (D9).
+	Proposal string `json:"proposal,omitempty"`
+	Blocked  bool   `json:"blocked,omitempty"`
+	Answered bool   `json:"answered,omitempty"`
 	// Elicit is the file the last blocked agent wrote its decisions to,
 	// BlockedBy that agent, and Answers what the person answered at the gate.
 	Elicit    string            `json:"elicit,omitempty"`
@@ -168,6 +184,9 @@ type Runner struct {
 	// holds about the change, computed when the run starts.
 	Roles []role.Role
 	Facts role.Facts
+	// Policy is the project's convergence policy: budget, iterations,
+	// acceptance, escalation.
+	Policy Policy
 	// Now is the clock; tests fix it.
 	Now func() time.Time
 	// OnEvent sees every event as it is written, for a live view.
@@ -250,6 +269,23 @@ func (r *Runner) Continue(ctx context.Context, s *State) (*State, error) {
 			r.emit(s, Event{Ev: "run.end", Node: name, Why: n.Outcome})
 			return s, r.save(s)
 		}
+		// A spent budget runs no agent again: the run ends where a spent
+		// limit ends it.
+		if why, spent := r.spent(s); spent && n.Kind == KindAgent {
+			to := r.Flow.OnLimit
+			r.emit(s, Event{Ev: "edge", Node: name, To: to, Why: why})
+			s.Why = why
+			if to == "" {
+				s.Node, s.Outcome = "", "exhausted"
+				r.emit(s, Event{Ev: "run.end", Node: name, Why: s.Outcome})
+				return s, r.save(s)
+			}
+			s.Node = to
+			if err := r.save(s); err != nil {
+				return s, err
+			}
+			continue
+		}
 		if err := r.runNode(ctx, name, n, s); err != nil {
 			r.emit(s, Event{Ev: "node.failed", Node: name, Why: err.Error()})
 			_ = r.save(s)
@@ -283,6 +319,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 	case KindSensor:
 		res := r.Sensors.Run(ctx, n.Stages)
 		s.Sensor = &res
+		r.weighSensors(s, n.Stages)
 	case KindPolicy:
 		v, err := r.Verdicts.Read(s.Context)
 		if err != nil {
@@ -294,6 +331,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 			return fmt.Errorf("a auditoria não gravou o veredicto desta execução (gofi verdict write %s --run %s --iter %d)", s.Context, s.Run, s.Iter)
 		}
 		r.judge(s, v)
+		r.weighVerdict(s)
 	case KindGate:
 		e, err := intake.ReadElicitation(r.work(), s.Elicit)
 		if err != nil || e == nil {
@@ -381,6 +419,9 @@ func (r *Runner) facts(s *State) role.Facts {
 	for _, o := range s.Open {
 		f["owner("+o.Owner+")"] = true
 	}
+	if s.Stuck {
+		f["stuck"] = true
+	}
 	return f
 }
 
@@ -396,9 +437,11 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 			prompt = intake.WithDecisions(prompt, e, s.Answers)
 		}
 	}
-	a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: rl.Name, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
+	tier := r.tierOf(rl.Name, s)
+	s.Worked = append(s.Worked, Ran{Node: name, Role: rl.Name})
+	a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: rl.Name, Tier: tier, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 	_ = saveAgent(r.Root, s.Run, a)
-	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: rl.Contract.Tier, Tools: rl.Contract.Tools})
+	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools})
 	s.CostUSD += res.CostUSD
 	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
 	if err != nil {
@@ -406,6 +449,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		_ = saveAgent(r.Root, s.Run, a)
 		return err
 	}
+	r.keepProposal(s)
 	e, _ := intake.ReadElicitation(r.work(), elicit)
 	s.Blocked = e != nil && len(e.Questions) > 0
 	s.Answered, s.Answers = false, nil
@@ -470,6 +514,13 @@ func (r *Runner) next(from string, s *State) (to, why string) {
 		if max := r.Flow.limit(from, e.To); max > 0 && s.Taken[key] >= max {
 			return r.Flow.OnLimit, fmt.Sprintf("limite de %s → %s esgotado (%d)", from, e.To, max)
 		}
+		if r.rework(from, e.To) {
+			// The first pass is iteration 1: max_iterations passes in all.
+			if max := r.Policy.MaxIterations; max > 0 && s.Rounds+1 >= max {
+				return r.Flow.OnLimit, fmt.Sprintf("loop.max_iterations esgotado (%d)", max)
+			}
+			s.Rounds++
+		}
 		s.Taken[key]++
 		return e.To, why
 	}
@@ -518,6 +569,19 @@ func (r *Runner) holds(w When, s *State) (bool, string) {
 			return false, ""
 		}
 		why = append(why, fmt.Sprintf("oscilação %v", osc))
+	}
+	if w.Accept != nil {
+		ok := r.Policy.accepts(s.Verdict)
+		if ok != *w.Accept {
+			return false, ""
+		}
+		why = append(why, fmt.Sprintf("aceite %v (veredicto %s, accept %s)", ok, s.Verdict, r.Policy.acceptName()))
+	}
+	if w.Stuck != nil {
+		if s.Stuck != *w.Stuck {
+			return false, ""
+		}
+		why = append(why, fmt.Sprintf("sem saída %v", s.Stuck))
 	}
 	if w.Blocked != nil {
 		if s.Blocked != *w.Blocked {

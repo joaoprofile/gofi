@@ -18,7 +18,7 @@ const (
 // Stages are where in the loop a role works. A flow's agent node names a
 // stage, and the roles of that stage whose triggers hold are the ones that
 // run — nobody picks them (0002, D18).
-var Stages = []string{"contract", "plan", "implement", "test", "repair", "audit", "deliver", "learn"}
+var Stages = []string{"contract", "plan", "implement", "test", "repair", "triage", "audit", "deliver", "learn"}
 
 // Trigger is when a role of a stage runs: every predicate of All holds, and
 // at least one of Any when Any is given. A role with no trigger runs whenever
@@ -38,6 +38,8 @@ var predicates = map[string][]string{
 	"sensor.failed":  {"build", "test", "static", "graph", "trace", "integrity"},
 	"verdict":        {"clean", "caveats", "rejected"},
 	"owner":          {"eng", "spec", "pd"},
+	// stuck: the work does not progress and no tier is left to raise.
+	"stuck": nil,
 }
 
 // checkPredicate reports whether p is a fact a trigger can name.

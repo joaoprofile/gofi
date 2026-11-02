@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/joaoprofile/gofi/cli/internal/host"
 )
 
 // AgentsDir holds, in a run's folder, each agent's state (<id>.json) and
@@ -29,6 +31,7 @@ type AgentState struct {
 	ID      string    `json:"id"`
 	Node    string    `json:"node"`
 	Role    string    `json:"role"`
+	Tier    host.Tier `json:"tier,omitempty"`
 	Iter    int       `json:"iter"`
 	Status  string    `json:"status"`
 	Started time.Time `json:"started"`

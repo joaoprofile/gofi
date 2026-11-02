@@ -1,0 +1,19 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by the flow alone (0002, D19).
+#   stage      triage: what the delivery flow runs when it cannot go on — the
+#              audit found the contract wrong, or nothing progresses on the
+#              highest tier (0002, D8, D9, D17).
+#   triggers   a finding of the spec or the discovery; the work stuck.
+#   tools      what the role may use in its turn (0002, D15): read, edit, write,
+#              search, gofi (the index), verify (the loop's sensors), verdict,
+#              memory, shell. Exactly these are granted; no role gets a shell.
+#              It writes the proposal only — never edits code or contract.
+tier: standard
+visibility: internal
+stage: triage
+triggers:
+  - any: [owner(spec), owner(pd), stuck]
+tools: [read, write, search, gofi, verify]

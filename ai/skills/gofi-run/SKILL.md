@@ -51,7 +51,9 @@ Próprias do `/gofi-run`:
 7. **Fim.** Diga o resultado (`accepted`, `impasse`, `exhausted`), a
    integração (`integrada`, `conflito`, `aguardando`) e o custo. Impasse e
    conflito voltam para a pessoa com o porquê do log — não tente de novo por
-   conta própria.
+   conta própria. Num impasse, apresente a proposta de emenda que a execução
+   deixou (`proposal` no `state.json`, em `.gofi/proposals/`): a pergunta, as
+   opções e a recomendação são para a pessoa decidir.
 
 ## O que você NÃO faz
 
