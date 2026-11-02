@@ -166,6 +166,18 @@ atualizado: 2026-08-03
 	}
 }
 
+// A change's proposal names its contexts in contextos: that is its contexto.
+func TestAChangeProposalNamesItsContexts(t *testing.T) {
+	root := project(t, map[string]string{
+		".gofi.yaml": currentConfig,
+		"specs/changes/archive/2026-11-02-a/proposal.md": "---\ntipo: mudanca\nformato: 3\ncontextos: [billing]\nversao: \"1.0\"\nstatus: arquivado\nkeywords: [a]\n---\n# M\n",
+		"specs/INDEX.md": "index\n",
+	})
+	if f, ok := find(Run(root, Options{}), "specs/changes/archive/2026-11-02-a/proposal.md"); ok {
+		t.Errorf("a proposal with contextos is reported: %+v", f)
+	}
+}
+
 // A spec written before decision 0003 still works, so it is info: the audit
 // names the command that migrates it. The old document a migration archives
 // on purpose is history and raises nothing.

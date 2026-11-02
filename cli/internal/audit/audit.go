@@ -295,6 +295,10 @@ func inspectDoc(rel, body string) []Finding {
 	var out []Finding
 	var missing []string
 	for _, key := range []string{"versao", "keywords", "status", "contexto"} {
+		// A change's proposal names every context it touches: contextos.
+		if key == "contexto" && hasKey(front, "contextos") {
+			continue
+		}
 		if !hasKey(front, key) {
 			missing = append(missing, key)
 		}
