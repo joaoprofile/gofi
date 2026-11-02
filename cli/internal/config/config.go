@@ -627,6 +627,14 @@ type TestTask struct {
 	Needs []string `yaml:"needs,omitempty"`
 }
 
+// EnvRoot names a project root that wins over the one a .gofi.yaml in that
+// same folder records. gofi run sets it for the agents of a run in a
+// worktree: the worktree's .gofi.yaml is a copy, and by the declared-root
+// rule a copy describes the project it names — the one it was copied from.
+const EnvRoot = "GOFI_ROOT"
+
+// Load reads a .gofi.yaml, brings an older one to the current schema and
+// validates it.
 func Load(path string) (*GofiConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -652,6 +660,14 @@ func Load(path string) (*GofiConfig, error) {
 	// `gofi update` that rewrites the file. Seeding first makes validation judge
 	// the effective config instead of the age of the file.
 	Backfill(&cfg)
+	// A run in a worktree reads a .gofi.yaml that still names the project it
+	// was copied from; the supervisor says, for the processes it starts, that
+	// this copy is the project.
+	if root := os.Getenv(EnvRoot); root != "" {
+		if dir, err := filepath.Abs(filepath.Dir(path)); err == nil && dir == filepath.Clean(root) {
+			cfg.Project.Root = dir
+		}
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate %s: %w", path, err)
 	}

@@ -337,6 +337,14 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if tree != nil {
 		work = tree.Dir
 	}
+	// What the run starts — the agents, the gofi MCP server, the git hooks
+	// of its commit — works on the worktree, not on the project it was
+	// copied from.
+	if tree != nil {
+		_ = os.Setenv(config.EnvRoot, work)
+	} else {
+		_ = os.Unsetenv(config.EnvRoot)
+	}
 	report := humanReport(out)
 	if o.Events {
 		report = eventReport(out)
@@ -427,9 +435,6 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if tree == nil {
 		return s.Outcome, nil
 	}
-	if err := tree.Commit(ctx, fmt.Sprintf("feat(%s): %s", ctxName, change)); err != nil {
-		return s.Outcome, fmt.Errorf("commit %s: %w", tree.Branch, err)
-	}
 	outcome, err := landRun(ctx, out, root, s, tree, wait, o.Events, report)
 	result.Why = outcome
 	return outcome, err
@@ -453,6 +458,12 @@ var landPoll = 10 * time.Second
 func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tree *worktree.Tree, wait time.Duration, events bool, report func(loop.Event)) (string, error) {
 	say := func(ev, why string) {
 		report(loop.Event{Ev: ev, Node: s.Run, Why: why})
+	}
+	// Committed here, not where the run was accepted: a resume that lands a
+	// run whose commit failed commits it first. Nothing left to commit is
+	// not an error.
+	if err := tree.Commit(ctx, fmt.Sprintf("feat(%s): %s", s.Context, s.Change)); err != nil {
+		return waiting, fmt.Errorf("commit %s: %w", tree.Branch, err)
 	}
 	var deps []string
 	if all, err := contract.Docs(tree.Dir); err == nil {
@@ -483,7 +494,7 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 			_ = loop.SaveState(root, s)
 			say("land.conflict", err.Error())
 			return conflict, errors.New(i18n.T("run.land.conflict", tree.Branch, tree.Base, tree.Dir))
-		} else if errors.Is(err, worktree.ErrDirty) || errors.Is(err, worktree.ErrMoved) {
+		} else if errors.Is(err, worktree.ErrDirty) || errors.Is(err, worktree.ErrMoved) || errors.Is(err, worktree.ErrRaced) {
 			why = err.Error()
 		} else {
 			return waiting, err

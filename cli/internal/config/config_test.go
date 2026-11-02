@@ -474,3 +474,24 @@ func backupsIn(t *testing.T, configPath string) []string {
 	}
 	return kept
 }
+
+// GOFI_ROOT names the project for a .gofi.yaml in that folder — a run's
+// worktree, whose copy still records the project it came from — and leaves
+// any other .gofi.yaml to the root it records.
+func TestLoad_EnvRootNamesTheCopyAsTheProject(t *testing.T) {
+	main, copy := t.TempDir(), t.TempDir()
+	cfg := validConfig()
+	cfg.Project.Root = main
+	for _, dir := range []string{main, copy} {
+		if err := Save(filepath.Join(dir, FileName), cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv(EnvRoot, copy)
+	if got, _ := Load(filepath.Join(copy, FileName)); got.Project.Root != copy {
+		t.Errorf("the worktree's copy: root %q, want %q", got.Project.Root, copy)
+	}
+	if got, _ := Load(filepath.Join(main, FileName)); got.Project.Root != main {
+		t.Errorf("the project itself: root %q, want %q", got.Project.Root, main)
+	}
+}
