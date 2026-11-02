@@ -96,6 +96,9 @@ func (m model) onIntake(msg intakeDone) (tea.Model, tea.Cmd) {
 	}
 	shown := tea.Println(m.planBlock(r))
 	switch {
+	case r.Blocked != "":
+		m.plan, m.wait = nil, waitNone
+		return m, tea.Sequence(shown, tea.Println(k.nested([]string{i18n.T("intake.blocked", r.Blocked)}, k.warn)))
 	case r.Ask:
 		m.wait = waitAnswer
 		return m, tea.Sequence(shown, tea.Println(m.questionsBlock(r)))

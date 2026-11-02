@@ -107,7 +107,9 @@ func (p planner) plan(intent, artifact string, ctx *Context) ([]Phase, error) {
 				if err := visit(producer, fmt.Sprintf("%s precisa de %s, e o contexto ainda não tem", name, req.Artifact), depth+1); err != nil {
 					return err
 				}
-			case req.Revises(intent):
+			// A sealed change is the contract already written and approved:
+			// the loop delivers it with no spec phase before.
+			case req.Revises(intent) && !(req.Artifact == "spec" && len(ctx.sealed()) > 0):
 				if err := visit(producer, fmt.Sprintf("a mudança é registrada em %s antes de %s", req.Artifact, name), depth+1); err != nil {
 					return err
 				}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/docs"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 )
@@ -43,7 +44,7 @@ func copyTree(t *testing.T, src, dst string) {
 }
 
 func spec(ctx, entities, keywords, body string) string {
-	return "---\ntipo: spec\nformato: sdd\ncontexto: " + ctx + "\nversao: \"1.0\"\nstatus: aprovado\nentidades: [" + entities + "]\nkeywords: [" + keywords + "]\n---\n# SDD — " + ctx + "\n\n" + body
+	return "---\ntipo: spec\nformato: 3\ncontexto: " + ctx + "\nversao: \"1.0\"\nstatus: aprovado\nentidades: [" + entities + "]\nkeywords: [" + keywords + "]\n---\n# SDD — " + ctx + "\n\n" + body
 }
 
 func memory(ctx string) string {
@@ -148,10 +149,41 @@ func TestChangeBehaviourOfAnImplementedContext(t *testing.T) {
 }
 
 // A fix keeps the spec: the behaviour it describes does not change.
-func TestFixSkipsTheSpec(t *testing.T) {
-	r := runIntake(t, project(t), "corrija o bug no cancelamento de pedidos", Options{})
-	if want := []string{"gofi-eng", "gofi-qa"}; !slices.Equal(roles(r), want) {
+// A fix goes through a change too (0003): the bug is a scenario the
+// contract lacked, written as a delta before the code — unless the context
+// already has a sealed change, which the loop delivers as it is.
+func TestAFixGoesThroughAChange(t *testing.T) {
+	root := project(t)
+	r := runIntake(t, root, "corrija o bug no cancelamento de pedidos", Options{})
+	if want := []string{"gofi-spec", "gofi-eng", "gofi-qa"}; !slices.Equal(roles(r), want) {
 		t.Errorf("plan = %v, want %v (context %+v)", roles(r), want, r.Context)
+	}
+
+	dir := "specs/changes/corrigir-cancelamento/"
+	write(t, root, dir+"proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [order]\nversao: \"1.0\"\nstatus: proposto\ndesign: n/a\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n")
+	write(t, root, dir+"deltas/order.md", "---\ntipo: delta\nformato: 3\ncontexto: order\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# D\n\n## Propósito\n\nPedidos.\n\n## ADICIONADO\n\n### Requisito: REQ-09 — Cancelar\nO sistema DEVE x.\n\n#### Cenário: REQ-09.1 — x\n- DADO a\n- QUANDO b\n- ENTÃO c\n")
+	all, _ := contract.Docs(root)
+	for _, d := range all {
+		if _, err := contract.Approve(root, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r = runIntake(t, root, "corrija o bug no cancelamento de pedidos", Options{})
+	if want := []string{"gofi-eng", "gofi-qa"}; !slices.Equal(roles(r), want) || len(r.Context.Sealed) != 1 {
+		t.Errorf("with a sealed change: plan = %v, sealed %v", roles(r), r.Context.Sealed)
+	}
+}
+
+// A context still in format 2 is migrated before the loop works on it.
+func TestAFormatTwoContextWaitsForTheMigration(t *testing.T) {
+	root := project(t)
+	write(t, root, "specs/order/sdd-order.md", strings.Replace(spec("order", "order_order", "pedido", "## 1. Pedido\n\nx\n"), "formato: 3", "formato: 2", 1))
+	r := runIntake(t, root, "corrija o bug no cancelamento de pedidos", Options{})
+	if len(r.Plan) != 0 || !strings.Contains(r.Blocked, "gofi spec migrate order") {
+		t.Errorf("plan = %v, blocked %q", roles(r), r.Blocked)
+	}
+	if r := runIntake(t, root, "explique como funciona o cancelamento de pedidos", Options{}); r.Blocked != "" {
+		t.Errorf("a question about the project was blocked: %q", r.Blocked)
 	}
 }
 
@@ -178,6 +210,10 @@ func TestWideReachRaisesTheTier(t *testing.T) {
 func TestAskedTierWins(t *testing.T) {
 	r := runIntake(t, project(t), "corrija o bug no cancelamento de pedidos", Options{Tier: host.Light})
 	for _, p := range r.Plan {
+		// An elicitation keeps its own tier: it only reads and asks.
+		if p.Elicit {
+			continue
+		}
 		if p.Tier != host.Light || p.TierWhy != "pedido explícito" {
 			t.Errorf("%s: %s (%s)", p.Role, p.Tier, p.TierWhy)
 		}

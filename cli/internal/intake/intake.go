@@ -98,6 +98,9 @@ type Result struct {
 	Spent *Spent `json:"spent,omitempty"`
 	// Change is what changes, as the person answered it.
 	Change string `json:"change,omitempty"`
+	// Blocked says why the plan cannot run, and what unblocks it: no phase
+	// runs while it is set.
+	Blocked string `json:"blocked,omitempty"`
 	// VerdictFile is where the QA writes its verdict — the context's memory,
 	// relative to the project root — when a phase has OnReject.
 	VerdictFile string `json:"verdict_file,omitempty"`
@@ -317,6 +320,7 @@ func run(root, text string, opts Options, s settled) (*Result, error) {
 	}
 
 	// 4. Plan.
+	contractState(root, res.Context)
 	if res.Intent == "explain" {
 		// A question about the project changes nothing: no role runs. It goes
 		// to the conversation as asked, with the sections that answer it, so
@@ -336,6 +340,13 @@ func run(root, text string, opts Options, s settled) (*Result, error) {
 		} else {
 			route(phases, p.roles, res.Context, opts.Tier)
 			res.Plan = phases
+		}
+		// The loop works from living specs and changes: a context still in
+		// format 2 is migrated before any phase writes or builds on it.
+		if res.Context != nil && res.Context.FormatTwo && writesContract(res.Plan) {
+			res.Blocked = fmt.Sprintf("%[1]s tem spec no formato 2: migre com `gofi spec migrate %[1]s` e escreva os cenários que ela marca (/gofi-migrate) — depois peça de novo", res.Context.Name)
+			res.Signals = append(res.Signals, "contexto no formato 2: o plano espera a migração")
+			res.Plan = nil
 		}
 		res.Next = nextAfter(res.Artifact, p)
 	}
@@ -602,6 +613,17 @@ func isIntentWord(lex Lexicon, word string) bool {
 			if normalize(e) == w {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// writesContract reports whether a plan writes the contract or builds on it.
+func writesContract(plan []Phase) bool {
+	for _, ph := range plan {
+		switch ph.Produces {
+		case "spec", "code", "ui", "infra":
+			return true
 		}
 	}
 	return false

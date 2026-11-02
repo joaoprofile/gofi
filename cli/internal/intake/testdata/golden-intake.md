@@ -10,7 +10,7 @@ preço = pricing.
 |---|---|---|---|---|
 | I01 | crie um PRD de sincronização de pedidos | novo | gofi-pd | sim |
 | I02 | altere o fluxo de pricing, adicionando um rate limit no intervalo dos envios de preços | pricing | gofi-spec → gofi-eng → gofi-qa | não |
-| I03 | corrija o bug no cancelamento de pedidos | order | gofi-eng → gofi-qa | não |
+| I03 | corrija o bug no cancelamento de pedidos | order | gofi-spec → gofi-eng → gofi-qa | não |
 | I04 | documente a API de pedidos | order | gofi-doc | não |
 | I05 | audite o contexto de pricing | pricing | gofi-qa | não |
 | I06 | como está o contexto de pedidos? | order | — | não |
@@ -23,4 +23,4 @@ preço = pricing.
 | I13 | crie a tela de cancelamento de pedidos | order | gofi-spec → gofi-ui → gofi-qa | não |
 | I14 | panorama dos contextos | — | gofi-status | não |
 | I15 | provisione o ambiente de pricing | pricing | gofi-ops | não |
-| I16 | corrija o erro no envio de preços | pricing | gofi-eng → gofi-qa | não |
+| I16 | corrija o erro no envio de preços | pricing | gofi-spec → gofi-eng → gofi-qa | não |

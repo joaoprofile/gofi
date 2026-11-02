@@ -23,10 +23,23 @@ type Context struct {
 	Neighbors []string `json:"neighbors,omitempty"`
 	// Why says how the context was chosen.
 	Why string `json:"why"`
+	// Sealed lists the open changes of the context approved as they are:
+	// what the loop can deliver with no contract phase before it (0003).
+	Sealed []string `json:"sealed,omitempty"`
+	// FormatTwo is set when the context's spec is still in format 2: the
+	// loop works from living specs and changes, so it must be migrated first.
+	FormatTwo bool `json:"format_two,omitempty"`
 }
 
 func (c *Context) has(artifact string) bool {
 	return c != nil && slices.Contains(c.Has, artifact)
+}
+
+func (c *Context) sealed() []string {
+	if c == nil {
+		return nil
+	}
+	return c.Sealed
 }
 
 // dominance is how far ahead the best context must be of the second for the

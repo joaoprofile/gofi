@@ -81,6 +81,9 @@ const conduct = {
 				this.running = false;
 				this.setRunning(false);
 				break;
+			case 'blocked':
+				this.endPlan(`O plano não pode rodar: ${result.blocked}`);
+				break;
 			case 'answer':
 			case 'confirm':
 				this.running = false;
