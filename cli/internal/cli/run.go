@@ -10,8 +10,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -28,14 +28,13 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
+	"github.com/joaoprofile/gofi/cli/internal/pack"
 	"github.com/joaoprofile/gofi/cli/internal/role"
+	"github.com/joaoprofile/gofi/cli/internal/sensor"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
 
-// sensorTimeout bounds one sensor stage: a test suite that hangs must not
-// hold the run forever.
-const sensorTimeout = 20 * time.Minute
 
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -106,7 +105,22 @@ var runPorts = struct {
 	// regenerate writes a worktree's derived files; in a test, the running
 	// binary is the test binary and must not be run as gofi.
 	regenerate func(ctx context.Context, dir string) error
+	// graph is the graph sensor's command, for the same reason.
+	graph *pack.Command
 }{}
+
+// graphSensor is gofi's own stage: this gofi indexes the code the turn
+// changed, in the tree the run works on.
+func graphSensor() pack.Command {
+	if runPorts.graph != nil {
+		return *runPorts.graph
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return pack.Command{}
+	}
+	return pack.Command{Run: strconv.Quote(exe) + " index code", Format: pack.FormatExit}
+}
 
 func runRun(cmd *cobra.Command, args []string) error {
 	cfg, root, err := loadProjectConfig()
@@ -403,6 +417,13 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if err != nil {
 		return "", err
 	}
+	sensors, err := sensorCommands(cfg)
+	if err != nil {
+		return "", err
+	}
+	if _, set := sensors["graph"]; !set {
+		sensors["graph"] = graphSensor()
+	}
 	gate := runPorts.gate
 	if gate == nil {
 		g := &loop.FileGate{Root: root, Run: run, Timeout: wait}
@@ -415,7 +436,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	r := &loop.Runner{
 		Root: root, Work: work, Flow: f, Brief: loop.DefaultBrief, Roles: roles, Facts: facts,
 		Agent:    &engineAgent{root: root, work: work, run: run, open: open, out: out, quiet: o.Events},
-		Sensors:  commandSensors{root: work, commands: sensorCommands(cfg)},
+		Sensors:  sensor.Runner{Root: work, Commands: sensors},
 		Verdicts: diskVerdicts{root: work},
 		Gate:     gate,
 		OnEvent:  report,
@@ -751,25 +772,34 @@ func sealedChange(root, change string) (string, error) {
 	return "", errors.New(i18n.T("change.not_found", change))
 }
 
-// sensorCommands are the commands of each stage: loop.sensors, with test
-// defaulting to the test section's default task and build, on a Go backend,
-// to building it.
-func sensorCommands(cfg *config.GofiConfig) map[string]string {
-	cmds := map[string]string{}
-	if cfg.Loop != nil {
-		for k, v := range cfg.Loop.Sensors {
-			cmds[k] = v
+// sensorCommands are the commands of each stage: loop.sensors first, then
+// the backend language's pack (0002, D13); with no pack, test is the test
+// section's default task. A command from loop.sensors is read as
+// file:line output, the shape compilers and most tools print.
+func sensorCommands(cfg *config.GofiConfig) (map[string]pack.Command, error) {
+	cmds := map[string]pack.Command{}
+	if lang := backendLanguage(cfg); lang != "" {
+		p, err := pack.Load(lang)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if _, ok := cmds["build"]; !ok && backendLanguage(cfg) == config.LanguageGo {
-		cmds["build"] = "go -C " + cfg.Backend.Path + " build ./..."
+		if p != nil {
+			for stage, c := range p.Sensors {
+				cmds[stage] = c.Expand(cfg.Backend.Path)
+			}
+		}
 	}
 	if _, ok := cmds["test"]; !ok {
 		if t, ok := cfg.Test.Tasks[cfg.Test.Default]; ok && !strings.HasPrefix(strings.TrimSpace(t.Run), "echo ") {
-			cmds["test"] = t.Run
+			cmds["test"] = pack.Command{Run: t.Run, Format: pack.FormatLines}
 		}
 	}
-	return cmds
+	if cfg.Loop != nil {
+		for stage, run := range cfg.Loop.Sensors {
+			cmds[stage] = pack.Command{Run: run, Format: pack.FormatLines}
+		}
+	}
+	return cmds, nil
 }
 
 // engineAgent runs a role's turn in a fresh engine session and keeps what
@@ -832,41 +862,6 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 		}
 	}
 	return res, failure
-}
-
-// commandSensors runs each stage's command from the project root, cheapest
-// first, and stops at the first that fails.
-type commandSensors struct {
-	root     string
-	commands map[string]string
-}
-
-func (c commandSensors) Run(ctx context.Context, stages []string) loop.SensorResult {
-	var res loop.SensorResult
-	var notes []string
-	for _, stage := range stages {
-		command := strings.TrimSpace(c.commands[stage])
-		if command == "" {
-			notes = append(notes, stage+": não verificado — sem comando em loop.sensors")
-			continue
-		}
-		sctx, cancel := context.WithTimeout(ctx, sensorTimeout)
-		shell, flag := "sh", "-c"
-		if runtime.GOOS == "windows" {
-			shell, flag = "cmd", "/C"
-		}
-		cmd := exec.CommandContext(sctx, shell, flag, command)
-		cmd.Dir = c.root
-		output, err := cmd.CombinedOutput()
-		cancel()
-		if err != nil {
-			res.Failed = append(res.Failed, stage)
-			res.Output = strings.Join(append(notes, stage+": "+command+"\n"+string(output)), "\n")
-			return res
-		}
-	}
-	res.Output = strings.Join(notes, "\n")
-	return res
 }
 
 type diskVerdicts struct{ root string }

@@ -29,6 +29,8 @@ func shippedRoles() []role.Role {
 			Triggers: []role.Trigger{{Any: []string{"change.surface(backend)"}}}}},
 		{Name: "gofi-qa", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "audit",
 			Triggers: []role.Trigger{{All: []string{"sensor.green"}}}}},
+		{Name: "gofi-repair", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "repair",
+			Triggers: []role.Trigger{{Any: []string{"sensor.failed(build)", "sensor.failed(static)", "sensor.failed(graph)"}}}}},
 		{Name: "gofi-ui", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "implement",
 			Triggers: []role.Trigger{{Any: []string{"change.surface(web)", "change.surface(mobile)"}}}}},
 	}

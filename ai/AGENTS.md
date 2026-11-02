@@ -122,6 +122,7 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 | `gofi-eng` | implement | implementa a mudança no backend |
 | `gofi-ui` | implement | implementa a camada de apresentação (web, mobile) |
 | `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
+| `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados |
 | `gofi-qa` | audit | audita a implementação contra a mudança e os padrões |
 | `gofi-doc` | deliver | doc de contrato para front e QA a partir dos handlers |
 

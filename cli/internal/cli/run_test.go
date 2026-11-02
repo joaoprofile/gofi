@@ -17,6 +17,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/pack"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
 
@@ -65,6 +66,14 @@ func installRoles(t *testing.T, root string) {
 	}
 }
 
+// quietPorts keeps a test's run from reaching what only a real gofi does:
+// running the test binary as gofi, to index or regenerate.
+func quietPorts(t *testing.T) {
+	t.Helper()
+	runPorts.graph = &pack.Command{Run: "true", Format: pack.FormatExit}
+	t.Cleanup(func() { runPorts.graph = nil })
+}
+
 func (fakeSession) Cancel()      {}
 func (fakeSession) Close() error { return nil }
 
@@ -75,6 +84,7 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	runPorts.open = func(root string) engine.Session { return fakeSession{root: root, prompts: &prompts} }
 	t.Cleanup(func() { runPorts.open = nil })
 	installRoles(t, root)
+	quietPorts(t)
 	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  sensors:\n    test: \"true\"\n")
 
 	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
@@ -151,18 +161,22 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	}
 }
 
-// On a Go backend the build sensor builds it unless loop.sensors says
-// otherwise; test is the test section's default task.
-func TestTheSensorsDefaultToTheProjectsBuildAndTests(t *testing.T) {
+// On a Go backend the sensors are the Go pack's — build, vet, go test -json
+// — each reading its own report; loop.sensors wins a stage it names.
+func TestTheSensorsComeFromTheLanguagePack(t *testing.T) {
 	cfg := &config.GofiConfig{Backend: &config.Backend{Language: config.LanguageGo, Path: "backend"},
 		Test: config.DefaultTestSection(config.LanguageGo, "backend")}
-	got := sensorCommands(cfg)
-	if got["build"] != "go -C backend build ./..." || !strings.Contains(got["test"], "test ./...") {
-		t.Errorf("sensors = %v", got)
+	got, err := sensorCommands(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["build"].Run != "go -C backend build ./..." || got["test"].Run != "go -C backend test -json ./..." ||
+		got["test"].Format != pack.FormatGoTestJSON || got["static"].Run != "go -C backend vet ./..." {
+		t.Errorf("sensors = %+v", got)
 	}
 	cfg.Loop = &config.Loop{Sensors: map[string]string{"build": "make build"}}
-	if got := sensorCommands(cfg); got["build"] != "make build" {
-		t.Errorf("loop.sensors did not win: %v", got)
+	if got, _ := sensorCommands(cfg); got["build"].Run != "make build" || got["build"].Format != pack.FormatLines {
+		t.Errorf("loop.sensors did not win: %+v", got)
 	}
 }
 

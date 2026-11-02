@@ -157,18 +157,28 @@ func TestGreenOnTheFirstPass(t *testing.T) {
 	}
 }
 
-// Code that does not build goes back to the implementation with the output,
-// and never reaches the audit.
-func TestAFailingSensorGoesBackWithItsOutput(t *testing.T) {
+// Code that does not build goes to repair with the sensor's findings placed
+// by file and line, and never reaches the audit; a failing test goes back to
+// the implementation (0002, D6).
+func TestAFailingSensorGoesBackWithItsFindings(t *testing.T) {
 	w := newWorld(t)
-	w.sensors.results = []SensorResult{{Failed: []string{"build"}, Output: "service.go:12: undefined: Total"}, {}}
+	w.sensors.results = []SensorResult{{Failed: []string{"build"}, Findings: []SensorFinding{
+		{Stage: "build", File: "backend/pedidos/service.go", Line: 12, Severity: "blocker", Message: "undefined: Total"}}}, {}}
 	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
 	s := w.run(t)
-	if s.Outcome != "accepted" || path(t, w.root) != "implement sense implement sense audit policy accepted" {
+	if s.Outcome != "accepted" || path(t, w.root) != "implement sense repair sense audit policy accepted" {
 		t.Errorf("outcome %s, path %s", s.Outcome, path(t, w.root))
 	}
-	if !strings.Contains(w.agent.turns[1].Prompt, "undefined: Total") {
-		t.Errorf("the second turn does not carry the build output:\n%s", w.agent.turns[1].Prompt)
+	if w.agent.turns[1].Role != "gofi-repair" || !strings.Contains(w.agent.turns[1].Prompt, "`backend/pedidos/service.go:12` undefined: Total") {
+		t.Errorf("the repair turn does not carry the finding:\n%s", w.agent.turns[1].Prompt)
+	}
+
+	w = newWorld(t)
+	w.sensors.results = []SensorResult{{Failed: []string{"test"}, Findings: []SensorFinding{
+		{Stage: "test", Rule: "TestTotal", Severity: "blocker", Message: "TestTotal falhou"}}}, {}}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" || path(t, w.root) != "implement sense implement sense audit policy accepted" {
+		t.Errorf("a failing test: outcome %s, path %s", s.Outcome, path(t, w.root))
 	}
 }
 

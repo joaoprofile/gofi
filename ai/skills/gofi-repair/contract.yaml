@@ -1,0 +1,15 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by the flow alone (0002, D19).
+#   stage      repair: what the delivery flow runs when a sensor refuses the
+#              code before the audit (0002, D6, D17).
+#   triggers   the sensors it fixes: compilation, static analysis, the graph.
+#              A failing test is wrong behaviour, not this role's: the flow
+#              sends it back to the implementation.
+tier: standard
+visibility: internal
+stage: repair
+triggers:
+  - any: [sensor.failed(build), sensor.failed(static), sensor.failed(graph)]
