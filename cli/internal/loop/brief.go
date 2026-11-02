@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
@@ -57,7 +58,7 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		}
 		fmt.Fprintf(&b, "**A execução não pode seguir:** %s. Grave a proposta de emenda em `%s` — é a única escrita deste turno — e encerre: a execução para em impasse e a pessoa decide pela sua proposta.\n\n", why, s.Proposal)
 	}
-	fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s` (formato gofi.elicit/v1: questions com id, text, options, recommended, why) e encerre o turno.\n\n", elicitFile)
+	fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s`, exatamente neste formato, e encerre o turno:\n\n```json\n%s\n```\n\n", elicitFile, intake.ElicitExample)
 	// A role with a grant has no shell: it is told what to use instead, so a
 	// turn is not spent on commands that are refused.
 	if len(rl.Contract.Tools) > 0 && !slices.Contains(rl.Contract.Tools, "shell") {

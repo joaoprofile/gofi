@@ -38,6 +38,51 @@ type ElicitQuest struct {
 	Why         string   `json:"why"`
 }
 
+// ElicitExample is the shape of an elicitation file, as a turn is told to
+// write it.
+var ElicitExample = fmt.Sprintf(`{"schema": %q, "questions": [{"id": "q1", "text": "...", "options": ["...", "..."], "recommended": "...", "why": "..."}], "derived": ["... (fonte)"]}`, ElicitSchema)
+
+// UnmarshalJSON reads a question as ElicitExample shows it, and also with
+// its options as objects — {"id", "label"} — the shape an agent reaches for:
+// each option is its label, and a recommendation that names an option's id
+// names its label.
+func (q *ElicitQuest) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		ID          string            `json:"id"`
+		Text        string            `json:"text"`
+		Options     []json.RawMessage `json:"options"`
+		Recommended string            `json:"recommended"`
+		Why         string            `json:"why"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	*q = ElicitQuest{ID: raw.ID, Text: raw.Text, Recommended: raw.Recommended, Why: raw.Why}
+	for i, o := range raw.Options {
+		var label string
+		if json.Unmarshal(o, &label) == nil {
+			q.Options = append(q.Options, label)
+			continue
+		}
+		var obj struct{ ID, Label, Text string }
+		if err := json.Unmarshal(o, &obj); err != nil {
+			return fmt.Errorf("option %d: a text, or an object with id and label", i+1)
+		}
+		label = obj.Label
+		if label == "" {
+			label = obj.Text
+		}
+		if label == "" {
+			label = obj.ID
+		}
+		if obj.ID != "" && obj.ID == q.Recommended {
+			q.Recommended = label
+		}
+		q.Options = append(q.Options, label)
+	}
+	return nil
+}
+
 // elicitFile is where phase i of a plan writes its elicitation.
 func elicitFile(r *Result, role string) string {
 	ctx := "pedido"
@@ -62,7 +107,7 @@ func elicitTurn(r *Result, i int) string {
 	b.WriteString("3. O que o pedido, os documentos, o projeto, o SDK ou as regras já respondem vai em `derived`, com a fonte — não vira pergunta.\n")
 	b.WriteString("4. Só o que nada responde vira pergunta: texto curto, de 2 a 4 opções quando couber, a recomendada e o porquê em uma frase.\n")
 	fmt.Fprintf(&b, "5. Grave em `%s`, exatamente neste formato:\n\n", ph.ElicitFile)
-	fmt.Fprintf(&b, "```json\n{\"schema\": %q, \"questions\": [{\"id\": \"q1\", \"text\": \"...\", \"options\": [\"...\"], \"recommended\": \"...\", \"why\": \"...\"}], \"derived\": [\"... (fonte)\"]}\n```\n\n", ElicitSchema)
+	fmt.Fprintf(&b, "```json\n%s\n```\n\n", ElicitExample)
 	b.WriteString("Termine com uma linha: quantas perguntas ficaram.\n\n")
 	b.WriteString(r.Brief)
 	return b.String()
@@ -88,7 +133,9 @@ func ReadElicitation(root, rel string) (*Elicitation, error) {
 	if err := json.Unmarshal(b, &e); err != nil {
 		return nil, fmt.Errorf("%s: %w", rel, err)
 	}
-	if e.Schema != ElicitSchema {
+	// The file is where the turn was told to write it: a schema left out is
+	// this one; another is not.
+	if e.Schema != "" && e.Schema != ElicitSchema {
 		return nil, fmt.Errorf("%s: schema %q, expected %s", rel, e.Schema, ElicitSchema)
 	}
 	for i := range e.Questions {

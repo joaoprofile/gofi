@@ -427,6 +427,32 @@ func TestABlockedImplementationAsksAndResumes(t *testing.T) {
 	}
 }
 
+// A decision written as an agent tends to — options as objects, the schema
+// left out — still stops the implementation at the gate; one gofi cannot
+// read stops the run, never read as no decision.
+func TestADecisionIsNeverLostToItsShape(t *testing.T) {
+	writeRaw := func(root, body string) step {
+		return func(t Turn) {
+			p := filepath.Join(root, filepath.FromSlash(t.ElicitFile))
+			_ = os.MkdirAll(filepath.Dir(p), 0o755)
+			_ = os.WriteFile(p, []byte(body), 0o644)
+		}
+	}
+	w := newWorld(t)
+	w.agent.steps["implement"] = []step{writeRaw(w.root, `{"format":"gofi.elicit/v1","questions":[{"id":"resto","text":"Quem absorve o resto?","options":[{"id":"ultima","label":"A última"},{"id":"primeira","label":"A primeira"}],"recommended":"ultima"}]}`), nil}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" || w.gate.asked != 1 || !strings.HasPrefix(path(t, w.root), "implement decide implement") {
+		t.Errorf("outcome %s, asked %d, path %s", s.Outcome, w.gate.asked, path(t, w.root))
+	}
+
+	w = newWorld(t)
+	w.agent.steps["implement"] = []step{writeRaw(w.root, `{"questions": "?"}`)}
+	_, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos")
+	if err == nil || !strings.Contains(err.Error(), "não lê") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 // An audit that wrote no verdict for this run stops the run, never read as
 // an earlier one; the run resumes where it stopped once the verdict is there.
 func TestAMissingVerdictStopsAndTheRunResumes(t *testing.T) {

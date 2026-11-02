@@ -454,7 +454,14 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		return err
 	}
 	r.keepProposal(s)
-	e, _ := intake.ReadElicitation(r.work(), elicit)
+	// A decision the agent wrote and gofi cannot read stops the run: read as
+	// nothing, the question would be lost and the work go on without it.
+	e, err := intake.ReadElicitation(r.work(), elicit)
+	if err != nil {
+		a.Status, a.Error = AgentFailed, err.Error()
+		_ = saveAgent(r.Root, s.Run, a)
+		return fmt.Errorf("%s gravou uma decisão que o gofi não lê: %w", rl.Name, err)
+	}
 	s.Blocked = e != nil && len(e.Questions) > 0
 	s.Answered, s.Answers = false, nil
 	a.Status = AgentDone
