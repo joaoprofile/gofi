@@ -253,14 +253,18 @@ routed like gofi's, with no change to the CLI.
 |---|---|---|---|
 | `/gofi-pd` | deep | lean PRD — problem, metrics, personas, scope, journeys | write requirements |
 | `/gofi-spec` | deep | changes — proposal, deltas of requirements and scenarios, design in the stack's template — and the baseline of a living spec | write code, approve |
-| `/gofi-eng` | standard | backend for an approved change, through the SDK | decide architecture, edit the contract |
-| `/gofi-ui` | standard | web/mobile UI, through the design system | decide architecture |
-| `/gofi-ops` | standard | IaC, build and CI/CD, from an approved infra change | choose cloud or sizing |
-| `/gofi-qa` | standard | audit scenario by scenario, against the design and the SDK rules | change code or the contract |
-| `/gofi-doc` | light | API contract docs for front-end and QA | edit code |
+| `gofi-eng` *(internal)* | standard | backend for an approved change, through the SDK | decide architecture, edit the contract |
+| `gofi-ui` *(internal)* | standard | web/mobile UI, through the design system | decide architecture |
+| `gofi-ops` *(internal)* | standard | IaC, build and CI/CD, from an approved infra change | choose cloud or sizing |
+| `gofi-qa` *(internal)* | standard | audit scenario by scenario, against the design and the SDK rules | change code or the contract |
+| `gofi-doc` *(internal)* | light | API contract docs for front-end and QA | edit code |
 | `/gofi-status` | light | the panorama of contexts, from their memory | write anything |
 | `/gofi-migrate` | standard | migrates an older document corpus to the indexed format | — |
-| `/gofi-full` | deep | runs `pd → spec → eng → qa` inside the agent, back to the phase at fault when QA fails | skip QA |
+| `/gofi-run` | light | takes an approved change to the loop (`gofi run --detach`), follows it and relays the gate's questions | implement, audit or approve |
+
+The roles marked *internal* are not slash commands: they install in
+`.claude/gofi/roles/` and the loop dispatches them from the change's facts —
+`gofi run <change> --explain` shows which and why.
 
 ```
 Requirement → gofi-pd → gofi-spec → approval → gofi-eng → gofi-qa → archive
@@ -366,9 +370,9 @@ the versions in `.gofi.yaml` (`ai.tiers`).
 
 | Tier | For | Roles | Claude Code |
 |---|---|---|---|
-| **light** | reading and answering; settling an open point of the intake | `gofi-status`, `gofi-doc`, the intake's consult | Haiku |
+| **light** | reading and answering; settling an open point of the intake | `gofi-status`, `gofi-doc`, `gofi-run`, the intake's consult | Haiku |
 | **standard** | writing within a defined scope, reviewing, gathering decisions | `gofi-eng`, `gofi-ui`, `gofi-ops`, `gofi-qa`, `gofi-migrate`, elicitations, spec records | Sonnet |
-| **deep** | turning decisions into a coherent PRD or spec | `gofi-pd`, `gofi-spec`, `gofi-full`, the retry after a failed audit | Opus |
+| **deep** | turning decisions into a coherent PRD or spec | `gofi-pd`, `gofi-spec`, the retry after a failed audit | Opus |
 
 On install, the tier becomes `model:` in the skill's frontmatter — Claude Code
 switches model for the skill's turn only. The **session** (free conversation,
@@ -552,7 +556,7 @@ and knowledge with no extra wiring.
 - **Plans before it sends, when you ask it to.** With `gofiAI.intake` on, free
   text goes through `gofi intake`, kept open per project (~10 ms per message).
   Off (the default), a message goes to the model as typed, and a conducted flow
-  starts from a skill (`/gofi-full`, `/gofi-pd` …). Questions become buttons; the elicitation's
+  starts from a skill (`/gofi-run`, `/gofi-pd` …). Questions become buttons; the elicitation's
   decisions become cards with the recommended option first; the review after a PRD
   or spec offers *continue* or *stop*. A message that is no task goes straight
   through. The engine starts while the request is planned.

@@ -226,7 +226,7 @@ ausência de aresta não é prova de ausência de uso".
 
 O hook de pre-commit põe o grafo em dia **no commit** (`gofi index hooks`) — mas
 o agent trabalha antes dele. O agent escreve
-código, e um pipeline encadeado (`/gofi-full`: `eng → qa`) passa de fase sem
+código, e o loop de entrega (`gofi run`: implementar → auditar) passa de fase sem
 parar — então, sem ação explícita, o QA auditaria contra um mapa que **não
 contém a implementação que acabou de ser feita**. O mesmo vale para você:
 consultar código que acabou de mudar sem reconstruir devolve o mapa de antes.

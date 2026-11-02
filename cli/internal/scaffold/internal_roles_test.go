@@ -67,3 +67,20 @@ func TestAnUpdateMovesARoleThatBecameInternal(t *testing.T) {
 		t.Error("the manifest still records the retired file")
 	}
 }
+
+// A skill gofi stopped shipping leaves the project on update, unless the
+// team edited it.
+func TestAnUpdateRetiresASkillNoLongerShipped(t *testing.T) {
+	root := t.TempDir()
+	old := roleTree("user")
+	old["ai/skills/gofi-full/SKILL.md"] = &fstest.MapFile{Data: []byte("# /gofi-full — Orchestrator\n\nCorpo.\n")}
+	if _, err := InstallSkillsContent(old, ".", root, InstallNew); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InstallSkillsContent(roleTree("user"), ".", root, InstallUpdate); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(layout.Skills().Abs(root, "gofi-full")); err == nil {
+		t.Error("the retired skill is still a slash command")
+	}
+}

@@ -1,0 +1,7 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+# /gofi-run starts and follows the loop; it produces no artifact, so the
+# intake never plans it as a phase.
+tier: light

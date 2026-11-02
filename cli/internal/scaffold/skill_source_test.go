@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,8 +111,17 @@ func TestInstallSkillsContent_RealTree(t *testing.T) {
 	if _, err := InstallSkillsContent(os.DirFS(repoRoot), ".", root, InstallNew); err != nil {
 		t.Fatalf("InstallSkillsContent: %v", err)
 	}
+	// The entry commands are slash commands; every other role is internal
+	// and runs from .claude/gofi/roles/, out of the host's reach (0002, D19).
+	entry := map[string]bool{"gofi-pd": true, "gofi-spec": true, "gofi-status": true, "gofi-run": true}
 	for _, agent := range allSkills {
 		installed := filepath.Join(root, ".claude", skillRelPath(agent))
+		if !entry[agent] {
+			if _, err := os.Stat(installed); err == nil {
+				t.Errorf("internal role %s is a slash command", agent)
+			}
+			installed = layout.Roles().Abs(root, agent, "SKILL.md")
+		}
 		body, err := os.ReadFile(installed)
 		if err != nil {
 			t.Errorf("skill %s did not install: %v", agent, err)
