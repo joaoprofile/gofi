@@ -157,6 +157,8 @@ type Change struct {
 	// Stale lists the documents whose approval no longer holds.
 	Stale []string `json:"vencidos,omitempty"`
 	Docs  []string `json:"documentos"`
+	// DependsOn are the changes that must be accepted before this one.
+	DependsOn []string `json:"depende_de,omitempty"`
 }
 
 // Changes lists the open changes, sorted by id.
@@ -175,6 +177,7 @@ func Changes(all []Doc) []Change {
 		if d.Kind == KindChange {
 			c.Status = value(d.Front, "status")
 			c.Contexts = d.Contexts
+			c.DependsOn = d.Front.List(FieldDepends)
 		}
 		switch state, _ := SealOf(d); state {
 		case Unsealed:
