@@ -52,8 +52,10 @@ type (
 // Turn is what an agent node sends.
 type Turn struct {
 	Node, Role string
-	// Tier is the role's, for the engine to pick its model.
+	// Tier is the role's, for the engine to pick its model; Tools what its
+	// contract grants, nil for the engine's defaults.
 	Tier   host.Tier
+	Tools  []string
 	Iter   int
 	Prompt string
 	// ElicitFile is where the agent writes a decision it cannot find, relative
@@ -396,7 +398,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	}
 	a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: rl.Name, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 	_ = saveAgent(r.Root, s.Run, a)
-	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: rl.Contract.Tier})
+	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: rl.Contract.Tier, Tools: rl.Contract.Tools})
 	s.CostUSD += res.CostUSD
 	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
 	if err != nil {

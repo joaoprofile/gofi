@@ -18,6 +18,9 @@
 #              change.surface(backend|web|mobile|infra), sensor.green,
 #              sensor.failed(<stage>), verdict(<clean|caveats|rejected>),
 #              owner(<eng|spec|pd>).
+#   tools      what the role may use in its turn (0002, D15): read, edit, write,
+#              search, gofi (the index), verify (the loop's sensors), verdict,
+#              memory, shell. Exactly these are granted; no role gets a shell.
 tier: light
 produces: docs
 intents: [documente, documentar, documentação, doc]
@@ -25,3 +28,4 @@ needs: [context]
 reads_only: true
 visibility: internal
 stage: deliver
+tools: [read, edit, write, search, gofi]

@@ -2,6 +2,7 @@ package loop
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/layout"
@@ -49,7 +50,12 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s` (formato gofi.elicit/v1: questions com id, text, options, recommended, why) e encerre o turno.\n\n", elicitFile)
-	fmt.Fprintf(&b, "Se o seu papel audita: grave o veredicto com `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter)
+	// A role with a grant has no shell: it is told what to use instead, so a
+	// turn is not spent on commands that are refused.
+	if len(rl.Contract.Tools) > 0 && !slices.Contains(rl.Contract.Tools, "shell") {
+		b.WriteString("Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi; para achar e entender código e documentos, `find`, `show` e `path`. O índice, o loop atualiza depois do seu turno.\n\n")
+	}
+	fmt.Fprintf(&b, "Se o seu papel audita: grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
 	return b.String()
 }
 

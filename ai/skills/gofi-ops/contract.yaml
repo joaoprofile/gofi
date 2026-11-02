@@ -18,6 +18,9 @@
 #              change.surface(backend|web|mobile|infra), sensor.green,
 #              sensor.failed(<stage>), verdict(<clean|caveats|rejected>),
 #              owner(<eng|spec|pd>).
+#   tools      what the role may use in its turn (0002, D15): read, edit, write,
+#              search, gofi (the index), verify (the loop's sensors), verdict,
+#              memory, shell. Exactly these are granted; no role gets a shell.
 tier: standard
 produces: infra
 requires:
@@ -29,3 +32,4 @@ visibility: internal
 stage: implement
 triggers:
   - any: [change.surface(infra)]
+tools: [read, edit, write, search, gofi, verify, memory]

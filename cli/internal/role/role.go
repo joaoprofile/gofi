@@ -69,7 +69,16 @@ type Contract struct {
 	// stage dispatches it when one of its Triggers holds.
 	Stage    string    `yaml:"stage"`
 	Triggers []Trigger `yaml:"triggers"`
+	// Tools are what an internal role may use in its turn (0002, D15):
+	// read, edit, write, search, gofi (the index), verify, verdict, memory,
+	// shell. The engine grants exactly these; empty grants the conductor's
+	// defaults.
+	Tools []string `yaml:"tools"`
 }
+
+// Tools a role's contract can grant. The host's engine turns each into its
+// own tools; a host that cannot grant per tool runs the role in its sandbox.
+var Tools = []string{"read", "edit", "write", "search", "gofi", "verify", "verdict", "memory", "shell"}
 
 // Internal reports whether the role is run by the flow alone.
 func (c Contract) Internal() bool { return c.Visibility == VisibilityInternal }
@@ -139,6 +148,11 @@ func Parse(b []byte) (Contract, error) {
 	}
 	if len(c.Triggers) > 0 && c.Stage == "" {
 		return c, errors.New("triggers: a role with triggers needs the stage they dispatch it in")
+	}
+	for _, t := range c.Tools {
+		if !slices.Contains(Tools, t) {
+			return c, fmt.Errorf("tools: %q is not a tool (expected %s)", t, strings.Join(Tools, ", "))
+		}
 	}
 	for i, t := range c.Triggers {
 		if len(t.All)+len(t.Any) == 0 {

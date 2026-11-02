@@ -20,6 +20,8 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/retrieval"
+	"github.com/joaoprofile/gofi/cli/internal/sensor"
+	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
 
 func newMCPCmd() *cobra.Command {
@@ -37,6 +39,9 @@ nothing leaves the machine. The agent sees gofi's queries as tools of its own:
   path          how one symbol reaches another
   index_status  whether the index still matches the project
   index         rebuild the index after an edit (writes derived files only)
+  verify        the loop's sensors — build, static analysis, tests — with findings
+  verdict_write record an audit's verdict, as gofi verdict write
+  memory_write  write a context's memory, as gofi memory write
 
 The answers are the ones the terminal commands print, from the same core. The
 indexes stay loaded between calls and are reopened when they change.
@@ -111,7 +116,96 @@ func newMCPServer(root, language string) *mcp.Server {
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 		Description: `Rebuild the index after editing: target "code" (incremental — only changed trees), "docs" (also regenerates the specs/PRD INDEX.md files), or empty for both. Writes derived files only. Queries refresh the document index by themselves; run this for code you just changed.`,
 	}, g.index)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "verify", Title: "Check the code with the loop's sensors",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		Description: `Run the checks the delivery loop runs — build, static analysis, tests (stages, in that order; empty for all) — and get what failed, placed by file and line, with what each tool said. A skipped test fails the tests. The same commands the loop runs after your turn; only the loop's result counts. Use it instead of a shell.`,
+	}, g.verify)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "verdict_write", Title: "Record an audit's verdict",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		Description: `Record a context's verdict: json is the verdict (` + verdict.Schema + `: result aprovado or reprovado, findings with severity, owner, rule and message); run and iter are the ones the turn names. Checked before it is written; status and ressalvas go into the context's memory. What gofi verdict write does.`,
+	}, g.verdictWrite)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "memory_write", Title: "Write a context's memory",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		Description: `Write a context's memory (.claude/memory/contexts/<name>.md), or name "project" for project.md: content is the whole file, frontmatter first. Checked before it is written. What gofi memory write does.`,
+	}, g.memoryWrite)
 	return s
+}
+
+type verifyArgs struct {
+	Stages []string `json:"stages,omitempty" jsonschema:"stages to run, in order: build, static, test; empty for all three"`
+}
+
+type verdictArgs struct {
+	Context string `json:"context" jsonschema:"the context audited"`
+	JSON    string `json:"json" jsonschema:"the verdict as JSON text"`
+	Run     string `json:"run,omitempty" jsonschema:"the run the turn names"`
+	Iter    int    `json:"iter,omitempty" jsonschema:"the iteration the turn names"`
+}
+
+type memoryArgs struct {
+	Name    string `json:"name" jsonschema:"the context, or project"`
+	Content string `json:"content" jsonschema:"the whole memory file, frontmatter first"`
+}
+
+// verify runs the loop's sensors on the project the server serves, with the
+// same commands and the same reading of their reports.
+func (g *gofiMCP) verify(ctx context.Context, _ *mcp.CallToolRequest, a verifyArgs) (*mcp.CallToolResult, any, error) {
+	cfg, err := config.Load(filepath.Join(g.root, config.FileName))
+	if err != nil {
+		return nil, nil, err
+	}
+	cmds, err := sensorCommands(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	stages := a.Stages
+	if len(stages) == 0 {
+		stages = []string{"build", "static", "test"}
+	}
+	res := sensor.Runner{Root: g.root, Commands: cmds}.Run(ctx, stages)
+	var b strings.Builder
+	if len(res.Failed) == 0 {
+		fmt.Fprintf(&b, "ok: %s", strings.Join(stages, ", "))
+		if res.Output != "" {
+			b.WriteString("\n" + res.Output)
+		}
+	} else {
+		fmt.Fprintf(&b, "falhou: %s\n", strings.Join(res.Failed, ", "))
+		for _, f := range res.Findings {
+			where := f.File
+			if f.Line > 0 {
+				where = fmt.Sprintf("%s:%d", f.File, f.Line)
+			}
+			if where == "" {
+				where = f.Rule
+			}
+			fmt.Fprintf(&b, "- %s %s\n", where, f.Message)
+		}
+		if len(res.Findings) == 0 {
+			b.WriteString(res.Output)
+		}
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: b.String()}}}, nil, nil
+}
+
+func (g *gofiMCP) verdictWrite(_ context.Context, _ *mcp.CallToolRequest, a verdictArgs) (*mcp.CallToolResult, any, error) {
+	said, err := writeVerdict(g.root, a.Context, []byte(a.JSON), a.Run, a.Iter)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: said}}}, nil, nil
+}
+
+func (g *gofiMCP) memoryWrite(_ context.Context, _ *mcp.CallToolRequest, a memoryArgs) (*mcp.CallToolResult, any, error) {
+	path, err := writeMemory(g.root, a.Name, []byte(a.Content))
+	if err != nil {
+		return nil, nil, err
+	}
+	rel, _ := filepath.Rel(g.root, path)
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: i18n.T("memory.written", filepath.ToSlash(rel))}}}, nil, nil
 }
 
 type findArgs struct {
