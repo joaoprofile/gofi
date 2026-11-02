@@ -11,6 +11,7 @@
 package flow
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -120,12 +121,20 @@ type Header = banner.Banner
 // Run asks every visible step in order. It returns ErrCancelled when the user
 // quits with ctrl+c; answers given until then are already written to their
 // bindings.
-func Run(h Header, steps []Step) error {
+func Run(h Header, steps []Step) error { return RunContext(context.Background(), h, steps) }
+
+// RunContext is Run until ctx is done: the dialogue is taken off the screen,
+// the terminal restored, and ctx's error returned — a question someone
+// answered elsewhere stops being asked here.
+func RunContext(ctx context.Context, h Header, steps []Step) error {
 	m := newModel(h, steps)
 	if m.idx < 0 {
 		return nil
 	}
-	final, err := tea.NewProgram(m).Run()
+	final, err := tea.NewProgram(m, tea.WithContext(ctx)).Run()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil {
 		return err
 	}

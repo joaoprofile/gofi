@@ -202,6 +202,8 @@ const conduct = {
 				this.post({ type: 'notice', text: `→ ${e.to}  (${e.why})` });
 			} else if (e.ev === 'node.failed') {
 				this.post({ type: 'notice', text: `${e.node}: ${e.why}` });
+			} else if (e.ev === 'gate.open') {
+				this.post({ type: 'notice', text: 'A entrega espera uma decisão que a mudança não cobre.', hint: `responda num terminal — ${e.why}` });
 			}
 		});
 		if (plan.run) {
