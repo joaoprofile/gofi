@@ -196,8 +196,10 @@ type Runner struct {
 	// Policy is the project's convergence policy: budget, iterations,
 	// acceptance, escalation.
 	Policy Policy
-	// IsTest says a file is a test of the project's language, from its pack.
-	IsTest func(file string) bool
+	// IsTest says a file is a test of the project's language, IsSource that
+	// it is code or test, from the language's pack.
+	IsTest   func(file string) bool
+	IsSource func(file string) bool
 	// Now is the clock; tests fix it.
 	Now func() time.Time
 	// OnEvent sees every event as it is written, for a live view.
@@ -467,6 +469,11 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	s.Worked = append(s.Worked, Ran{Node: name, Role: rl.Name})
 	a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: rl.Name, Tier: tier, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 	_ = saveAgent(r.Root, s.Run, a)
+	guard := r.guarded(rl)
+	var before map[string][]byte
+	if guard != nil {
+		before = snapshot(r.work(), guard)
+	}
 	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools})
 	s.CostUSD += res.CostUSD
 	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
@@ -474,6 +481,11 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		a.Status, a.Error = AgentFailed, err.Error()
 		_ = saveAgent(r.Root, s.Run, a)
 		return err
+	}
+	if guard != nil {
+		if undone := restore(r.work(), before, guard); len(undone) > 0 {
+			r.emit(s, Event{Ev: "guard", Node: name, To: rl.Name, Why: "desfeito — não é deste papel: " + joinFiles(undone)})
+		}
 	}
 	r.keepProposal(s)
 	// A decision the agent wrote and gofi cannot read stops the run: read as

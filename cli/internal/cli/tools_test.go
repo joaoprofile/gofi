@@ -23,8 +23,8 @@ func TestARoleGetsExactlyItsTools(t *testing.T) {
 		}
 	}
 	_, denied = claudeTools([]string{"read", "edit", "write", "search", "gofi", "verify"})
-	if !slices.Equal(denied, []string{"Bash"}) {
-		t.Errorf("the implementation is refused %v, want only the shell", denied)
+	if !slices.Equal(denied, []string{"Bash", "BashOutput", "KillShell", "Task", "Agent", "WebFetch", "WebSearch"}) {
+		t.Errorf("the implementation is refused %v, want the shell, the subagents and the web", denied)
 	}
 }
 

@@ -42,15 +42,21 @@ type Pack struct {
 	// patterns on a file's base name: what the loop reads as a test and not
 	// as the code it tests.
 	Tests []string `yaml:"tests"`
+	// Sources are the names of the language's source files, tests among
+	// them: what the loop guards the authorship of.
+	Sources []string `yaml:"sources"`
 }
 
 // IsTest reports whether a path is a test file of the language.
-func (p *Pack) IsTest(file string) bool {
-	if p == nil {
-		return false
-	}
+func (p *Pack) IsTest(file string) bool { return p != nil && matches(p.Tests, file) }
+
+// IsSource reports whether a path is a source file of the language — code
+// or test.
+func (p *Pack) IsSource(file string) bool { return p != nil && matches(p.Sources, file) }
+
+func matches(patterns []string, file string) bool {
 	base := path.Base(strings.ReplaceAll(file, "\\", "/"))
-	for _, pat := range p.Tests {
+	for _, pat := range patterns {
 		if ok, _ := path.Match(pat, base); ok {
 			return true
 		}

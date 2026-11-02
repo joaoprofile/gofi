@@ -709,3 +709,39 @@ func TestAChangeWithNoPlanPassesThePlanStage(t *testing.T) {
 		t.Errorf("outcome %s, path %s, implementation %s", s.Outcome, path(t, w.root), roles(w.agent, "implement"))
 	}
 }
+
+// Who writes the code never writes the test that judges it: what an
+// implementer changes in a test file, or the test role in the code, is
+// undone and logged (0002, D12, D17).
+func TestTheAuthorshipOfCodeAndTestsIsGuarded(t *testing.T) {
+	w := layeredWorld(t)
+	w.runner.IsSource = func(f string) bool { return strings.HasSuffix(f, ".go") }
+	put := func(rel, body string) step {
+		return func(Turn) {
+			p := filepath.Join(w.root, filepath.FromSlash(rel))
+			_ = os.MkdirAll(filepath.Dir(p), 0o755)
+			_ = os.WriteFile(p, []byte(body), 0o644)
+		}
+	}
+	put("backend/pedidos/service/service_test.go", "teste do gofi-test\n")(Turn{})
+	both := func(a, b step) step { return func(t Turn) { a(t); b(t) } }
+	w.agent.steps["implement"] = []step{nil, both(put("backend/pedidos/service/service.go", "código\n"), put("backend/pedidos/service/service_test.go", "teste do eng\n")), nil}
+	w.agent.steps["test"] = []step{put("backend/pedidos/service/service.go", "código do gofi-test\n")}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" {
+		t.Fatalf("outcome %s", s.Outcome)
+	}
+	read := func(rel string) string {
+		b, _ := os.ReadFile(filepath.Join(w.root, filepath.FromSlash(rel)))
+		return string(b)
+	}
+	if got := read("backend/pedidos/service/service_test.go"); got != "teste do gofi-test\n" {
+		t.Errorf("the implementer's test stayed: %q", got)
+	}
+	if got := read("backend/pedidos/service/service.go"); got != "código\n" {
+		t.Errorf("the test role's code stayed: %q", got)
+	}
+	if !hasEvent(t, w.root, "guard", "gofi-eng") || !hasEvent(t, w.root, "guard", "gofi-test") {
+		t.Error("the guard is not in the log")
+	}
+}
