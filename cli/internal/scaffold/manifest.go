@@ -62,6 +62,29 @@ func (m Manifest) merge(projectRoot string) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
+// RecordGenerated records, as installed, every file a generator just wrote
+// under dir (relative to the project root): what a generator owns it
+// rewrites whole, so the hash on record must be what it wrote — not what an
+// earlier pass installed there, which would read as the team's edit.
+func RecordGenerated(projectRoot, dir string) error {
+	m := Manifest{}
+	err := filepath.WalkDir(filepath.Join(projectRoot, filepath.FromSlash(dir)), func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		m[relSlash(projectRoot, p)] = hashBytes(b)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return m.merge(projectRoot)
+}
+
 // tunedTrees are the managed trees a project is expected to adjust — the
 // per-language and per-surface docs, where design tokens and house rules live.
 // A file there that the CLI has no record of writing is assumed to be the
