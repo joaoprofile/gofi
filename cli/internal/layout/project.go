@@ -83,8 +83,12 @@ func Institutional() Area { return Area{"institutional", home + "/institutional"
 func Memory() Area        { return Area{"memory", home + "/memory", OwnerProject} }
 func Lexicon() Area       { return Area{"lexicon", home + "/lexicon", OwnerProject} }
 func Eval() Area          { return Area{"eval", home + "/eval", OwnerProject} }
-func Specs() Area         { return Area{"specs", "specs", OwnerProject} }
-func PRD() Area           { return Area{"prd", "prd", OwnerProject} }
+
+// Flows holds a project's own flow graphs, overriding gofi's built-in ones
+// by name (decision 0002, D21).
+func Flows() Area { return Area{"flows", home + "/flows", OwnerProject} }
+func Specs() Area { return Area{"specs", "specs", OwnerProject} }
+func PRD() Area   { return Area{"prd", "prd", OwnerProject} }
 
 // Contexts is where each context keeps its state: part of memory, and a
 // document corpus of its own.
@@ -92,7 +96,7 @@ func Contexts() Area { return Area{"contexts", Memory().Path("contexts"), OwnerP
 
 // Areas lists every area, gofi's first.
 func Areas() []Area {
-	return []Area{Skills(), Templates(), SDK(), Expertise(), Knowledge(), Institutional(), Memory(), Lexicon(), Eval(), Specs(), PRD()}
+	return []Area{Skills(), Templates(), SDK(), Expertise(), Knowledge(), Institutional(), Memory(), Lexicon(), Eval(), Flows(), Specs(), PRD()}
 }
 
 // OwnerOf says who owns a project-relative path, by the area it sits in.

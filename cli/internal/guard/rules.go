@@ -24,6 +24,8 @@ var ReadOnlyRules = []string{
 	"Bash(gofi spec order *)",
 	"Bash(gofi change list)",
 	"Bash(gofi change list *)",
+	"Bash(gofi flow check)",
+	"Bash(gofi flow check *)",
 }
 
 // WriteRules are the gofi calls that write where Claude Code would stop an
