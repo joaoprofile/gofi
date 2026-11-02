@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +14,8 @@ import (
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/doctor"
+	"github.com/joaoprofile/gofi/cli/internal/engine/codex"
+	"github.com/joaoprofile/gofi/cli/internal/engine/copilot"
 	"github.com/joaoprofile/gofi/cli/internal/githooks"
 	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
 	"github.com/joaoprofile/gofi/cli/internal/host"
@@ -60,6 +63,8 @@ func runDoctor() error {
 		h := projectHost()
 		if h.ID == host.ClaudeCode.ID {
 			checks = append(checks, checkClaudeCode())
+		} else {
+			checks = append(checks, checkHostCLI(h))
 		}
 		checks = append(checks, checkInstructions(root, h), checkTiers(cfg, root, h), checkGraph(cfg, root), checkIndexLayout(root), checkMCP(root))
 		if h.Guard {
@@ -274,6 +279,21 @@ func checkClaudeCode() doctor.Check {
 		return doctor.Check{Name: name, Status: doctor.StatusFail, Detail: c.Hint, Hint: "minimum " + toolchain.MinClaudeCode}
 	}
 	return doctor.Check{Name: name, Status: doctor.StatusOK, Detail: c.Version + " (minimum " + toolchain.MinClaudeCode + ")"}
+}
+
+// checkHostCLI fails when the CLI of a host other than Claude Code is not
+// installed: gofi run and gofi ask send every agent turn to it.
+func checkHostCLI(h host.Host) doctor.Check {
+	env, name := EnvCodex, codex.DefaultExecutable
+	if h.ID == host.Copilot.ID {
+		env, name = EnvCopilot, copilot.DefaultExecutable
+	}
+	exe, err := hostExecutable(h, env, name)
+	if err != nil {
+		return doctor.Check{Name: strings.ToLower(h.Label), Status: doctor.StatusFail, Detail: err.Error()}
+	}
+	path, _ := exec.LookPath(exe)
+	return doctor.Check{Name: strings.ToLower(h.Label), Status: doctor.StatusOK, Detail: path}
 }
 
 // zedFirst are instruction files the Zed editor reads in preference to
