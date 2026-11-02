@@ -55,13 +55,18 @@ the question goes to .gofi/runs/<run>/gate.json and is answered with
 gofi answer <run> from any terminal — or right there, when the run has one.
 The run waits for --gate-timeout (loop.gate_timeout, 30m by default; 0 does
 not wait) and, unanswered, ends in impasse.
+
+--detach carries the run out in the background and prints its id: follow it
+with gofi watch or gofi logs -f; what the supervisor prints goes to
+.gofi/runs/<run>/supervisor.log.
 The sensors run the commands of loop.sensors in .gofi.yaml; test defaults to
 the test section's default task, and a stage with no command is recorded as
 not checked, never as passed.`,
 		Example: `gofi run adicionar-rate-limit
 gofi run --context pedidos
 gofi run --resume r-20261102-101500
-gofi run adicionar-rate-limit --no-archive`,
+gofi run adicionar-rate-limit --no-archive
+gofi run adicionar-rate-limit --detach`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runRun,
 	}
@@ -72,6 +77,9 @@ gofi run adicionar-rate-limit --no-archive`,
 	cmd.Flags().String("permission-mode", "acceptEdits", "Claude Code permission mode for the agent turns")
 	cmd.Flags().Bool("events", false, i18n.T("cmd.run.flag.events"))
 	cmd.Flags().String("gate-timeout", "", i18n.T("cmd.run.flag.gate_timeout"))
+	cmd.Flags().Bool("detach", false, i18n.T("cmd.run.flag.detach"))
+	cmd.Flags().String("run-id", "", "name of the new run (set by --detach)")
+	_ = cmd.Flags().MarkHidden("run-id")
 	return cmd
 }
 
@@ -98,10 +106,35 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if named != 1 {
 		return errors.New(i18n.T("run.which"))
 	}
+	if detach, _ := cmd.Flags().GetBool("detach"); detach {
+		if ctxName != "" {
+			return errors.New(i18n.T("run.detach_which"))
+		}
+		pass := args
+		if resume != "" {
+			pass = []string{"--resume", resume}
+		}
+		for _, f := range []string{"flow", "permission-mode", "gate-timeout"} {
+			if cmd.Flags().Changed(f) {
+				v, _ := cmd.Flags().GetString(f)
+				pass = append(pass, "--"+f, v)
+			}
+		}
+		if na, _ := cmd.Flags().GetBool("no-archive"); na {
+			pass = append(pass, "--no-archive")
+		}
+		run, err := detachRun(root, pass...)
+		if err != nil {
+			return &ExitCodeError{Code: 1, Err: err}
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "  "+i18n.T("run.detached", run, run))
+		return nil
+	}
 	o := deliverOpts{Resume: resume}
 	if len(args) > 0 {
 		o.Change = args[0]
 	}
+	o.RunID, _ = cmd.Flags().GetString("run-id")
 	o.Flow, _ = cmd.Flags().GetString("flow")
 	o.NoArchive, _ = cmd.Flags().GetBool("no-archive")
 	o.Events, _ = cmd.Flags().GetBool("events")
@@ -133,6 +166,76 @@ type deliverOpts struct {
 	Events bool
 	// GateTimeout overrides loop.gate_timeout (a duration; 0 does not wait).
 	GateTimeout string
+	// RunID names a new run; empty, one is made. A detached run is named by
+	// the process that started it, so it can say which run it started.
+	RunID string
+}
+
+// newRunID names a new run by the time it starts, made unique when another
+// started in the same second.
+func newRunID(root string) string {
+	base := "r-" + time.Now().Format("20060102-150405")
+	id := base
+	for n := 2; ; n++ {
+		if _, err := os.Stat(loop.Dir(root, id)); os.IsNotExist(err) {
+			return id
+		}
+		id = fmt.Sprintf("%s-%d", base, n)
+	}
+}
+
+// SupervisorLog is where a detached supervisor writes what it would have
+// printed: in the run's folder, beside its events.
+const SupervisorLog = "supervisor.log"
+
+// detachRun starts gofi run in the background — a change, or --resume <run> —
+// and returns the run it carries out. What the run does is on disk (gofi ps,
+// gofi logs, gofi watch); what the supervisor prints goes to its log. The
+// change is checked here, so a change that cannot run fails in the
+// foreground, not in a log nobody reads.
+func detachRun(root string, args ...string) (string, error) {
+	var run string
+	switch {
+	case len(args) == 2 && args[0] == "--resume":
+		run = args[1]
+		s, err := loop.LoadState(root, run)
+		if err != nil {
+			return "", err
+		}
+		if s.Node == "" {
+			return "", fmt.Errorf("run %s ended (%s)", run, s.Outcome)
+		}
+		if l, ok := loop.ReadLock(root, run); ok && loop.Alive(l.PID) {
+			return "", fmt.Errorf("a execução %s já está rodando (pid %d)", run, l.PID)
+		}
+	case len(args) >= 1 && !strings.HasPrefix(args[0], "-"):
+		if _, err := sealedChange(root, args[0]); err != nil {
+			return "", err
+		}
+		run = newRunID(root)
+		args = append(args, "--run-id", run)
+	default:
+		return "", errors.New(i18n.T("run.detach_which"))
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	dir := loop.Dir(root, run)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	log, err := os.OpenFile(filepath.Join(dir, SupervisorLog), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return "", err
+	}
+	defer log.Close()
+	cmd := exec.Command(exe, append([]string{"run"}, args...)...)
+	cmd.Dir, cmd.Stdout, cmd.Stderr, cmd.SysProcAttr = root, log, log, detached()
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	return run, cmd.Process.Release()
 }
 
 // deliver carries one approved change out through a flow and, accepted,
@@ -175,7 +278,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		if ctxName, err = sealedChange(root, change); err != nil {
 			return "", err
 		}
-		run = "r-" + time.Now().Format("20060102-150405")
+		if run = o.RunID; run == "" {
+			run = newRunID(root)
+		}
 	} else {
 		s, err := loop.LoadState(root, o.Resume)
 		if err != nil {
