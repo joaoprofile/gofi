@@ -35,7 +35,6 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
 
-
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run <change> | --context <ctx> | --resume <run>",
@@ -389,24 +388,24 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 
 	// Each role's turn runs on its tier's model: an internal role has no
 	// skill frontmatter to name one.
-	open := func(dir string, _ host.Tier) engine.Session { return runPorts.open(dir) }
+	open := func(dir string, _ host.Tier, _ []string) engine.Session { return runPorts.open(dir) }
 	if runPorts.open == nil {
 		mode := o.Mode
 		if mode == "" {
 			mode = "acceptEdits"
 		}
 		// Every agent of the run works on the project's host (ai.host).
-		session, err := agentEngine(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
+		session, err := agentSessions(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
 		if err != nil {
 			return "", err
 		}
 		h, _ := host.Get(cfg.AI.Host)
-		open = func(_ string, t host.Tier) engine.Session {
+		open = func(_ string, t host.Tier, grant []string) engine.Session {
 			model := ""
 			if h.SkillModel && t != "" {
 				model = h.Model(t, cfg.AI.Tiers)
 			}
-			return session(model)
+			return session(model, grant)
 		}
 	}
 	roles, problems := role.Load(layout.RoleDirs(work)...)
@@ -807,13 +806,13 @@ func sensorCommands(cfg *config.GofiConfig) (map[string]pack.Command, error) {
 type engineAgent struct {
 	root, run string
 	work      string // where the session runs: the run's worktree, or root
-	open      func(dir string, tier host.Tier) engine.Session
+	open      func(dir string, tier host.Tier, grant []string) engine.Session
 	out       io.Writer
 	quiet     bool // events mode: the transcript holds the tool calls
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
-	s := a.open(a.work, t.Tier)
+	s := a.open(a.work, t.Tier, t.Tools)
 	defer s.Close()
 	path := loop.Transcript(a.root, a.run, loop.AgentID(t.Node, t.Iter))
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)

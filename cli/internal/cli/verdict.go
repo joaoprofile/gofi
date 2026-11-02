@@ -49,32 +49,17 @@ EOF`,
 			if err != nil {
 				return err
 			}
-			if !contextName.MatchString(args[0]) {
-				return fmt.Errorf("%q is not a context name (lowercase letters, digits, - and _)", args[0])
-			}
 			data, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
-			v, err := verdict.Parse(data, args[0])
+			run, _ := cmd.Flags().GetString("run")
+			iter, _ := cmd.Flags().GetInt("iter")
+			said, err := writeVerdict(root, args[0], data, run, iter)
 			if err != nil {
 				return &ExitCodeError{Code: 1, Err: err}
 			}
-			if run, _ := cmd.Flags().GetString("run"); run != "" {
-				v.Run = run
-			}
-			if iter, _ := cmd.Flags().GetInt("iter"); iter > 0 {
-				v.Iter = iter
-			}
-			path, err := verdict.Write(root, v)
-			if err != nil {
-				return err
-			}
-			if err := recordVerdict(root, v); err != nil {
-				return err
-			}
-			rel, _ := filepath.Rel(root, path)
-			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("verdict.written", filepath.ToSlash(rel), v.Result, v.Caveats(), len(v.Findings)))
+			fmt.Fprintln(cmd.OutOrStdout(), said)
 			return nil
 		},
 	}
@@ -82,6 +67,34 @@ EOF`,
 	write.Flags().Int("iter", 0, i18n.T("cmd.verdict.flag.iter"))
 	cmd.AddCommand(write)
 	return cmd
+}
+
+// writeVerdict checks a verdict, writes it and carries it into the context's
+// memory: what gofi verdict write and the MCP tool both do. It returns the
+// line that says what was written.
+func writeVerdict(root, context string, data []byte, run string, iter int) (string, error) {
+	if !contextName.MatchString(context) {
+		return "", fmt.Errorf("%q is not a context name (lowercase letters, digits, - and _)", context)
+	}
+	v, err := verdict.Parse(data, context)
+	if err != nil {
+		return "", err
+	}
+	if run != "" {
+		v.Run = run
+	}
+	if iter > 0 {
+		v.Iter = iter
+	}
+	path, err := verdict.Write(root, v)
+	if err != nil {
+		return "", err
+	}
+	if err := recordVerdict(root, v); err != nil {
+		return "", err
+	}
+	rel, _ := filepath.Rel(root, path)
+	return i18n.T("verdict.written", filepath.ToSlash(rel), v.Result, v.Caveats(), len(v.Findings)), nil
 }
 
 // recordVerdict carries the verdict into the context's memory: status and

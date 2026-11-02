@@ -60,14 +60,17 @@ func TestMCPServesTheIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The tools that write — derived files, a verdict, a memory — or run the
+	// project's checks; every other is a query.
+	acts := map[string]bool{"index": true, "verify": true, "verdict_write": true, "memory_write": true}
 	var names []string
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
-		if tool.Name != "index" && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
+		if !acts[tool.Name] && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
 			t.Errorf("%s is a query and must say it is read-only", tool.Name)
 		}
 	}
-	for _, want := range []string{"find", "show", "path", "intake", "index_status", "index"} {
+	for _, want := range []string{"find", "show", "path", "intake", "index_status", "index", "verify", "verdict_write", "memory_write"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("tool %s missing from %v", want, names)
 		}
@@ -266,5 +269,44 @@ func TestMCPIndexesTheProjectItServes(t *testing.T) {
 	}
 	if cwd, _ := os.Getwd(); filepath.Base(cwd) != "cli" {
 		t.Errorf("the working folder moved: %s", cwd)
+	}
+}
+
+// verify runs the loop's own sensors: what does not build comes back placed
+// by file and line, clean code passes — no shell needed (0002, D6, D15).
+func TestMCPVerifiesWithTheLoopsSensors(t *testing.T) {
+	root := configuredProject(t)
+	t.Setenv("GOWORK", "off")
+	writeFile(t, filepath.Join(root, "src", "go.mod"), "module example.com/loja\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(root, "src", "frete", "frete.go"), "package frete\n\nfunc Calcular() int { return \"x\" }\n")
+	cs := mcpSession(t, root)
+	out, _ := callText(t, cs, "verify", map[string]any{"stages": []string{"build"}})
+	if !strings.Contains(out, "falhou: build") || !strings.Contains(out, "src/frete/frete.go:3") {
+		t.Fatalf("verify:\n%s", out)
+	}
+	writeFile(t, filepath.Join(root, "src", "frete", "frete.go"), "package frete\n\nfunc Calcular() int { return 1 }\n")
+	if out, _ := callText(t, cs, "verify", map[string]any{"stages": []string{"build", "static"}}); !strings.HasPrefix(out, "ok: build, static") {
+		t.Errorf("clean code:\n%s", out)
+	}
+}
+
+// The audit records its verdict and a role its memory through the server,
+// checked as the commands check them.
+func TestMCPWritesTheVerdictAndTheMemory(t *testing.T) {
+	root := configuredProject(t)
+	cs := mcpSession(t, root)
+	if out, isErr := callText(t, cs, "verdict_write", map[string]any{"context": "frete", "json": `{"result":"aprovado"}`, "run": "r-1", "iter": 2}); isErr {
+		t.Fatalf("verdict_write: %s", out)
+	}
+	b, err := os.ReadFile(filepath.Join(root, ".gofi", "verdict", "frete.json"))
+	if err != nil || !strings.Contains(string(b), `"run": "r-1"`) {
+		t.Errorf("verdict on disk: %s, %v", b, err)
+	}
+	if _, isErr := callText(t, cs, "verdict_write", map[string]any{"context": "frete", "json": `{"result":"talvez"}`}); !isErr {
+		t.Error("an invalid verdict was written")
+	}
+	mem := "---\ncontexto: frete\nformato: 3\nstatus: implementado\nversao: \"1.0\"\nkeywords: [frete]\n---\n# frete\n"
+	if out, isErr := callText(t, cs, "memory_write", map[string]any{"name": "frete", "content": mem}); isErr {
+		t.Fatalf("memory_write: %s", out)
 	}
 }

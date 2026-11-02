@@ -52,6 +52,10 @@ type Options struct {
 	// AllowedTools are permission rules the session runs with, passed as
 	// --allowedTools: what a phase gofi conducts may do without asking.
 	AllowedTools []string
+	// DisallowedTools are refused for the session whatever the person's own
+	// settings allow, passed with --disallowed-tools: what keeps a role to
+	// the tools its contract grants.
+	DisallowedTools []string
 }
 
 // Session is a conversation held by one long-lived claude process, restarted
@@ -207,7 +211,7 @@ func (s *Session) args() []string {
 		a = append(a, "--resume", s.sessionID)
 	}
 	// Last, because the flag takes every following argument as a tool name.
-	return append(append(a, "--disallowed-tools"), interactiveTools...)
+	return append(append(append(a, "--disallowed-tools"), interactiveTools...), s.opts.DisallowedTools...)
 }
 
 // start spawns the engine. Called with s.mu held.

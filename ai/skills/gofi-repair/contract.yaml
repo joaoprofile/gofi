@@ -8,8 +8,12 @@
 #   triggers   the sensors it fixes: compilation, static analysis, the graph.
 #              A failing test is wrong behaviour, not this role's: the flow
 #              sends it back to the implementation.
+#   tools      what the role may use in its turn (0002, D15): read, edit, write,
+#              search, gofi (the index), verify (the loop's sensors), verdict,
+#              memory, shell. Exactly these are granted; no role gets a shell.
 tier: standard
 visibility: internal
 stage: repair
 triggers:
   - any: [sensor.failed(build), sensor.failed(static), sensor.failed(graph)]
+tools: [read, edit, write, search, gofi, verify]
