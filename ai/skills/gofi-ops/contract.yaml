@@ -14,6 +14,6 @@ tier: standard
 produces: infra
 requires:
   - artifact: spec
-    revise_on: [change]
+    revise_on: [change, fix, create]
 intents: [provisione, provisionar, implante, implantar, deploy, pipeline, infraestrutura, terraform]
 needs: [context]

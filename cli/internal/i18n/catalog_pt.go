@@ -103,6 +103,7 @@ var catalogPT = map[string]string{
 	"ask.stopped_for_review":     "parou depois do %s para revisão — rode de novo com --yes para seguir para /%s",
 	"ask.review_question":        "O %s está escrito. Seguir para /%s?",
 	"ask.sealed":                 "aprovado e selado: %s",
+	"intake.blocked":             "o plano não pode rodar: %s",
 	"cmd.update.short":           "Atualiza o que é do gofi no projeto: skills, agents, expertise, templates, SDK, design system",
 	"cmd.update.templates.short": "Atualiza os templates de PRD e spec a partir do upstream",
 	"cmd.update.skills.short":    "Reinstala as skills dos agentes a partir da fonte configurada",

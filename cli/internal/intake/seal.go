@@ -2,6 +2,7 @@ package intake
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/contract"
@@ -47,4 +48,26 @@ func SealContract(root string, r *Result, i int) ([]string, error) {
 		sealed = append(sealed, d.Path)
 	}
 	return sealed, nil
+}
+
+// contractState reads what the contract of a context is now: its open sealed
+// changes, and whether its spec is still in format 2.
+func contractState(root string, c *Context) {
+	if c == nil || c.New {
+		return
+	}
+	all, err := contract.Docs(root)
+	if err != nil {
+		return
+	}
+	for _, d := range all {
+		if d.Kind == contract.KindSpec && d.Change == "" && d.Context == c.Name && d.Format < contract.FormatSplit {
+			c.FormatTwo = true
+		}
+	}
+	for _, ch := range contract.Changes(all) {
+		if ch.Sealed && slices.Contains(ch.Contexts, c.Name) {
+			c.Sealed = append(c.Sealed, ch.ID)
+		}
+	}
 }

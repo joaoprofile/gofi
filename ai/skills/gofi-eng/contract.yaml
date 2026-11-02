@@ -14,7 +14,7 @@ tier: standard
 produces: code
 requires:
   - artifact: spec
-    revise_on: [change]
+    revise_on: [change, fix, create]
 then: [gofi-qa]
 intents: [implemente, implementar, implementa, codifique, codificar, programe, programar, desenvolva, desenvolver]
 needs: [context, change]

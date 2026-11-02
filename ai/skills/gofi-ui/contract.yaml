@@ -14,7 +14,7 @@ tier: standard
 produces: ui
 requires:
   - artifact: spec
-    revise_on: [change]
+    revise_on: [change, fix, create]
 then: [gofi-qa]
 intents: [tela, telas, interface, frontend, componente]
 needs: [context, change]

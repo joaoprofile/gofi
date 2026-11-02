@@ -112,6 +112,9 @@ func runAsk(cmd *cobra.Command, request string) error {
 		fmt.Fprintln(out)
 		printIntake(out, res)
 	}
+	if res.Blocked != "" {
+		return &ExitCodeError{Code: 1, Err: errors.New(res.Blocked)}
+	}
 	if res.Answer != "" {
 		return nil
 	}

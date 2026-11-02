@@ -69,6 +69,21 @@ O sistema NÃO DEVE cancelar um pedido QUANDO ele já foi enviado.
   declare quando a mudança faz este contexto passar a consumir outro.
 - Seção sem requisito sai do arquivo.
 
+## Correção de defeito
+
+Uma correção também é uma mudança: o defeito mostra um cenário que o contrato
+não tinha.
+
+- O requisito que o código descumpre entra em **MODIFICADO**, inteiro, com um
+  cenário novo que **reproduz o defeito** (`REQ-NN.k — {o caso que quebrava}`):
+  DADO o estado que dispara o bug, QUANDO a ação, ENTÃO o comportamento certo.
+  É esse cenário que vira o teste de regressão.
+- O requisito não existia (o código faz algo que ninguém especificou e está
+  errado): **ADICIONADO**, com o cenário.
+- A proposta diz o defeito em "Por quê" e o impacto pelo grafo.
+- O design traz só o que a correção muda; `design: n/a` só se nenhum código
+  muda — o que numa correção é raro.
+
 ## A proposta — `proposal.md`
 
 - **Por quê** — o problema ou a oportunidade, 2–3 frases; cite o PRD quando

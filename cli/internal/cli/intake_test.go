@@ -23,7 +23,7 @@ func intakeProject(t *testing.T) string {
 		writeFile(t, filepath.Join(root, ".claude/skills", filepath.Base(filepath.Dir(s)), "contract.yaml"), string(b))
 	}
 	writeFile(t, filepath.Join(root, "specs", "pricing", "sdd-pricing.md"),
-		"---\ntipo: spec\nformato: sdd\ncontexto: pricing\nversao: \"1.0\"\nstatus: aprovado\nkeywords: [preco]\n---\n# SDD — pricing\n\n## 1. Envio de preços\n\nEm lote.\n")
+		"---\ntipo: spec\nformato: 3\ncontexto: pricing\nversao: \"1.0\"\nstatus: aprovado\nkeywords: [preco]\n---\n# SDD — pricing\n\n## 1. Envio de preços\n\nEm lote.\n")
 	// gofi init builds the document index; the intake reads it.
 	if _, _, _, err := (&docs.Builder{Root: root}).Build(); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestIntakeCommandJSON(t *testing.T) {
 		writeFile(t, filepath.Join(root, ".claude/skills", filepath.Base(filepath.Dir(s)), "contract.yaml"), string(b))
 	}
 	writeFile(t, filepath.Join(root, "specs/pricing/sdd-pricing.md"),
-		"---\ntipo: spec\nformato: sdd\ncontexto: pricing\nversao: \"1.0\"\nstatus: aprovado\nkeywords: [preco]\n---\n# SDD — pricing\n\n## 1. Envio de preços\n\nEm lote.\n")
+		"---\ntipo: spec\nformato: 3\ncontexto: pricing\nversao: \"1.0\"\nstatus: aprovado\nkeywords: [preco]\n---\n# SDD — pricing\n\n## 1. Envio de preços\n\nEm lote.\n")
 	if _, _, _, err := (&docs.Builder{Root: root}).Build(); err != nil {
 		t.Fatal(err)
 	}

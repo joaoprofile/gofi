@@ -118,7 +118,8 @@ func TestModelSettlesAnIntentNoWordNamed(t *testing.T) {
 	if r.Intent != "fix" || m.calls != 1 {
 		t.Fatalf("intent=%s calls=%d signals=%v", r.Intent, m.calls, r.Signals)
 	}
-	if want := []string{"gofi-eng", "gofi-qa"}; strings.Join(roles(r), ",") != strings.Join(want, ",") {
+	// A fix goes through a change: the contract phase comes first.
+	if want := []string{"gofi-spec", "gofi-eng", "gofi-qa"}; strings.Join(roles(r), ",") != strings.Join(want, ",") {
 		t.Errorf("plan = %v, want %v", roles(r), want)
 	}
 }

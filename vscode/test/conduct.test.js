@@ -116,6 +116,15 @@ test('um contrato que não passa no check não é selado e o plano para', async 
 	assert.ok(posted.some((m) => m.type === 'planEnded' && /REQ-07 sem cenário/.test(m.text)));
 });
 
+test('um plano travado não roda nada e diz o que destrava', async () => {
+	const blocked = { ...threePhases(), plan: [], blocked: 'order tem spec no formato 2: migre com `gofi spec migrate order`' };
+	const { chat, posted, turns } = makeChat([blocked]);
+	await chat.send('corrija o cancelamento');
+	await tick();
+	assert.strictEqual(turns.length, 0, 'nada roda');
+	assert.ok(posted.some((m) => m.type === 'planEnded' && /gofi spec migrate order/.test(m.text)));
+});
+
 test('uma pergunta respondida por botão volta ao intake e espera confirmação', async () => {
 	const first = { schema: 'gofi.intake/v1', request: 'altere as regras', plan: [], ask: true,
 		questions: [{ id: 'context', text: 'Em qual contexto?', options: ['invoice', 'shipping'] }], assumptions: [] };

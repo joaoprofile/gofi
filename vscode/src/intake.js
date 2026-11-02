@@ -266,6 +266,9 @@ function nextStep(result, answered) {
 	if (result.direct || result.chat) {
 		return 'direct';
 	}
+	if (result.blocked) {
+		return 'blocked';
+	}
 	if (result.ask) {
 		return 'answer';
 	}

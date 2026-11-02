@@ -163,6 +163,9 @@ func printIntake(out io.Writer, r *intake.Result) {
 		}
 		fmt.Fprintf(out, "\n  contexto %s (%s)\n    %s\n", c.Name, state, c.Why)
 	}
+	if r.Blocked != "" {
+		fmt.Fprintf(out, "\n  %s\n", i18n.T("intake.blocked", r.Blocked))
+	}
 	if r.Answer != "" {
 		fmt.Fprintf(out, "\n  resposta: %s\n", r.Answer)
 	}
