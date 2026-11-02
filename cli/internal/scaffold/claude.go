@@ -21,7 +21,7 @@ import (
 var allSkills = []string{
 	"gofi-pd", "gofi-spec", "gofi-eng", "gofi-ui",
 	"gofi-ops", "gofi-qa", "gofi-doc", "gofi-status",
-	"gofi-run", "gofi-repair",
+	"gofi-run", "gofi-repair", "gofi-triage",
 }
 
 // retiredSkills are skills gofi no longer ships, with what replaced them: an

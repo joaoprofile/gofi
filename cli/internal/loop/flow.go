@@ -97,6 +97,12 @@ type When struct {
 	Progress *bool `yaml:"progress,omitempty"`
 	// Oscillation holds when a finding resolved before is open again.
 	Oscillation *bool `yaml:"oscillation,omitempty"`
+	// Accept holds when the last verdict is one loop.accept accepts: clean,
+	// or approved with caveats under ressalvas.
+	Accept *bool `yaml:"accept,omitempty"`
+	// Stuck holds when the work does not progress and no tier is left to
+	// raise — or the policy raises none (loop.escalate).
+	Stuck *bool `yaml:"stuck,omitempty"`
 	// Blocked holds when the agent stopped on a decision and wrote it down.
 	Blocked *bool `yaml:"blocked,omitempty"`
 	// Answered holds when the person answered the gate.
@@ -106,7 +112,7 @@ type When struct {
 // Empty reports whether the condition sets nothing: the default edge.
 func (w When) Empty() bool {
 	return w.SensorFailed == nil && w.Verdict == "" && len(w.Owner) == 0 &&
-		w.Progress == nil && w.Oscillation == nil && w.Blocked == nil && w.Answered == nil
+		w.Progress == nil && w.Oscillation == nil && w.Accept == nil && w.Stuck == nil && w.Blocked == nil && w.Answered == nil
 }
 
 var (

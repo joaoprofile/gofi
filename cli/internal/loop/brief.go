@@ -49,6 +49,14 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		}
 		b.WriteString("\n")
 	}
+	// Triage is where a run that cannot go on says why, for the person.
+	if rl.Contract.Stage == "triage" && s.Proposal != "" {
+		why := "a auditoria achou defeito do contrato (dono spec ou pd)"
+		if s.Stuck {
+			why = "o trabalho não progride nem no tier mais alto"
+		}
+		fmt.Fprintf(&b, "**A execução não pode seguir:** %s. Grave a proposta de emenda em `%s` — é a única escrita deste turno — e encerre: a execução para em impasse e a pessoa decide pela sua proposta.\n\n", why, s.Proposal)
+	}
 	fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s` (formato gofi.elicit/v1: questions com id, text, options, recommended, why) e encerre o turno.\n\n", elicitFile)
 	// A role with a grant has no shell: it is told what to use instead, so a
 	// turn is not spent on commands that are refused.

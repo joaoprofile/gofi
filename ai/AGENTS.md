@@ -113,7 +113,7 @@ Os comandos de **entrada** — o que a pessoa chama:
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
 | `/gofi-migrate` | Corpus Migration — traz specs, PRDs e memória de um formato antigo para o atual (facetas, índice em dois níveis, grafo); orquestra `gofi index migrate` |
 
-Os **papéis internos** — implementar, auditar, documentar — não são slash
+Os **papéis internos** — implementar, reparar, triar, auditar, documentar — não são slash
 commands: ficam em `.claude/gofi/roles/` e o loop os despacha pelos fatos da
 mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 
@@ -122,7 +122,8 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 | `gofi-eng` | implement | implementa a mudança no backend |
 | `gofi-ui` | implement | implementa a camada de apresentação (web, mobile) |
 | `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
-| `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados |
+| `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados — começa no tier light e sobe quando não progride |
+| `gofi-triage` | triage | quando o loop não pode seguir (achado do contrato, ou sem progresso no tier mais alto): classifica a causa-raiz e redige a proposta de emenda em `.gofi/proposals/` |
 | `gofi-qa` | audit | audita a implementação contra a mudança e os padrões |
 | `gofi-doc` | deliver | doc de contrato para front e QA a partir dos handlers |
 

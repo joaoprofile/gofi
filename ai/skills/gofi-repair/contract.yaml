@@ -5,13 +5,15 @@
 #   visibility internal: run by the flow alone (0002, D19).
 #   stage      repair: what the delivery flow runs when a sensor refuses the
 #              code before the audit (0002, D6, D17).
+#              light: the fix is placed by the sensor; the loop raises the
+#              tier when two repairs in a row do not progress (0002, D8).
 #   triggers   the sensors it fixes: compilation, static analysis, the graph.
 #              A failing test is wrong behaviour, not this role's: the flow
 #              sends it back to the implementation.
 #   tools      what the role may use in its turn (0002, D15): read, edit, write,
 #              search, gofi (the index), verify (the loop's sensors), verdict,
 #              memory, shell. Exactly these are granted; no role gets a shell.
-tier: standard
+tier: light
 visibility: internal
 stage: repair
 triggers:

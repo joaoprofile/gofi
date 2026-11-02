@@ -470,7 +470,7 @@ func (m model) treeLine(i int) string {
 	}
 	a := t.agents[r.agent]
 	return mark + "    " + k.dot(agentColor(a.Status)) + fmt.Sprintf("%-18s %-12s %-12s", a.ID, a.Role, a.Status) +
-		k.dim.Render(fmt.Sprintf("  US$ %.3f", a.CostUSD))
+		k.dim.Render(fmt.Sprintf("  %-8s US$ %.3f", a.Tier, a.CostUSD))
 }
 
 func (m model) askView() []string {

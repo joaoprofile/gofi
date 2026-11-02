@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -218,21 +219,176 @@ func TestCaveatsReopenTheImplementation(t *testing.T) {
 	}
 }
 
-// The contract is wrong: not the loop's to fix.
-func TestAFindingOfTheContractIsAnImpasse(t *testing.T) {
+// propose writes the amendment the triage turn is told to write.
+func propose(dir string) step {
+	return func(t Turn) {
+		m := regexp.MustCompile("`(" + regexp.QuoteMeta(ProposalsDir) + "/[^`]+)`").FindStringSubmatch(t.Prompt)
+		if m == nil {
+			panic("the triage turn names no proposal:\n" + t.Prompt)
+		}
+		p := filepath.Join(dir, filepath.FromSlash(m[1]))
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte("# Proposta de emenda\n"), 0o644)
+	}
+}
+
+// tiers are the tiers a node's turns ran on, in order.
+func tiers(a *fakeAgent, node string) string {
+	var out []string
+	for _, t := range a.turns {
+		if t.Node == node {
+			out = append(out, string(t.Tier))
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// The contract is wrong: not the loop's to fix. Triage proposes the
+// amendment, numbered after the context's last, and the run ends in impasse
+// (0002, D9).
+func TestAFindingOfTheContractIsTriagedIntoAProposal(t *testing.T) {
 	w := newWorld(t)
+	_ = os.MkdirAll(filepath.Join(w.root, ".gofi", "proposals"), 0o755)
+	_ = os.WriteFile(filepath.Join(w.root, ".gofi", "proposals", "pedidos-1.md"), []byte("x"), 0o644)
 	w.agent.steps["audit"] = []step{audit(w.root, "reprovado", "major:spec:pedidos/REQ-04.1")}
-	if s := w.run(t); s.Outcome != "impasse" || strings.Count(path(t, w.root), "implement") != 1 {
+	w.agent.steps["triage"] = []step{propose(w.root)}
+	s := w.run(t)
+	if s.Outcome != "impasse" || path(t, w.root) != "implement sense audit policy triage impasse" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	last := w.agent.turns[len(w.agent.turns)-1]
+	if last.Role != "gofi-triage" || !strings.Contains(last.Prompt, "pedidos/REQ-04.1") || s.Proposal != ".gofi/proposals/pedidos-2.md" {
+		t.Errorf("triage %s, proposal %q:\n%s", last.Role, s.Proposal, last.Prompt)
+	}
+	if !hasEvent(t, w.root, "proposal", s.Proposal) {
+		t.Error("the proposal is not in the log")
+	}
+}
+
+// Without progress the retry runs on the same tier; two iterations without
+// progress raise the implementation one tier, and on the highest tier the
+// run is stuck: triaged, then impasse (0002, D8).
+func TestNoProgressRaisesTheTierBeforeTheImpasse(t *testing.T) {
+	w := newWorld(t)
+	for i := 0; i < 5; i++ {
+		w.agent.steps["audit"] = append(w.agent.steps["audit"], audit(w.root, "reprovado", "blocker:eng:r1"))
+	}
+	s := w.run(t)
+	if s.Outcome != "impasse" || !strings.HasSuffix(path(t, w.root), "policy triage impasse") {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if got := tiers(w.agent, "implement"); got != "standard standard standard deep deep" {
+		t.Errorf("implementation tiers = %s", got)
+	}
+	if got := tiers(w.agent, "audit"); got != "standard standard standard standard standard" {
+		t.Errorf("the audit was raised: %s", got)
+	}
+	if !hasEvent(t, w.root, "escalate", "gofi-eng") {
+		t.Error("the escalation is not in the log")
+	}
+}
+
+// loop.escalate: never raises nothing, and stops at the second iteration
+// without progress; on_first_reject raises at the first refusal.
+func TestTheEscalationFollowsThePolicy(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Policy.Escalate = EscalateNever
+	for i := 0; i < 3; i++ {
+		w.agent.steps["audit"] = append(w.agent.steps["audit"], audit(w.root, "reprovado", "blocker:eng:r1"))
+	}
+	if s := w.run(t); s.Outcome != "impasse" || tiers(w.agent, "implement") != "standard standard standard" || !strings.Contains(path(t, w.root), "triage") {
+		t.Errorf("never: outcome %s, tiers %s, path %s", s.Outcome, tiers(w.agent, "implement"), path(t, w.root))
+	}
+
+	w = newWorld(t)
+	w.runner.Policy.Escalate = EscalateOnFirstReject
+	w.agent.steps["audit"] = []step{audit(w.root, "reprovado", "blocker:eng:r1"), audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" || tiers(w.agent, "implement") != "standard deep" {
+		t.Errorf("on_first_reject: outcome %s, tiers %s", s.Outcome, tiers(w.agent, "implement"))
+	}
+}
+
+// The repair starts light; two repairs that leave the same failure raise
+// it. A failure further on — a later stage — is progress.
+func TestTheRepairStartsLightAndRisesWhenItDoesNotProgress(t *testing.T) {
+	w := newWorld(t)
+	broken := SensorResult{Failed: []string{"build"}, Findings: []SensorFinding{{Stage: "build", File: "a.go", Line: 1, Severity: "blocker", Message: "undefined: X"}}}
+	w.sensors.results = []SensorResult{broken, broken, broken, {}}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" || tiers(w.agent, "repair") != "light light standard" {
+		t.Errorf("outcome %s, repair tiers %s, path %s", s.Outcome, tiers(w.agent, "repair"), path(t, w.root))
+	}
+
+	w = newWorld(t)
+	w.sensors.results = []SensorResult{broken, {Failed: []string{"static"}, Findings: []SensorFinding{{Stage: "static", Severity: "blocker", Message: "vet"}}}, broken, {}}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	w.runner.Flow.Nodes["sense"] = Node{Kind: KindSensor, Stages: []string{"build", "static"}}
+	if s := w.run(t); s.Outcome != "accepted" || tiers(w.agent, "repair") != "light light light" {
+		t.Errorf("progress across stages: outcome %s, repair tiers %s", s.Outcome, tiers(w.agent, "repair"))
+	}
+}
+
+// A spent budget runs no agent again: the run ends exhausted, saying why.
+func TestASpentBudgetRunsNoAgentAgain(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Policy.BudgetUSD = 0.025 // each fake turn costs 0.01
+	w.agent.steps["audit"] = []step{audit(w.root, "reprovado", "blocker:eng:r1"), audit(w.root, "reprovado", "major:eng:r1")}
+	s := w.run(t)
+	if s.Outcome != "exhausted" || len(w.agent.turns) != 3 || !strings.Contains(s.Why, "orçamento de US$ 0.03") {
+		t.Errorf("outcome %s, turns %d, why %q, path %s", s.Outcome, len(w.agent.turns), s.Why, path(t, w.root))
+	}
+}
+
+// loop.max_iterations bounds every way back to work together — a failing
+// sensor and a refused audit alike.
+func TestMaxIterationsBoundsTheReworkTogether(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Policy.MaxIterations = 2
+	w.sensors.results = []SensorResult{{Failed: []string{"test"}}, {}}
+	w.agent.steps["audit"] = []step{audit(w.root, "reprovado", "blocker:eng:r1"), audit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "exhausted" || !strings.Contains(lastEdgeWhy(t, w.root), "loop.max_iterations esgotado (2)") {
+		t.Errorf("outcome %s, last edge %q, path %s", s.Outcome, lastEdgeWhy(t, w.root), path(t, w.root))
+	}
+	if path(t, w.root) != "implement sense implement sense audit policy exhausted" {
+		t.Errorf("path %s", path(t, w.root))
+	}
+}
+
+// loop.accept: ressalvas accepts an approval with caveats open.
+func TestRessalvasAcceptsCaveats(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Policy.Accept = AcceptCaveats
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado", "minor:eng:pack/naming")}
+	if s := w.run(t); s.Outcome != "accepted" || strings.Count(path(t, w.root), "implement") != 1 {
 		t.Errorf("outcome %s, path %s", s.Outcome, path(t, w.root))
 	}
 }
 
-func TestTheSameFindingTwiceIsNoProgress(t *testing.T) {
+// A run in a worktree leaves its proposal where the person reads it: at the
+// project root.
+func TestTheProposalOfAWorktreeRunIsKeptAtTheRoot(t *testing.T) {
 	w := newWorld(t)
-	w.agent.steps["audit"] = []step{audit(w.root, "reprovado", "blocker:eng:r1"), audit(w.root, "reprovado", "blocker:eng:r1")}
-	if s := w.run(t); s.Outcome != "impasse" || strings.Count(path(t, w.root), "audit") != 2 {
-		t.Errorf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	work := t.TempDir()
+	w.runner.Work = work
+	w.runner.Verdicts = diskVerdicts{work}
+	w.agent.steps["audit"] = []step{audit(work, "reprovado", "major:pd:pedidos/REQ-01")}
+	w.agent.steps["triage"] = []step{propose(work)}
+	s := w.run(t)
+	if _, err := os.Stat(filepath.Join(w.root, filepath.FromSlash(s.Proposal))); s.Outcome != "impasse" || err != nil {
+		t.Errorf("outcome %s, proposal %q at the root: %v", s.Outcome, s.Proposal, err)
 	}
+}
+
+func hasEvent(t *testing.T, root, ev, to string) bool {
+	t.Helper()
+	evs, _ := Events(root, "r-1")
+	for _, e := range evs {
+		if e.Ev == ev && e.To == to {
+			return true
+		}
+	}
+	return false
 }
 
 // A finding fixed and then broken again is an oscillation: the run stops.

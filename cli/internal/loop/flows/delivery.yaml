@@ -14,6 +14,10 @@ nodes:
   # What the build, the static analysis or the graph refused is repaired
   # with the findings alone, before anything reaches the audit.
   repair:    {kind: agent, stage: repair}
+  # The run cannot go on — the contract is wrong, or nothing progresses on
+  # the highest tier: triage proposes what to change, the person decides
+  # (0002, D9).
+  triage:    {kind: agent, stage: triage}
   audit:     {kind: agent, stage: audit}
   policy:    {kind: policy}
   decide:    {kind: gate}
@@ -29,17 +33,22 @@ edges:
   # Code that does not build or pass its tests never reaches the audit:
   # what the compiler, vet or the graph refused goes to repair, a failing
   # test back to the implementation.
+  - {from: sense, to: triage, when: {stuck: true}}
   - {from: sense, to: repair, when: {sensor_failed: [build, static, graph]}}
   - {from: sense, to: implement, when: {sensor_failed: []}}
   - {from: sense, to: audit}
   - {from: repair, to: sense}
   - {from: audit, to: policy}
-  - {from: policy, to: accepted, when: {verdict: clean}}
+  - {from: policy, to: accepted, when: {accept: true}}
   # The contract is wrong, or the discovery behind it: not the loop's to fix.
-  - {from: policy, to: impasse, when: {owner: [spec, pd]}}
+  - {from: policy, to: triage, when: {owner: [spec, pd]}}
   - {from: policy, to: impasse, when: {oscillation: true}}
-  - {from: policy, to: implement, when: {progress: true}}
+  - {from: policy, to: triage, when: {stuck: true}}
+  # Not accepted yet: back with the findings, on the same tier until two
+  # iterations do not progress (loop.escalate).
+  - {from: policy, to: implement, when: {stuck: false}}
   - {from: policy, to: impasse}
+  - {from: triage, to: impasse}
   - {from: decide, to: implement, when: {answered: true}}
   - {from: decide, to: impasse}
 
