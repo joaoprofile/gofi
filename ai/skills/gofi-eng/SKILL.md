@@ -28,7 +28,9 @@ Próprias desta skill:
    **Você não edita spec viva nem mudança aprovada**: ambas são seladas.
    Divergir de um contrato, de um dado ou do Mapa de requisitos do design é uma
    decisão — pare e pergunte, como acima. Estrutura de arquivo e detalhe
-   interno de camada são seus: o design não os fixa.
+   interno de camada são seus, dentro das convenções do `sdk-knowledge`: o
+   design não os fixa. Se ele citar um caminho que contradiz a convenção, siga
+   a convenção e diga no relatório o que mudou — o contrato é o mesmo.
 2. **Regressão vermelho→verde.** Escrever o teste **antes** do fix é o caminho
    preferido; no mínimo, ele acompanha o fix no mesmo passo.
 3. **Execução sempre step by step** — um passo, mostre, valide
