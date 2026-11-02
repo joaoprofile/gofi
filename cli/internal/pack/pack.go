@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -37,6 +38,24 @@ type Pack struct {
 	Schema   string             `yaml:"schema"`
 	Language string             `yaml:"language"`
 	Sensors  map[string]Command `yaml:"sensors"`
+	// Tests are the names of the language's test files, as path.Match
+	// patterns on a file's base name: what the loop reads as a test and not
+	// as the code it tests.
+	Tests []string `yaml:"tests"`
+}
+
+// IsTest reports whether a path is a test file of the language.
+func (p *Pack) IsTest(file string) bool {
+	if p == nil {
+		return false
+	}
+	base := path.Base(strings.ReplaceAll(file, "\\", "/"))
+	for _, pat := range p.Tests {
+		if ok, _ := path.Match(pat, base); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Command is how a sensor stage is checked. Report, when set, is the file

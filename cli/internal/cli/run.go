@@ -448,6 +448,12 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if err != nil {
 		return "", err
 	}
+	// The language's pack also says which files are tests: what the loop
+	// sends to the test role, not to the code's.
+	langPack, err := pack.Load(backendLanguage(cfg))
+	if err != nil {
+		return "", err
+	}
 	if _, set := sensors["graph"]; !set {
 		sensors["graph"] = graphSensor()
 	}
@@ -467,6 +473,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		Verdicts: diskVerdicts{root: work},
 		Gate:     gate,
 		Policy:   policy,
+		IsTest:   langPack.IsTest,
 		OnEvent:  report,
 	}
 	if !o.Events {
@@ -574,6 +581,14 @@ func explainRun(out io.Writer, root string, cfg *config.GofiConfig, change, flow
 	}
 	slices.Sort(held)
 	fmt.Fprintf(out, "  %s %s\n", i18n.T("run.explain.facts", change), strings.Join(held, ", "))
+	// The layers with work are the plan's, known once the run planned: with
+	// a plan stage that dispatches, every layer may; with none, plan.none.
+	planned := false
+	for _, n := range f.Nodes {
+		if n.Kind == loop.KindAgent && n.Stage == "plan" && len(role.Dispatch(roles, "plan", facts)) > 0 {
+			planned = true
+		}
+	}
 	for _, name := range f.Walk() {
 		n := f.Nodes[name]
 		if n.Kind != loop.KindAgent {
@@ -588,7 +603,18 @@ func explainRun(out io.Writer, root string, cfg *config.GofiConfig, change, flow
 			at[k] = v
 		}
 		at["sensor.green"] = true
+		at["tests.due"] = true
+		if planned {
+			for _, l := range role.Layers {
+				at["layer("+l+")"] = true
+			}
+		} else {
+			at["plan.none"] = true
+		}
 		fmt.Fprintf(out, "\n  %s — %s %s\n", name, i18n.T("run.explain.stage"), n.Stage)
+		if planned && n.Stage == "implement" {
+			fmt.Fprintln(out, "    "+i18n.T("run.explain.layers"))
+		}
 		for _, line := range role.Explain(roles, n.Stage, at) {
 			fmt.Fprintln(out, "    "+line)
 		}

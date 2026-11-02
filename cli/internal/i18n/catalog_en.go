@@ -92,6 +92,7 @@ var catalogEN = map[string]string{
 	"run.land.conflict":           "%s conflicts with %s: the branch is kept as it is — rebase it by hand in %s",
 	"run.land.waiting":            "%s waits to land: %s",
 	"run.land.gave_up":            "%s did not land in time — gofi run --resume %s lands it",
+	"run.explain.layers":          "(the layers with work come from the run's plan: each role below runs if its own has tasks)",
 	"run.dirty":                   "the tree has changes outside the change %s: %s — commit or stash them first, or run with --worktree",
 	"run.checkpoint.done":         "commit %q on %s",
 	"run.checkpoint.kept":         "the work not accepted is kept on the branch %s; the tree is back where the run started",

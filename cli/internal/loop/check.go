@@ -51,7 +51,7 @@ func Check(f *Flow, roles []role.Role) []Problem {
 				errf("%s: an agent node names its role or its stage — one of them", name)
 			case n.Stage != "" && !slices.Contains(role.Stages, n.Stage):
 				errf("%s: stage %q is not a stage of the loop", name, n.Stage)
-			case n.Stage != "" && roles != nil && !staged[n.Stage]:
+			case n.Stage != "" && roles != nil && !staged[n.Stage] && !n.Optional:
 				out = append(out, Problem{Message: fmt.Sprintf("%s: no installed role works in stage %s", name, n.Stage)})
 			case n.Role != "" && roles != nil && !installed[n.Role]:
 				out = append(out, Problem{Message: fmt.Sprintf("%s: role %s is not installed", name, n.Role)})

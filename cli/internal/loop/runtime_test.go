@@ -133,7 +133,8 @@ func (w *world) run(t *testing.T) *State {
 	return s
 }
 
-// path is the nodes the run went through, in order.
+// path is the nodes the run went through, in order — an optional stage
+// that dispatched nobody left out.
 func path(t *testing.T, root string) string {
 	t.Helper()
 	evs, err := Events(root, "r-1")
@@ -142,8 +143,11 @@ func path(t *testing.T, root string) string {
 	}
 	var out []string
 	for _, e := range evs {
-		if e.Ev == "node.start" {
+		switch e.Ev {
+		case "node.start":
 			out = append(out, e.Node)
+		case "skip": // an optional stage nobody answers did not run
+			out = out[:len(out)-1]
 		}
 	}
 	return strings.Join(out, " ")
@@ -553,5 +557,155 @@ func TestAStageNobodyAnswersStopsTheRun(t *testing.T) {
 	}
 	if len(w.agent.turns) != 0 {
 		t.Error("a turn ran with nobody dispatched")
+	}
+}
+
+// planned writes the plan the plan turn is told to write.
+func planned(dir, body string) step {
+	return func(t Turn) {
+		p := filepath.Join(dir, filepath.FromSlash(planFile("r-1")))
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(body), 0o644)
+	}
+}
+
+const threeLayers = `{"schema":"gofi-plan/v1","tasks":[
+ {"id":"T1","layer":"data","summary":"tabela","reqs":["REQ-01"],"files":["backend/pedidos/repository/"]},
+ {"id":"T2","layer":"domain","summary":"serviço","reqs":["REQ-01"],"files":["backend/pedidos/service/"],"depends":["T1"]},
+ {"id":"T3","layer":"api","summary":"rota","reqs":["REQ-01"],"files":["backend/pedidos/handler/"],"depends":["T2"]}]}`
+
+// auditAt writes a verdict with findings placed in a file, given as
+// severity:owner:rule:file.
+func auditAt(root, result string, findings ...string) step {
+	return func(t Turn) {
+		v := &verdict.Verdict{Schema: verdict.Schema, Context: "pedidos", Run: "r-1", Iter: t.Iter, Result: result, Findings: []verdict.Finding{}}
+		for _, f := range findings {
+			p := strings.SplitN(f, ":", 4)
+			v.Findings = append(v.Findings, verdict.Finding{Severity: p[0], Owner: p[1], Rule: p[2], File: p[3], Message: "m"})
+		}
+		data, _ := json.Marshal(v)
+		parsed, err := verdict.Parse(data, "pedidos")
+		if err != nil {
+			panic(err)
+		}
+		parsed.Run, parsed.Iter = v.Run, v.Iter
+		if _, err := verdict.Write(root, parsed); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func layeredWorld(t *testing.T) *world {
+	w := newWorld(t)
+	w.runner.Roles = layeredRoles()
+	w.runner.IsTest = func(f string) bool { return strings.HasSuffix(f, "_test.go") }
+	w.agent.steps["plan"] = []step{planned(w.root, threeLayers)}
+	return w
+}
+
+// roles are the roles a node's turns ran, in order.
+func roles(a *fakeAgent, node string) string {
+	var out []string
+	for _, t := range a.turns {
+		if t.Node == node {
+			out = append(out, t.Role)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// The plan decomposes the change by layer, and the implementation is one
+// role per layer with work, in the plan's order, each told its tasks; the
+// tests are written by a role of their own (0002, D17).
+func TestThePlanDispatchesOneRolePerLayerInItsOrder(t *testing.T) {
+	w := layeredWorld(t)
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" || path(t, w.root) != "plan implement test sense audit policy accepted" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if got := roles(w.agent, "implement"); got != "gofi-eng-data gofi-eng gofi-eng-api" {
+		t.Errorf("implementation = %s", got)
+	}
+	if got := roles(w.agent, "test"); got != "gofi-test" {
+		t.Errorf("tests = %q", got)
+	}
+	for _, turn := range w.agent.turns {
+		if turn.Role == "gofi-eng-data" && (!strings.Contains(turn.Prompt, "T1 — tabela") || strings.Contains(turn.Prompt, "T2")) {
+			t.Errorf("the data turn does not carry its tasks alone:\n%s", turn.Prompt)
+		}
+		if turn.Role == "gofi-plan" && !strings.Contains(turn.Prompt, planFile("r-1")) {
+			t.Errorf("the plan turn does not say where the plan goes:\n%s", turn.Prompt)
+		}
+	}
+}
+
+// A retry goes to the layers the findings point at: an audit finding in the
+// handler to the API alone, a failing test to the code it tests; the tests
+// are not written again.
+func TestARetryGoesToTheLayersTheFindingsPointAt(t *testing.T) {
+	w := layeredWorld(t)
+	w.sensors.results = []SensorResult{{}, {Failed: []string{"test"}, Findings: []SensorFinding{{Stage: "test", File: "backend/pedidos/service/service_test.go", Severity: "blocker", Message: "TestTotal falhou"}}}, {}}
+	w.agent.steps["audit"] = []step{auditAt(w.root, "reprovado", "blocker:eng:pedidos/REQ-01:backend/pedidos/handler/h.go"), audit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if got := roles(w.agent, "implement"); got != "gofi-eng-data gofi-eng gofi-eng-api gofi-eng-api gofi-eng" {
+		t.Errorf("implementation = %s", got)
+	}
+	if got := roles(w.agent, "test"); got != "gofi-test" {
+		t.Errorf("tests = %q", got)
+	}
+
+	// A finding nobody's files hold goes back to every layer.
+	w = layeredWorld(t)
+	w.agent.steps["audit"] = []step{auditAt(w.root, "reprovado", "blocker:eng:pedidos/REQ-01:backend/main.go"), audit(w.root, "aprovado")}
+	w.run(t)
+	if got := roles(w.agent, "implement"); got != "gofi-eng-data gofi-eng gofi-eng-api gofi-eng-data gofi-eng gofi-eng-api" {
+		t.Errorf("an unplaced finding: implementation = %s", got)
+	}
+}
+
+// What the audit found only in the tests goes to the test role.
+func TestAFindingInTheTestsGoesToTheTestRole(t *testing.T) {
+	w := layeredWorld(t)
+	w.agent.steps["audit"] = []step{auditAt(w.root, "reprovado", "major:eng:pedidos/REQ-01.1:backend/pedidos/service/service_test.go"), audit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" || path(t, w.root) != "plan implement test sense audit policy test sense audit policy accepted" {
+		t.Errorf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if got := roles(w.agent, "test"); got != "gofi-test gofi-test" {
+		t.Errorf("tests = %q", got)
+	}
+}
+
+// A plan gofi cannot read, or none, stops the run.
+func TestAPlanThatCannotBeReadStopsTheRun(t *testing.T) {
+	w := layeredWorld(t)
+	w.agent.steps["plan"] = []step{planned(w.root, `{"tasks":[{"id":"T1","layer":"ui","files":["x"]}]}`)}
+	if _, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos"); err == nil || !strings.Contains(err.Error(), `layer "ui"`) {
+		t.Errorf("err = %v", err)
+	}
+	w = layeredWorld(t)
+	w.agent.steps["plan"] = []step{nil}
+	if _, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos"); err == nil || !strings.Contains(err.Error(), "não foi gravado") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// A change of a screen has no plan: the plan and test stages pass, and the
+// surface's role implements.
+func TestAChangeWithNoPlanPassesThePlanStage(t *testing.T) {
+	w := layeredWorld(t)
+	for _, r := range shippedRoles() {
+		if r.Name == "gofi-ui" {
+			w.runner.Roles = append(w.runner.Roles, r)
+		}
+	}
+	w.runner.Facts = role.Facts{"change.surface(web)": true}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	if s := w.run(t); s.Outcome != "accepted" || path(t, w.root) != "implement sense audit policy accepted" || roles(w.agent, "implement") != "gofi-ui" {
+		t.Errorf("outcome %s, path %s, implementation %s", s.Outcome, path(t, w.root), roles(w.agent, "implement"))
 	}
 }

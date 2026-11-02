@@ -91,6 +91,7 @@ var catalogPT = map[string]string{
 	"run.land.conflict":           "%s conflita com %s: a branch fica como está — faça o rebase à mão em %s",
 	"run.land.waiting":            "%s espera para integrar: %s",
 	"run.land.gave_up":            "%s não foi integrada a tempo — gofi run --resume %s integra",
+	"run.explain.layers":          "(as camadas com trabalho vêm do plano da execução: cada papel abaixo roda se a sua tiver tarefas)",
 	"run.dirty":                   "a árvore tem mudanças fora da mudança %s: %s — faça commit ou stash antes, ou rode com --worktree",
 	"run.checkpoint.done":         "commit %q em %s",
 	"run.checkpoint.kept":         "o trabalho não aceito ficou na branch %s; a árvore voltou ao início da execução",

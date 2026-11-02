@@ -57,11 +57,14 @@ type Flow struct {
 
 // Node is one step of a flow.
 type Node struct {
-	Kind    string   `yaml:"kind"`
-	Role    string   `yaml:"role,omitempty"`    // agent: one role, fixed
-	Stage   string   `yaml:"stage,omitempty"`   // agent: the roles its facts dispatch
-	Stages  []string `yaml:"stages,omitempty"`  // sensor
-	Outcome string   `yaml:"outcome,omitempty"` // terminal
+	Kind  string `yaml:"kind"`
+	Role  string `yaml:"role,omitempty"`  // agent: one role, fixed
+	Stage string `yaml:"stage,omitempty"` // agent: the roles its facts dispatch
+	// Optional lets a stage nobody answers pass: a change that has no plan
+	// or tests of its own — a screen, a pipeline — goes through it.
+	Optional bool     `yaml:"optional,omitempty"`
+	Stages   []string `yaml:"stages,omitempty"`  // sensor
+	Outcome  string   `yaml:"outcome,omitempty"` // terminal
 }
 
 // Edge is a transition. Edges from a node are tried in the order written and
@@ -100,6 +103,9 @@ type When struct {
 	// Accept holds when the last verdict is one loop.accept accepts: clean,
 	// or approved with caveats under ressalvas.
 	Accept *bool `yaml:"accept,omitempty"`
+	// TestsOnly holds when every finding open is placed in a test file: the
+	// tests' to fix, not the code's.
+	TestsOnly *bool `yaml:"tests_only,omitempty"`
 	// Stuck holds when the work does not progress and no tier is left to
 	// raise — or the policy raises none (loop.escalate).
 	Stuck *bool `yaml:"stuck,omitempty"`
@@ -112,7 +118,7 @@ type When struct {
 // Empty reports whether the condition sets nothing: the default edge.
 func (w When) Empty() bool {
 	return w.SensorFailed == nil && w.Verdict == "" && len(w.Owner) == 0 &&
-		w.Progress == nil && w.Oscillation == nil && w.Accept == nil && w.Stuck == nil && w.Blocked == nil && w.Answered == nil
+		w.Progress == nil && w.Oscillation == nil && w.Accept == nil && w.TestsOnly == nil && w.Stuck == nil && w.Blocked == nil && w.Answered == nil
 }
 
 var (

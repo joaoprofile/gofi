@@ -2,12 +2,19 @@
 # a project overrides it with .claude/flows/delivery.yaml.
 schema: gofi-flow/v1
 name: delivery
-start: implement
+start: plan
 
 nodes:
+  # The plan decomposes a backend change into tasks by layer; a change of a
+  # screen or a pipeline has none, and passes.
+  plan:      {kind: agent, stage: plan, optional: true}
   # Who implements and who audits is dispatched by the change's facts —
-  # change.surface, sensor.green — from the roles' contracts (0002, D18).
+  # change.surface, layer, sensor.green — from the roles' contracts (0002,
+  # D18): one role per layer with work, in the plan's order.
   implement: {kind: agent, stage: implement}
+  # The tests are written by a role of their own, from the scenarios — not
+  # by whoever wrote the code they judge (D17).
+  test:      {kind: agent, stage: test, optional: true}
   # Cheapest first; graph reindexes the code the turn changed, so the audit
   # reads a map that holds it and no agent rebuilds the index by hand.
   sense:     {kind: sensor, stages: [build, static, test, graph]}
@@ -20,16 +27,22 @@ nodes:
   triage:    {kind: agent, stage: triage}
   audit:     {kind: agent, stage: audit}
   policy:    {kind: policy}
-  decide:    {kind: gate}
+  plan-decide: {kind: gate}
+  decide:      {kind: gate}
+  test-decide: {kind: gate}
   accepted:  {kind: terminal, outcome: accepted}
   impasse:   {kind: terminal, outcome: impasse}
   exhausted: {kind: terminal, outcome: exhausted}
 
 edges:
-  # The implementation stopped on a decision the change does not cover: the
-  # person answers, and it runs again.
+  # A turn stopped on a decision the change does not cover: the person
+  # answers, and the stage that asked runs again.
+  - {from: plan, to: plan-decide, when: {blocked: true}}
+  - {from: plan, to: implement}
   - {from: implement, to: decide, when: {blocked: true}}
-  - {from: implement, to: sense}
+  - {from: implement, to: test}
+  - {from: test, to: test-decide, when: {blocked: true}}
+  - {from: test, to: sense}
   # Code that does not build or pass its tests never reaches the audit:
   # what the compiler, vet or the graph refused goes to repair, a failing
   # test back to the implementation.
@@ -44,13 +57,19 @@ edges:
   - {from: policy, to: triage, when: {owner: [spec, pd]}}
   - {from: policy, to: impasse, when: {oscillation: true}}
   - {from: policy, to: triage, when: {stuck: true}}
+  # What the audit found only in the tests goes to who wrote them.
+  - {from: policy, to: test, when: {tests_only: true}}
   # Not accepted yet: back with the findings, on the same tier until two
   # iterations do not progress (loop.escalate).
   - {from: policy, to: implement, when: {stuck: false}}
   - {from: policy, to: impasse}
   - {from: triage, to: impasse}
+  - {from: plan-decide, to: plan, when: {answered: true}}
+  - {from: plan-decide, to: impasse}
   - {from: decide, to: implement, when: {answered: true}}
   - {from: decide, to: impasse}
+  - {from: test-decide, to: test, when: {answered: true}}
+  - {from: test-decide, to: impasse}
 
 # A spent limit ends the run: it never falls through to the next edge.
 on_limit: exhausted
@@ -58,4 +77,7 @@ limits:
   - {from: sense, to: implement, max: 3}
   - {from: sense, to: repair, max: 3}
   - {from: policy, to: implement, max: 4}
+  - {from: policy, to: test, max: 3}
+  - {from: plan-decide, to: plan, max: 3}
   - {from: decide, to: implement, max: 3}
+  - {from: test-decide, to: test, max: 3}
