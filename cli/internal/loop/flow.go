@@ -177,3 +177,21 @@ func (f *Flow) limit(from, to string) int {
 	}
 	return 0
 }
+
+// flowOf is the built-in flow that delivers each artifact a plan builds.
+var flowOf = map[string]string{"code": "delivery", "ui": "delivery-ui", "infra": "delivery-ops"}
+
+// FlowFor names the flow that delivers an artifact — code, ui or infra — and
+// reports whether the artifact is one the loop delivers at all.
+func FlowFor(artifact string) (string, bool) {
+	f, ok := flowOf[artifact]
+	return f, ok
+}
+
+// Delivers reports whether a plan phase producing artifact is part of a
+// delivery the loop carries out: the build itself, or the audit that the
+// flow already holds.
+func Delivers(artifact string) bool {
+	_, build := flowOf[artifact]
+	return build || artifact == "audit"
+}

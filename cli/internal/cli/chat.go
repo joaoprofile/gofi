@@ -130,6 +130,7 @@ func runChat(f chatFlags) error {
 		Models:    config.AllModels(),
 		Intake:    planIntake,
 		TierModel: tierModel,
+		Deliver:   spawnDelivery(root),
 		NewSession: func(resumeID string) engine.Session {
 			if resumeID != "" {
 				resume = resumeID

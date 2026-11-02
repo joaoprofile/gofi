@@ -18,6 +18,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/runs"
 	"github.com/joaoprofile/gofi/cli/internal/tui/flow"
 )
@@ -164,7 +165,13 @@ func runAsk(cmd *cobra.Command, request string) error {
 		// only --proceed takes the recommendations, each written down as assumed.
 		return nil, opts.Proceed
 	}
-	return conduct(out, res, open, model, tierModel, approve, elicit, root, rec)
+	// Once the contract is sealed, the delivery is the loop's: every sealed
+	// change of the context, in order, through the flow of what the plan
+	// builds — the same executor gofi run is.
+	handoff := func(flowName string) (string, error) {
+		return deliverContext(context.Background(), out, root, cfg, res.Context.Name, deliverOpts{Flow: flowName, Mode: mode})
+	}
+	return conduct(out, res, open, model, tierModel, approve, elicit, handoff, root, rec)
 }
 
 // askQuestions asks each open question in the terminal: its options to pick
@@ -193,14 +200,15 @@ func askQuestions(qs []intake.Question) (map[string]string, error) {
 	return answers, nil
 }
 
-// conduct runs the plan's phases in order, each a turn with its role in a
-// fresh session at its tier: a phase reads what the ones before it left on
-// disk — the spec, the context's memory, the code — never their conversation.
-// It stops for review where approve says so, and on the first phase that
-// fails. An audit the QA fails runs the retry the plan carries — the
-// implementation one tier up, then the audit again. A request with no plan is
-// sent as it is. Each phase is recorded in rec, when there is one.
-func conduct(out io.Writer, res *intake.Result, open func(model string) engine.Session, sessionModel string, tierModel func(host.Tier) string, approve func(done, next string) bool, elicit func([]intake.Question) (map[string]string, bool), root string, rec *runs.Run) (err error) {
+// conduct runs the plan's contract phases in order, each a turn with its role
+// in a fresh session at its tier: a phase reads what the ones before it left
+// on disk — the spec, the context's memory, the code — never their
+// conversation. It stops for review where approve says so, sealing what the
+// person approved, and on the first phase that fails. What the plan builds is
+// handed to the loop (handoff), which implements, checks, audits and retries
+// on its own; the phases after it run when the delivery was accepted. A
+// request with no plan is sent as it is. Each phase is recorded in rec.
+func conduct(out io.Writer, res *intake.Result, open func(model string) engine.Session, sessionModel string, tierModel func(host.Tier) string, approve func(done, next string) bool, elicit func([]intake.Question) (map[string]string, bool), handoff func(flow string) (string, error), root string, rec *runs.Run) (err error) {
 	if len(res.Plan) == 0 {
 		s := open(sessionModel)
 		defer s.Close()
@@ -211,7 +219,7 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 		_, err := runTurn(out, s, turn)
 		return err
 	}
-	outcome, verdict, retried := runs.OutcomeStopped, "", false
+	outcome, verdict := runs.OutcomeStopped, ""
 	defer func() {
 		if err != nil {
 			outcome = runs.OutcomeFailed
@@ -220,8 +228,8 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 			_ = rec.Finish(outcome, verdict)
 		}
 	}()
-	// The phases as they run: a failed audit splices its retry in. The plan
-	// the intake returned stays as it was decided.
+	// The contract phases run as turns here; what the plan builds is the
+	// loop's (handoff), with its audit and its retries.
 	r := *res
 	r.Plan = append([]intake.Phase{}, res.Plan...)
 	// What each role's elicitation left, and the person's answers: they end
@@ -233,6 +241,31 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 	decisions := map[string]decided{}
 	for i := 0; i < len(r.Plan); i++ {
 		ph := r.Plan[i]
+		// What the plan builds is delivered by the loop, with its audit: the
+		// phases that listed them one by one are the flow's now.
+		if flowName, build := loop.FlowFor(ph.Produces); build && !ph.Elicit {
+			if handoff == nil {
+				return errors.New(i18n.T("chat.plan.no_delivery"))
+			}
+			fmt.Fprintf(out, "\n● %s\n", i18n.T("ask.handoff", flowName))
+			got, herr := handoff(flowName)
+			if rec != nil {
+				_ = rec.Phase(runs.Phase{Role: "gofi run", Tier: string(ph.Tier), Why: flowName, OK: herr == nil && got == "accepted"})
+			}
+			if herr != nil {
+				return fmt.Errorf("%s: %w", flowName, herr)
+			}
+			verdict = got
+			if got != "accepted" {
+				outcome = runs.OutcomeEscalated
+				fmt.Fprintln(out, "\n  "+i18n.T("run.not_accepted", got))
+				return nil
+			}
+			for i+1 < len(r.Plan) && loop.Delivers(r.Plan[i+1].Produces) && !r.Plan[i+1].Elicit {
+				i++
+			}
+			continue
+		}
 		fmt.Fprintf(out, "\n● %s\n", i18n.T("chat.plan.phase", i+1, len(r.Plan), ph.Role, string(ph.Tier)))
 		// A raised phase runs on its tier's model, as the role; any other
 		// invokes its skill, whose own model wins for the turn.
@@ -242,7 +275,6 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 				model, asRole = m, true
 			}
 		}
-		before := intake.Verdict(root, &r)
 		turn := intake.TurnFor(&r, i, asRole)
 		if d, ok := decisions[ph.Role]; ok && !ph.Elicit {
 			turn = intake.WithDecisions(turn, d.e, d.answers)
@@ -262,23 +294,18 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 		if err != nil {
 			p.Error = err.Error()
 		}
-		// What the phase left for the person: an elicitation's decisions, or
-		// those an implementation stopped on.
+		// What an elicitation left for the person: the decisions the role
+		// writes with.
 		var e *intake.Elicitation
-		if err == nil && ph.ElicitFile != "" {
+		if err == nil && ph.Elicit && ph.ElicitFile != "" {
 			e, err = intake.ReadElicitation(root, ph.ElicitFile)
 		}
-		var stop, blockedAgain bool
+		var stop bool
 		switch {
 		case err != nil:
 		case ph.Elicit && e == nil:
 			fmt.Fprintln(out, "\n  "+i18n.T("ask.elicit.none", ph.Role))
-		case e != nil && (ph.Elicit || len(e.Questions) > 0):
-			if !ph.Elicit && len(ph.OnBlock) == 0 {
-				// Stopped again after the spec was completed: the person's to look at.
-				blockedAgain = true
-				break
-			}
+		case e != nil:
 			answers, ok := map[string]string{}, true
 			if qs := e.AsQuestions(); len(qs) > 0 {
 				fmt.Fprintln(out, "\n  "+i18n.T("ask.elicit.questions", len(qs), ph.Role))
@@ -292,14 +319,7 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 					p.Assumed++
 				}
 			}
-			if ph.Elicit {
-				decisions[ph.Role] = decided{e, answers}
-			} else {
-				// The spec records the answers, and the implementation runs again.
-				decisions[ph.OnBlock[0].Role] = decided{e, answers}
-				fmt.Fprintln(out, "\n  "+blockedMessage(ph))
-				r.Plan = append(r.Plan[:i+1], append(append([]intake.Phase{}, ph.OnBlock...), r.Plan[i+1:]...)...)
-			}
+			decisions[ph.Role] = decided{e, answers}
 			stop = !ok
 		}
 		if rec != nil {
@@ -308,30 +328,9 @@ func conduct(out io.Writer, res *intake.Result, open func(model string) engine.S
 		if err != nil {
 			return fmt.Errorf("%s: %w", ph.Role, err)
 		}
-		if blockedAgain {
-			fmt.Fprintln(out, "\n  "+i18n.T("ask.blocked_again", ph.Role, ph.ElicitFile))
-			return nil
-		}
 		if stop {
 			fmt.Fprintln(out, "\n  "+i18n.T("ask.elicit.stopped", ph.ElicitFile))
 			return nil
-		}
-		if ph.Produces == "audit" {
-			verdict = intake.Status(intake.Verdict(root, &r))
-			if intake.Rejected(root, &r, before) {
-				if len(ph.OnReject) > 0 {
-					fmt.Fprintln(out, "\n  "+i18n.T("chat.plan.rejected", ph.OnReject[0].Role, string(ph.OnReject[0].Tier)))
-					r.Plan = append(r.Plan[:i+1], append(append([]intake.Phase{}, ph.OnReject...), r.Plan[i+1:]...)...)
-					retried = true
-					continue
-				}
-				if retried {
-					// Failed again after the retry: the person's to look at.
-					outcome = runs.OutcomeEscalated
-					fmt.Fprintln(out, "\n  "+i18n.T("chat.plan.still_rejected"))
-					return nil
-				}
-			}
 		}
 		if phaseReview(&r, i) {
 			if !approve(ph.Produces, r.Plan[i+1].Role) {
@@ -402,14 +401,4 @@ func turnCost(d engine.Done) string {
 		parts = append(parts, fmt.Sprintf("$%.3f", d.CostUSD))
 	}
 	return strings.Join(parts, " · ")
-}
-
-// blockedMessage says what follows a phase that stopped on decisions: the
-// spec records them and the phase runs again, or — when the phase itself runs
-// again, as documentation does — it only takes the answers.
-func blockedMessage(ph intake.Phase) string {
-	if next := ph.OnBlock[0].Role; next != ph.Role {
-		return i18n.T("ask.blocked", ph.Role, next)
-	}
-	return i18n.T("ask.blocked_rerun", ph.Role)
 }

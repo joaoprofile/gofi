@@ -1,10 +1,12 @@
 package loop
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -489,4 +491,23 @@ func sortedSet(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Stream reads a run's events as gofi run --events writes them, one JSON
+// line each, until the reader ends — how a conductor follows a delivery it
+// started as a subprocess.
+func Stream(r io.Reader) <-chan Event {
+	ch := make(chan Event)
+	go func() {
+		defer close(ch)
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+		for sc.Scan() {
+			var e Event
+			if json.Unmarshal(sc.Bytes(), &e) == nil && e.Ev != "" {
+				ch <- e
+			}
+		}
+	}()
+	return ch
 }

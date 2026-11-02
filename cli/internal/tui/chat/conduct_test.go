@@ -3,6 +3,7 @@ package chat
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
-	"github.com/joaoprofile/gofi/cli/internal/runs"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
 )
 
 // intakeCall is one call the chat made to the intake.
@@ -47,8 +48,48 @@ func planModel(t *testing.T, script []*intake.Result, done engine.Event) (model,
 			return r, nil
 		},
 		TierModel: func(t host.Tier) string { return "model-for-" + string(t) },
+		Deliver:   fakeDeliver(&lastDeliveries, "accepted"),
 	}, false)
+	lastDeliveries = nil
 	return m, &sessions, &calls
+}
+
+// lastDeliveries records what the plan of the last planModel handed to the
+// loop, as "flow context".
+var lastDeliveries []string
+
+// fakeDeliver stands in for gofi run --context: it records the handoff and
+// ends with the outcome given.
+func fakeDeliver(record *[]string, outcome string) func(flow, ctx string) (<-chan loop.Event, func() error) {
+	return func(flow, ctx string) (<-chan loop.Event, func() error) {
+		*record = append(*record, flow+" "+ctx)
+		ch := make(chan loop.Event, 3)
+		ch <- loop.Event{Ev: "node.start", Node: "implement"}
+		ch <- loop.Event{Ev: "run.result", Why: outcome}
+		close(ch)
+		return ch, func() error { return nil }
+	}
+}
+
+// pump feeds the messages a command produces back into the chat until none
+// is left that belongs to a delivery, as the program would.
+func pump(t *testing.T, m model, cmd tea.Cmd) model {
+	t.Helper()
+	for i := 0; cmd != nil && i < 50; i++ {
+		msg := findMsg(cmd, func(msg tea.Msg) bool {
+			switch msg.(type) {
+			case deliveryEvent, deliveryDone:
+				return true
+			}
+			return false
+		})
+		if msg == nil {
+			return m
+		}
+		next, c := m.Update(msg)
+		m, cmd = next.(model), c
+	}
+	return m
 }
 
 // ask types text and delivers the intake's answer, as the program would.
@@ -89,6 +130,15 @@ func findMsg(cmd tea.Cmd, match func(tea.Msg) bool) tea.Msg {
 		}
 		return nil
 	}
+	// tea.Sequence wraps its commands in an unexported slice type.
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeOf(tea.Cmd(nil)) {
+		for i := 0; i < v.Len(); i++ {
+			if found := findMsg(v.Index(i).Interface().(tea.Cmd), match); found != nil {
+				return found
+			}
+		}
+		return nil
+	}
 	if match(msg) {
 		return msg
 	}
@@ -103,6 +153,13 @@ func phases(sessions []*fakeSession) (sent, models []string) {
 		models = append(models, s.model)
 	}
 	return sent, models
+}
+
+// enterCmd presses enter and returns what the chat issued with it.
+func enterCmd(m model) (model, tea.Cmd) {
+	m.input.SetValue("")
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	return next.(model), cmd
 }
 
 func enter(m model) model {
@@ -140,21 +197,16 @@ func TestFreeTextIsPlannedAndConducted(t *testing.T) {
 	if sent, _ = phases(*sessions); m.wait != waitContinue || len(sent) != 1 {
 		t.Fatalf("after the spec the chat must wait for review: wait=%q sent=%d", m.wait, len(sent))
 	}
-	m = drain(t, enter(m))
+	// Past the review, what the plan builds is the loop's: one handoff, and
+	// no turn runs for the implementation or its audit.
+	m, c := enterCmd(m)
+	m = pump(t, m, c)
 	sent, _ = phases(*sessions)
-	if len(sent) != 3 || !strings.HasPrefix(sent[1], "/gofi-eng ") || !strings.HasPrefix(sent[2], "/gofi-qa ") {
-		t.Fatalf("phases sent = %q", sent)
+	if len(sent) != 1 || len(lastDeliveries) != 1 || lastDeliveries[0] != "delivery pricing" {
+		t.Fatalf("phases sent = %q, deliveries = %v", sent, lastDeliveries)
 	}
-	if len(*sessions) != 4 || len((*sessions)[0].sent) != 0 {
-		t.Errorf("each phase runs in a session of its own, apart from the chat's: %d sessions, chat sent %q", len(*sessions), (*sessions)[0].sent)
-	}
-	for _, s := range (*sessions)[1:3] {
-		if !s.closed {
-			t.Error("a finished phase's session was left open")
-		}
-	}
-	if !strings.Contains(sent[1], "Fase 2 de 3") || !strings.Contains(sent[1], "/gofi-spec") {
-		t.Errorf("the next phase is not told what came before: %q", sent[1])
+	if len((*sessions)[0].sent) != 0 || !(*sessions)[1].closed {
+		t.Errorf("the spec runs in a session of its own and is closed: chat sent %q", (*sessions)[0].sent)
 	}
 	if m.plan != nil || m.wait != waitNone {
 		t.Errorf("the plan should be over: %+v wait=%q", m.plan, m.wait)
@@ -181,9 +233,10 @@ func TestAnsweredQuestionThenConfirm(t *testing.T) {
 	if m.wait != waitConfirm {
 		t.Fatalf("an answered plan waits for confirmation, wait=%q", m.wait)
 	}
-	m = drain(t, enter(m))
-	if sent, _ := phases(*sessions); len(sent) != 1 || !strings.HasPrefix(sent[0], "/gofi-eng ") {
-		t.Errorf("sent = %q", sent)
+	m, c := enterCmd(m)
+	m = pump(t, m, c)
+	if sent, _ := phases(*sessions); len(sent) != 0 || len(lastDeliveries) != 1 || lastDeliveries[0] != "delivery shipping" {
+		t.Errorf("sent = %q, deliveries = %v", sent, lastDeliveries)
 	}
 }
 
@@ -191,12 +244,12 @@ func TestAnsweredQuestionThenConfirm(t *testing.T) {
 // model, as the role — not the skill, whose own model would win — and the
 // chat's session keeps its model.
 func TestRaisedPhaseRunsOnItsTier(t *testing.T) {
-	r := &intake.Result{Request: "corrija o cancelamento", Intent: "fix", Artifact: "code",
-		Plan: []intake.Phase{{Role: "gofi-eng", Produces: "code", Tier: host.Deep, Base: host.Standard, TierWhy: "acoplado a 3 contextos"}}}
+	r := &intake.Result{Request: "documente o cancelamento", Intent: "document", Artifact: "docs",
+		Plan: []intake.Phase{{Role: "gofi-doc", Produces: "docs", Tier: host.Standard, Base: host.Light, TierWhy: "acoplado a 3 contextos"}}}
 	m, sessions, _ := planModel(t, []*intake.Result{r}, nil)
-	m = ask(t, m, "corrija o cancelamento")
+	m = ask(t, m, "documente o cancelamento")
 	sent, models := phases(*sessions)
-	if len(models) != 1 || models[0] != "model-for-deep" || !strings.HasPrefix(sent[0], "Siga o papel descrito em .claude/skills/gofi-eng/SKILL.md") {
+	if len(models) != 1 || models[0] != "model-for-standard" || !strings.HasPrefix(sent[0], "Siga o papel descrito em .claude/skills/gofi-doc/SKILL.md") {
 		t.Fatalf("models=%q sent=%q", models, sent)
 	}
 	m = drain(t, m)
@@ -227,58 +280,6 @@ func TestFailedPhaseStopsThePlan(t *testing.T) {
 	m = drain(t, ask(t, m, "altere o fluxo de pricing"))
 	if sent, _ := phases(*sessions); len(sent) != 1 || m.plan != nil {
 		t.Errorf("sent=%d plan=%+v", len(sent), m.plan)
-	}
-}
-
-// A failed audit runs the retry the plan carries — the implementation one
-// tier up, then the audit — and the run is recorded under .gofi/runs.
-func TestFailedAuditIsRetriedOneTierUp(t *testing.T) {
-	r := &intake.Result{
-		Request: "corrija o pricing", Intent: "fix", Artifact: "code", VerdictFile: "mem/pricing.md",
-		Context: &intake.Context{Name: "pricing", Has: []string{"spec", "code"}},
-		Plan: []intake.Phase{
-			{Role: "gofi-eng", Produces: "code", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-eng corrija"},
-			{Role: "gofi-qa", Produces: "audit", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-qa audite"},
-		},
-	}
-	r.Plan[1].OnReject = []intake.Phase{
-		{Role: "gofi-eng", Produces: "code", Tier: host.Deep, Base: host.Standard, Turn: "/gofi-eng refaça", RoleTurn: "Siga o papel: refaça"},
-		{Role: "gofi-qa", Produces: "audit", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-qa de novo"},
-	}
-	m, sessions, _ := planModel(t, []*intake.Result{r}, nil)
-	root := m.opts.Root
-	verdict := filepath.Join(root, "mem", "pricing.md")
-	_ = os.MkdirAll(filepath.Dir(verdict), 0o755)
-	audits := []string{"reprovado", "aprovado"}
-	m.session = nil
-	m.opts.NewSession = func(string) engine.Session {
-		s := &fakeSession{script: []engine.Event{engine.Meta{SessionID: "s1"}, engine.Done{Duration: time.Second, CostUSD: 0.01}}}
-		s.onSend = func(p string) {
-			if strings.HasPrefix(p, "/gofi-qa") && len(audits) > 0 {
-				_ = os.WriteFile(verdict, []byte("---\nstatus: "+audits[0]+"\n---\n"), 0o644)
-				audits = audits[1:]
-			}
-		}
-		*sessions = append(*sessions, s)
-		return s
-	}
-	m.session = m.opts.NewSession("")
-	m = drain(t, ask(t, m, "corrija o pricing"))
-	sent, _ := phases(*sessions)
-	want := []string{"/gofi-eng corrija", "/gofi-qa audite", "Siga o papel: refaça", "/gofi-qa de novo"}
-	if strings.Join(sent, "|") != strings.Join(want, "|") {
-		t.Fatalf("sent = %q", sent)
-	}
-	if m.plan != nil {
-		t.Errorf("the plan should be over")
-	}
-	files, _ := filepath.Glob(filepath.Join(root, ".gofi", "runs", "*.json"))
-	if len(files) != 1 {
-		t.Fatalf("runs = %v", files)
-	}
-	run, _ := runs.Load(files[0])
-	if run.Surface != "chat" || run.Outcome != runs.OutcomeDone || run.Verdict != "aprovado" || len(run.Phases) != 4 || run.Phases[2].Model != "model-for-deep" {
-		t.Errorf("run = %+v", run)
 	}
 }
 
@@ -328,44 +329,6 @@ func TestElicitedDecisionsAreAskedBeforeTheRole(t *testing.T) {
 		if !strings.Contains(sent[1], want) {
 			t.Errorf("role turn lacks %q:\n%s", want, sent[1])
 		}
-	}
-}
-
-// An implementation that stops on a decision gets it asked in the chat; the
-// spec records the answer and the implementation runs again.
-func TestABlockedPhaseIsAskedAndRecordedInTheSpec(t *testing.T) {
-	eng := intake.Phase{Role: "gofi-eng", Produces: "code", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-eng corrija",
-		ElicitFile: ".gofi/elicit/order-gofi-eng.json"}
-	again := eng
-	again.Turn = "/gofi-eng retome"
-	eng.OnBlock = []intake.Phase{{Role: "gofi-spec", Tier: host.Standard, Base: host.Deep, Turn: "registre", RoleTurn: "registre"}, again}
-	r := &intake.Result{Request: "corrija o cancelamento", Intent: "fix", Artifact: "code",
-		Context: &intake.Context{Name: "order", Has: []string{"spec", "code"}}, Plan: []intake.Phase{eng}}
-	m, sessions, _ := planModel(t, []*intake.Result{r}, nil)
-	root := m.opts.Root
-	next := m.opts.NewSession
-	m.opts.NewSession = func(id string) engine.Session {
-		s := next(id).(*fakeSession)
-		s.onSend = func(p string) {
-			if p == "/gofi-eng corrija" {
-				path := filepath.Join(root, ".gofi", "elicit", "order-gofi-eng.json")
-				_ = os.MkdirAll(filepath.Dir(path), 0o755)
-				_ = os.WriteFile(path, []byte(`{"schema":"gofi.elicit/v1","questions":[{"id":"idx","text":"Perfil de acesso?","options":["append-only","hot UPDATE"],"recommended":"hot UPDATE","why":"atualiza"}]}`), 0o644)
-			}
-		}
-		return s
-	}
-	m = drain(t, ask(t, m, "corrija o cancelamento"))
-	if m.wait != waitElicit {
-		t.Fatalf("the block was not asked: wait=%q", m.wait)
-	}
-	m = drain(t, ask(t, m, "2"))
-	sent, models := phases(*sessions)
-	if len(sent) != 3 || !strings.HasPrefix(sent[1], "registre") || !strings.Contains(sent[1], "Perfil de acesso? → append-only") || sent[2] != "/gofi-eng retome" {
-		t.Fatalf("sent = %q", sent)
-	}
-	if models[1] != "model-for-standard" || m.plan != nil {
-		t.Errorf("models = %v, plan over = %v", models, m.plan == nil)
 	}
 }
 

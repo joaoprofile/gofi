@@ -64,20 +64,6 @@ func askPlan(raiseEng bool) *intake.Result {
 
 func tiers(t host.Tier) string { return "m-" + string(t) }
 
-func TestConductRunsEveryPhase(t *testing.T) {
-	s := &askSession{}
-	var out bytes.Buffer
-	if err := conduct(&out, askPlan(false), s.open, "session", tiers, func(string, string) bool { return true }, nil, "", nil); err != nil {
-		t.Fatal(err)
-	}
-	if len(s.sent) != 3 || !strings.HasPrefix(s.sent[0], "/gofi-spec ") || !strings.HasPrefix(s.sent[2], "/gofi-qa ") {
-		t.Errorf("sent = %q", s.sent)
-	}
-	if strings.Join(s.opened, ",") != "session,session,session" {
-		t.Errorf("each phase opens its own session on the session's model: %v", s.opened)
-	}
-}
-
 // A review stop that is not approved ends the run after the spec.
 func TestConductStopsForReview(t *testing.T) {
 	s := &askSession{}
@@ -85,57 +71,28 @@ func TestConductStopsForReview(t *testing.T) {
 	err := conduct(&bytes.Buffer{}, askPlan(false), s.open, "session", tiers, func(done, next string) bool {
 		stops = append(stops, done+"→"+next)
 		return false
-	}, nil, "", nil)
+	}, nil, nil, "", nil)
 	if err != nil || len(s.sent) != 1 || len(stops) != 1 || stops[0] != "spec→gofi-eng" {
 		t.Errorf("err=%v sent=%d stops=%v", err, len(s.sent), stops)
 	}
 }
 
-// A raised phase runs in a session on its tier's model, as the role; the
-// next phase is back on the session's model.
-func TestConductRaisesThenRestores(t *testing.T) {
-	s := &askSession{}
-	if err := conduct(&bytes.Buffer{}, askPlan(true), s.open, "session", tiers, func(string, string) bool { return true }, nil, "", nil); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(s.sent[1], "Siga o papel descrito em .claude/skills/gofi-eng/SKILL.md") {
-		t.Errorf("raised phase = %q", s.sent[1])
-	}
-	if want := []string{"session", "m-deep", "session"}; strings.Join(s.opened, ",") != strings.Join(want, ",") {
-		t.Errorf("sessions = %v, want %v", s.opened, want)
-	}
-}
-
 func TestConductStopsOnAFailedPhase(t *testing.T) {
-	s := &askSession{fail: 2}
-	err := conduct(&bytes.Buffer{}, askPlan(false), s.open, "session", tiers, func(string, string) bool { return true }, nil, "", nil)
-	if err == nil || !strings.Contains(err.Error(), "gofi-eng") || len(s.sent) != 2 {
+	s := &askSession{fail: 1}
+	err := conduct(&bytes.Buffer{}, askPlan(false), s.open, "session", tiers, func(string, string) bool { return true }, nil, nil, "", nil)
+	if err == nil || !strings.Contains(err.Error(), "gofi-spec") || len(s.sent) != 1 {
 		t.Errorf("err=%v sent=%d", err, len(s.sent))
 	}
 }
 
 func TestConductSendsARequestWithNoPlanAsItIs(t *testing.T) {
 	s := &askSession{}
-	if err := conduct(&bytes.Buffer{}, &intake.Result{Request: "oi"}, s.open, "session", nil, nil, nil, "", nil); err != nil {
+	if err := conduct(&bytes.Buffer{}, &intake.Result{Request: "oi"}, s.open, "session", nil, nil, nil, nil, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.sent) != 1 || s.sent[0] != "oi" {
 		t.Errorf("sent = %q", s.sent)
 	}
-}
-
-// retryPlan is a fix with its audit's retry, as the intake fills it.
-func retryPlan() *intake.Result {
-	r := &intake.Result{Request: "corrija o pricing", Brief: "# Pedido montado\n", VerdictFile: "mem/pricing.md",
-		Plan: []intake.Phase{
-			{Role: "gofi-eng", Produces: "code", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-eng corrija"},
-			{Role: "gofi-qa", Produces: "audit", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-qa audite"},
-		}}
-	r.Plan[1].OnReject = []intake.Phase{
-		{Role: "gofi-eng", Produces: "code", Tier: host.Deep, Base: host.Standard, Turn: "/gofi-eng refaça", RoleTurn: "Siga o papel: refaça"},
-		{Role: "gofi-qa", Produces: "audit", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-qa de novo"},
-	}
-	return r
 }
 
 // verdicts has each audit write the next verdict into the context's memory.
@@ -148,64 +105,6 @@ func verdicts(t *testing.T, root string, v ...string) func(string) {
 			_ = os.WriteFile(path, []byte(fmt.Sprintf("---\nstatus: %s\nrodada: %d\n---\n", v[n], n)), 0o644)
 			n++
 		}
-	}
-}
-
-// A failed audit runs the implementation again one tier up, then audits again;
-// the run records every phase and how it ended.
-func TestConductRetriesAFailedAuditOneTierUp(t *testing.T) {
-	root := t.TempDir()
-	s := &askSession{onSend: verdicts(t, root, "reprovado", "aprovado")}
-	res := retryPlan()
-	rec, err := runs.Start(root, "ask", res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := conduct(&bytes.Buffer{}, res, s.open, "session", tiers, func(string, string) bool { return true }, nil, root, rec); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"/gofi-eng corrija", "/gofi-qa audite", "Siga o papel: refaça", "/gofi-qa de novo"}
-	if strings.Join(s.sent, "|") != strings.Join(want, "|") {
-		t.Errorf("sent = %q", s.sent)
-	}
-	if strings.Join(s.opened, ",") != "session,session,m-deep,session" {
-		t.Errorf("sessions = %v", s.opened)
-	}
-	if len(res.Plan) != 2 {
-		t.Error("the retry changed the plan the intake returned")
-	}
-	got, _ := runs.Load(rec.Path())
-	if got.Outcome != runs.OutcomeDone || got.Verdict != "aprovado" || len(got.Phases) != 4 || got.Phases[2].Model != "m-deep" || got.CostUSD < 0.039 {
-		t.Errorf("run = %+v", got)
-	}
-}
-
-// Failed again after the retry: the plan stops, escalated to the person.
-func TestConductStopsWhenTheRetryFailsToo(t *testing.T) {
-	root := t.TempDir()
-	s := &askSession{onSend: verdicts(t, root, "reprovado", "reprovado")}
-	res := retryPlan()
-	rec, _ := runs.Start(root, "ask", res)
-	if err := conduct(&bytes.Buffer{}, res, s.open, "session", tiers, func(string, string) bool { return true }, nil, root, rec); err != nil {
-		t.Fatal(err)
-	}
-	if len(s.sent) != 4 {
-		t.Errorf("sent = %q", s.sent)
-	}
-	if got, _ := runs.Load(rec.Path()); got.Outcome != runs.OutcomeEscalated || got.Verdict != "reprovado" {
-		t.Errorf("run = %+v", got)
-	}
-}
-
-// An audit that approves runs no retry.
-func TestConductApprovedAuditEndsThePlan(t *testing.T) {
-	root := t.TempDir()
-	s := &askSession{onSend: verdicts(t, root, "aprovado")}
-	if err := conduct(&bytes.Buffer{}, retryPlan(), s.open, "session", tiers, func(string, string) bool { return true }, nil, root, nil); err != nil {
-		t.Fatal(err)
-	}
-	if len(s.sent) != 2 {
-		t.Errorf("sent = %q", s.sent)
 	}
 }
 
@@ -244,7 +143,7 @@ func TestConductAsksWhatTheElicitationLeft(t *testing.T) {
 	}
 	res := elicitPlan()
 	rec, _ := runs.Start(root, "ask", res)
-	if err := conduct(&bytes.Buffer{}, res, s.open, "session", tiers, func(string, string) bool { return true }, elicit, root, rec); err != nil {
+	if err := conduct(&bytes.Buffer{}, res, s.open, "session", tiers, func(string, string) bool { return true }, elicit, nil, root, rec); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Join(s.opened, ",") != "m-standard,session" {
@@ -270,7 +169,7 @@ func TestConductStopsForTheElicitationsAnswers(t *testing.T) {
 	root := t.TempDir()
 	s := &askSession{onSend: writesElicitation(root)}
 	stop := func([]intake.Question) (map[string]string, bool) { return nil, false }
-	if err := conduct(&bytes.Buffer{}, elicitPlan(), s.open, "session", tiers, func(string, string) bool { return true }, stop, root, nil); err != nil {
+	if err := conduct(&bytes.Buffer{}, elicitPlan(), s.open, "session", tiers, func(string, string) bool { return true }, stop, nil, root, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.sent) != 1 {
@@ -278,63 +177,36 @@ func TestConductStopsForTheElicitationsAnswers(t *testing.T) {
 	}
 }
 
-// blockPlan is a fix whose implementation may stop on a decision.
-func blockPlan() *intake.Result {
-	eng := intake.Phase{Role: "gofi-eng", Produces: "code", Tier: host.Standard, Base: host.Standard, Turn: "/gofi-eng corrija",
-		ElicitFile: ".gofi/elicit/order-gofi-eng.json"}
-	again := eng
-	again.Turn = "/gofi-eng retome"
-	eng.OnBlock = []intake.Phase{
-		{Role: "gofi-spec", Tier: host.Standard, Base: host.Deep, Turn: "registre", RoleTurn: "registre"},
-		again,
-	}
-	return &intake.Result{Request: "corrija o cancelamento", Brief: "# Pedido montado\n", Plan: []intake.Phase{eng}}
-}
-
-// blocks has each turn in stops write a question to the implementation's file.
-func blocks(root string, stops ...string) func(string) {
-	return func(prompt string) {
-		for _, s := range stops {
-			if prompt == s {
-				path := filepath.Join(root, ".gofi", "elicit", "order-gofi-eng.json")
-				_ = os.MkdirAll(filepath.Dir(path), 0o755)
-				_ = os.WriteFile(path, []byte(`{"schema":"gofi.elicit/v1","questions":[{"id":"idx","text":"Perfil de acesso?","options":["append-only","hot UPDATE"],"recommended":"hot UPDATE","why":"cancelamento atualiza"}]}`), 0o644)
-			}
-		}
-	}
-}
-
-// A stopped implementation's question is asked; the spec records the answer
-// on a cheaper tier, and the implementation runs again.
-func TestConductRecordsABlockedDecisionInTheSpec(t *testing.T) {
-	root := t.TempDir()
-	s := &askSession{onSend: blocks(root, "/gofi-eng corrija")}
-	answer := func([]intake.Question) (map[string]string, bool) {
-		return map[string]string{"idx": "append-only"}, true
-	}
-	if err := conduct(&bytes.Buffer{}, blockPlan(), s.open, "session", tiers, func(string, string) bool { return true }, answer, root, nil); err != nil {
+// Past the contract, what the plan builds is the loop's: the conductor hands
+// it to the executor once, and the audit the plan listed is the flow's — no
+// turn runs for either.
+func TestConductHandsTheDeliveryToTheLoop(t *testing.T) {
+	s := &askSession{}
+	plan := askPlan(false)
+	plan.Plan = append(plan.Plan, intake.Phase{Role: "gofi-doc", Produces: "docs", Tier: host.Light, Base: host.Light})
+	var flows []string
+	handoff := func(flow string) (string, error) { flows = append(flows, flow); return "accepted", nil }
+	if err := conduct(&bytes.Buffer{}, plan, s.open, "session", tiers, func(string, string) bool { return true }, nil, handoff, "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.sent) != 3 || !strings.HasPrefix(s.sent[1], "registre") || !strings.Contains(s.sent[1], "Perfil de acesso? → append-only") || s.sent[2] != "/gofi-eng retome" {
-		t.Errorf("sent = %q", s.sent)
+	if len(flows) != 1 || flows[0] != "delivery" {
+		t.Errorf("handoffs = %v", flows)
 	}
-	if strings.Join(s.opened, ",") != "session,m-standard,session" {
-		t.Errorf("sessions = %v", s.opened)
+	var roles []string
+	for _, p := range s.sent {
+		roles = append(roles, strings.Fields(p)[0])
 	}
-}
+	if strings.Join(roles, " ") != "/gofi-spec /gofi-doc" {
+		t.Errorf("turns = %v: the spec and the docs run as turns, the delivery does not", roles)
+	}
 
-// Stopped again after the spec was completed, the plan stops.
-func TestConductStopsWhenBlockedAgain(t *testing.T) {
-	root := t.TempDir()
-	s := &askSession{onSend: blocks(root, "/gofi-eng corrija", "/gofi-eng retome")}
-	answer := func([]intake.Question) (map[string]string, bool) {
-		return map[string]string{"idx": "append-only"}, true
-	}
-	var out bytes.Buffer
-	if err := conduct(&out, blockPlan(), s.open, "session", tiers, func(string, string) bool { return true }, answer, root, nil); err != nil {
+	// A delivery that is not accepted ends the plan there.
+	s = &askSession{}
+	refused := func(string) (string, error) { return "impasse", nil }
+	if err := conduct(&bytes.Buffer{}, plan, s.open, "session", tiers, func(string, string) bool { return true }, nil, refused, "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.sent) != 3 || strings.Contains(out.String(), "plano concluído") || strings.Contains(out.String(), "plan done") {
-		t.Errorf("sent = %q\n%s", s.sent, out.String())
+	if len(s.sent) != 1 {
+		t.Errorf("turns after an impasse: %d", len(s.sent))
 	}
 }
