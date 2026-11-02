@@ -180,3 +180,23 @@ func TestGoWorkModulesAreOneGraph(t *testing.T) {
 		t.Error("a call across the workspace modules did not resolve")
 	}
 }
+
+// A root that is only a workspace — a go.work, no go.mod of its own — is the
+// modules it lists, as the gofi SDK's releases are published: before, the
+// whole scope failed for want of a root go.mod.
+func TestAWorkspaceWithNoRootModuleIsItsModules(t *testing.T) {
+	g, err := extract.Fast(extract.Options{Root: "testdata/workonly", MaxFileKB: 2048})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Stats.Files != 2 {
+		t.Fatalf("files = %d, want 2", g.Stats.Files)
+	}
+	if e := findEdge(g, model.FuncID("example.com/app", "Run"),
+		model.FuncID("example.com/lib", "Name"), model.RelCalls); e == nil {
+		t.Error("a call across the workspace modules did not resolve")
+	}
+	if _, err := extract.Fast(extract.Options{Root: t.TempDir()}); err == nil {
+		t.Error("a folder with neither go.mod nor go.work was read")
+	}
+}
