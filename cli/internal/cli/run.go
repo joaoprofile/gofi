@@ -63,6 +63,12 @@ not wait) and, unanswered, ends in impasse.
 with gofi watch or gofi logs -f; what the supervisor prints goes to
 .gofi/runs/<run>/supervisor.log.
 
+Without a worktree the run works in the project's tree, checkpointed in
+git: it starts only from a clean tree (the change's folder aside), an
+accepted change becomes one commit on the current branch, and a change not
+accepted leaves no commit — its work is kept on the branch gofi/<change>
+and the tree goes back to where the run started.
+
 --worktree — always the case with --detach — runs it in a git worktree of its
 own, on the branch gofi/<change>, so several changes run at the same time.
 The change must be committed. Accepted, the branch is committed, rebased on
@@ -354,6 +360,16 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		}
 		change, ctxName = prior.Change, prior.Context
 	}
+	// In the project's own tree, the run is checkpointed in git (0002, D14):
+	// it starts from a clean tree, and its end is one commit, or its work
+	// kept on a branch of its own. A tree it cannot start on is said before
+	// anything of the run is written.
+	var cp *worktree.Checkpoint
+	if inPlace := prior != nil && prior.Worktree == "" || prior == nil && !o.Worktree; inPlace {
+		if cp, err = checkpoint(ctx, root, run, change, prior); err != nil {
+			return "", err
+		}
+	}
 	release, err := loop.Acquire(root, run)
 	if err != nil {
 		return "", err
@@ -462,6 +478,8 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 			s, err = r.StartIn(ctx, run, change, ctxName, func(s *loop.State) {
 				s.Worktree, s.Branch, s.Base = tree.Dir, tree.Branch, tree.Base
 			})
+		} else if cp != nil {
+			s, err = r.StartIn(ctx, run, change, ctxName, func(s *loop.State) { s.Base = cp.Branch })
 		} else {
 			s, err = r.Start(ctx, run, change, ctxName)
 		}
@@ -485,6 +503,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if !o.Events {
 		fmt.Fprintf(out, "\n  %s\n", i18n.T("run.ended", run, s.Outcome, s.CostUSD))
 	}
+	if s.Outcome != "accepted" && cp != nil {
+		return s.Outcome, keepWork(ctx, out, root, s, cp, o.Events, report)
+	}
 	if s.Outcome != "accepted" || o.NoArchive {
 		return s.Outcome, nil
 	}
@@ -499,6 +520,18 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	result.To = res.Dir
 	if !o.Events {
 		fmt.Fprintln(out, "  "+i18n.T("change.archive.moved", res.Dir))
+	}
+	if cp != nil {
+		message := commitMessage(s)
+		if err := cp.Commit(ctx, message, "specs/changes/"+change, filepath.ToSlash(res.Dir)); err != nil {
+			return s.Outcome, fmt.Errorf("commit %s: %w", cp.Branch, err)
+		}
+		s.Landing = landed
+		_ = loop.SaveState(root, s)
+		report(loop.AppendEvent(root, s.Run, loop.Event{Ev: "land.done", Node: s.Run, Why: cp.Branch}))
+		if !o.Events {
+			fmt.Fprintln(out, "  "+i18n.T("run.checkpoint.done", message, cp.Branch))
+		}
 	}
 	if tree == nil {
 		return s.Outcome, nil
@@ -656,7 +689,7 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 	// Committed here, not where the run was accepted: a resume that lands a
 	// run whose commit failed commits it first. Nothing left to commit is
 	// not an error.
-	message := fmt.Sprintf("feat(%s): %s", s.Context, s.Change)
+	message := commitMessage(s)
 	if tree.Ahead(ctx) {
 		message = "chore: regenerate the indexes of " + s.Change
 	}
@@ -714,6 +747,68 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 		case <-time.After(landPoll):
 		}
 	}
+}
+
+// commitMessage is the commit an accepted change becomes.
+func commitMessage(s *loop.State) string {
+	return fmt.Sprintf("feat(%s): %s", s.Context, s.Change)
+}
+
+// checkpoint is the git checkpoint of a run in the project's own tree; nil
+// when the project is not in a repository with a commit. A new run starts
+// only from a clean tree — the open changes, approved and maybe not yet
+// committed, and the derived files aside —, a resumed one only on the
+// branch it started on.
+func checkpoint(ctx context.Context, root, run, change string, prior *loop.State) (*worktree.Checkpoint, error) {
+	if prior != nil && prior.Base == "" {
+		return nil, nil // started with no checkpoint: it ends with none
+	}
+	cp, ok := worktree.OpenCheckpoint(ctx, root)
+	if !ok {
+		return nil, nil
+	}
+	cp.Keep = []string{"specs/changes"}
+	cp.Derived, cp.Regenerate = derivedFile, regenerateIndexes
+	if runPorts.regenerate != nil {
+		cp.Regenerate = runPorts.regenerate
+	}
+	if prior != nil {
+		if prior.Base != cp.Branch {
+			return nil, errors.New(i18n.T("run.checkpoint.moved", run, prior.Base, cp.Branch, prior.Base))
+		}
+		return cp, nil
+	}
+	dirty, err := cp.Dirty(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(dirty) > 0 {
+		if len(dirty) > 5 {
+			dirty = append(dirty[:5], "…")
+		}
+		return nil, errors.New(i18n.T("run.dirty", change, strings.Join(dirty, ", ")))
+	}
+	return cp, nil
+}
+
+// keepWork leaves no commit of a run not accepted: its work goes to a
+// branch of its own, gofi/<change>, and the tree back to where the run
+// started (0002, D14).
+func keepWork(ctx context.Context, out io.Writer, root string, s *loop.State, cp *worktree.Checkpoint, events bool, report func(loop.Event)) error {
+	branch, err := cp.Shelve(ctx, "gofi/"+s.Change, fmt.Sprintf("wip(%s): %s — %s (%s)", s.Context, s.Change, s.Outcome, s.Run))
+	if err != nil {
+		return fmt.Errorf("keep the work of %s: %w", s.Run, err)
+	}
+	if branch == "" {
+		return nil
+	}
+	s.Kept = branch
+	_ = loop.SaveState(root, s)
+	report(loop.AppendEvent(root, s.Run, loop.Event{Ev: "work.kept", Node: s.Run, To: branch}))
+	if !events {
+		fmt.Fprintln(out, "  "+i18n.T("run.checkpoint.kept", branch))
+	}
+	return nil
 }
 
 // deliverContext delivers every sealed change of a context, in the order

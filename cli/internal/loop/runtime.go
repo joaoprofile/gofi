@@ -147,13 +147,17 @@ type State struct {
 	BlockedBy string            `json:"blocked_by,omitempty"`
 	Answers   map[string]string `json:"answers,omitempty"`
 	// Worktree, Branch and Base say where a run in a worktree works and
-	// lands; Landing is how that went: landed, waiting, conflict.
-	Worktree string    `json:"worktree,omitempty"`
-	Branch   string    `json:"branch,omitempty"`
-	Base     string    `json:"base,omitempty"`
-	Landing  string    `json:"landing,omitempty"`
-	CostUSD  float64   `json:"cost_usd"`
-	Updated  time.Time `json:"updated"`
+	// lands — Base alone, the branch a run in the project's tree commits on;
+	// Landing is how that went: landed, waiting, conflict.
+	Worktree string `json:"worktree,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	Base     string `json:"base,omitempty"`
+	Landing  string `json:"landing,omitempty"`
+	// Kept is the branch the work of a run not accepted in the project's tree
+	// was kept on, the tree put back where it started.
+	Kept    string    `json:"kept,omitempty"`
+	CostUSD float64   `json:"cost_usd"`
+	Updated time.Time `json:"updated"`
 }
 
 // Event is one line of a run's log.
