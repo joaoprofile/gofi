@@ -7,6 +7,11 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
+// AsRole reports whether the phase runs as its role — "follow the role in
+// …/SKILL.md" on its tier's model — rather than invoking its skill: a phase
+// the router raised, or a role that is not a slash command at all.
+func (p Phase) AsRole() bool { return p.Tier != p.Base || p.Internal }
+
 // Phase is one step of the plan: a role, the tier it runs at, and why it is
 // in the plan and at that tier.
 type Phase struct {
@@ -18,6 +23,9 @@ type Phase struct {
 	Base    host.Tier `json:"base_tier"`
 	Why     string    `json:"why"`
 	TierWhy string    `json:"tier_why"`
+	// Internal is a role run by the flow alone (0002, D19): never invoked
+	// as a slash command, it runs as the role, on its tier's model.
+	Internal bool `json:"internal,omitempty"`
 
 	// Turn is what a conductor sends to run the phase: the role's skill,
 	// invoked with the assembled request. RoleTurn is the same work for a
@@ -107,10 +115,10 @@ func (p planner) plan(intent, artifact string, ctx *Context) ([]Phase, error) {
 		}
 		seen[name] = true
 		if e := c.Elicit; e != nil {
-			phases = append(phases, Phase{Role: name, Tier: e.Tier, Base: c.Tier, Elicit: true, Checklist: e.Checklist,
+			phases = append(phases, Phase{Role: name, Tier: e.Tier, Base: c.Tier, Elicit: true, Checklist: e.Checklist, Internal: c.Internal(),
 				Why: "levanta as decisões que faltam antes de /" + name + " escrever"})
 		}
-		phases = append(phases, Phase{Role: name, Produces: c.Produces, Tier: c.Tier, Base: c.Tier, Why: why})
+		phases = append(phases, Phase{Role: name, Produces: c.Produces, Tier: c.Tier, Base: c.Tier, Why: why, Internal: c.Internal()})
 		for _, next := range c.Then {
 			if err := visit(next, "sempre depois de "+name, depth+1); err != nil {
 				return err

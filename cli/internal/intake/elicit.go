@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -51,8 +52,8 @@ func elicitFile(r *Result, role string) string {
 // on the role's tier, which is what the phase exists to spare.
 func elicitTurn(r *Result, i int) string {
 	ph := r.Plan[i]
-	skill := layout.Skills().Path(ph.Role, "SKILL.md")
-	checklist := layout.Skills().Path(ph.Role, ph.Checklist)
+	skill := layout.RoleSkill(ph.Role, ph.Internal)
+	checklist := path.Join(path.Dir(skill), ph.Checklist)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Siga o papel descrito em %s em **modo elicitação**, no nível %s (%s).\n\n", skill, ph.Tier, ph.TierWhy)
 	fmt.Fprintf(&b, "Não escreva o documento nem altere arquivo do projeto: só leia e grave `%s`.\n\n", ph.ElicitFile)

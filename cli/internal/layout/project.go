@@ -84,6 +84,23 @@ func Memory() Area        { return Area{"memory", home + "/memory", OwnerProject
 func Lexicon() Area       { return Area{"lexicon", home + "/lexicon", OwnerProject} }
 func Eval() Area          { return Area{"eval", home + "/eval", OwnerProject} }
 
+// Roles holds the internal roles (0002, D19): run by the flow, outside
+// skills/, so the host neither lists nor suggests nor invokes them.
+func Roles() Area { return Area{"roles", home + "/gofi/roles", OwnerGofi} }
+
+// RoleDirs are the folders a role can be installed in, the host's skills
+// first: what loads the contracts reads both.
+func RoleDirs(root string) []string { return []string{Skills().Abs(root), Roles().Abs(root)} }
+
+// RoleSkill is a role's SKILL.md, relative to the project root, in the area
+// its visibility installs it in.
+func RoleSkill(name string, internal bool) string {
+	if internal {
+		return Roles().Path(name, "SKILL.md")
+	}
+	return Skills().Path(name, "SKILL.md")
+}
+
 // Flows holds a project's own flow graphs, overriding gofi's built-in ones
 // by name (decision 0002, D21).
 func Flows() Area { return Area{"flows", home + "/flows", OwnerProject} }
@@ -96,7 +113,7 @@ func Contexts() Area { return Area{"contexts", Memory().Path("contexts"), OwnerP
 
 // Areas lists every area, gofi's first.
 func Areas() []Area {
-	return []Area{Skills(), Templates(), SDK(), Expertise(), Knowledge(), Institutional(), Memory(), Lexicon(), Eval(), Flows(), Specs(), PRD()}
+	return []Area{Skills(), Roles(), Templates(), SDK(), Expertise(), Knowledge(), Institutional(), Memory(), Lexicon(), Eval(), Flows(), Specs(), PRD()}
 }
 
 // OwnerOf says who owns a project-relative path, by the area it sits in.

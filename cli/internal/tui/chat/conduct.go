@@ -335,7 +335,7 @@ func (m model) startPhase(before tea.Cmd) (tea.Model, tea.Cmd) {
 	sw, canSwitch := p.phase.(engine.ModelSwitcher)
 	text := intake.TurnFor(r, p.next, false)
 	p.model = ""
-	if ph.Tier != ph.Base && m.opts.TierModel != nil && canSwitch {
+	if ph.AsRole() && m.opts.TierModel != nil && canSwitch {
 		if model := m.opts.TierModel(ph.Tier); model != "" {
 			sw.SetModel(model)
 			p.model = model

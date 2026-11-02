@@ -129,7 +129,7 @@ func PhaseTurn(r *Result, i int, asRole bool) string {
 // roleTurn has the agent follow a role's SKILL.md on the session's model, for
 // a phase above its contract's tier.
 func roleTurn(ph Phase, body string) string {
-	return fmt.Sprintf("Siga o papel descrito em %s, no nível %s (%s).\n\n%s", layout.Skills().Path(ph.Role, "SKILL.md"), ph.Tier, ph.TierWhy, body)
+	return fmt.Sprintf("Siga o papel descrito em %s, no nível %s (%s).\n\n%s", layout.RoleSkill(ph.Role, ph.Internal), ph.Tier, ph.TierWhy, body)
 }
 
 // TurnFor is what to send for phase i: the turn the plan carries, or one

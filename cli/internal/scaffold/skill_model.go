@@ -28,6 +28,23 @@ func SetSkillModels(h host.Host, tiers map[string]string) {
 	skillModel = func(t host.Tier) string { return h.Model(t, tiers) }
 }
 
+// internalRole reports whether a skill's contract makes it an internal role.
+// No contract, or a release from before visibility, is a user skill.
+func internalRole(agentsFS fs.FS, srcRoot, name string) (bool, error) {
+	b, err := fs.ReadFile(agentsFS, path.Join(skillSourceDir(srcRoot, name), role.ContractFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	c, err := role.Parse(b)
+	if err != nil {
+		return false, fmt.Errorf("skill %s: %w", name, err)
+	}
+	return c.Internal(), nil
+}
+
 // modelFor is the model to write into a skill: its contract's tier, through
 // skillModel. A skill without a contract — a release from before contracts —
 // gets none; a contract that does not parse is a broken release and says so.

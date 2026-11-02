@@ -49,6 +49,10 @@ func (m Manifest) merge(projectRoot string) error {
 	}
 	merged := LoadManifest(projectRoot)
 	for k, v := range m {
+		if v == "" {
+			delete(merged, k) // a file the install retired
+			continue
+		}
 		merged[k] = v
 	}
 	b, err := yaml.Marshal(merged)
@@ -190,6 +194,32 @@ func (p *preserver) keeps(rel string, existing []byte) bool {
 		return underAny(rel, tunedTrees)
 	}
 	return recorded != hashBytes(existing)
+}
+
+// retire removes a managed file the install no longer writes there — a role
+// that moved to another area — unless the team edited it: an edited one stays
+// and is reported as kept. --force removes it too, a copy kept in
+// .gofi/backup/. Reports whether it removed.
+func (p *preserver) retire(target string) bool {
+	rel := relSlash(p.root, target)
+	existing, err := os.ReadFile(target)
+	if err != nil {
+		return false
+	}
+	if p.guard && p.keeps(rel, existing) {
+		p.kept = append(p.kept, rel)
+		return false
+	}
+	if !p.guard {
+		p.backup(rel, existing)
+	}
+	if os.Remove(target) != nil {
+		return false
+	}
+	if p.next != nil {
+		p.next[rel] = ""
+	}
+	return true
 }
 
 func (p *preserver) record(rel string, content []byte) {

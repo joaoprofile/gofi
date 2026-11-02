@@ -404,6 +404,27 @@ func checkClaude(root string, opts Options) []Finding {
 	out = append(out, legacyLayout(claude)...)
 	out = append(out, missingPacks(root, opts)...)
 	out = append(out, seededCopies(root)...)
+	out = append(out, leftoverRoles(root)...)
+	return out
+}
+
+// leftoverRoles reports an internal role still under skills/: installed by a
+// gofi from before the move and edited there, so the update left it — a slash
+// command the host keeps offering, frozen at the team's edit (0002, D19).
+func leftoverRoles(root string) []Finding {
+	entries, _ := os.ReadDir(layout.Roles().Abs(root))
+	var out []Finding
+	for _, e := range entries {
+		old := layout.Skills().Abs(root, e.Name())
+		if info, err := os.Stat(old); err != nil || !info.IsDir() {
+			continue
+		}
+		out = append(out, Finding{
+			Area: "claude", Item: layout.Skills().Path(e.Name()) + "/", Severity: SeverityWarn,
+			Detail: "the internal role " + e.Name() + " is still a slash command here, with the team's edits; the flow runs " + layout.Roles().Path(e.Name()) + "/",
+			Hint:   "move the difference to .claude/knowledge/ (overrides: in its frontmatter), then delete " + layout.Skills().Path(e.Name()) + "/",
+		})
+	}
 	return out
 }
 

@@ -10,6 +10,14 @@
 #   then       roles that always follow this one.
 #   intents    verbs that point at this role.
 #   needs      data the role cannot start without (context, change).
+#   visibility user (a slash command, the default) or internal (run by the
+#              flow alone, installed under .claude/gofi/roles/ — 0002, D19).
+#   stage      where in the loop the role works; a flow node of that stage
+#              dispatches it when one of its triggers holds (0002, D18).
+#   triggers   all/any lists of facts gofi computes, never a model:
+#              change.surface(backend|web|mobile|infra), sensor.green,
+#              sensor.failed(<stage>), verdict(<clean|caveats|rejected>),
+#              owner(<eng|spec|pd>).
 tier: standard
 produces: infra
 requires:
@@ -17,3 +25,7 @@ requires:
     revise_on: [change, fix, create]
 intents: [provisione, provisionar, implante, implantar, deploy, pipeline, infraestrutura, terraform]
 needs: [context]
+visibility: internal
+stage: implement
+triggers:
+  - any: [change.surface(infra)]
