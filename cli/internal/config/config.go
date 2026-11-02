@@ -174,6 +174,17 @@ type GofiConfig struct {
 	Test     TestSection           `yaml:"test"`
 	Hsec     HsecConfig            `yaml:"hsec"`
 	Sonar    SonarConfig           `yaml:"sonar"`
+	// Loop configures the delivery loop (gofi run). Absent, its defaults hold.
+	Loop *Loop `yaml:"loop,omitempty"`
+}
+
+// Loop configures gofi run (decision 0002).
+type Loop struct {
+	// Sensors maps a sensor stage (build, test, static, …) to the command
+	// that checks it, run from the project root. A stage with no command is
+	// recorded as not checked — never as passed. test defaults to the test
+	// section's default task.
+	Sensors map[string]string `yaml:"sensors,omitempty"`
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.
