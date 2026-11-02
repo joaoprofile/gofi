@@ -74,6 +74,7 @@ var catalogPT = map[string]string{
 	"answer.waiting":              "%s espera pelo que %s não encontrou:",
 	"answer.how":                  "responda com gofi answer %s --set id=valor (ou --recommended)",
 	"answer.sent":                 "respondido: %s segue",
+	"engine.missing":              "%s é o host do projeto (ai.host), mas `%s` não está instalado — instale e faça login, ou troque o ai.host com gofi init",
 	"cmd.watch.short":             "Acompanha ao vivo as execuções do projeto e seus agentes",
 	"watch.no_gate":               "esta execução não espera resposta",
 	"watch.cancelled":             "pedido de parada enviado a %s",

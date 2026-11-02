@@ -21,7 +21,6 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
-	"github.com/joaoprofile/gofi/cli/internal/engine/claude"
 	"github.com/joaoprofile/gofi/cli/internal/guard"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
@@ -41,8 +40,9 @@ func newRunCmd() *cobra.Command {
 delivery) implements it, checks it with the sensors, audits it and, accepted,
 archives it into the living specs (decision 0002).
 
-Only a sealed change runs (gofi change approve). Each agent turn is a fresh
-session; the state is checkpointed after every node, so a run interrupted —
+Only a sealed change runs (gofi change approve). The agents work on the
+project's host — ai.host, as gofi init set it: Claude Code, Codex or Copilot.
+Each agent turn is a fresh session; the state is checkpointed after every node, so a run interrupted —
 Ctrl+C, gofi cancel, a crash — resumes with --resume where it stopped. Every
 transition goes to .gofi/runs/<run>/events.ndjson with why it was taken; each
 agent's turn to agents/<node>-<iter>.ndjson.
@@ -256,17 +256,16 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	open := runPorts.open
 	if open == nil {
-		if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
-			return "", err
-		}
 		mode := o.Mode
 		if mode == "" {
 			mode = "acceptEdits"
 		}
-		open = func(root string) engine.Session {
-			return claude.New(claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, PermissionMode: mode,
-				AllowedTools: append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...)})
+		// Every agent of the run works on the project's host (ai.host).
+		session, err := agentEngine(cfg, root, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
+		if err != nil {
+			return "", err
 		}
+		open = func(string) engine.Session { return session("") }
 	}
 	wait, err := gateTimeout(cfg, o.GateTimeout)
 	if err != nil {

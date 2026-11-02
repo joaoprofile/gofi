@@ -13,7 +13,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/joaoprofile/gofi/cli/internal/engine"
-	"github.com/joaoprofile/gofi/cli/internal/engine/claude"
 	"github.com/joaoprofile/gofi/cli/internal/guard"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
@@ -32,7 +31,8 @@ func newAskCmd() *cobra.Command {
 		Use:   "ask <request>",
 		Short: i18n.T("cmd.ask.short"),
 		Long: `Carry a request in free text out in one call: plan it as 'gofi intake' does,
-then run its phases one after the other on Claude Code, each role at its tier.
+then run its phases one after the other on the project's host (ai.host: Claude
+Code, Codex or Copilot), each role at its tier.
 
 Open questions are asked in a terminal; in a script the command stops on them
 with exit code 2 — answer with --answer id=value, or --proceed to go on with
@@ -40,9 +40,10 @@ each default written down as an assumption.
 
 After a PRD or a spec the plan stops for review: in a terminal it asks, in a
 script it stops there unless --yes. There is no screen here to approve each
-change, so the agent runs in Claude Code's acceptEdits mode by default: it
-edits the project's files, and a shell command that needs approval is refused.
---permission-mode picks another mode.`,
+change, so on Claude Code the agent runs in acceptEdits mode by default: it
+edits the project's files, and a shell command that needs approval is refused
+(--permission-mode picks another mode). Codex runs in its workspace-write
+sandbox; Copilot with its tools allowed, as its CLI requires headless.`,
 		Example: `gofi ask "altere o fluxo de pricing, adicionando um rate limit"
 gofi ask "crie um PRD de sincronização de pedidos" --answer context=novo
 gofi ask "corrija o cancelamento de pedidos" --yes --permission-mode plan`,
@@ -66,11 +67,12 @@ func runAsk(cmd *cobra.Command, request string) error {
 	if err != nil {
 		return err
 	}
-	h, ok := host.Get(cfg.AI.Host)
-	if !ok || !h.Chat {
-		return fmt.Errorf("%s", i18n.T("chat.host_required", h.Label, h.Label))
-	}
-	if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
+	h, _ := host.Get(cfg.AI.Host)
+	mode, _ := cmd.Flags().GetString("permission-mode")
+	// Each phase runs in a session of its own: it reads what the phases before
+	// it left on disk, never their conversation.
+	open, err := agentEngine(cfg, root, mode, guard.WriteRules)
+	if err != nil {
 		return err
 	}
 	interactive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
@@ -123,13 +125,6 @@ func runAsk(cmd *cobra.Command, request string) error {
 	model, _ := cmd.Flags().GetString("model")
 	if model == "" {
 		model = cfg.AI.Model
-	}
-	mode, _ := cmd.Flags().GetString("permission-mode")
-	// Each phase runs in a session of its own: it reads what the phases before
-	// it left on disk, never their conversation.
-	open := func(m string) engine.Session {
-		return claude.New(claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, Model: m, PermissionMode: mode,
-			AllowedTools: guard.WriteRules})
 	}
 
 	yes, _ := cmd.Flags().GetBool("yes")
