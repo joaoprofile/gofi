@@ -95,6 +95,7 @@ type Finding struct {
 	Severity    string `json:"severity"`
 	Owner       string `json:"owner"`
 	Rule        string `json:"rule"`
+	File        string `json:"file,omitempty"`
 	Message     string `json:"message"`
 }
 
@@ -136,6 +137,10 @@ type State struct {
 	Raised        map[string]int `json:"raised,omitempty"`
 	Worked        []Ran          `json:"worked,omitempty"`
 	Stuck         bool           `json:"stuck,omitempty"`
+	// Plan is what the plan stage decomposed the change into; Tested that
+	// the tests were written by the test stage once.
+	Plan   *Plan `json:"plan,omitempty"`
+	Tested bool  `json:"tested,omitempty"`
 	// Proposal is the amendment the run proposes when it cannot go on — the
 	// contract is wrong, or the work is stuck — relative to the root (D9).
 	Proposal string `json:"proposal,omitempty"`
@@ -191,6 +196,8 @@ type Runner struct {
 	// Policy is the project's convergence policy: budget, iterations,
 	// acceptance, escalation.
 	Policy Policy
+	// IsTest says a file is a test of the project's language, from its pack.
+	IsTest func(file string) bool
 	// Now is the clock; tests fix it.
 	Now func() time.Time
 	// OnEvent sees every event as it is written, for a live view.
@@ -388,6 +395,10 @@ func (r *Runner) dispatch(name string, n Node, s *State) ([]role.Role, error) {
 	}
 	facts := r.facts(s)
 	choices := role.Dispatch(r.Roles, n.Stage, facts)
+	if len(choices) == 0 && n.Optional {
+		r.emit(s, Event{Ev: "skip", Node: name, Why: "nenhum papel do estágio " + n.Stage + " dispara: o nó é opcional"})
+		return nil, nil
+	}
 	if len(choices) == 0 {
 		return nil, fmt.Errorf("nenhum papel do estágio %s dispara nesta mudança:\n  %s", n.Stage, strings.Join(role.Explain(r.Roles, n.Stage, facts), "\n  "))
 	}
@@ -400,6 +411,7 @@ func (r *Runner) dispatch(name string, n Node, s *State) ([]role.Role, error) {
 			}
 		}
 	}
+	byLayer(out, s.Plan)
 	return out, nil
 }
 
@@ -425,6 +437,16 @@ func (r *Runner) facts(s *State) role.Facts {
 	}
 	if s.Stuck {
 		f["stuck"] = true
+	}
+	if s.Plan == nil {
+		f["plan.none"] = true
+	} else {
+		for _, l := range r.due(s) {
+			f["layer("+l+")"] = true
+		}
+	}
+	if r.testsDue(s) {
+		f["tests.due"] = true
 	}
 	return f
 }
@@ -463,6 +485,26 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		return fmt.Errorf("%s gravou uma decisão que o gofi não lê: %w", rl.Name, err)
 	}
 	s.Blocked = e != nil && len(e.Questions) > 0
+	switch rl.Contract.Stage {
+	case "plan":
+		// The plan is what the next stages dispatch on: one gofi cannot read,
+		// or none, stops the run.
+		p, err := readPlan(r.work(), planFile(s.Run))
+		if err == nil && p == nil && !s.Blocked {
+			err = fmt.Errorf("o plano não foi gravado em %s", planFile(s.Run))
+		}
+		if err != nil {
+			a.Status, a.Error = AgentFailed, err.Error()
+			_ = saveAgent(r.Root, s.Run, a)
+			return fmt.Errorf("%s: %w", rl.Name, err)
+		}
+		if p != nil {
+			s.Plan = p
+			r.emit(s, Event{Ev: "plan", Node: name, Why: fmt.Sprintf("%d tarefas: %s", len(p.Tasks), strings.Join(p.layers(), ", "))})
+		}
+	case "test":
+		s.Tested = true
+	}
 	s.Answered, s.Answers = false, nil
 	a.Status = AgentDone
 	if s.Blocked {
@@ -484,7 +526,7 @@ func (r *Runner) judge(s *State, v *verdict.Verdict) {
 		if f.Severity == "suggestion" {
 			continue
 		}
-		open = append(open, Finding{Fingerprint: f.Fingerprint, Severity: f.Severity, Owner: f.Owner, Rule: f.Rule, Message: f.Message})
+		open = append(open, Finding{Fingerprint: f.Fingerprint, Severity: f.Severity, Owner: f.Owner, Rule: f.Rule, File: f.File, Message: f.Message})
 		score += weight[f.Severity]
 	}
 	now := map[string]bool{}
@@ -587,6 +629,13 @@ func (r *Runner) holds(w When, s *State) (bool, string) {
 			return false, ""
 		}
 		why = append(why, fmt.Sprintf("aceite %v (veredicto %s, accept %s)", ok, s.Verdict, r.Policy.acceptName()))
+	}
+	if w.TestsOnly != nil {
+		ok := r.testsOnly(s)
+		if ok != *w.TestsOnly {
+			return false, ""
+		}
+		why = append(why, fmt.Sprintf("só testes %v", ok))
 	}
 	if w.Stuck != nil {
 		if s.Stuck != *w.Stuck {

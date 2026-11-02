@@ -40,7 +40,21 @@ var predicates = map[string][]string{
 	"owner":          {"eng", "spec", "pd"},
 	// stuck: the work does not progress and no tier is left to raise.
 	"stuck": nil,
+	// layer(x): the run's plan has work for layer x in this pass — every
+	// layer it plans at first, those the findings point at on a retry.
+	"layer": Layers,
+	// plan.none: the run has no plan — a flow with no plan stage.
+	"plan.none": nil,
+	// tests.due: the tests are to be written — no test turn yet, or a
+	// finding of the audit is in a test file.
+	"tests.due": nil,
 }
+
+// Layers are what a plan divides the implementation of a backend change
+// into, in the order a plan usually takes them: the data, the domain, the
+// integrations with what is outside, the API. A role that implements one
+// declares it; the run dispatches it when its layer has work.
+var Layers = []string{"data", "domain", "integration", "api"}
 
 // checkPredicate reports whether p is a fact a trigger can name.
 func checkPredicate(p string) error {

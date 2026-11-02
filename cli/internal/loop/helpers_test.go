@@ -37,3 +37,30 @@ func shippedRoles() []role.Role {
 			Triggers: []role.Trigger{{Any: []string{"change.surface(web)", "change.surface(mobile)"}}}}},
 	}
 }
+
+// layeredRoles are the roles of a backend change split by layer (0002, D17):
+// the plan, one implementer per layer, the tests by a role of their own —
+// with the audit, the repair and the triage.
+func layeredRoles() []role.Role {
+	backend := "change.surface(backend)"
+	impl := func(name, layer string, extra ...role.Trigger) role.Role {
+		return role.Role{Name: name, Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "implement", Layer: layer,
+			Triggers: append([]role.Trigger{{All: []string{backend, "layer(" + layer + ")"}}}, extra...)}}
+	}
+	out := []role.Role{
+		{Name: "gofi-plan", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "plan",
+			Triggers: []role.Trigger{{All: []string{backend}}}}},
+		impl("gofi-eng", "domain", role.Trigger{All: []string{backend, "plan.none"}}),
+		impl("gofi-eng-api", "api"),
+		impl("gofi-eng-data", "data"),
+		impl("gofi-integrate", "integration"),
+		{Name: "gofi-test", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "test",
+			Triggers: []role.Trigger{{All: []string{backend, "tests.due"}}}}},
+	}
+	for _, r := range shippedRoles() {
+		if r.Contract.Stage != "implement" {
+			out = append(out, r)
+		}
+	}
+	return out
+}

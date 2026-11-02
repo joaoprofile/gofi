@@ -69,6 +69,9 @@ type Contract struct {
 	// stage dispatches it when one of its Triggers holds.
 	Stage    string    `yaml:"stage"`
 	Triggers []Trigger `yaml:"triggers"`
+	// Layer is the part of a backend change the role implements, one of
+	// Layers: its turn gets the plan's tasks of that layer.
+	Layer string `yaml:"layer"`
 	// Tools are what an internal role may use in its turn (0002, D15):
 	// read, edit, write, search, gofi (the index), verify, verdict, memory,
 	// shell. The engine grants exactly these; empty grants the conductor's
@@ -145,6 +148,12 @@ func Parse(b []byte) (Contract, error) {
 	}
 	if c.Stage != "" && !slices.Contains(Stages, c.Stage) {
 		return c, fmt.Errorf("stage: %q is not a stage (expected %s)", c.Stage, strings.Join(Stages, ", "))
+	}
+	if c.Layer != "" && !slices.Contains(Layers, c.Layer) {
+		return c, fmt.Errorf("layer: %q is not a layer (expected %s)", c.Layer, strings.Join(Layers, ", "))
+	}
+	if c.Layer != "" && c.Stage != "implement" {
+		return c, fmt.Errorf("layer: %s — only a role of stage implement implements a layer", c.Layer)
 	}
 	if len(c.Triggers) > 0 && c.Stage == "" {
 		return c, errors.New("triggers: a role with triggers needs the stage they dispatch it in")

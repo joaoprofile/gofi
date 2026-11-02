@@ -50,6 +50,18 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		}
 		b.WriteString("\n")
 	}
+	switch {
+	case rl.Contract.Stage == "plan":
+		fmt.Fprintf(&b, "Grave o plano em `%s`, exatamente neste formato — tarefas na ordem em que são feitas, `layer` uma de %s, `files` os caminhos (ou pastas terminadas em `/`) que cada tarefa escreve, a partir da raiz do projeto:\n\n```json\n%s\n```\n\n", planFile(s.Run), strings.Join(role.Layers, ", "), PlanExample)
+	case len(tasksOf(s, rl)) > 0:
+		fmt.Fprintf(&b, "**Suas tarefas** — camada %s do plano; as outras camadas são de outros papéis, e os testes do `gofi-test`:\n\n", rl.Contract.Layer)
+		for _, t := range tasksOf(s, rl) {
+			fmt.Fprintf(&b, "- %s — %s (%s) → %s\n", t.ID, t.Summary, strings.Join(t.Reqs, ", "), strings.Join(t.Files, ", "))
+		}
+		b.WriteString("\n")
+	case rl.Contract.Stage == "test":
+		b.WriteString("Escreva os testes **a partir dos cenários dos deltas**, não do código: o código é a coisa testada. Do código, leia só as assinaturas públicas que o teste chama (`gofi show <símbolo>`).\n\n")
+	}
 	// Triage is where a run that cannot go on says why, for the person.
 	if rl.Contract.Stage == "triage" && s.Proposal != "" {
 		why := "a auditoria achou defeito do contrato (dono spec ou pd)"
