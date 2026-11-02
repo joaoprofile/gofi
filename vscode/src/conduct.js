@@ -204,6 +204,14 @@ const conduct = {
 				this.post({ type: 'notice', text: `${e.node}: ${e.why}` });
 			} else if (e.ev === 'gate.open') {
 				this.post({ type: 'notice', text: 'A entrega espera uma decisão que a mudança não cobre.', hint: `responda num terminal — ${e.why}` });
+			} else if (e.ev === 'escalate') {
+				this.post({ type: 'notice', text: `${e.to} sobe de tier: ${e.why}` });
+			} else if (e.ev === 'proposal') {
+				this.post({ type: 'notice', text: 'A entrega não pode seguir: há uma proposta de emenda para você decidir.', hint: e.to });
+			} else if (e.ev === 'land.done') {
+				this.post({ type: 'notice', text: `Mudança integrada em ${e.why}.` });
+			} else if (e.ev === 'work.kept') {
+				this.post({ type: 'notice', text: `O trabalho não aceito ficou na branch ${e.to}; a árvore voltou ao início.` });
 			}
 		});
 		if (plan.run) {
