@@ -24,7 +24,7 @@ func TestTheBuiltinFlowsAreValid(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := Check(f, []string{"gofi-eng", "gofi-qa"}); len(got) != 0 {
+		if got := Check(f, []string{"gofi-eng", "gofi-ui", "gofi-ops", "gofi-qa"}); len(got) != 0 {
 			t.Errorf("%s:\n%s", name, messages(got))
 		}
 	}

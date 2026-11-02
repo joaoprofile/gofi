@@ -190,3 +190,27 @@ func Changes(all []Doc) []Change {
 	}
 	return out
 }
+
+// SealedFor lists the open changes of a context approved as they are, in the
+// order their dependencies allow: what the loop delivers for the context.
+func SealedFor(all []Doc, ctx string) ([]string, error) {
+	sealed := map[string]bool{}
+	for _, c := range Changes(all) {
+		if c.Sealed && contains(c.Contexts, ctx) {
+			sealed[c.ID] = true
+		}
+	}
+	levels, err := ChangeOrder(all)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, level := range levels {
+		for _, id := range level {
+			if sealed[id] {
+				out = append(out, id)
+			}
+		}
+	}
+	return out, nil
+}

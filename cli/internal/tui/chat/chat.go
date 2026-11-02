@@ -30,6 +30,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/tui/banner"
 	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
 )
@@ -55,6 +56,10 @@ type Options struct {
 	// TierModel is the model a tier runs on, for a phase the router raised
 	// above its role's contract. Nil keeps the skill's own model.
 	TierModel func(host.Tier) string
+	// Deliver hands what a plan builds to the loop: every sealed change of a
+	// context through a flow, its events as they come and, once they end, the
+	// error the delivery ended with. Nil leaves the plan to stop there.
+	Deliver func(flow, context string) (events <-chan loop.Event, wait func() error)
 }
 
 // Run holds the conversation until the user leaves.
@@ -86,6 +91,10 @@ type (
 	}
 	tick        struct{}
 	approvalMsg struct{ req *approval.Request }
+	// deliveryEvent is one event of the delivery the loop carries out;
+	// deliveryDone is its end.
+	deliveryEvent struct{ event loop.Event }
+	deliveryDone  struct{}
 )
 
 type model struct {
@@ -171,6 +180,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.onApprovalKey(msg)
 		}
 		return m.onKey(msg)
+
+	case deliveryEvent:
+		return m.onDeliveryEvent(msg.event)
+	case deliveryDone:
+		return m.onDeliveryDone()
 
 	case approvalMsg:
 		if m.always[msg.req.Tool] {

@@ -12,6 +12,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/runs"
 )
 
@@ -39,8 +40,6 @@ type plan struct {
 
 	rec     *runs.Run // the run's record, from the first phase on
 	model   string    // the model a raised phase set, for the record
-	before  []byte    // the context's memory before the running phase
-	retried bool      // a failed audit's retry was spliced in
 	outcome string    // how the plan ended, for the record
 	verdict string    // the QA's last verdict, for the record
 
@@ -49,6 +48,8 @@ type plan struct {
 	decisions map[string]*decided
 	asking    []intake.Question // the elicitation's questions still to answer
 	askingFor string            // the role they are for
+
+	delivery *delivery // the loop's delivery, while it runs
 }
 
 // decided is an elicitation and its answers.
@@ -215,6 +216,98 @@ func no(t string) bool {
 	return false
 }
 
+// delivery is a delivery the loop is carrying out for the plan.
+type delivery struct {
+	events  <-chan loop.Event
+	wait    func() error
+	outcome string
+}
+
+// startDelivery hands what the plan builds to the loop — the sealed changes
+// of the context through the flow of the artifact — and skips the phases the
+// flow holds: the build and its audit are the loop's now.
+func (m model) startDelivery(flow string, before tea.Cmd) (tea.Model, tea.Cmd) {
+	p := m.plan
+	r := p.res
+	k := m.look
+	if m.opts.Deliver == nil || r.Context == nil {
+		m.stopPlan()
+		return m, tea.Sequence(before, tea.Println(k.nested([]string{i18n.T("chat.plan.no_delivery")}, k.warn)))
+	}
+	p.closePhase()
+	events, wait := m.opts.Deliver(flow, r.Context.Name)
+	p.delivery = &delivery{events: events, wait: wait}
+	for p.next++; p.next < len(r.Plan) && loop.Delivers(r.Plan[p.next].Produces) && !r.Plan[p.next].Elicit; p.next++ {
+	}
+	m.conducting = true
+	line := tea.Println("\n" + k.bullet(k.accent, i18n.T("ask.handoff", flow), k.bold, m.width))
+	if before != nil {
+		line = tea.Sequence(before, line)
+	}
+	return m, tea.Sequence(line, readDelivery(events))
+}
+
+func readDelivery(ch <-chan loop.Event) tea.Cmd {
+	return func() tea.Msg {
+		e, ok := <-ch
+		if !ok {
+			return deliveryDone{}
+		}
+		return deliveryEvent{e}
+	}
+}
+
+// onDeliveryEvent shows the delivery as it goes and reads the next event.
+func (m model) onDeliveryEvent(e loop.Event) (tea.Model, tea.Cmd) {
+	p := m.plan
+	if p == nil || p.delivery == nil {
+		return m, nil
+	}
+	k := m.look
+	var line string
+	switch e.Ev {
+	case "node.start":
+		line = k.nested([]string{"● " + e.Node}, k.text)
+	case "edge":
+		line = k.nested([]string{"→ " + e.To + "  (" + e.Why + ")"}, k.dim)
+	case "node.failed", "run.cancelled":
+		line = k.nested([]string{e.Ev + " " + e.Why}, k.warn)
+	case "run.result":
+		p.delivery.outcome = e.Why
+	}
+	next := readDelivery(p.delivery.events)
+	if line == "" {
+		return m, next
+	}
+	return m, tea.Sequence(tea.Println(line), next)
+}
+
+// onDeliveryDone goes on with the plan when every change was accepted, and
+// stops it with the outcome otherwise.
+func (m model) onDeliveryDone() (tea.Model, tea.Cmd) {
+	p := m.plan
+	if p == nil || p.delivery == nil {
+		return m, nil
+	}
+	k := m.look
+	d := p.delivery
+	p.delivery = nil
+	err := d.wait()
+	if err != nil || d.outcome != "accepted" {
+		why := d.outcome
+		if why == "" && err != nil {
+			why = err.Error()
+		}
+		m.stopPlan()
+		return m, tea.Println(k.nested([]string{i18n.T("run.not_accepted", why)}, k.warn))
+	}
+	if p.next >= len(p.res.Plan) {
+		m.stopPlan()
+		return m, tea.Println("\n" + k.bullet(k.good, i18n.T("chat.plan.done"), k.text, m.width))
+	}
+	return m.startPhase(nil)
+}
+
 // startPhase runs the plan's next phase as one turn, in a session of its own:
 // the phase reads what the ones before it left on disk — the spec, the
 // context's memory, the code — never their conversation, nor the chat's. A
@@ -227,6 +320,9 @@ func (m model) startPhase(before tea.Cmd) (tea.Model, tea.Cmd) {
 	r := p.res
 	ph := r.Plan[p.next]
 	k := m.look
+	if flow, build := loop.FlowFor(ph.Produces); build && !ph.Elicit {
+		return m.startDelivery(flow, before)
+	}
 	header := i18n.T("chat.plan.phase", p.next+1, len(r.Plan), ph.Role, string(ph.Tier))
 	if p.rec == nil && p.next == 0 {
 		// The record is for calibration; the plan does not wait on it.
@@ -254,7 +350,6 @@ func (m model) startPhase(before tea.Cmd) (tea.Model, tea.Cmd) {
 		text = intake.WithDecisions(text, d.e, d.answers)
 		delete(p.decisions, ph.Role)
 	}
-	p.before = intake.Verdict(m.opts.Root, r)
 	p.next++
 	m.conducting = true
 	line := tea.Println("\n" + k.bullet(k.accent, header, k.bold, m.width))
@@ -274,7 +369,7 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 	done := r.Plan[p.next-1]
 	var el *intake.Elicitation
 	var elErr error
-	if done.ElicitFile != "" && !m.lastFailed {
+	if done.Elicit && done.ElicitFile != "" && !m.lastFailed {
 		el, elErr = intake.ReadElicitation(m.opts.Root, done.ElicitFile)
 	}
 	asked := 0
@@ -308,47 +403,6 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 			return m, tea.Sequence(tea.Println("\n"+head), tea.Println(m.questionBlock(qs[0])))
 		}
 		return m.startPhase(nil)
-	}
-	if el != nil && len(el.Questions) > 0 {
-		if len(done.OnBlock) == 0 {
-			// Stopped again after the spec was completed: the person's to look at.
-			m.stopPlan()
-			return m, tea.Println("\n" + k.bullet(k.warn, i18n.T("ask.blocked_again", done.Role, done.ElicitFile), k.text, m.width))
-		}
-		// The implementation stopped on decisions the spec does not cover:
-		// asked here, recorded in the spec, and the implementation runs again.
-		recorder := done.OnBlock[0].Role
-		if p.decisions == nil {
-			p.decisions = map[string]*decided{}
-		}
-		p.decisions[recorder] = &decided{e: el, answers: map[string]string{}}
-		r.Plan = append(r.Plan[:p.next], append(append([]intake.Phase{}, done.OnBlock...), r.Plan[p.next:]...)...)
-		qs := el.AsQuestions()
-		p.asking, p.askingFor = qs, recorder
-		m.wait = waitElicit
-		msg := i18n.T("ask.blocked", done.Role, recorder)
-		if recorder == done.Role {
-			msg = i18n.T("ask.blocked_rerun", done.Role)
-		}
-		head := k.nested([]string{msg}, k.warn)
-		return m, tea.Sequence(tea.Println("\n"+head), tea.Println(m.questionBlock(qs[0])))
-	}
-	if done.Produces == "audit" {
-		p.verdict = intake.Status(intake.Verdict(m.opts.Root, r))
-		if intake.Rejected(m.opts.Root, r, p.before) {
-			if len(done.OnReject) > 0 {
-				// The retry the plan carries: the implementation one tier up,
-				// then the audit again.
-				r.Plan = append(r.Plan[:p.next], append(append([]intake.Phase{}, done.OnReject...), r.Plan[p.next:]...)...)
-				p.retried = true
-				return m.startPhase(tea.Println("\n" + k.nested([]string{i18n.T("chat.plan.rejected", done.OnReject[0].Role, string(done.OnReject[0].Tier))}, k.warn)))
-			}
-			if p.retried {
-				p.outcome = runs.OutcomeEscalated
-				m.stopPlan()
-				return m, tea.Println("\n" + k.bullet(k.warn, i18n.T("chat.plan.still_rejected"), k.text, m.width))
-			}
-		}
 	}
 	if p.next >= len(r.Plan) {
 		p.outcome = runs.OutcomeDone

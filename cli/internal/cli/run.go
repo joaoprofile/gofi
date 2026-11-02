@@ -35,7 +35,7 @@ const sensorTimeout = 20 * time.Minute
 
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run <change> | --resume <run>",
+		Use:   "run <change> | --context <ctx> | --resume <run>",
 		Short: i18n.T("cmd.run.short"),
 		Long: `Carry an approved change out on its own: the delivery flow (gofi flow check
 delivery) implements it, checks it with the sensors, audits it and, accepted,
@@ -47,21 +47,27 @@ Ctrl+C, gofi cancel, a crash — resumes with --resume where it stopped. Every
 transition goes to .gofi/runs/<run>/events.ndjson with why it was taken; each
 agent's turn to agents/<node>-<iter>.ndjson.
 
+--context delivers every sealed change of a context, in the order their
+dependencies allow, and stops at the first not accepted.
+
 A decision the change does not cover stops the implementation: in a terminal
 the question is asked, in a script nobody answers and the run ends in impasse.
 The sensors run the commands of loop.sensors in .gofi.yaml; test defaults to
 the test section's default task, and a stage with no command is recorded as
 not checked, never as passed.`,
 		Example: `gofi run adicionar-rate-limit
+gofi run --context pedidos
 gofi run --resume r-20261102-101500
 gofi run adicionar-rate-limit --no-archive`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runRun,
 	}
 	cmd.Flags().String("resume", "", i18n.T("cmd.run.flag.resume"))
+	cmd.Flags().String("context", "", i18n.T("cmd.run.flag.context"))
 	cmd.Flags().String("flow", "delivery", i18n.T("cmd.run.flag.flow"))
 	cmd.Flags().Bool("no-archive", false, i18n.T("cmd.run.flag.no_archive"))
 	cmd.Flags().String("permission-mode", "acceptEdits", "Claude Code permission mode for the agent turns")
+	cmd.Flags().Bool("events", false, i18n.T("cmd.run.flag.events"))
 	return cmd
 }
 
@@ -78,27 +84,75 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	resume, _ := cmd.Flags().GetString("resume")
-	if (resume == "") == (len(args) == 0) {
+	ctxName, _ := cmd.Flags().GetString("context")
+	named := 0
+	for _, set := range []bool{resume != "", len(args) > 0, ctxName != ""} {
+		if set {
+			named++
+		}
+	}
+	if named != 1 {
 		return errors.New(i18n.T("run.which"))
 	}
-	out := cmd.OutOrStdout()
-	flowName, _ := cmd.Flags().GetString("flow")
-	f, err := loop.Load(root, flowName)
+	o := deliverOpts{Resume: resume}
+	if len(args) > 0 {
+		o.Change = args[0]
+	}
+	o.Flow, _ = cmd.Flags().GetString("flow")
+	o.NoArchive, _ = cmd.Flags().GetBool("no-archive")
+	o.Events, _ = cmd.Flags().GetBool("events")
+	o.Mode, _ = cmd.Flags().GetString("permission-mode")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	var outcome string
+	if ctxName != "" {
+		outcome, err = deliverContext(ctx, cmd.OutOrStdout(), root, cfg, ctxName, o)
+	} else {
+		outcome, err = deliver(ctx, cmd.OutOrStdout(), root, cfg, o)
+	}
 	if err != nil {
-		return err
+		return &ExitCodeError{Code: 1, Err: err}
+	}
+	if outcome != "accepted" {
+		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("run.not_accepted", outcome))}
+	}
+	return nil
+}
+
+// deliverOpts is one delivery: a change to run, or a run to resume.
+type deliverOpts struct {
+	Change, Resume, Flow, Mode string
+	NoArchive                  bool
+	// Events writes the run's events as NDJSON, one per line, ending with a
+	// run.result line — what the panel and the chat read.
+	Events bool
+}
+
+// deliver carries one approved change out through a flow and, accepted,
+// archives it. It is gofi run, and what every conductor hands a sealed
+// change to: one executor for all of them.
+func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiConfig, o deliverOpts) (string, error) {
+	if o.Flow == "" {
+		o.Flow = "delivery"
+	}
+	f, err := loop.Load(root, o.Flow)
+	if err != nil {
+		return "", err
 	}
 	for _, p := range loop.Check(f, nil) {
 		if p.Error {
-			return fmt.Errorf("%s: %s — gofi flow check %s", f.Source, p.Message, flowName)
+			return "", fmt.Errorf("%s: %s — gofi flow check %s", f.Source, p.Message, o.Flow)
 		}
 	}
-
 	open := runPorts.open
 	if open == nil {
 		if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
-			return err
+			return "", err
 		}
-		mode, _ := cmd.Flags().GetString("permission-mode")
+		mode := o.Mode
+		if mode == "" {
+			mode = "acceptEdits"
+		}
 		open = func(root string) engine.Session {
 			return claude.New(claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, PermissionMode: mode,
 				AllowedTools: append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...)})
@@ -106,78 +160,128 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	gate := runPorts.gate
 	if gate == nil {
-		gate = termGate{interactive: term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))}
+		gate = termGate{interactive: !o.Events && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))}
 	}
 
-	run, change, ctxName := resume, "", ""
-	if resume == "" {
-		change = args[0]
-		ctxName, err = sealedChange(root, change)
-		if err != nil {
-			return err
+	run, change, ctxName := o.Resume, o.Change, ""
+	if o.Resume == "" {
+		if ctxName, err = sealedChange(root, change); err != nil {
+			return "", err
 		}
 		run = "r-" + time.Now().Format("20060102-150405")
 	} else {
-		s, err := loop.LoadState(root, resume)
+		s, err := loop.LoadState(root, o.Resume)
 		if err != nil {
-			return err
+			return "", err
 		}
 		change, ctxName = s.Change, s.Context
 	}
-
 	release, err := loop.Acquire(root, run)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer release()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
+	report := humanReport(out)
+	if o.Events {
+		report = eventReport(out)
+	}
 	r := &loop.Runner{
 		Root: root, Flow: f, Brief: loop.DefaultBrief,
-		Agent:    &engineAgent{root: root, run: run, open: open, out: out},
+		Agent:    &engineAgent{root: root, run: run, open: open, out: out, quiet: o.Events},
 		Sensors:  commandSensors{root: root, commands: sensorCommands(cfg)},
 		Verdicts: diskVerdicts{root: root},
 		Gate:     gate,
-		OnEvent: func(e loop.Event) {
-			switch e.Ev {
-			case "node.start":
-				fmt.Fprintf(out, "\n● %s\n", e.Node)
-			case "edge":
-				fmt.Fprintf(out, "  → %s  (%s)\n", e.To, e.Why)
-			case "node.failed", "run.end", "run.cancelled":
-				fmt.Fprintf(out, "  %s %s\n", e.Ev, e.Why)
-			}
-		},
+		OnEvent:  report,
 	}
-	fmt.Fprintln(out, i18n.T("run.started", run, change, f.Source))
+	if !o.Events {
+		fmt.Fprintln(out, i18n.T("run.started", run, change, f.Source))
+	}
 	var s *loop.State
-	if resume == "" {
+	if o.Resume == "" {
 		s, err = r.Start(ctx, run, change, ctxName)
 	} else {
 		s, err = r.Resume(ctx, run)
 	}
+	result := loop.Event{Ev: "run.result", Node: run}
+	defer func() {
+		if o.Events {
+			report(result)
+		}
+	}()
 	if err != nil {
-		fmt.Fprintln(out, "\n  "+i18n.T("run.stopped", run, run))
-		return &ExitCodeError{Code: 1, Err: err}
+		result.Why = "stopped: " + err.Error()
+		if !o.Events {
+			fmt.Fprintln(out, "\n  "+i18n.T("run.stopped", run, run))
+		}
+		return "", err
 	}
-	fmt.Fprintf(out, "\n  %s\n", i18n.T("run.ended", run, s.Outcome, s.CostUSD))
-	if s.Outcome != "accepted" {
-		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("run.not_accepted", s.Outcome))}
+	result.Why = s.Outcome
+	if !o.Events {
+		fmt.Fprintf(out, "\n  %s\n", i18n.T("run.ended", run, s.Outcome, s.CostUSD))
 	}
-	if noArchive, _ := cmd.Flags().GetBool("no-archive"); noArchive {
-		return nil
+	if s.Outcome != "accepted" || o.NoArchive {
+		return s.Outcome, nil
 	}
 	all, err := contract.Docs(root)
 	if err != nil {
-		return err
+		return s.Outcome, err
 	}
 	res, err := contract.Archive(root, all, change, time.Now().Format("2006-01-02"))
 	if err != nil {
-		return fmt.Errorf("%s — gofi change archive %s: %w", i18n.T("run.archive_failed"), change, err)
+		return s.Outcome, fmt.Errorf("%s — gofi change archive %s: %w", i18n.T("run.archive_failed"), change, err)
 	}
-	fmt.Fprintln(out, "  "+i18n.T("change.archive.moved", res.Dir))
-	return nil
+	result.To = res.Dir
+	if !o.Events {
+		fmt.Fprintln(out, "  "+i18n.T("change.archive.moved", res.Dir))
+	}
+	return s.Outcome, nil
+}
+
+// deliverContext delivers every sealed change of a context, in the order
+// their dependencies allow, and stops at the first not accepted. It is what
+// a conductor hands the delivery to: the changes and their order are decided
+// here, once.
+func deliverContext(ctx context.Context, out io.Writer, root string, cfg *config.GofiConfig, ctxName string, o deliverOpts) (string, error) {
+	all, err := contract.Docs(root)
+	if err != nil {
+		return "", err
+	}
+	changes, err := contract.SealedFor(all, ctxName)
+	if err != nil {
+		return "", err
+	}
+	if len(changes) == 0 {
+		return "", errors.New(i18n.T("ask.no_sealed", ctxName))
+	}
+	for _, c := range changes {
+		o.Change, o.Resume = c, ""
+		outcome, err := deliver(ctx, out, root, cfg, o)
+		if err != nil || outcome != "accepted" {
+			return outcome, err
+		}
+	}
+	return "accepted", nil
+}
+
+// humanReport prints a run as it goes, for a person at a terminal.
+func humanReport(out io.Writer) func(loop.Event) {
+	return func(e loop.Event) {
+		switch e.Ev {
+		case "node.start":
+			fmt.Fprintf(out, "\n● %s\n", e.Node)
+		case "edge":
+			fmt.Fprintf(out, "  → %s  (%s)\n", e.To, e.Why)
+		case "node.failed", "run.end", "run.cancelled":
+			fmt.Fprintf(out, "  %s %s\n", e.Ev, e.Why)
+		}
+	}
+}
+
+// eventReport writes each event as one JSON line.
+func eventReport(out io.Writer) func(loop.Event) {
+	enc := json.NewEncoder(out)
+	return func(e loop.Event) { _ = enc.Encode(e) }
 }
 
 // sealedChange checks that a change is open and sealed, and returns the
@@ -225,6 +329,7 @@ type engineAgent struct {
 	root, run string
 	open      func(root string) engine.Session
 	out       io.Writer
+	quiet     bool // events mode: the transcript holds the tool calls
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
@@ -258,7 +363,9 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 					record("text", b.Text)
 				case engine.BlockToolUse:
 					record("tool", b.Name+" "+string(b.Input))
-					fmt.Fprintf(a.out, "  · %s\n", b.Name)
+					if !a.quiet {
+						fmt.Fprintf(a.out, "  · %s\n", b.Name)
+					}
 				}
 			}
 		case engine.Done:
@@ -325,4 +432,40 @@ func (g termGate) Ask(_ context.Context, e *intake.Elicitation) (map[string]stri
 	}
 	answers, err := askQuestions(e.AsQuestions())
 	return answers, err == nil
+}
+
+// spawnDelivery starts the delivery of a context as its own gofi process —
+// gofi run --context <ctx> --flow <flow> --events — and streams its events:
+// how the chat hands what a plan builds to the loop without running it inside
+// its own screen.
+func spawnDelivery(root string) func(flow, ctxName string) (<-chan loop.Event, func() error) {
+	return func(flow, ctxName string) (<-chan loop.Event, func() error) {
+		exe, err := os.Executable()
+		if err != nil {
+			return closedEvents(), func() error { return err }
+		}
+		cmd := exec.Command(exe, "run", "--context", ctxName, "--flow", flow, "--events")
+		cmd.Dir = root
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return closedEvents(), func() error { return err }
+		}
+		if err := cmd.Start(); err != nil {
+			return closedEvents(), func() error { return err }
+		}
+		return loop.Stream(stdout), func() error {
+			if err := cmd.Wait(); err != nil {
+				return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+			}
+			return nil
+		}
+	}
+}
+
+func closedEvents() <-chan loop.Event {
+	ch := make(chan loop.Event)
+	close(ch)
+	return ch
 }
