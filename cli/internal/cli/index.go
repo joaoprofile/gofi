@@ -563,6 +563,9 @@ func buildWorkspace(cmd *cobra.Command, opt workspace.Options, root string) (*wo
 			fmt.Fprintln(out, "  "+i18n.T("graph.build.more_diags", extra))
 		}
 	}
+	for _, s := range res.Unreadable() {
+		fmt.Fprintln(out, i18n.T("graph.build.unreadable", scopeLabel(s.Scope, root), s.Scope.Language))
+	}
 	if len(res.Built()) > 0 {
 		fmt.Fprintln(out, i18n.T("graph.build.written", relativeTo(root, graph.Dir(root)), workspace.IndexFile))
 	}

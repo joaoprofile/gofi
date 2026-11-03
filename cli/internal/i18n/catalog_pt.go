@@ -597,6 +597,7 @@ var catalogPT = map[string]string{
 	"learn.which":                    "diga a lição pelo número que gofi learn mostra",
 	"learn.accepted":                 "gravada: %s",
 	"learn.rejected":                 "recusada: lição %[2]d de %[1]s",
+	"graph.build.unreadable":         "%s: sem extrator de %s neste projeto — o grafo dele não é construído (gofi index install %[2]s)",
 	"trace.gaps":                     "o rastreio tem lacunas: gofi:implements REQ-NN no símbolo que realiza o requisito, gofi:tests REQ-NN.n no teste do cenário",
 	"trace.unknown":                  "%q não é uma mudança aberta nem um contexto com spec — gofi change list",
 	"cmd.impact.flag.min_conf":       "deixa de fora arestas abaixo desta confiança (0 a 1)",
