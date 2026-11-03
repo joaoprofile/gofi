@@ -9,8 +9,9 @@ O seu trabalho é levar uma mudança aprovada ao loop e acompanhar a execução 
 o fim, repassando à pessoa o que só ela decide.
 
 ```
-mudança escrita → gofi spec check → a pessoa aprova (gofi change approve)
-      → gofi run <mudança> --detach → acompanha → responde portões → entregue
+pedido → /gofi-spec escreve a mudança → gofi review (check + revisão)
+      → a pessoa aprova (gofi change approve) → gofi run <mudança> --detach
+      → acompanha → responde portões → gofi report → entregue
 ```
 
 ## Leis
@@ -34,11 +35,15 @@ Próprias do `/gofi-run`:
 ## Workflow
 
 1. **Qual mudança.** Do argumento (`/gofi-run <mudança>`) ou de
-   `gofi change list`. Sem mudança aberta, a pessoa precisa de uma: ofereça
-   `/gofi-spec` para escrevê-la.
-2. **Contrato pronto.** `gofi spec check <mudança>`: com erro, mostre os
-   achados e pare. Sem erro e sem selo, pergunte se a pessoa aprova e, com o
-   sim dela, ela mesma roda ou autoriza `gofi change approve <mudança>`.
+   `gofi change list`. Um pedido em texto, sem mudança que o cubra: siga o
+   `/gofi-spec` (o `/gofi-pd` antes, quando o contexto não tem PRD) para
+   escrevê-la com a pessoa — a mudança é dela, as decisões também.
+2. **Contrato pronto.** `gofi review <mudança>` faz o `gofi spec check` e a
+   revisão da mudança (ambiguidade, contradição, cenário não testável,
+   lacuna). Mostre os achados: a pessoa corrige a mudança e você roda de novo,
+   ou ela decide que o achado não procede. Sem achado que bloqueie e sem selo,
+   pergunte se ela aprova e, com o sim dela, ela mesma roda ou autoriza
+   `gofi change approve <mudança>`.
 3. **Antes de rodar.** `gofi run <mudança> --explain`: diga quem vai
    implementar e auditar e por quê. Em segundo plano a mudança roda numa
    worktree própria e precisa estar commitada — se não estiver, diga isso.
@@ -49,7 +54,9 @@ Próprias do `/gofi-run`:
    terminal — leve-as à pessoa e grave a resposta com
    `gofi answer <run> --set id=valor`.
 7. **Fim.** Diga o resultado (`accepted`, `impasse`, `exhausted`), a
-   integração (`integrada`, `conflito`, `aguardando`) e o custo. Impasse e
+   integração (`integrada`, `conflito`, `aguardando`) e o custo; o
+   `gofi report <run>` tem o rastreio de cada requisito, o que mudou e a
+   auditoria — é o que a pessoa revisa. Impasse e
    conflito voltam para a pessoa com o porquê do log — não tente de novo por
    conta própria. Num impasse, apresente a proposta de emenda que a execução
    deixou (`proposal` no `state.json`, em `.gofi/proposals/`): a pergunta, as

@@ -21,7 +21,7 @@ import (
 var allSkills = []string{
 	"gofi-pd", "gofi-spec", "gofi-eng", "gofi-ui",
 	"gofi-ops", "gofi-qa", "gofi-doc", "gofi-status",
-	"gofi-run", "gofi-repair", "gofi-triage",
+	"gofi-run", "gofi-repair", "gofi-triage", "gofi-spec-review",
 	"gofi-plan", "gofi-eng-data", "gofi-eng-api", "gofi-integrate", "gofi-test",
 	"gofi-qa-conformance", "gofi-qa-tests", "gofi-qa-security", "gofi-qa-data", "gofi-qa-ui",
 }

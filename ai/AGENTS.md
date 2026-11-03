@@ -119,6 +119,7 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 
 | Papel | Estágio | Faz |
 |-------|---------|-----|
+| `gofi-spec-review` | contract | revisa a mudança antes da aprovação: ambiguidade, contradição, cenário não testável, lacuna, escopo (`gofi review`) |
 | `gofi-plan` | plan | decompõe a mudança de backend em tarefas por camada (`data`, `domain`, `integration`, `api`) |
 | `gofi-eng-data` | implement | camada `data`: modelo, migrations em par, repositório |
 | `gofi-eng` | implement | camada `domain`: erros, service, application, composition root — sem plano, todas as camadas |

@@ -28,7 +28,10 @@ type fakeSession struct {
 	prompts *[]string
 }
 
-var reVerdictCmd = regexp.MustCompile(`gofi verdict write (\S+) --run (\S+) --iter (\d+)`)
+var (
+	reVerdictCmd = regexp.MustCompile(`gofi verdict write (\S+) --run (\S+) --iter (\d+)`)
+	reReviewFile = regexp.MustCompile("Grave os achados em `([^`]+)`")
+)
 
 func (f fakeSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event, error) {
 	*f.prompts = append(*f.prompts, t.Prompt)
@@ -39,10 +42,20 @@ func (f fakeSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event
 		v.Run, v.Iter = m[2], iter
 		_, _ = verdict.Write(f.root, v)
 	}
+	if isRole(t.Prompt, "gofi-spec-review") {
+		m := reReviewFile.FindStringSubmatch(t.Prompt)
+		writeReviewFile(filepath.Join(f.root, m[1]))
+	}
 	ch := make(chan engine.Event, 1)
 	ch <- engine.Done{CostUSD: 0.02, Duration: time.Second}
 	close(ch)
 	return ch, nil
+}
+
+// writeReviewFile is the reviewer finding nothing.
+func writeReviewFile(p string) {
+	_ = os.MkdirAll(filepath.Dir(p), 0o755)
+	_ = os.WriteFile(p, []byte(`{"schema":"gofi-review/v1","findings":[]}`), 0o644)
 }
 
 // isRole reports whether a turn runs a role, as a slash command or as the
@@ -60,7 +73,7 @@ var shippedSkills, _ = filepath.Abs(filepath.Join("..", "..", "..", "ai", "skill
 // where the loop dispatches them from.
 func installRoles(t *testing.T, root string) {
 	t.Helper()
-	for _, name := range []string{"gofi-eng", "gofi-qa"} {
+	for _, name := range []string{"gofi-eng", "gofi-qa", "gofi-spec-review"} {
 		writeFile(t, layout.Roles().Abs(root, name, "contract.yaml"), readFile(t, filepath.Join(shippedSkills, name, "contract.yaml")))
 		writeFile(t, layout.Roles().Abs(root, name, "SKILL.md"), "# /"+name+"\n")
 	}
@@ -101,17 +114,26 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 		err := c.Execute()
 		return out.String(), err
 	}
-	// Not sealed: nothing runs.
-	_, err := run(newRunCmd, "criar-pedidos")
-	if err == nil || !strings.Contains(err.Error(), "not approved") || len(prompts) != 0 {
-		t.Fatalf("an unsealed change ran: %v, %d turns", err, len(prompts))
+	// Not sealed: the change is reviewed, and with nobody at a terminal to
+	// approve it, nothing else runs.
+	out, err := run(newRunCmd, "criar-pedidos")
+	if err == nil || !strings.Contains(err.Error(), "not approved") || len(prompts) != 1 || !isRole(prompts[0], "gofi-spec-review") {
+		t.Fatalf("an unsealed change ran: %v, %d turns\n%s", err, len(prompts), out)
 	}
+	if !strings.Contains(out, "no findings") {
+		t.Errorf("the review is not shown:\n%s", out)
+	}
+	// Reviewed as it is, it is not reviewed again.
+	if out, _ := run(newRunCmd, "criar-pedidos"); len(prompts) != 1 || !strings.Contains(out, "already read the change") {
+		t.Errorf("an unchanged change was reviewed again: %d turns\n%s", len(prompts), out)
+	}
+	prompts = nil
 	if _, err := run(newChangeCmd, "approve", "criar-pedidos"); err != nil {
 		t.Fatal(err)
 	}
 
 	// --explain says who the run would dispatch, and why, running nothing.
-	out, err := run(newRunCmd, "criar-pedidos", "--explain")
+	out, err = run(newRunCmd, "criar-pedidos", "--explain")
 	if err != nil || len(prompts) != 0 {
 		t.Fatalf("explain: %v, %d turns\n%s", err, len(prompts), out)
 	}
