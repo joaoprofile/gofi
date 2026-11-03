@@ -7,12 +7,16 @@
 #              only, writes its own verdict, and gofi merges them (0002, D17).
 #   tools      what the role may use in its turn (0002, D15). A lens reads and
 #              writes its verdict: no edit, no write, no memory, no shell.
-#   triggers   sensors green, and the part of the change this lens is about.
+#   triggers   sensors green, and the part of the change this lens is about:
+#              the code graph says it touched the layer (diff.touches), or
+#              the plan has work there.
 tier: standard
 reads_only: true
 visibility: internal
 stage: audit
 triggers:
+  - all: [sensor.green, diff.touches(api)]
+  - all: [sensor.green, diff.touches(integration)]
   - all: [sensor.green, layer(api)]
   - all: [sensor.green, layer(integration)]
   - all: [sensor.green, change.surface(backend), plan.none]

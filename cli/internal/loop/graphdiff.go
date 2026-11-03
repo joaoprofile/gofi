@@ -86,6 +86,25 @@ func WriteDiff(dir, run string, d *GraphDiff) error {
 	return os.WriteFile(p, append(data, '\n'), 0o644)
 }
 
+// readDiff takes in what a sensor run with the graph stage said the change
+// did: the diff the audit is dispatched and scoped by, and its reach.
+func (r *Runner) readDiff(s *State, stages []string) {
+	if !slices.Contains(stages, "graph") {
+		return
+	}
+	d, err := ReadDiff(r.work(), s.Run)
+	if err != nil || d == nil {
+		return
+	}
+	s.Diff = d
+	r.reach(s, d.Reach)
+}
+
+// reach adds to the run's reach the contexts besides its own.
+func (r *Runner) reach(s *State, contexts []string) {
+	s.Reach = outside(append(append([]string{}, s.Reach...), contexts...), s.Context)
+}
+
 // outside are the contexts in reach that are not the change's own.
 func outside(reach []string, own string) []string {
 	var out []string

@@ -486,6 +486,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		Policy:   policy,
 		IsTest:   langPack.IsTest,
 		IsSource: langPack.IsSource,
+		Reach:    planReach(work, run, backendLanguage(cfg)),
 		OnEvent:  report,
 	}
 	if !o.Events {
