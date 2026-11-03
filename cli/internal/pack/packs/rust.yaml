@@ -1,0 +1,40 @@
+# The Rust pack, for an Axum + sqlx backend (decision 0002, D13): the
+# commands the loop's sensors run and the format each reports in. {src} is
+# the backend folder of .gofi.yaml.
+schema: gofi-pack/v1
+language: rust
+# A context's tests live in a file of their own, <module>_tests.rs, declared
+# with #[cfg(test)] mod: who writes the code never writes the test that
+# judges it, and the files say which is which.
+tests: ["*_tests.rs"]
+sources: ["*.rs"]
+sensors:
+  # Cheapest first: a run stops at the first stage that fails.
+  build:  {run: "cd {src} && cargo build --all-targets --quiet --message-format short", format: lines}
+  static: {run: "cd {src} && cargo clippy --all-targets --quiet --message-format short -- -D warnings", format: lines}
+  # libtest says which tests failed and which were ignored: an ignored test
+  # proves nothing, so it fails the stage.
+  test:   {run: "cd {src} && cargo test --message-format short", format: cargo-test}
+# A context is a module, src/<context>/, a file per layer
+# (sdk/rust/knowledge/structure.md); a file of it in no layer is its domain.
+contexts: "src/{context}/"
+layers:
+  - {name: handler,    plan: api,         paths: ["src/*/handler.rs", "src/*/handlers/**", "src/*/routes.rs"]}
+  - {name: repository, plan: data,        paths: ["src/*/repository.rs", "src/*/repository/**"]}
+  - {name: model,      plan: data,        paths: ["src/*/model.rs", "src/*/dto.rs", "src/*/model/**", "src/*/dto/**"]}
+  - {name: migration,  plan: data,        paths: ["migrations/**"]}
+  - {name: adapter,    plan: integration, paths: ["src/*/adapter.rs", "src/*/adapters/**"]}
+  - {name: service,    plan: domain,      paths: ["src/*/service.rs", "src/*/service/**"]}
+  - {name: domain,     plan: domain,      paths: ["src/*/*"]}
+graph:
+  # sdk/rust/knowledge/layers.md: a handler never reaches the repository, a
+  # repository never knows its caller, the service never the HTTP.
+  rules:
+    - "deny: handler -> repository"
+    - "deny: repository -> service"
+    - "deny: repository -> handler"
+    - "deny: service -> handler"
+    - "deny: model -> service"
+    - "deny: model -> repository"
+    - "deny: model -> handler"
+    - "deny: new-cycle"

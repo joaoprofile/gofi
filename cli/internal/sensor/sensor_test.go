@@ -188,3 +188,29 @@ func TestSurefireReportsArePlacedByClass(t *testing.T) {
 		t.Errorf("failed %v, findings %v", res.Failed, files)
 	}
 }
+
+// cargo test's output: a test that failed is placed where it panicked, one
+// ignored proves nothing.
+func TestCargoTestIsRead(t *testing.T) {
+	out := `running 3 tests
+test desconto::service_tests::abaixo ... ok
+test desconto::service_tests::faixa ... FAILED
+test desconto::service_tests::depois ... ignored
+
+failures:
+
+---- desconto::service_tests::faixa stdout ----
+thread 'desconto::service_tests::faixa' (636286) panicked at src/desconto/service_tests.rs:12:9:
+assertion ` + "`left == right`" + ` failed
+  left: 9500
+ right: 9501
+note: run with ` + "`RUST_BACKTRACE=1`" + ` environment variable to display a backtrace
+
+test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out
+`
+	got := Read("test", pack.FormatCargoTest, []byte(out), nil, "backend")
+	if len(got) != 2 || got[0].File != "backend/src/desconto/service_tests.rs" || got[0].Line != 12 || !strings.Contains(got[0].Message, "right: 9501") ||
+		!strings.Contains(got[1].Message, "ignorado") {
+		t.Errorf("findings %+v", got)
+	}
+}

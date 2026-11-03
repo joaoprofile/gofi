@@ -172,6 +172,8 @@ func ReadWith(stage string, c pack.Command, stdout, stderr []byte, src string) [
 		return sarif(stage, stdout)
 	case pack.FormatJUnit:
 		return append(junit(stage, stdout, src, c.ClassFile), lines(stage, stderr, src)...)
+	case pack.FormatCargoTest:
+		return append(cargoTest(stage, append(append([]byte{}, stdout...), stderr...), src), lines(stage, stderr, src)...)
 	}
 	return nil
 }
@@ -341,6 +343,63 @@ func junit(stage string, out []byte, src, classFile string) []loop.SensorFinding
 		}
 	}
 	walk(doc.suite)
+	return res
+}
+
+var (
+	reCargoResult = regexp.MustCompile(`^test (\S+) \.\.\. (FAILED|ignored)`)
+	reCargoPanic  = regexp.MustCompile(`^thread '([^']+)'(?: \(\d+\))? panicked at ([^:\s]+\.rs):(\d+):\d+:`)
+)
+
+// cargoTest reads libtest's output: each test that failed, placed where it
+// panicked, with what it printed — and each one ignored, which proves
+// nothing.
+func cargoTest(stage string, out []byte, src string) []loop.SensorFinding {
+	type place struct {
+		file string
+		line int
+		msg  strings.Builder
+	}
+	panics := map[string]*place{}
+	var res []loop.SensorFinding
+	var current *place
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var order []string
+	results := map[string]string{}
+	for sc.Scan() {
+		ln := sc.Text()
+		if m := reCargoPanic.FindStringSubmatch(ln); m != nil {
+			n, _ := strconv.Atoi(m[3])
+			current = &place{file: within(src, m[2]), line: n}
+			panics[m[1]] = current
+			continue
+		}
+		if m := reCargoResult.FindStringSubmatch(ln); m != nil {
+			if _, seen := results[m[1]]; !seen {
+				order = append(order, m[1])
+			}
+			results[m[1]] = m[2]
+			current = nil
+			continue
+		}
+		if current != nil && current.msg.Len() < 1200 && !strings.HasPrefix(ln, "note:") {
+			current.msg.WriteString(ln + "\n")
+		}
+	}
+	for _, name := range order {
+		f := loop.SensorFinding{Stage: stage, Rule: name, Severity: "blocker"}
+		if p := panics[name]; p != nil {
+			f.File, f.Line = p.file, p.line
+			f.Message = name + " falhou: " + strings.TrimSpace(p.msg.String())
+		} else {
+			f.Message = name + " falhou"
+		}
+		if results[name] == "ignored" {
+			f.Message = name + " foi ignorado: um teste ignorado não prova nada — faça-o rodar ou remova-o com o requisito"
+		}
+		res = append(res, f)
+	}
 	return res
 }
 

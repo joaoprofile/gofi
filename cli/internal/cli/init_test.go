@@ -468,7 +468,6 @@ func TestExecutePipeline_NonGoBackendsAreReported(t *testing.T) {
 		module   string
 		manifest string
 	}{
-		{"rust", "", "src/Cargo.toml"},
 		{"csharp", "Acme.MySvc", "src/my-svc/my-svc.csproj"},
 	}
 	for _, tc := range cases {
@@ -781,5 +780,29 @@ func TestExecutePipeline_QuarkusBackend(t *testing.T) {
 	cfg, err := config.Load(filepath.Join(target, config.FileName))
 	if err != nil || cfg.Backend.Module != "com.acme.mysvc" {
 		t.Errorf("backend.module = %+v, %v", cfg.Backend, err)
+	}
+}
+
+// An Axum backend gets the starter its pack's sensors run — cargo build,
+// clippy, cargo test —, the contexts declared in its library.
+func TestExecutePipeline_AxumBackend(t *testing.T) {
+	useFixtureRepo(t)
+	forceToolchain(t, toolchain.Preflight{})
+	target := filepath.Join(t.TempDir(), "my-svc")
+	r := goWizardResult(target)
+	r.Language, r.Module = "rust", ""
+	if err := executePipeline(r); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	for _, p := range []string{"src/Cargo.toml", "src/src/main.rs", "src/src/lib.rs", "src/migrations"} {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			t.Errorf("%s not scaffolded: %v", p, err)
+		}
+	}
+	if c, _ := os.ReadFile(filepath.Join(target, "src/Cargo.toml")); !strings.Contains(string(c), `name = "my-svc"`) {
+		t.Errorf("Cargo.toml:\n%s", c)
+	}
+	if _, err := os.Stat(filepath.Join(target, "go.work")); !os.IsNotExist(err) {
+		t.Error("go.work written for a Rust backend")
 	}
 }
