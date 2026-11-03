@@ -166,6 +166,7 @@ var detectToolchain = toolchain.Detect
 var (
 	createViteApp = scaffold.CreateViteApp
 	createExpoApp = scaffold.CreateExpoApp
+	npmInstall    = scaffold.NpmInstall
 )
 
 func executePipeline(r *wizard.Result) error {
@@ -174,8 +175,9 @@ func executePipeline(r *wizard.Result) error {
 	adoptedBack := hasBack && r.Adopted(wizard.EnvBack)
 	// Only a surface gofi is going to create needs Node: an adopted app is never
 	// scaffolded, so demanding a toolchain for it would warn about nothing.
+	nodeBackend := hasBack && !adoptedBack && r.Language == config.LanguageNodeJS
 	needNode := (r.Has(wizard.EnvWeb) && !r.Adopted(wizard.EnvWeb)) ||
-		(r.Has(wizard.EnvMobile) && !r.Adopted(wizard.EnvMobile))
+		(r.Has(wizard.EnvMobile) && !r.Adopted(wizard.EnvMobile)) || nodeBackend
 
 	// The host decides the folder everything below is written to: fixed first,
 	// so no path is resolved against another host's layout.
@@ -354,6 +356,13 @@ func executePipeline(r *wizard.Result) error {
 	if goBackend && pre.GoOK {
 		steps = append(steps, spinner.Step{Name: i18n.T("init.step.gowork"), Fn: func() error {
 			return scaffold.EnsureGoWorkSDK(r.Root, r.Language)
+		}})
+	}
+	// The sensors run the starter's tools — tsc, ESLint, Jest — from its
+	// node_modules: installed now, the first run has them.
+	if nodeBackend && pre.NodeOK {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.npm", r.SourcePath), Fn: func() error {
+			return npmInstall(filepath.Join(r.Root, r.SourcePath))
 		}})
 	}
 	if r.GitRemote != "" {

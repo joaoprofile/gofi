@@ -99,13 +99,11 @@ func DefaultTestSection(language, sourceRoot string) TestSection {
 			Default: "unit",
 			Tasks: map[string]TestTask{
 				"unit": {Desc: "Unit tests", Run: npm + " test"},
-				// A second reporter is needed because naming one replaces the
-				// default, and a coverage run that prints nothing looks hung.
+				// Jest, as the NestJS starter has it: lcov for Sonar, text so a
+				// coverage run that prints nothing does not look hung.
 				"cover": {
-					Desc: "Coverage as lcov (node --experimental-test-coverage)",
-					Run: "node --test --experimental-test-coverage" +
-						" --test-reporter=spec --test-reporter-destination=stdout" +
-						" --test-reporter=lcov --test-reporter-destination=" + sourceRoot + "/coverage/lcov.info " + sourceRoot,
+					Desc: "Coverage as lcov (jest --coverage)",
+					Run:  npm + " test -- --coverage --coverageDirectory=../coverage --coverageReporters=lcov --coverageReporters=text",
 				},
 				"sonar": {
 					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",

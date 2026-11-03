@@ -399,6 +399,7 @@ var catalogEN = map[string]string{
 	"init.step.claude":           "Fetch the agents and install .claude/",
 	"init.step.institutional":    "Pull the institutional base",
 	"init.step.localstack":       "Prepare ops/localstack and .env",
+	"init.step.npm":              "Install the backend's dependencies (npm install in %s)",
 	"init.step.gowork":           "Wire the SDK into go.work",
 	"init.step.remote":           "Configure the git remote",
 	"init.step.extension":        "Install the GOFI AI extension",
