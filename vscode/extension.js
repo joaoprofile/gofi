@@ -6,11 +6,13 @@ const { resolveProvider } = require('./src/providers/index.js');
 const { readGofiProject, findProjectRoot } = require('./src/gofiConfig.js');
 const { hasGraph } = require('./src/docGraph.js');
 const { GraphPanel } = require('./src/graphView.js');
+const { RunPanel } = require('./src/runPanel.js');
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
 	const chats = new ChatManager(context);
 	const graph = new GraphPanel(context);
+	const runs = new RunPanel(context);
 
 	context.subscriptions.push(
 		// `retainContextWhenHidden` keeps the transcript alive when the user
@@ -39,8 +41,10 @@ function activate(context) {
 		vscode.commands.registerCommand('gofi-ai.doctor', () => runDoctor()),
 		vscode.commands.registerCommand('gofi-ai.graph', (name) => graph.open(name)),
 		vscode.commands.registerCommand('gofi-ai.docsBuild', () => graph.build()),
+		vscode.commands.registerCommand('gofi-ai.run', () => runs.pick()),
 		{ dispose: () => chats.dispose() },
 		{ dispose: () => graph.dispose() },
+		{ dispose: () => runs.dispose() },
 	);
 
 	// A project that already has a graph opens showing it. The panel is a

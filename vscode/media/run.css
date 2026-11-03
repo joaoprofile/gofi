@@ -1,0 +1,20 @@
+#runView { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 12px 20px; }
+#runView h1 { font-size: 1.3em; margin: 0 0 4px; }
+#runView h2 { font-size: 1.05em; margin: 20px 0 8px; }
+#runView .muted { opacity: 0.7; }
+#runView .flow { overflow: auto; }
+#runView svg text { fill: var(--vscode-foreground); font-size: 12px; text-anchor: middle; }
+#runView svg text.sub { font-size: 10px; opacity: 0.7; }
+#runView .node rect { fill: var(--vscode-editor-background); stroke: var(--vscode-panel-border, #888); stroke-width: 1; }
+#runView .node.visited rect { fill: var(--vscode-list-inactiveSelectionBackground, #3335); }
+#runView .node.current rect { stroke: var(--vscode-focusBorder, #39f); stroke-width: 2.5; }
+#runView .node.terminal rect { stroke-dasharray: 4 2; }
+#runView .node.ended rect { stroke: var(--vscode-testing-iconPassed, #3a3); stroke-width: 2.5; stroke-dasharray: none; }
+#runView .edge { fill: none; stroke: var(--vscode-panel-border, #888); stroke-width: 1; opacity: 0.35; }
+#runView .edge.back { stroke-dasharray: 5 3; }
+#runView .edge.taken { opacity: 1; stroke: var(--vscode-focusBorder, #39f); stroke-width: 1.6; }
+#runView marker path { fill: var(--vscode-panel-border, #888); }
+#runView table.matrix { border-collapse: collapse; width: 100%; }
+#runView table.matrix th, #runView table.matrix td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border, #8884); vertical-align: top; }
+#runView tr.scenario td:nth-child(2) { padding-left: 24px; }
+#runView tr.gap td:last-child { color: var(--vscode-errorForeground, #e55); font-weight: 600; }

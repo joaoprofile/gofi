@@ -1017,3 +1017,28 @@ func TestARunThatReworkedProposesLessons(t *testing.T) {
 		}
 	}
 }
+
+// A run keeps the flow it carries out, drawable: its nodes and edges, each
+// condition in the flow's words.
+func TestARunKeepsTheFlowItRuns(t *testing.T) {
+	w := newWorld(t)
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	w.run(t)
+	data, err := os.ReadFile(FlowFile(w.root, "r-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v FlowView
+	if err := json.Unmarshal(data, &v); err != nil || v.Start != "plan" || len(v.Nodes) == 0 {
+		t.Fatalf("view %+v, %v", v, err)
+	}
+	found := false
+	for _, e := range v.Edges {
+		if e.From == "sense" && e.To == "repair" {
+			found = e.When == "sensor_failed: [build, static, graph]" && e.Max == 3
+		}
+	}
+	if !found {
+		t.Errorf("edges %+v", v.Edges)
+	}
+}

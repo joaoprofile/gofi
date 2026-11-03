@@ -214,6 +214,8 @@ const conduct = {
 				this.post({ type: 'notice', text: `Auditoria em lentes: ${e.why}.` });
 			} else if (e.ev === 'guard') {
 				this.post({ type: 'notice', text: `${e.to}: ${e.why}` });
+			} else if (e.ev === 'lessons') {
+				this.post({ type: 'notice', text: `A entrega propôs lições ao knowledge do projeto: ${e.why}.`, hint: 'gofi learn accept|reject' });
 			} else if (e.ev === 'work.kept') {
 				this.post({ type: 'notice', text: `O trabalho não aceito ficou na branch ${e.to}; a árvore voltou ao início.` });
 			}

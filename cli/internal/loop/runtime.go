@@ -259,6 +259,7 @@ func (r *Runner) StartIn(ctx context.Context, run, change, context string, setup
 	if err := os.MkdirAll(Dir(r.Root, run), 0o755); err != nil {
 		return nil, err
 	}
+	r.saveFlow(run)
 	r.emit(s, Event{Ev: "run.start", Node: r.Flow.Start, Why: "mudança " + change})
 	if err := r.save(s); err != nil {
 		return nil, err
