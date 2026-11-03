@@ -45,6 +45,98 @@ type Pack struct {
 	// Sources are the names of the language's source files, tests among
 	// them: what the loop guards the authorship of.
 	Sources []string `yaml:"sources"`
+	// Layers are what a backend in the language is divided into, by where
+	// their files are; the first whose paths match a file is its layer.
+	Layers []Layer `yaml:"layers,omitempty"`
+	// Contexts is where a context's code lives, relative to the backend
+	// folder, with {context} for its name: domain/{context}/.
+	Contexts string `yaml:"contexts,omitempty"`
+	// Graph is what the graph stage holds the code to.
+	Graph GraphRules `yaml:"graph,omitempty"`
+}
+
+// Layer is one layer of the language's backend: the paths of its files,
+// relative to the backend folder — * for one name, ** for any folders — and
+// the layer of a plan its work is part of.
+type Layer struct {
+	Name  string   `yaml:"name"`
+	Plan  string   `yaml:"plan"`
+	Paths []string `yaml:"paths"`
+}
+
+// GraphRules are the rules the code graph is held to (0002, D11), each a
+// line: "deny: <layer> -> <layer>", "deny: new-cycle", "deny: import
+// "<package>" from <layer>".
+type GraphRules struct {
+	Rules []string `yaml:"rules,omitempty"`
+}
+
+// LayerOf is the layer of a file relative to the backend folder, and the
+// plan's layer it is part of; empty when no layer holds it.
+func (p *Pack) LayerOf(file string) (layer, plan string) {
+	if p == nil {
+		return "", ""
+	}
+	file = strings.TrimPrefix(strings.ReplaceAll(file, "\\", "/"), "./")
+	for _, l := range p.Layers {
+		for _, pat := range l.Paths {
+			if Glob(pat, file) {
+				return l.Name, l.Plan
+			}
+		}
+	}
+	return "", ""
+}
+
+// ContextOf is the context whose code a file is, relative to the backend
+// folder: the name where the pack's contexts pattern says {context}.
+func (p *Pack) ContextOf(file string) string {
+	if p == nil || p.Contexts == "" {
+		return ""
+	}
+	pat := strings.Split(strings.Trim(p.Contexts, "/"), "/")
+	segs := strings.Split(strings.TrimPrefix(strings.ReplaceAll(file, "\\", "/"), "./"), "/")
+	// The context is a folder: the file is below it, never the folder's name.
+	if len(segs) <= len(pat) {
+		return ""
+	}
+	name := ""
+	for i, s := range pat {
+		switch {
+		case s == "{context}":
+			name = segs[i]
+		case s != segs[i]:
+			return ""
+		}
+	}
+	return name
+}
+
+// Glob reports whether a slash path matches a pattern: path.Match for each
+// name, and ** for any number of folders, none among them.
+func Glob(pattern, file string) bool {
+	return glob(strings.Split(pattern, "/"), strings.Split(file, "/"))
+}
+
+func glob(pat, segs []string) bool {
+	for len(pat) > 0 {
+		if pat[0] == "**" {
+			for i := 0; i <= len(segs); i++ {
+				if glob(pat[1:], segs[i:]) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(segs) == 0 {
+			return false
+		}
+		if ok, _ := path.Match(pat[0], segs[0]); !ok {
+			return false
+		}
+		pat, segs = pat[1:], segs[1:]
+	}
+	return len(segs) == 0
 }
 
 // IsTest reports whether a path is a test file of the language.

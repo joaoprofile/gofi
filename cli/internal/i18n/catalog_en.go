@@ -565,6 +565,8 @@ var catalogEN = map[string]string{
 	"cmd.show.short":                 "Describe a symbol, document, section, context or table: what is it?",
 	"cmd.show.flag.limit":            "maximum number of links or relations shown per group",
 	"cmd.path.short":                 "Show how one symbol reaches another in the code graph",
+	"cmd.impact.short":               "Show what a change to some symbols or files can break",
+	"cmd.impact.flag.min_conf":       "leave out edges below this confidence (0 to 1)",
 	"cmd.index.short":                "Build the code graph and the document index",
 	"cmd.index.check.short":          "Check the document corpus and measure the search (CI)",
 	"cmd.index.migrate.short":        "Bring a document corpus up to the current format",

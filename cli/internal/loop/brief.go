@@ -77,7 +77,7 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	// A role with a grant has no shell: it is told what to use instead, so a
 	// turn is not spent on commands that are refused.
 	if len(rl.Contract.Tools) > 0 && !slices.Contains(rl.Contract.Tools, "shell") {
-		b.WriteString("Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi; para achar e entender código e documentos, `find`, `show` e `path`. O índice, o loop atualiza depois do seu turno.\n\n")
+		b.WriteString("Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi; para achar e entender código e documentos, `find`, `show` e `path`; para saber o que depende de um símbolo ou arquivo, `impact`. O índice, o loop atualiza depois do seu turno.\n\n")
 	}
 	if slices.Contains(s.Lenses, rl.Name) {
 		// One lens of several: its verdict is a part, merged by gofi.

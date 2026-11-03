@@ -70,7 +70,7 @@ func runMCP(cmd *cobra.Command, _ []string) error {
 // mcpInstructions reach the agent when it connects: when to use the tools, in
 // the few lines a host shows every session.
 const mcpInstructions = `gofi indexes this project: its documents (specs, PRDs, memory, knowledge, SDK docs) and its code graph.
-Ask it before Grep, Glob or reading whole files: find says where something is and which lines to read; show describes a symbol (with its callers), a document, a section, a context or a table; path says how A reaches B.
+Ask it before Grep, Glob or reading whole files: find says where something is and which lines to read; show describes a symbol (with its callers), a document, a section, a context or a table; path says how A reaches B; impact, what depends on a symbol or a file.
 For exact text — an error message, a config key, SQL — use find with text or regex: each line comes with the symbol or section that holds it.
 After editing code, run index (target code) before querying what you changed.
 Given a task in free text, call intake first: it says what the request asks for, the context it is about, the phases — which role, in order, at what tier — the expertise to read, and what to ask the person.`
@@ -103,6 +103,10 @@ func newMCPServer(root, language string) *mcp.Server {
 		Name: "path", Title: "Path between symbols", Annotations: readOnly,
 		Description: `How does A reach B? Every hop between two symbols in the code graph, with where in the code each happens. In a fast graph an ambiguous call has no edge: no path is not proof there is none.`,
 	}, g.path)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "impact", Title: "What a change can break", Annotations: readOnly,
+		Description: `What depends on this? Every symbol that calls, uses, implements, embeds or extends the targets — symbols, or files whose symbols are — edge by edge, nearest first, grouped by context, with the tests among them. What to check before and after changing them. In a fast graph an ambiguous call has no edge: a dependent can be missing.`,
+	}, g.impact)
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "intake", Title: "Plan a request", Annotations: readOnly,
 		Description: `How should this request be carried out? Reads a task in free text against the index and the roles' contracts: the intent and the artifact it ends with, the context and what it already has, the phases in order — each role (follow its .claude/skills/<role>/SKILL.md or the host's equivalent) at its tier, with why — the expertise packs to read, the open questions with options from the index, and the assembled request for the first phase. Call it before starting a task. Rules only: settle an open question from the conversation, or ask the person, then call again with answers (the question ids) or proceed.`,
@@ -228,6 +232,11 @@ type pathArgs struct {
 	To   string `json:"to" jsonschema:"the symbol the path should reach"`
 }
 
+type impactArgs struct {
+	Targets []string `json:"targets" jsonschema:"symbols (service.Bill) or files from the project root"`
+	MinConf float64  `json:"min_conf,omitempty" jsonschema:"leave out edges below this confidence, 0 to 1; 0 for all"`
+}
+
 type intakeArgs struct {
 	Request string            `json:"request" jsonschema:"the task, in the person's words"`
 	Answers map[string]string `json:"answers,omitempty" jsonschema:"answers to the previous call's questions, by question id (context: a context name, or novo)"`
@@ -303,6 +312,13 @@ func (g *gofiMCP) show(_ context.Context, _ *mcp.CallToolRequest, a showArgs) (*
 func (g *gofiMCP) path(_ context.Context, _ *mcp.CallToolRequest, a pathArgs) (*mcp.CallToolResult, any, error) {
 	return g.answer(func(e *retrieval.Engine, out *bytes.Buffer) error {
 		view, err := e.Path(a.From, a.To)
+		return renderView(out, view, err)
+	})
+}
+
+func (g *gofiMCP) impact(_ context.Context, _ *mcp.CallToolRequest, a impactArgs) (*mcp.CallToolResult, any, error) {
+	return g.answer(func(e *retrieval.Engine, out *bytes.Buffer) error {
+		view, err := e.Impact(a.Targets, a.MinConf)
 		return renderView(out, view, err)
 	})
 }

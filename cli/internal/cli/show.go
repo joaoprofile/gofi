@@ -78,6 +78,37 @@ gofi path OrderHandler.Bill Repository.Save`,
 	return cmd
 }
 
+func newImpactCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "impact <symbol|file>...",
+		Short: i18n.T("cmd.impact.short"),
+		Long: `Show what a change to some symbols can break: every symbol that calls, uses,
+implements, embeds or extends them, edge by edge back, nearest first — grouped
+by context, with the tests among them. A file stands for every symbol it
+declares.
+
+Only as complete as the graph: in fast mode an ambiguous call has no edge, so a
+dependent can be missing — build with 'gofi index code --deep' before
+concluding nothing depends on it.`,
+		Example: `gofi impact service.Bill
+gofi impact backend/domain/pedidos/model/entity.go
+gofi impact Repository.Save --min-conf 1`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			engine, err := openEngine()
+			if err != nil {
+				return err
+			}
+			conf, _ := cmd.Flags().GetFloat64("min-conf")
+			view, err := engine.Impact(args, conf)
+			return printView(cmd, view, err)
+		},
+	}
+	cmd.Flags().Float64("min-conf", 0, i18n.T("cmd.impact.flag.min_conf"))
+	cmd.Flags().Bool("json", false, i18n.T("cmd.flag.json"))
+	return cmd
+}
+
 // openEngine opens the retrieval core on the project the index commands
 // build, reading the backend language from .gofi.yaml when it can. A broken
 // config does not stop a read: the indexes on disk are still there.
