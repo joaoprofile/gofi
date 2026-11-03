@@ -26,4 +26,6 @@ keywords: [estrutura, layout, rust, axum, sqlx, módulo, contexto, handler, serv
 
 **Teste em arquivo próprio**, não `mod tests` dentro do arquivo do código: quem
 escreve o código nunca escreve o teste que o julga, e o gofi distingue um do
-outro pelo nome do arquivo (o pack `rust`).
+outro pelo nome do arquivo (o pack `rust`). Por isso a declaração
+`#[cfg(test)] mod {camada}_tests;` no `mod.rs` — e o arquivo de teste vazio —
+é de quem cria a camada: o `mod.rs` é código, e o papel dos testes não o toca.
