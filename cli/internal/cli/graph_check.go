@@ -24,6 +24,17 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
+// projectPack is the backend language's pack, bound to the project's
+// module: where its context's code is, in a language whose folders follow
+// its packages.
+func projectPack(cfg *config.GofiConfig) (*pack.Pack, error) {
+	p, err := pack.Load(backendLanguage(cfg))
+	if err != nil || p == nil || cfg.Backend == nil {
+		return p, err
+	}
+	return p.Bind(cfg.Backend.Module), nil
+}
+
 // projectGraph is the path of the project scope's graph, and the folder its
 // paths are relative to; ok is false when the project has none.
 func projectGraph(root string) (file, tree string, ok bool) {
@@ -91,7 +102,7 @@ func graphCheck(out io.Writer, cfg *config.GofiConfig, root, baseline, diffOut, 
 	if err != nil {
 		return err
 	}
-	lp, err := pack.Load(backendLanguage(cfg))
+	lp, err := projectPack(cfg)
 	if err != nil {
 		return err
 	}
@@ -295,7 +306,7 @@ func symbolAt(root string) func(file string, line int) string {
 // folders, ending in / — hold, in the graph the run started from: what a
 // plan's files reach before a line of it is written. nil when the run has
 // no baseline.
-func planReach(work, run, language string) func(files []string) []string {
+func planReach(work, run string, lp *pack.Pack) func(files []string) []string {
 	_, tree, ok := projectGraph(work)
 	if !ok {
 		return nil
@@ -304,7 +315,6 @@ func planReach(work, run, language string) func(files []string) []string {
 	if err != nil {
 		return nil
 	}
-	lp, _ := pack.Load(language)
 	return func(files []string) []string {
 		var targets []string
 		for _, f := range files {

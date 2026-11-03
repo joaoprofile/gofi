@@ -106,3 +106,32 @@ func TestFastAPILayersAndContexts(t *testing.T) {
 		t.Error("IsTest")
 	}
 }
+
+func TestQuarkusLayersAndContextsFollowTheModule(t *testing.T) {
+	p, err := Load("java")
+	if err != nil || p == nil {
+		t.Fatalf("Load(java) = %v, %v", p, err)
+	}
+	p = p.Bind("com.acme.loja")
+	for file, want := range map[string][2]string{
+		"src/main/java/com/acme/loja/pontos/PontosResource.java":   {"resource", "api"},
+		"src/main/java/com/acme/loja/pontos/PontosRepository.java": {"repository", "data"},
+		"src/main/java/com/acme/loja/pontos/dto/ConsultaDto.java":  {"model", "data"},
+		"src/main/java/com/acme/loja/pontos/PontosService.java":    {"service", "domain"},
+		"src/main/java/com/acme/loja/pontos/Nivel.java":            {"domain", "domain"},
+	} {
+		layer, plan := p.LayerOf(file)
+		if layer != want[0] || plan != want[1] {
+			t.Errorf("LayerOf(%s) = %s, %s; want %s, %s", file, layer, plan, want[0], want[1])
+		}
+	}
+	for file, want := range map[string]string{
+		"src/main/java/com/acme/loja/pontos/PontosService.java":     "pontos",
+		"src/test/java/com/acme/loja/pontos/PontosServiceTest.java": "pontos",
+		"src/main/java/com/acme/loja/Main.java":                     "",
+	} {
+		if got := p.ContextOf(file); got != want {
+			t.Errorf("ContextOf(%s) = %q, want %q", file, got, want)
+		}
+	}
+}

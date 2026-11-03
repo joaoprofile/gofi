@@ -49,11 +49,29 @@ type Pack struct {
 	// Layers are what a backend in the language is divided into, by where
 	// their files are; the first whose paths match a file is its layer.
 	Layers []Layer `yaml:"layers,omitempty"`
-	// Contexts is where a context's code lives, relative to the backend
-	// folder, with {context} for its name: domain/{context}/.
-	Contexts string `yaml:"contexts,omitempty"`
+	// Contexts are where a context's code lives, relative to the backend
+	// folder, with {context} for its name: domain/{context}/ — one pattern,
+	// or several when the tests live under a root of their own.
+	Contexts Patterns `yaml:"contexts,omitempty"`
 	// Graph is what the graph stage holds the code to.
 	Graph GraphRules `yaml:"graph,omitempty"`
+}
+
+// Patterns are one path pattern or several; YAML takes a string or a list.
+type Patterns []string
+
+// UnmarshalYAML reads a single pattern as a list of one.
+func (p *Patterns) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		*p = Patterns{n.Value}
+		return nil
+	}
+	var list []string
+	if err := n.Decode(&list); err != nil {
+		return err
+	}
+	*p = list
+	return nil
 }
 
 // Layer is one layer of the language's backend: the paths of its files,
@@ -70,6 +88,33 @@ type Layer struct {
 // "<package>" from <layer>".
 type GraphRules struct {
 	Rules []string `yaml:"rules,omitempty"`
+}
+
+// Bind puts the project's module into the pack's paths: {pkg} is the
+// module as a path — com.acme.svc is com/acme/svc —, where a language whose
+// folders follow its packages keeps a context's code.
+func (p *Pack) Bind(module string) *Pack {
+	if p == nil {
+		return nil
+	}
+	pkg := strings.ReplaceAll(strings.TrimSpace(module), ".", "/")
+	if pkg == "" {
+		return p
+	}
+	b := *p
+	b.Contexts = make(Patterns, len(p.Contexts))
+	for i, c := range p.Contexts {
+		b.Contexts[i] = strings.ReplaceAll(c, "{pkg}", pkg)
+	}
+	b.Layers = make([]Layer, len(p.Layers))
+	for i, l := range p.Layers {
+		l.Paths = append([]string{}, l.Paths...)
+		for j := range l.Paths {
+			l.Paths[j] = strings.ReplaceAll(l.Paths[j], "{pkg}", pkg)
+		}
+		b.Layers[i] = l
+	}
+	return &b
 }
 
 // LayerOf is the layer of a file relative to the backend folder, and the
@@ -92,11 +137,19 @@ func (p *Pack) LayerOf(file string) (layer, plan string) {
 // ContextOf is the context whose code a file is, relative to the backend
 // folder: the name where the pack's contexts pattern says {context}.
 func (p *Pack) ContextOf(file string) string {
-	if p == nil || p.Contexts == "" {
+	if p == nil {
 		return ""
 	}
-	pat := strings.Split(strings.Trim(p.Contexts, "/"), "/")
 	segs := strings.Split(strings.TrimPrefix(strings.ReplaceAll(file, "\\", "/"), "./"), "/")
+	for _, c := range p.Contexts {
+		if name := contextIn(strings.Split(strings.Trim(c, "/"), "/"), segs); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func contextIn(pat, segs []string) string {
 	// The context is a folder: the file is below it, never the folder's name.
 	if len(segs) <= len(pat) {
 		return ""
@@ -162,7 +215,12 @@ func matches(patterns []string, file string) bool {
 type Command struct {
 	Run    string `yaml:"run"`
 	Format string `yaml:"format"`
+	// Report may be a glob: every file it matches is read — Surefire writes
+	// one per test class.
 	Report string `yaml:"report,omitempty"`
+	// ClassFile places a JUnit case its report gives no file for, from its
+	// class: {class} is the class name as a path, com/acme/x/XTest.
+	ClassFile string `yaml:"class_file,omitempty"`
 }
 
 // Load reads the pack gofi carries for a language; a language with none has
@@ -208,5 +266,6 @@ func (c Command) Expand(src string) Command {
 	}
 	c.Run = strings.ReplaceAll(c.Run, "{src}", src)
 	c.Report = strings.ReplaceAll(c.Report, "{src}", src)
+	c.ClassFile = strings.ReplaceAll(c.ClassFile, "{src}", src)
 	return c
 }

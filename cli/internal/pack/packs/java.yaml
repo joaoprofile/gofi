@@ -1,0 +1,39 @@
+# The Java pack, for a Quarkus backend built with Maven (decision 0002,
+# D13): the commands the loop's sensors run and the format each reports in.
+# {src} is the backend folder of .gofi.yaml; {pkg} the backend's module as a
+# path (backend.module: com.acme.svc is com/acme/svc).
+schema: gofi-pack/v1
+language: java
+tests: ["*Test.java", "*IT.java"]
+sources: ["*.java"]
+sensors:
+  # Cheapest first: a run stops at the first stage that fails. javac through
+  # Maven places an error as [ERROR] file:[line,col].
+  build:  {run: "cd {src} && mvn -q -B compile test-compile", format: lines}
+  # Surefire writes a JUnit report per test class, naming the class, not its
+  # file: a skipped test proves nothing, so it fails the stage.
+  test:   {run: "cd {src} && mvn -q -B test", format: junit, report: "{src}/target/surefire-reports/TEST-*.xml", class_file: "{src}/src/test/java/{class}.java"}
+# A context is a package below the module, its layers by class name and
+# folder (sdk/java/knowledge/structure.md); a class of it in no layer is its
+# domain. The tests mirror the code under src/test/java.
+contexts: ["src/main/java/{pkg}/{context}/", "src/test/java/{pkg}/{context}/"]
+layers:
+  - {name: resource,   plan: api,         paths: ["src/main/java/{pkg}/*/*Resource.java", "src/main/java/{pkg}/*/*ExceptionMapper.java"]}
+  - {name: repository, plan: data,        paths: ["src/main/java/{pkg}/*/*Repository.java"]}
+  - {name: model,      plan: data,        paths: ["src/main/java/{pkg}/*/entity/**", "src/main/java/{pkg}/*/dto/**"]}
+  - {name: migration,  plan: data,        paths: ["src/main/resources/db/migration/**"]}
+  - {name: adapter,    plan: integration, paths: ["src/main/java/{pkg}/*/adapter/**", "src/main/java/{pkg}/*/*Client.java"]}
+  - {name: service,    plan: domain,      paths: ["src/main/java/{pkg}/*/*Service.java"]}
+  - {name: domain,     plan: domain,      paths: ["src/main/java/{pkg}/*/*"]}
+graph:
+  # sdk/java/knowledge/layers.md: a resource never reaches the repository, a
+  # repository never knows its caller, the service never the HTTP.
+  rules:
+    - "deny: resource -> repository"
+    - "deny: repository -> service"
+    - "deny: repository -> resource"
+    - "deny: service -> resource"
+    - "deny: model -> service"
+    - "deny: model -> repository"
+    - "deny: model -> resource"
+    - "deny: new-cycle"

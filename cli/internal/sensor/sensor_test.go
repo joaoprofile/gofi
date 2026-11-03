@@ -159,3 +159,32 @@ func TestAnAbsolutePathIsPlacedFromTheRoot(t *testing.T) {
 		t.Errorf("findings %+v", res.Findings)
 	}
 }
+
+// Surefire writes a report per class, naming the class and not its file:
+// every report the glob matches is read, and a case is placed by its class.
+func TestSurefireReportsArePlacedByClass(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "backend", "target", "surefire-reports")
+	_ = os.MkdirAll(dir, 0o755)
+	write := func(name, body string) { _ = os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644) }
+	write("TEST-a.xml", `<testsuite name="com.acme.x.ATest"><testcase classname="com.acme.x.ATest" name="ok"/><testcase classname="com.acme.x.ATest" name="pulado"><skipped/></testcase></testsuite>`)
+	write("TEST-b.xml", `<testsuite name="com.acme.x.BTest"><testcase classname="com.acme.x.BTest" name="falha"><failure message="expected 1"/></testcase></testsuite>`)
+	c := pack.Command{Format: pack.FormatJUnit, Report: "backend/target/surefire-reports/TEST-*.xml",
+		ClassFile: "backend/src/test/java/{class}.java"}
+	// The stage removes the reports before it runs: the command writes them
+	// again, as Surefire does.
+	saved := t.TempDir()
+	for _, n := range []string{"TEST-a.xml", "TEST-b.xml"} {
+		b, _ := os.ReadFile(filepath.Join(dir, n))
+		_ = os.WriteFile(filepath.Join(saved, n), b, 0o644)
+	}
+	c.Run = "mkdir -p backend/target/surefire-reports && cp " + saved + "/* backend/target/surefire-reports/"
+	res := Runner{Root: root, Commands: map[string]pack.Command{"test": c}}.Run(context.Background(), []string{"test"})
+	var files []string
+	for _, f := range res.Findings {
+		files = append(files, f.File+" "+f.Rule)
+	}
+	if len(res.Failed) != 1 || strings.Join(files, ",") != "backend/src/test/java/com/acme/x/ATest.java pulado,backend/src/test/java/com/acme/x/BTest.java falha" {
+		t.Errorf("failed %v, findings %v", res.Failed, files)
+	}
+}
