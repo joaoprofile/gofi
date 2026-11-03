@@ -26,10 +26,11 @@ const (
 	FormatGoTestJSON = "go-test-json" // go test -json events
 	FormatSARIF      = "sarif"        // static analysis, any linter
 	FormatJUnit      = "junit"        // JUnit XML — jest-junit, pytest, surefire, nextest
+	FormatCargoTest  = "cargo-test"   // libtest's output — cargo test
 	FormatExit       = "exit"         // only the exit code says anything
 )
 
-var formats = []string{FormatLines, FormatGoTestJSON, FormatSARIF, FormatJUnit, FormatExit}
+var formats = []string{FormatLines, FormatGoTestJSON, FormatSARIF, FormatJUnit, FormatCargoTest, FormatExit}
 
 //go:embed packs/*.yaml
 var builtin embed.FS

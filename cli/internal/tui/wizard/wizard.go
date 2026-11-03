@@ -233,7 +233,7 @@ func buildSteps(r *Result, found detect.Result, sdkGo *string, configureRemote, 
 			},
 			Options: []flow.Option{
 				{Label: "Go", Value: config.LanguageGo, Hint: i18n.T("wizard.lang.sdk")},
-				{Label: "Rust", Value: config.LanguageRust},
+				{Label: "Rust (Axum + sqlx)", Value: config.LanguageRust},
 				{Label: "Node.js (NestJS)", Value: config.LanguageNodeJS},
 				{Label: "Python (FastAPI)", Value: config.LanguagePython},
 				{Label: "Java", Value: config.LanguageJava},

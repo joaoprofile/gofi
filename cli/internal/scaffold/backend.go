@@ -11,6 +11,7 @@ var backendScaffolds = map[string]string{
 	"nodejs": "nestjs",
 	"python": "fastapi",
 	"java":   "quarkus",
+	"rust":   "axum",
 }
 
 // HasBackendScaffold reports whether gofi can bootstrap a project skeleton for

@@ -135,3 +135,27 @@ func TestQuarkusLayersAndContextsFollowTheModule(t *testing.T) {
 		}
 	}
 }
+
+func TestAxumLayersAndContexts(t *testing.T) {
+	p, err := Load("rust")
+	if err != nil || p == nil {
+		t.Fatalf("Load(rust) = %v, %v", p, err)
+	}
+	for file, want := range map[string][2]string{
+		"src/pontos/handler.rs":       {"handler", "api"},
+		"src/pontos/repository.rs":    {"repository", "data"},
+		"src/pontos/dto.rs":           {"model", "data"},
+		"src/pontos/service.rs":       {"service", "domain"},
+		"src/pontos/mod.rs":           {"domain", "domain"},
+		"src/pontos/service_tests.rs": {"domain", "domain"},
+		"src/main.rs":                 {"", ""},
+	} {
+		layer, plan := p.LayerOf(file)
+		if layer != want[0] || plan != want[1] {
+			t.Errorf("LayerOf(%s) = %s, %s; want %s, %s", file, layer, plan, want[0], want[1])
+		}
+	}
+	if !p.IsTest("src/pontos/service_tests.rs") || p.IsTest("src/pontos/service.rs") {
+		t.Error("IsTest")
+	}
+}

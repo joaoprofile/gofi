@@ -1,0 +1,25 @@
+# {{.ProjectName}}
+
+Axum + sqlx service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+.
+├── {{.SourceRoot}}/
+│   ├── Cargo.toml
+│   ├── migrations/
+│   └── src/
+│       ├── main.rs
+│       └── <contexto>/      # um módulo por contexto
+└── .claude/                 # gofi agents config
+```
+
+## Build, lint & test
+
+```sh
+cd {{.SourceRoot}}
+cargo build
+cargo clippy -- -D warnings
+cargo test
+```
