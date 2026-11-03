@@ -498,7 +498,7 @@ func TestExecutePipeline_NonGoBackendsAreReported(t *testing.T) {
 	}
 }
 
-// Python has no scaffold. Init must still complete — the .gofi.yaml and the
+// C# has no scaffold. Init must still complete — the .gofi.yaml and the
 // .claude/ harness are the point — and say so instead of writing nothing
 // silently.
 func TestExecutePipeline_BackendWithoutScaffoldIsReported(t *testing.T) {
@@ -506,8 +506,8 @@ func TestExecutePipeline_BackendWithoutScaffoldIsReported(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "my-svc")
 	r := goWizardResult(target)
-	r.Language = config.LanguagePython
-	r.Module = ""
+	r.Language = config.LanguageCSharp
+	r.Module = "Acme.MySvc"
 
 	if err := executePipeline(r); err != nil {
 		t.Fatalf("pipeline: %v", err)
@@ -516,7 +516,7 @@ func TestExecutePipeline_BackendWithoutScaffoldIsReported(t *testing.T) {
 		t.Errorf("expected .gofi.yaml written: %v", err)
 	}
 	if len(r.Skipped) == 0 {
-		t.Error("expected the python backend to be reported as skipped")
+		t.Error("expected the csharp backend to be reported as skipped")
 	}
 }
 
@@ -728,5 +728,33 @@ func TestExecutePipeline_NestJSBackend(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, "go.work")); !os.IsNotExist(err) {
 		t.Error("go.work written for a Node backend")
+	}
+}
+
+// A FastAPI backend gets the starter its pack's sensors run — mypy, ruff,
+// pytest with JUnit — and its virtual environment.
+func TestExecutePipeline_FastAPIBackend(t *testing.T) {
+	useFixtureRepo(t)
+	forceToolchain(t, toolchain.Preflight{})
+	var made []string
+	orig := pythonEnv
+	pythonEnv = func(dir string) error { made = append(made, dir); return nil }
+	t.Cleanup(func() { pythonEnv = orig })
+	target := filepath.Join(t.TempDir(), "my-svc")
+	r := goWizardResult(target)
+	r.Language, r.Module = "python", ""
+	if err := executePipeline(r); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	for _, p := range []string{"src/pyproject.toml", "src/app/main.py", "src/app/__init__.py"} {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			t.Errorf("%s not scaffolded: %v", p, err)
+		}
+	}
+	if py, _ := os.ReadFile(filepath.Join(target, "src/pyproject.toml")); !strings.Contains(string(py), `name = "my-svc"`) {
+		t.Errorf("pyproject:\n%s", py)
+	}
+	if len(made) != 1 || made[0] != filepath.Join(target, "src") {
+		t.Errorf("venv made in %v", made)
 	}
 }

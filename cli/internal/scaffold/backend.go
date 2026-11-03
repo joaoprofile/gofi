@@ -9,6 +9,7 @@ package scaffold
 var backendScaffolds = map[string]string{
 	"go":     "golang",
 	"nodejs": "nestjs",
+	"python": "fastapi",
 }
 
 // HasBackendScaffold reports whether gofi can bootstrap a project skeleton for

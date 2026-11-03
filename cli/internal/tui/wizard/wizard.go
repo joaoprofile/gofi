@@ -193,7 +193,10 @@ func Run(initial *config.GofiConfig, found detect.Result, meta Meta) (*Result, e
 func buildSteps(r *Result, found detect.Result, sdkGo *string, configureRemote, proceed *bool, editing bool) []flow.Step {
 	has := func(env string) bool { return slices.Contains(r.Environments, env) }
 	backGo := func() bool { return has(EnvBack) && r.Language == config.LanguageGo }
-	needsModule := func() bool { return has(EnvBack) && r.Language != config.LanguageRust }
+	// Rust and Python name their package after the project: no module to ask.
+	needsModule := func() bool {
+		return has(EnvBack) && r.Language != config.LanguageRust && r.Language != config.LanguagePython
+	}
 
 	return []flow.Step{
 		{
@@ -231,7 +234,8 @@ func buildSteps(r *Result, found detect.Result, sdkGo *string, configureRemote, 
 			Options: []flow.Option{
 				{Label: "Go", Value: config.LanguageGo, Hint: i18n.T("wizard.lang.sdk")},
 				{Label: "Rust", Value: config.LanguageRust},
-				{Label: "Node.js", Value: config.LanguageNodeJS},
+				{Label: "Node.js (NestJS)", Value: config.LanguageNodeJS},
+				{Label: "Python (FastAPI)", Value: config.LanguagePython},
 				{Label: "Java", Value: config.LanguageJava},
 				{Label: "C#", Value: config.LanguageCSharp},
 			},
@@ -450,7 +454,7 @@ func (r *Result) Summary() string {
 	rows := []row{{i18n.T("wizard.sum.name"), r.Name}, {i18n.T("wizard.sum.root"), r.Root}}
 	if r.Has(EnvBack) {
 		b := r.Language + " (" + r.SourcePath + "/)"
-		if r.Module != "" && r.Language != config.LanguageRust {
+		if r.Module != "" && r.Language != config.LanguageRust && r.Language != config.LanguagePython {
 			b += "  " + r.Module
 		}
 		rows = append(rows, row{i18n.T("wizard.sum.backend"), b})

@@ -1,0 +1,26 @@
+# {{.ProjectName}}
+
+FastAPI service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+.
+├── {{.SourceRoot}}/
+│   ├── pyproject.toml
+│   ├── .venv/               # criado pelo gofi init
+│   ├── migrations/
+│   └── app/
+│       ├── main.py
+│       └── <contexto>/      # um pacote por contexto
+└── .claude/                 # gofi agents config
+```
+
+## Typecheck, lint & test
+
+```sh
+cd {{.SourceRoot}}
+.venv/bin/python -m mypy app
+.venv/bin/python -m ruff check app
+.venv/bin/python -m pytest app
+```
