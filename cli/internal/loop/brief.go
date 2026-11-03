@@ -36,6 +36,9 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 				if where == "" {
 					where = f.Rule
 				}
+				if f.Symbol != "" {
+					where += " · " + f.Symbol
+				}
 				fmt.Fprintf(&b, "- `%s` %s\n", where, clip(f.Message, 1200))
 			}
 			b.WriteString("\n")

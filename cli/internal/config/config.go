@@ -561,6 +561,9 @@ type Graph struct {
 	Deep bool `yaml:"deep"`
 	// Exclude are directory glob patterns left out of the scan.
 	Exclude []string `yaml:"exclude,omitempty"`
+	// Rules are the project's rules for its code's architecture, besides
+	// the language pack's: "deny: handler -> repository" (0002, D11).
+	Rules []string `yaml:"rules,omitempty"`
 }
 
 // MarshalYAML writes the block with the one comment a reader needs. Everything
@@ -602,6 +605,15 @@ func (g Graph) MarshalYAML() (interface{}, error) {
 		}
 		add("exclude", "pastas fora da varredura, além das ignoradas por padrão.", seq)
 	}
+	if len(g.Rules) > 0 {
+		seq := &yaml.Node{Kind: yaml.SequenceNode}
+		for _, r := range g.Rules {
+			seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: r})
+		}
+		add("rules", "regras de arquitetura do projeto, além das do pack da linguagem — cada\n"+
+			"execução checa as arestas que a mudança criou: deny: handler -> repository,\n"+
+			"deny: import \"net/http\" from service, deny: new-cycle.", seq)
+	}
 	return node, nil
 }
 
@@ -617,6 +629,14 @@ func (g *Graph) HooksOn() bool {
 
 // UseDeep reports whether builds use the type-checker.
 func (g *Graph) UseDeep() bool { return g != nil && g.Deep }
+
+// ProjectRules returns the project's architecture rules.
+func (g *Graph) ProjectRules() []string {
+	if g == nil {
+		return nil
+	}
+	return g.Rules
+}
 
 // Excludes returns the scan exclusions.
 func (g *Graph) Excludes() []string {

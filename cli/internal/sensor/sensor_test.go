@@ -99,3 +99,15 @@ func TestSARIFIsRead(t *testing.T) {
 		t.Errorf("findings %+v", got)
 	}
 }
+
+// The graph stage places a broken rule at its symbol: SARIF's logical
+// location.
+func TestSARIFSymbolIsRead(t *testing.T) {
+	doc := `{"runs":[{"results":[{"ruleId":"deny: handler -> repository","level":"error","message":{"text":"x"},
+	"locations":[{"physicalLocation":{"artifactLocation":{"uri":"backend/domain/p/handler/h.go"},"region":{"startLine":9}},
+	"logicalLocations":[{"fullyQualifiedName":"domain/p/handler.Create"}]}]}]}]}`
+	got := Read("graph", pack.FormatSARIF, []byte(doc), nil, "")
+	if len(got) != 1 || got[0].Symbol != "domain/p/handler.Create" || got[0].File != "backend/domain/p/handler/h.go" {
+		t.Errorf("findings %+v", got)
+	}
+}
