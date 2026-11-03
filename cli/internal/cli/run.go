@@ -182,6 +182,14 @@ func runRun(cmd *cobra.Command, args []string) error {
 		flowName, _ := cmd.Flags().GetString("flow")
 		return explainRun(cmd.OutOrStdout(), root, cfg, args[0], flowName)
 	}
+	// A change not approved yet goes through the contract first, here, with
+	// the person — even when the delivery itself runs detached.
+	if len(args) > 0 {
+		events, _ := cmd.Flags().GetBool("events")
+		if err := contractGate(cmd, root, cfg, args[0], !events); err != nil {
+			return err
+		}
+	}
 	if detach, _ := cmd.Flags().GetBool("detach"); detach {
 		if ctxName != "" {
 			return errors.New(i18n.T("run.detach_which"))
@@ -438,27 +446,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		return landRun(ctx, out, root, prior, tree, wait, o.Events, report)
 	}
 
-	// Each role's turn runs on its tier's model: an internal role has no
-	// skill frontmatter to name one.
-	open := func(dir string, _ host.Tier, _ []string) engine.Session { return runPorts.open(dir) }
-	if runPorts.open == nil {
-		mode := o.Mode
-		if mode == "" {
-			mode = "acceptEdits"
-		}
-		// Every agent of the run works on the project's host (ai.host).
-		session, err := agentSessions(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
-		if err != nil {
-			return "", err
-		}
-		h, _ := host.Get(cfg.AI.Host)
-		open = func(_ string, t host.Tier, grant []string) engine.Session {
-			model := ""
-			if h.SkillModel && t != "" {
-				model = h.Model(t, cfg.AI.Tiers)
-			}
-			return session(model, grant)
-		}
+	open, err := turnSessions(cfg, work, o.Mode)
+	if err != nil {
+		return "", err
 	}
 	roles, problems := role.Load(layout.RoleDirs(work)...)
 	if len(problems) > 0 {
@@ -982,6 +972,30 @@ func sensorCommands(cfg *config.GofiConfig) (map[string]pack.Command, error) {
 	return cmds, nil
 }
 
+// turnSessions opens the session of a role's turn, in work: on the
+// project's host (ai.host), on its tier's model — an internal role has no
+// skill frontmatter to name one —, with the tools its contract grants.
+func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, tier host.Tier, grant []string) engine.Session, error) {
+	if runPorts.open != nil {
+		return func(dir string, _ host.Tier, _ []string) engine.Session { return runPorts.open(dir) }, nil
+	}
+	if mode == "" {
+		mode = "acceptEdits"
+	}
+	session, err := agentSessions(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
+	if err != nil {
+		return nil, err
+	}
+	h, _ := host.Get(cfg.AI.Host)
+	return func(_ string, t host.Tier, grant []string) engine.Session {
+		model := ""
+		if h.SkillModel && t != "" {
+			model = h.Model(t, cfg.AI.Tiers)
+		}
+		return session(model, grant)
+	}, nil
+}
+
 // engineAgent runs a role's turn in a fresh engine session and keeps what
 // the agent did in agents/<node>-<iter>.ndjson.
 type engineAgent struct {
@@ -990,6 +1004,9 @@ type engineAgent struct {
 	open      func(dir string, tier host.Tier, grant []string) engine.Session
 	out       io.Writer
 	quiet     bool // events mode: the transcript holds the tool calls
+	// transcript, when set, is where the turn is recorded instead of the
+	// run's agents folder: a turn outside a run.
+	transcript string
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
@@ -999,7 +1016,10 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 	if id == "" {
 		id = loop.AgentID(t.Node, t.Iter)
 	}
-	path := loop.Transcript(a.root, a.run, id)
+	path := a.transcript
+	if path == "" {
+		path = loop.Transcript(a.root, a.run, id)
+	}
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	transcript, err := os.Create(path)
 	if err != nil {

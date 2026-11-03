@@ -1,0 +1,12 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by gofi review and by gofi run before the
+#              approval, never by a person's slash command (0002, D19).
+#   stage      contract: it reads the change before the person approves it.
+#   tools      it reads, and writes the one review file the turn names.
+tier: standard
+visibility: internal
+stage: contract
+tools: [read, write, search, gofi]
