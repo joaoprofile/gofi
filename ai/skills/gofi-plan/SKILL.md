@@ -24,6 +24,10 @@ Próprias do `/gofi-plan`:
    cenários; o plano é do código.
 4. **Sem decisão nova.** O que o design não diz e muda o plano — uma camada a
    mais, um contrato — é pergunta: grave no arquivo de decisões do turno.
+5. **Só o escopo aprovado.** O que a proposta põe em `## Fora desta mudança`
+   não entra em tarefa nenhuma, nem quando a convenção da camada costuma
+   trazê-lo junto (registrar a rota, subir o servidor, o `wire`): o plano
+   não escreve arquivo que só sirva a isso.
 
 ## As camadas
 
