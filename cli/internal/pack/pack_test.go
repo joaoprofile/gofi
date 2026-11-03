@@ -53,3 +53,30 @@ func TestGoLayersAndContexts(t *testing.T) {
 		}
 	}
 }
+
+func TestNestLayersAndContexts(t *testing.T) {
+	p, err := Load("nodejs")
+	if err != nil || p == nil {
+		t.Fatalf("Load(nodejs) = %v, %v", p, err)
+	}
+	for file, want := range map[string][2]string{
+		"src/pontos/pontos.controller.ts":      {"controller", "api"},
+		"src/pontos/pontos.repository.ts":      {"repository", "data"},
+		"src/pontos/dto/consulta.dto.ts":       {"model", "data"},
+		"src/pontos/entities/pontos.entity.ts": {"model", "data"},
+		"src/pontos/pontos.service.ts":         {"service", "domain"},
+		"src/pontos/pontos.module.ts":          {"domain", "domain"},
+		"src/main.ts":                          {"", ""},
+	} {
+		layer, plan := p.LayerOf(file)
+		if layer != want[0] || plan != want[1] {
+			t.Errorf("LayerOf(%s) = %s, %s; want %s, %s", file, layer, plan, want[0], want[1])
+		}
+	}
+	if c := p.ContextOf("src/pontos/pontos.service.ts"); c != "pontos" {
+		t.Errorf("ContextOf = %q", c)
+	}
+	if !p.IsTest("src/pontos/pontos.service.spec.ts") || p.IsTest("src/pontos/pontos.service.ts") {
+		t.Error("IsTest")
+	}
+}

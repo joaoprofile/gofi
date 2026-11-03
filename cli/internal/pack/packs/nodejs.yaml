@@ -1,0 +1,42 @@
+# The Node.js pack, for a NestJS backend (decision 0002, D13): the commands
+# the loop's sensors run and the format each reports in. {src} is the
+# backend folder of .gofi.yaml; a project overrides a stage with
+# loop.sensors. The starter (gofi init) installs what each command needs.
+schema: gofi-pack/v1
+language: nodejs
+tests: ["*.spec.ts", "*.test.ts"]
+sources: ["*.ts"]
+sensors:
+  # Cheapest first: a run stops at the first stage that fails.
+  build:  {run: "cd {src} && npx --no-install tsc --noEmit --pretty false -p tsconfig.json", format: lines}
+  static: {run: "cd {src} && npx --no-install eslint . -f @microsoft/eslint-formatter-sarif -o .gofi-eslint.sarif", format: sarif, report: "{src}/.gofi-eslint.sarif"}
+  # jest-junit says which tests failed and which were skipped: a skipped
+  # test proves nothing, so it fails the stage.
+  test:   {run: "cd {src} && JEST_JUNIT_OUTPUT_FILE=.gofi-junit.xml JEST_JUNIT_ADD_FILE_ATTRIBUTE=true npx --no-install jest --ci --reporters=default --reporters=jest-junit", format: junit, report: "{src}/.gofi-junit.xml"}
+# A context is a Nest module, src/<context>/, its layers by file and folder
+# (sdk/nodejs/knowledge/structure.md); a file of the module in no layer is
+# its domain. The plan's layer of each is gofi-plan's.
+contexts: "src/{context}/"
+layers:
+  - {name: controller, plan: api,         paths: ["src/*/*.controller.ts", "src/*/guards/**", "src/*/*.guard.ts"]}
+  - {name: repository, plan: data,        paths: ["src/*/*.repository.ts", "src/*/repositories/**"]}
+  - {name: model,      plan: data,        paths: ["src/*/entities/**", "src/*/dto/**", "src/*/*.entity.ts", "src/*/*.dto.ts"]}
+  - {name: migration,  plan: data,        paths: ["src/migrations/**"]}
+  - {name: adapter,    plan: integration, paths: ["src/*/adapters/**", "src/*/*.adapter.ts", "src/*/*.consumer.ts"]}
+  - {name: service,    plan: domain,      paths: ["src/*/*.service.ts"]}
+  - {name: domain,     plan: domain,      paths: ["src/*/*"]}
+graph:
+  # sdk/nodejs/knowledge/layers.md: a controller never reaches the
+  # repository, a repository never knows its caller, the service never the
+  # HTTP.
+  rules:
+    - "deny: controller -> repository"
+    - "deny: repository -> service"
+    - "deny: repository -> controller"
+    - "deny: service -> controller"
+    - "deny: model -> service"
+    - "deny: model -> repository"
+    - "deny: model -> controller"
+    - "deny: import \"express\" from service"
+    - "deny: import \"express\" from repository"
+    - "deny: new-cycle"
