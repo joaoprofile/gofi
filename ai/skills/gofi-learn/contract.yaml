@@ -1,0 +1,14 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by the flow alone, at the end of a run.
+#   stage      learn: after the delivery of a change accepted with rework.
+#   tools      it reads, and writes the one lessons file the turn names; the
+#              source files are guarded.
+tier: standard
+visibility: internal
+stage: learn
+triggers:
+  - all: [run.reworked]
+tools: [read, write, search, gofi]

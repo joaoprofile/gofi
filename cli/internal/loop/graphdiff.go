@@ -120,3 +120,7 @@ func outside(reach []string, own string) []string {
 	slices.Sort(out)
 	return out
 }
+
+// LessonsFile is where gofi-learn writes the lessons of a run, relative to
+// the tree it works in.
+func LessonsFile(run string) string { return slash.Join(RunsDir, run, "lessons.json") }

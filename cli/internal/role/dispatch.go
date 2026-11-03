@@ -48,6 +48,9 @@ var predicates = map[string][]string{
 	// tests.due: the tests are to be written — no test turn yet, or a
 	// finding of the audit is in a test file.
 	"tests.due": nil,
+	// run.reworked: the run went back to work at least once — a sensor or
+	// the audit refused it —: something in it is worth learning.
+	"run.reworked": nil,
 	// diff.touches(x): the code graph says the change touched layer x —
 	// a symbol added, changed or removed in it since the run started.
 	"diff.touches": Layers,

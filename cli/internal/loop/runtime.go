@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -149,6 +150,11 @@ type State struct {
 	// the tests were written by the test stage once.
 	Plan   *Plan `json:"plan,omitempty"`
 	Tested bool  `json:"tested,omitempty"`
+	// Seen is every finding the audit raised in the run, as first raised, and
+	// SensorFailures how many times each sensor stage refused the work:
+	// what the run had to fix, for the lessons proposed of it (0002, §7).
+	Seen           []Finding      `json:"seen,omitempty"`
+	SensorFailures map[string]int `json:"sensor_failures,omitempty"`
 	// Diff is what the graph stage last said the change did to the code;
 	// Reach the contexts besides the change's own that depend on what it
 	// touches — or, before any code, on what its plan writes (0002, D11).
@@ -355,6 +361,12 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 	case KindSensor:
 		res := r.Sensors.Run(ctx, n.Stages)
 		s.Sensor = &res
+		for _, st := range res.Failed {
+			if s.SensorFailures == nil {
+				s.SensorFailures = map[string]int{}
+			}
+			s.SensorFailures[st]++
+		}
 		r.weighSensors(s, n.Stages)
 		r.readDiff(s, n.Stages)
 	case KindPolicy:
@@ -474,6 +486,9 @@ func (r *Runner) facts(s *State) role.Facts {
 	if r.testsDue(s) {
 		f["tests.due"] = true
 	}
+	if s.Rounds > 0 {
+		f["run.reworked"] = true
+	}
 	if s.Diff != nil {
 		for _, l := range s.Diff.Layers {
 			f["diff.touches("+l+")"] = true
@@ -556,6 +571,12 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		}
 	case "test":
 		s.Tested = true
+	case "learn":
+		if err := r.keepLessons(s); err != nil {
+			a.Status, a.Error = AgentFailed, err.Error()
+			_ = saveAgent(r.Root, s.Run, a)
+			return fmt.Errorf("%s: %w", rl.Name, err)
+		}
 	}
 	s.Answered, s.Answers = false, nil
 	a.Status = AgentDone
@@ -584,6 +605,11 @@ func (r *Runner) judge(s *State, v *verdict.Verdict) {
 	now := map[string]bool{}
 	for _, f := range open {
 		now[f.Fingerprint] = true
+	}
+	for _, f := range open {
+		if !slices.ContainsFunc(s.Seen, func(x Finding) bool { return x.Fingerprint == f.Fingerprint }) {
+			s.Seen = append(s.Seen, f)
+		}
 	}
 	resolved := map[string]bool{}
 	for _, fp := range s.Resolved {
