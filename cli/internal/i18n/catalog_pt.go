@@ -564,6 +564,8 @@ var catalogPT = map[string]string{
 	"cmd.show.short":                 "Descreve um símbolo, documento, seção, contexto ou tabela: o que é?",
 	"cmd.show.flag.limit":            "máximo de links ou relações exibidos por grupo",
 	"cmd.path.short":                 "Mostra como um símbolo chega a outro no grafo de código",
+	"cmd.impact.short":               "Mostra o que uma mudança em símbolos ou arquivos pode quebrar",
+	"cmd.impact.flag.min_conf":       "deixa de fora arestas abaixo desta confiança (0 a 1)",
 	"cmd.index.short":                "Gera o grafo de código e o índice de documentos",
 	"cmd.index.check.short":          "Verifica o corpus de documentos e mede a busca (CI)",
 	"cmd.index.migrate.short":        "Leva um corpus de documentos ao formato atual",

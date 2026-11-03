@@ -86,7 +86,7 @@ var claudeGrants = map[string][]string{
 	"edit":    {"Edit", "MultiEdit", "NotebookEdit"},
 	"write":   {"Write"},
 	"search":  {"Glob", "Grep"},
-	"gofi":    {guard.MCPPrefix + "find", guard.MCPPrefix + "show", guard.MCPPrefix + "path", guard.MCPPrefix + "index_status", guard.MCPPrefix + "index"},
+	"gofi":    {guard.MCPPrefix + "find", guard.MCPPrefix + "show", guard.MCPPrefix + "path", guard.MCPPrefix + "impact", guard.MCPPrefix + "index_status", guard.MCPPrefix + "index"},
 	"verify":  {guard.MCPPrefix + "verify"},
 	"verdict": {guard.MCPPrefix + "verdict_write"},
 	"memory":  {guard.MCPPrefix + "memory_write"},

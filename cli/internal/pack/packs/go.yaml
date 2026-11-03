@@ -12,3 +12,30 @@ sensors:
   # go test -json says which tests failed and which were skipped: a skipped
   # test proves nothing, so it fails the stage.
   test:   {run: "go -C {src} test -json ./...", format: go-test-json}
+# A context's code is under domain/<context>/, one folder per layer
+# (sdk/go/knowledge/structure.md); a file of the context in no layer's folder
+# is its domain.
+contexts: "domain/{context}/"
+layers:
+  - {name: handler,    plan: api,         paths: ["domain/*/handler/**"]}
+  - {name: repository, plan: data,        paths: ["domain/*/repository/**"]}
+  - {name: migration,  plan: data,        paths: [".migrations/**"]}
+  - {name: adapter,    plan: integration, paths: ["domain/*/adapter/**"]}
+  - {name: service,    plan: domain,      paths: ["domain/*/service/**"]}
+  - {name: model,      plan: domain,      paths: ["domain/*/model/**"]}
+  - {name: domain,     plan: domain,      paths: ["domain/*/*"]}
+graph:
+  # sdk/go/knowledge/layers.md: a handler never reaches the repository, a
+  # repository never knows a DTO's caller, the service never the HTTP.
+  rules:
+    - "deny: handler -> repository"
+    - "deny: repository -> service"
+    - "deny: repository -> handler"
+    - "deny: service -> handler"
+    - "deny: model -> service"
+    - "deny: model -> repository"
+    - "deny: model -> handler"
+    - "deny: import \"net/http\" from service"
+    - "deny: import \"net/http\" from repository"
+    - "deny: import \"net/http\" from model"
+    - "deny: new-cycle"
