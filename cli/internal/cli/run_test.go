@@ -52,6 +52,12 @@ func (f fakeSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event
 	return ch, nil
 }
 
+// minimalDesign is the design of a change that adds REQ-01 to a context:
+// a requirement that did not exist is code that does not, and has one.
+func minimalDesign(ctx string) string {
+	return "---\ntipo: design\nformato: 3\ncontexto: " + ctx + "\nversao: \"1.0\"\nstatus: proposto\nentidades: []\nkeywords: [x]\n---\n# Design\n\n## Abordagem\n\nUma função.\n\n## Mapa de requisitos\n\n| Requisito | Componente |\n|---|---|\n| REQ-01 | `" + ctx + ".X` |\n"
+}
+
 // writeReviewFile is the reviewer finding nothing.
 func writeReviewFile(p string) {
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
@@ -102,7 +108,8 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  sensors:\n    test: \"true\"\n")
 
 	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
-	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\ndesign: n/a\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
+	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
+	writeFile(t, filepath.Join(dir, "design.md"), minimalDesign("pedidos"))
 	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# D\n\n## Propósito\n\nPedidos.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO total zero\n- QUANDO fecha\n- ENTÃO recusa\n")
 
 	run := func(cmd func() *cobra.Command, args ...string) (string, error) {

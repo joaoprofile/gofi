@@ -20,7 +20,9 @@ func writeDoc(t *testing.T, root, rel, body string) {
 	}
 }
 
-const sealProposal = "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\ndesign: n/a\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n"
+const sealProposal = "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n"
+
+const sealDesign = "---\ntipo: design\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nentidades: []\nkeywords: [pedido]\n---\n# Design\n\n## Abordagem\n\nUma função.\n\n## Mapa de requisitos\n\n| Requisito | Componente |\n|---|---|\n| REQ-01 | `pedidos.Total` |\n"
 
 const sealDelta = "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# D\n\n## Propósito\n\nPedidos.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO total zero\n- QUANDO fecha\n- ENTÃO recusa\n"
 
@@ -30,13 +32,14 @@ func TestSealContract(t *testing.T) {
 	root := t.TempDir()
 	writeDoc(t, root, "specs/changes/criar-pedidos/proposal.md", sealProposal)
 	writeDoc(t, root, "specs/changes/criar-pedidos/deltas/pedidos.md", sealDelta)
+	writeDoc(t, root, "specs/changes/criar-pedidos/design.md", sealDesign)
 	r := &Result{Context: &Context{Name: "pedidos"}, Plan: []Phase{{Role: "gofi-spec", Produces: "spec"}, {Role: "gofi-eng", Produces: "code"}}}
 
 	if sealed, err := SealContract(root, r, 1); err != nil || sealed != nil {
 		t.Errorf("after the code phase: sealed=%v err=%v", sealed, err)
 	}
 	sealed, err := SealContract(root, r, 0)
-	if err != nil || len(sealed) != 2 {
+	if err != nil || len(sealed) != 3 {
 		t.Fatalf("sealed=%v err=%v", sealed, err)
 	}
 	all, _ := contract.Docs(root)

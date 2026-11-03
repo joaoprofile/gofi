@@ -191,15 +191,22 @@ func (f *finder) proposal(all []Doc, root string) {
 			f.add(0, true, "%s tem delta, mas não está em contextos", d.Context)
 		}
 	}
-	touchesCode := false
+	touchesCode, adds := false, false
 	for _, d := range c.deltas {
 		for _, s := range DeltaSections(d) {
 			touchesCode = touchesCode || s.Op != OpRemoved && len(s.Requirements) > 0
+			adds = adds || s.Op == OpAdded && len(s.Requirements) > 0
 		}
 	}
 	// Frontmatter.Get reads n/a as empty, so the declaration is read raw.
 	noDesign := strings.Trim(strings.TrimSpace(f.doc.Front["design"]), `"'`) == "n/a"
-	if touchesCode && c.design == nil && !noDesign {
+	switch {
+	case adds && noDesign && c.design == nil:
+		// A requirement that did not exist is code that does not exist: n/a
+		// is for a change that changes no code — a scenario reworded, a
+		// requirement removed.
+		f.add(0, true, "a mudança adiciona requisitos e declara design: n/a — requisito novo é código novo: escreva o design.md")
+	case touchesCode && c.design == nil && !noDesign:
 		f.add(0, true, "a mudança adiciona ou modifica requisitos e não tem design.md (ou declare design: n/a)")
 	}
 	for _, s := range f.doc.Front.List(FieldSurfaces) {
