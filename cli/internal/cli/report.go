@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,8 +14,12 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/trace"
 )
 
-// ReportFile is where a run's delivery report is kept, in its folder.
-const ReportFile = "report.md"
+// ReportFile is where a run's delivery report is kept, in its folder;
+// TraceFile its trace matrix.
+const (
+	ReportFile = "report.md"
+	TraceFile  = "trace.json"
+)
 
 func newReportCmd() *cobra.Command {
 	return &cobra.Command{
@@ -49,6 +54,12 @@ run that did not get there, assembled from its state, without the trace.`,
 // writeReport keeps the delivery report of a run in its folder.
 func writeReport(root string, s *loop.State, rows []trace.Row) (string, error) {
 	agents, _ := loop.Agents(root, s.Run)
+	// The matrix, as the panel draws it: what the report's table is made of.
+	if rows != nil {
+		if data, err := json.MarshalIndent(map[string]any{"schema": "gofi.trace/v1", "ref": s.Change, "rows": rows}, "", "  "); err == nil {
+			_ = os.WriteFile(filepath.Join(loop.Dir(root, s.Run), TraceFile), append(data, '\n'), 0o644)
+		}
+	}
 	p := filepath.Join(loop.Dir(root, s.Run), ReportFile)
 	return p, os.WriteFile(p, []byte(deliveryReport(s, agents, rows)), 0o644)
 }
