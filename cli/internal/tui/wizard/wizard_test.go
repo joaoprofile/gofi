@@ -211,3 +211,26 @@ func TestFinalizeFillsBlankAnswers(t *testing.T) {
 		}
 	}
 }
+
+// The module offered follows the language, and a Java package is dotted
+// identifiers — the folders of src/main/java.
+func TestTheModuleFollowsTheLanguage(t *testing.T) {
+	for lang, want := range map[string]string{
+		config.LanguageGo:     "github.com/your-org/your-repo",
+		config.LanguageJava:   "com.example.caixajava",
+		config.LanguageCSharp: "Example.Caixajava",
+		config.LanguageNodeJS: "caixajava",
+	} {
+		if got := suggestedModule(lang, "caixa-java"); got != want {
+			t.Errorf("suggestedModule(%s) = %q, want %q", lang, got, want)
+		}
+	}
+	if !isSuggestion("github.com/your-org/your-repo", "x") || isSuggestion("com.acme.loja", "x") {
+		t.Error("isSuggestion")
+	}
+	for s, ok := range map[string]bool{"com.acme.loja": true, "github.com/your-org/your-repo": false, "com.acme.my-svc": false, "loja": false} {
+		if err := validateModule(config.LanguageJava, s); (err == nil) != ok {
+			t.Errorf("validateModule(java, %q) = %v", s, err)
+		}
+	}
+}
