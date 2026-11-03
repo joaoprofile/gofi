@@ -930,3 +930,49 @@ func TestTheGraphSizesTheTierAndScopesTheAudit(t *testing.T) {
 		}
 	}
 }
+
+// traceGap is a finding of the trace stage: the directive it asks for, on a
+// requirement or scenario of pedidos.
+func traceGap(kind, id string) SensorFinding {
+	return SensorFinding{Stage: "trace", Rule: "gofi:" + kind + " pedidos/" + id, File: "specs/changes/criar-pedidos/deltas/pedidos.md", Line: 12, Severity: "blocker",
+		Message: "sem resposta no código: " + id}
+}
+
+// A scenario no test tests is the test role's to write: the run goes there,
+// not back to the code (0002, D10).
+func TestAScenarioWithNoTestGoesToTheTestRole(t *testing.T) {
+	w := layeredWorld(t)
+	w.sensors.results = []SensorResult{{Failed: []string{"trace"}, Findings: []SensorFinding{traceGap("tests", "REQ-01.2")}}}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" || path(t, w.root) != "plan implement test sense test sense audit policy accepted" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	var tests []Turn
+	for _, turn := range w.agent.turns {
+		if turn.Node == "test" {
+			tests = append(tests, turn)
+		}
+	}
+	if len(tests) != 2 || !strings.Contains(tests[1].Prompt, "REQ-01.2") {
+		t.Errorf("the test role is not told the gap: %+v", tests)
+	}
+}
+
+// A requirement nothing implements goes back to the layer whose tasks
+// realize it, alone.
+func TestARequirementNothingImplementsGoesToItsLayer(t *testing.T) {
+	w := layeredWorld(t)
+	w.agent.steps["plan"] = []step{planned(w.root, `{"schema":"gofi-plan/v1","tasks":[
+ {"id":"T1","layer":"data","summary":"tabela","reqs":["REQ-01"],"files":["backend/pedidos/repository/"]},
+ {"id":"T2","layer":"api","summary":"rota","reqs":["REQ-02"],"files":["backend/pedidos/handler/"]}]}`)}
+	w.sensors.results = []SensorResult{{Failed: []string{"trace"}, Findings: []SensorFinding{traceGap("implements", "REQ-02")}}}
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if got := roles(w.agent, "implement"); got != "gofi-eng-data gofi-eng-api gofi-eng-api" {
+		t.Errorf("implement turns = %s", got)
+	}
+}

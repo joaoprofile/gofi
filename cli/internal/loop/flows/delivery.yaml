@@ -16,8 +16,10 @@ nodes:
   # by whoever wrote the code they judge (D17).
   test:      {kind: agent, stage: test, optional: true}
   # Cheapest first; graph reindexes the code the turn changed, so the audit
-  # reads a map that holds it and no agent rebuilds the index by hand.
-  sense:     {kind: sensor, stages: [build, static, test, graph]}
+  # reads a map that holds it and no agent rebuilds the index by hand, and
+  # holds it to the architecture rules; trace, that every requirement has
+  # its code and every scenario its test (0002, D10).
+  sense:     {kind: sensor, stages: [build, static, test, graph, trace]}
   # What the build, the static analysis or the graph refused is repaired
   # with the findings alone, before anything reaches the audit.
   repair:    {kind: agent, stage: repair}
@@ -50,6 +52,8 @@ edges:
   # test back to the implementation.
   - {from: sense, to: triage, when: {stuck: true}}
   - {from: sense, to: repair, when: {sensor_failed: [build, static, graph]}}
+  # A scenario with no test is the test role's to write, not the code's.
+  - {from: sense, to: test, when: {sensor_failed: [trace], tests_only: true}}
   - {from: sense, to: implement, when: {sensor_failed: []}}
   - {from: sense, to: audit}
   - {from: repair, to: sense}
@@ -78,6 +82,7 @@ on_limit: exhausted
 limits:
   - {from: sense, to: implement, max: 3}
   - {from: sense, to: repair, max: 3}
+  - {from: sense, to: test, max: 3}
   - {from: policy, to: implement, max: 4}
   - {from: policy, to: test, max: 3}
   - {from: plan-decide, to: plan, max: 3}

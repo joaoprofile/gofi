@@ -132,6 +132,23 @@ func (r *Runner) due(s *State) []string {
 			return all
 		}
 		for _, f := range s.Sensor.Findings {
+			// A requirement nothing implements is the work of the tasks
+			// that realize it; a scenario with no test, the test role's.
+			switch TraceGap(f) {
+			case traceTests:
+				continue
+			case traceImplements:
+				layers := s.Plan.layersOf(traceReq(f))
+				if len(layers) == 0 {
+					return all
+				}
+				for _, t := range s.Plan.Tasks {
+					if slices.Contains(layers, t.Layer) && len(t.Files) > 0 {
+						files = append(files, t.Files[0])
+					}
+				}
+				continue
+			}
 			files = append(files, f.File)
 		}
 	} else {
@@ -160,12 +177,62 @@ func (r *Runner) due(s *State) []string {
 	return out
 }
 
+// The gaps a trace finding names, by the directive it asks for.
+const (
+	traceImplements = "gofi:implements"
+	traceTests      = "gofi:tests"
+)
+
+// TraceGap is the directive a finding of the trace stage asks for, empty
+// for any other finding: its rule is "gofi:tests pontos/REQ-03.1".
+func TraceGap(f SensorFinding) string {
+	if f.Stage != "trace" {
+		return ""
+	}
+	kind, _, _ := strings.Cut(f.Rule, " ")
+	if kind == traceImplements || kind == traceTests {
+		return kind
+	}
+	return ""
+}
+
+// traceReq is the requirement a trace finding is about: REQ-03.
+func traceReq(f SensorFinding) string {
+	_, ref, _ := strings.Cut(f.Rule, " ")
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		ref = ref[i+1:]
+	}
+	if i := strings.Index(ref, "."); i >= 0 {
+		ref = ref[:i]
+	}
+	return ref
+}
+
+// layersOf are the layers of the tasks that realize a requirement.
+func (p *Plan) layersOf(req string) []string {
+	var out []string
+	for _, t := range p.Tasks {
+		if slices.Contains(t.Reqs, req) && !slices.Contains(out, t.Layer) {
+			out = append(out, t.Layer)
+		}
+	}
+	return out
+}
+
 // testsDue reports whether the tests are to be written now: no test turn
-// has run, or the audit found something in a test file. A failing test is
-// the code's to fix — the test reads the contract, not the code.
+// has run, the trace found a scenario no test tests, or the audit found
+// something in a test file. A failing test is the code's to fix — the test
+// reads the contract, not the code.
 func (r *Runner) testsDue(s *State) bool {
 	if !s.Tested {
 		return true
+	}
+	if s.Sensor != nil {
+		for _, f := range s.Sensor.Findings {
+			if TraceGap(f) == traceTests {
+				return true
+			}
+		}
 	}
 	for _, f := range s.Open {
 		if f.File != "" && r.IsTest != nil && r.IsTest(f.File) {
@@ -175,9 +242,21 @@ func (r *Runner) testsDue(s *State) bool {
 	return false
 }
 
-// testsOnly reports whether every open finding of the audit is in a test
-// file.
+// testsOnly reports whether what refused the work is the tests' alone:
+// every gap of a failing trace a scenario with no test, or — the sensors
+// green — every open finding of the audit in a test file.
 func (r *Runner) testsOnly(s *State) bool {
+	if s.Sensor != nil && len(s.Sensor.Failed) > 0 {
+		if s.Sensor.Failed[0] != "trace" || len(s.Sensor.Findings) == 0 {
+			return false
+		}
+		for _, f := range s.Sensor.Findings {
+			if TraceGap(f) != traceTests {
+				return false
+			}
+		}
+		return true
+	}
 	if len(s.Open) == 0 || r.IsTest == nil {
 		return false
 	}
