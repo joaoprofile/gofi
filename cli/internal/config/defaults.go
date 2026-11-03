@@ -113,14 +113,20 @@ func DefaultTestSection(language, sourceRoot string) TestSection {
 			},
 		}
 	case LanguagePython:
-		// gofi has no Python scaffold, so there is no layout to write a real
-		// command against; the placeholder keeps the YAML schema-valid.
+		// The FastAPI starter's virtual environment, made by gofi init.
+		py := "cd " + sourceRoot + " && .venv/bin/python -m pytest app"
 		return TestSection{
 			Default: "unit",
 			Tasks: map[string]TestTask{
-				"unit": {
-					Desc: "TODO — no Python scaffold yet; wire your own runner",
-					Run:  `echo "gofi test: configure the python test task in .gofi.yaml"`,
+				"unit": {Desc: "Unit tests", Run: py},
+				"cover": {
+					Desc: "Coverage as coverage.xml (pytest-cov)",
+					Run:  py + " --cov=app --cov-report=xml --cov-report=term",
+				},
+				"sonar": {
+					Desc:  "SonarQube/SonarCloud analysis (requires SONAR_TOKEN, SONAR_HOST_URL)",
+					Needs: []string{"cover"},
+					Run:   "gofi sonar start",
 				},
 			},
 		}

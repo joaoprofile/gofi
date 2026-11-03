@@ -142,3 +142,20 @@ func TestTheCompilersShapesArePlaced(t *testing.T) {
 		t.Errorf("findings %+v", got)
 	}
 }
+
+// A tool that names a file by its absolute path is placed from the root.
+func TestAnAbsolutePathIsPlacedFromTheRoot(t *testing.T) {
+	root := t.TempDir()
+	doc := `{"runs":[{"results":[{"ruleId":"B011","level":"error","message":{"text":"x"},
+	"locations":[{"physicalLocation":{"artifactLocation":{"uri":"file://` + filepath.ToSlash(root) + `/backend/app/x/test_s.py"},"region":{"startLine":3}}}]}]}]}`
+	r := Runner{Root: root, Commands: map[string]pack.Command{"static": {Run: "cat report.sarif", Format: pack.FormatSARIF, Report: "report.sarif"}}}
+	if err := os.WriteFile(filepath.Join(root, "report.sarif"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The stage removes a stale report before it runs: the command writes it.
+	r.Commands["static"] = pack.Command{Run: "printf '%s' '" + strings.ReplaceAll(doc, "'", "") + "' > report.sarif", Format: pack.FormatSARIF, Report: "report.sarif"}
+	res := r.Run(context.Background(), []string{"static"})
+	if len(res.Findings) != 1 || res.Findings[0].File != "backend/app/x/test_s.py" {
+		t.Errorf("findings %+v", res.Findings)
+	}
+}

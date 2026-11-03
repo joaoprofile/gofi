@@ -1,0 +1,42 @@
+# The Python pack, for a FastAPI backend (decision 0002, D13): the commands
+# the loop's sensors run and the format each reports in. {src} is the
+# backend folder of .gofi.yaml; the starter (gofi init) makes the virtual
+# environment in {src}/.venv the commands run from.
+schema: gofi-pack/v1
+language: python
+tests: ["test_*.py", "*_test.py"]
+sources: ["*.py"]
+sensors:
+  # Cheapest first: a run stops at the first stage that fails. mypy is the
+  # build: what does not type does not run as written.
+  build:  {run: "cd {src} && .venv/bin/python -m mypy app --no-error-summary --hide-error-context", format: lines}
+  static: {run: "cd {src} && .venv/bin/python -m ruff check app --output-format sarif --output-file .gofi-ruff.sarif", format: sarif, report: "{src}/.gofi-ruff.sarif"}
+  # pytest's JUnit says which tests failed and which were skipped: a skipped
+  # test proves nothing, so it fails the stage.
+  test:   {run: "cd {src} && .venv/bin/python -m pytest app -q -o junit_family=xunit1 --junitxml=.gofi-junit.xml", format: junit, report: "{src}/.gofi-junit.xml"}
+# A context is a package, app/<context>/, a module per layer
+# (sdk/python/knowledge/structure.md); a module of it in no layer is its
+# domain. The plan's layer of each is gofi-plan's.
+contexts: "app/{context}/"
+layers:
+  - {name: router,     plan: api,         paths: ["app/*/router.py", "app/*/routers/**", "app/*/dependencies.py"]}
+  - {name: repository, plan: data,        paths: ["app/*/repository.py", "app/*/repositories/**"]}
+  - {name: model,      plan: data,        paths: ["app/*/models.py", "app/*/schemas.py", "app/*/models/**", "app/*/schemas/**"]}
+  - {name: migration,  plan: data,        paths: ["migrations/**", "alembic/**"]}
+  - {name: adapter,    plan: integration, paths: ["app/*/adapters/**", "app/*/adapter.py"]}
+  - {name: service,    plan: domain,      paths: ["app/*/service.py", "app/*/services/**"]}
+  - {name: domain,     plan: domain,      paths: ["app/*/*"]}
+graph:
+  # sdk/python/knowledge/layers.md: a router never reaches the repository,
+  # a repository never knows its caller, the service never the HTTP.
+  rules:
+    - "deny: router -> repository"
+    - "deny: repository -> service"
+    - "deny: repository -> router"
+    - "deny: service -> router"
+    - "deny: model -> service"
+    - "deny: model -> repository"
+    - "deny: model -> router"
+    - "deny: import \"fastapi\" from service"
+    - "deny: import \"fastapi\" from repository"
+    - "deny: new-cycle"

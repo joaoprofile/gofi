@@ -92,6 +92,17 @@ func (r Runner) stage(ctx context.Context, stage string, c pack.Command) ([]loop
 		}
 	}
 	findings := Read(stage, c.Format, report, stderr.Bytes(), r.srcOf(c))
+	// A tool that names files by their absolute path — ruff, javac — is
+	// placed from the project root, as every other.
+	if root, err := filepath.Abs(r.Root); err == nil {
+		for i := range findings {
+			if f := findings[i].File; filepath.IsAbs(f) {
+				if rel, err := filepath.Rel(root, f); err == nil && !strings.HasPrefix(rel, "..") {
+					findings[i].File = filepath.ToSlash(rel)
+				}
+			}
+		}
+	}
 	if sctx.Err() == context.DeadlineExceeded {
 		findings = append(findings, loop.SensorFinding{Stage: stage, Severity: "blocker", Message: fmt.Sprintf("o estágio passou de %s e foi interrompido", Timeout)})
 	}

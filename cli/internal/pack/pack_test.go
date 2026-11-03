@@ -80,3 +80,29 @@ func TestNestLayersAndContexts(t *testing.T) {
 		t.Error("IsTest")
 	}
 }
+
+func TestFastAPILayersAndContexts(t *testing.T) {
+	p, err := Load("python")
+	if err != nil || p == nil {
+		t.Fatalf("Load(python) = %v, %v", p, err)
+	}
+	for file, want := range map[string][2]string{
+		"app/pontos/router.py":       {"router", "api"},
+		"app/pontos/repository.py":   {"repository", "data"},
+		"app/pontos/schemas.py":      {"model", "data"},
+		"app/pontos/service.py":      {"service", "domain"},
+		"app/pontos/test_service.py": {"domain", "domain"},
+		"app/main.py":                {"", ""},
+	} {
+		layer, plan := p.LayerOf(file)
+		if layer != want[0] || plan != want[1] {
+			t.Errorf("LayerOf(%s) = %s, %s; want %s, %s", file, layer, plan, want[0], want[1])
+		}
+	}
+	if c := p.ContextOf("app/pontos/service.py"); c != "pontos" {
+		t.Errorf("ContextOf = %q", c)
+	}
+	if !p.IsTest("app/pontos/test_service.py") || p.IsTest("app/pontos/service.py") {
+		t.Error("IsTest")
+	}
+}

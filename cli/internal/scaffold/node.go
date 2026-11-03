@@ -29,6 +29,15 @@ func execRunner(dir, name string, args ...string) error {
 // nodeRunner runs the web/mobile create commands. Overridden in tests.
 var nodeRunner commandRunner = execRunner
 
+// PythonEnv makes the virtual environment of the package at dir, in
+// dir/.venv, with the package and its dev dependencies installed.
+func PythonEnv(dir string) error {
+	if err := nodeRunner(dir, "python3", "-m", "venv", ".venv"); err != nil {
+		return err
+	}
+	return nodeRunner(dir, filepath.Join(".venv", "bin", "python"), "-m", "pip", "install", "--quiet", "-e", ".[dev]")
+}
+
 // NpmInstall installs the dependencies of the package at dir.
 func NpmInstall(dir string) error {
 	return nodeRunner(dir, "npm", "install", "--no-audit", "--no-fund")

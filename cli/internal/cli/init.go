@@ -167,6 +167,7 @@ var (
 	createViteApp = scaffold.CreateViteApp
 	createExpoApp = scaffold.CreateExpoApp
 	npmInstall    = scaffold.NpmInstall
+	pythonEnv     = scaffold.PythonEnv
 )
 
 func executePipeline(r *wizard.Result) error {
@@ -356,6 +357,17 @@ func executePipeline(r *wizard.Result) error {
 	if goBackend && pre.GoOK {
 		steps = append(steps, spinner.Step{Name: i18n.T("init.step.gowork"), Fn: func() error {
 			return scaffold.EnsureGoWorkSDK(r.Root, r.Language)
+		}})
+	}
+	// The sensors run the starter's tools from its environment — mypy, ruff
+	// and pytest from the venv —: made now, the first run has them. A machine
+	// without Python gets the project and the hint, not a failed init.
+	if hasBack && !adoptedBack && r.Language == config.LanguagePython {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.venv", r.SourcePath), Fn: func() error {
+			if err := pythonEnv(filepath.Join(r.Root, r.SourcePath)); err != nil {
+				fmt.Fprintln(os.Stderr, "  "+i18n.T("init.venv_failed", r.SourcePath, err))
+			}
+			return nil
 		}})
 	}
 	// The sensors run the starter's tools — tsc, ESLint, Jest — from its

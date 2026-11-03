@@ -24,6 +24,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/graph"
+	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
 	"github.com/joaoprofile/gofi/cli/internal/guard"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
@@ -500,7 +501,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if err != nil {
 		return "", err
 	}
-	if _, set := sensors["graph"]; !set {
+	// The graph stage needs an extractor of the backend's language: without
+	// one it is not checked, never failed — a repair cannot install it.
+	if _, set := sensors["graph"]; !set && graphEnabled(cfg) && workspace.CanExtract(work, backendLanguage(cfg)) {
 		sensors["graph"] = graphSensor(run)
 	}
 	if _, set := sensors["trace"]; !set {

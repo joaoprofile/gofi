@@ -31,12 +31,9 @@ func TestBackendScaffolds_MatchConfigLanguages(t *testing.T) {
 	// Only a language with a pack gets a skeleton; the others are accepted
 	// by config and adopted or started by hand.
 	for language := range known {
-		want := language == config.LanguageGo || language == config.LanguageNodeJS
+		want := language == config.LanguageGo || language == config.LanguageNodeJS || language == config.LanguagePython
 		if HasBackendScaffold(language) != want {
 			t.Errorf("HasBackendScaffold(%q) = %v, want %v", language, !want, want)
 		}
-	}
-	if HasBackendScaffold(config.LanguagePython) {
-		t.Error("HasBackendScaffold(python) = true, want false")
 	}
 }
