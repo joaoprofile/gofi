@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -130,13 +131,22 @@ func Read(stage, format string, stdout, stderr []byte, src string) []loop.Sensor
 		return append(goTestJSON(stage, stdout, src), lines(stage, stderr, src)...)
 	case pack.FormatSARIF:
 		return sarif(stage, stdout)
+	case pack.FormatJUnit:
+		return append(junit(stage, stdout, src), lines(stage, stderr, src)...)
 	}
 	return nil
 }
 
-var reLine = regexp.MustCompile(`^\s*([^\s:][^:]*\.[A-Za-z0-9]+):(\d+)(?::\d+)?:\s*(.+)$`)
+// The shapes a compiler places an error in: file:line[:col]: message — Go,
+// Rust, gcc, most linters —; file(line,col): message — tsc —; and
+// [ERROR] file:[line,col] message — javac through Maven.
+var (
+	reLine   = regexp.MustCompile(`^\s*([^\s:][^:]*\.[A-Za-z0-9]+):(\d+)(?::\d+)?:\s*(.+)$`)
+	reParens = regexp.MustCompile(`^\s*([^\s(][^(]*\.[A-Za-z0-9]+)\((\d+),\d+\):\s*(.+)$`)
+	reMaven  = regexp.MustCompile(`^\[ERROR\]\s+(\S+\.[A-Za-z0-9]+):\[(\d+),\d+\]\s*(.+)$`)
+)
 
-// lines reads file:line[:col]: message, the shape every compiler prints.
+// lines reads the shapes compilers print an error in.
 func lines(stage string, out []byte, src string) []loop.SensorFinding {
 	var res []loop.SensorFinding
 	seen := map[string]bool{}
@@ -144,6 +154,12 @@ func lines(stage string, out []byte, src string) []loop.SensorFinding {
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		m := reLine.FindStringSubmatch(sc.Text())
+		if m == nil {
+			m = reParens.FindStringSubmatch(sc.Text())
+		}
+		if m == nil {
+			m = reMaven.FindStringSubmatch(sc.Text())
+		}
 		if m == nil {
 			continue
 		}
@@ -222,6 +238,67 @@ func testFile(pkg string, out *strings.Builder, src string) string {
 		return within(src, m[1])
 	}
 	return ""
+}
+
+// junit reads JUnit XML — one suite or many —: each test case that failed
+// or erred, with its message, and each one skipped, which proves nothing.
+func junit(stage string, out []byte, src string) []loop.SensorFinding {
+	type outcome struct {
+		Message string `xml:"message,attr"`
+		Text    string `xml:",chardata"`
+	}
+	type testCase struct {
+		Name      string    `xml:"name,attr"`
+		Classname string    `xml:"classname,attr"`
+		File      string    `xml:"file,attr"`
+		Line      int       `xml:"line,attr"`
+		Failure   *outcome  `xml:"failure"`
+		Error     *outcome  `xml:"error"`
+		Skipped   *struct{} `xml:"skipped"`
+	}
+	type suite struct {
+		File   string     `xml:"file,attr"`
+		Cases  []testCase `xml:"testcase"`
+		Suites []suite    `xml:"testsuite"`
+	}
+	var doc struct {
+		suite
+		XMLName xml.Name
+	}
+	if xml.Unmarshal(out, &doc) != nil {
+		return nil
+	}
+	var res []loop.SensorFinding
+	var walk func(s suite)
+	walk = func(s suite) {
+		for _, c := range s.Cases {
+			file := c.File
+			if file == "" {
+				file = s.File
+			}
+			if file != "" {
+				file = within(src, file)
+			}
+			name := strings.TrimSpace(strings.Trim(c.Classname+" "+c.Name, " "))
+			switch {
+			case c.Failure != nil || c.Error != nil:
+				o := c.Failure
+				if o == nil {
+					o = c.Error
+				}
+				res = append(res, loop.SensorFinding{Stage: stage, File: file, Line: c.Line, Rule: c.Name, Severity: "blocker",
+					Message: name + " falhou: " + tail(strings.TrimSpace(o.Message+"\n"+o.Text), 1200)})
+			case c.Skipped != nil:
+				res = append(res, loop.SensorFinding{Stage: stage, File: file, Line: c.Line, Rule: c.Name, Severity: "blocker",
+					Message: name + " foi pulado: um teste pulado não prova nada — faça-o rodar ou remova-o com o requisito"})
+			}
+		}
+		for _, child := range s.Suites {
+			walk(child)
+		}
+	}
+	walk(doc.suite)
+	return res
 }
 
 // sarif reads SARIF 2.1: each result with its rule, level and first place.

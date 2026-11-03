@@ -25,10 +25,11 @@ const (
 	FormatLines      = "lines"        // file:line[:col]: message — compilers, vet
 	FormatGoTestJSON = "go-test-json" // go test -json events
 	FormatSARIF      = "sarif"        // static analysis, any linter
+	FormatJUnit      = "junit"        // JUnit XML — jest-junit, pytest, surefire, nextest
 	FormatExit       = "exit"         // only the exit code says anything
 )
 
-var formats = []string{FormatLines, FormatGoTestJSON, FormatSARIF, FormatExit}
+var formats = []string{FormatLines, FormatGoTestJSON, FormatSARIF, FormatJUnit, FormatExit}
 
 //go:embed packs/*.yaml
 var builtin embed.FS

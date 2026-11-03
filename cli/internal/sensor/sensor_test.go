@@ -111,3 +111,34 @@ func TestSARIFSymbolIsRead(t *testing.T) {
 		t.Errorf("findings %+v", got)
 	}
 }
+
+// JUnit XML, as jest-junit, pytest and surefire write it: a failed and a
+// skipped case are blockers, a passing one is nothing; nested suites are
+// read too.
+func TestJUnitIsRead(t *testing.T) {
+	doc := `<?xml version="1.0"?>
+<testsuites><testsuite name="pontos" file="src/pontos/pontos.service.spec.ts">
+  <testcase classname="PontosService" name="REQ-03.1 consulta válida"/>
+  <testcase classname="PontosService" name="REQ-03.2 valor inválido"><failure message="expected 400">at x.spec.ts:20</failure></testcase>
+  <testcase classname="PontosService" name="REQ-03.3"><skipped/></testcase>
+</testsuite></testsuites>`
+	got := Read("test", pack.FormatJUnit, []byte(doc), nil, "backend")
+	if len(got) != 2 || got[0].File != "backend/src/pontos/pontos.service.spec.ts" || !strings.Contains(got[0].Message, "expected 400") ||
+		!strings.Contains(got[1].Message, "pulado") {
+		t.Errorf("findings %+v", got)
+	}
+	if got := Read("test", pack.FormatJUnit, []byte(`<testsuite><testcase name="ok"/></testsuite>`), nil, ""); len(got) != 0 {
+		t.Errorf("a passing suite: %+v", got)
+	}
+}
+
+// tsc and javac through Maven place an error in shapes of their own.
+func TestTheCompilersShapesArePlaced(t *testing.T) {
+	out := "src/pontos/pontos.controller.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.\n" +
+		"[ERROR] /app/src/main/java/loja/pontos/PontosResource.java:[30,17] cannot find symbol\n"
+	got := Read("build", pack.FormatLines, []byte(out), nil, "backend")
+	if len(got) != 2 || got[0].File != "backend/src/pontos/pontos.controller.ts" || got[0].Line != 12 ||
+		got[1].File != "/app/src/main/java/loja/pontos/PontosResource.java" || got[1].Line != 30 {
+		t.Errorf("findings %+v", got)
+	}
+}
