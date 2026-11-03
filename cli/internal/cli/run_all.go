@@ -177,7 +177,12 @@ func runAll(ctx context.Context, out io.Writer, root string, cfg *config.GofiCon
 					d.Outcome = "stopped"
 				}
 				if s.Outcome != "accepted" {
+					// What the person decides on: the run's reason, and the
+					// amendment it proposed.
 					d.Why = s.Why
+					if s.Proposal != "" {
+						d.Why = strings.TrimSpace(d.Why + " proposta: " + s.Proposal)
+					}
 				}
 				ended(d)
 			}()

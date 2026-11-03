@@ -50,7 +50,7 @@ func TestRunAllDeliversInOrderAndSkipsWhatDependsOnAFailure(t *testing.T) {
 		mu.Unlock()
 		s := &loop.State{Schema: loop.StateSchema, Run: run, Change: change, Outcome: "accepted", CostUSD: 1}
 		if change == "a" {
-			s.Outcome, s.Why = "impasse", "achado do contrato"
+			s.Outcome, s.Proposal = "impasse", ".gofi/proposals/a-1.md"
 		}
 		return s, loop.SaveState(root, s)
 	}
@@ -67,7 +67,7 @@ func TestRunAllDeliversInOrderAndSkipsWhatDependsOnAFailure(t *testing.T) {
 	if strings.Join(started, ",") != "a,c" {
 		t.Errorf("started %v", started)
 	}
-	for _, want := range []string{"| 0 | a | impasse |", "| 1 | b | skipped |", "depends on a, which ended impasse", "| 0 | c | accepted |", "| 0 | d | skipped |", "not approved"} {
+	for _, want := range []string{"| 0 | a | impasse |", "proposta: .gofi/proposals/a-1.md", "| 1 | b | skipped |", "depends on a, which ended impasse", "| 0 | c | accepted |", "| 0 | d | skipped |", "not approved"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("summary lacks %q:\n%s", want, out.String())
 		}
