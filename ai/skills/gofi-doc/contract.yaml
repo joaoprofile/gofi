@@ -28,4 +28,8 @@ needs: [context]
 reads_only: true
 visibility: internal
 stage: deliver
+# The contract's doc is of the routes: a change that touched no API has none
+# to write (0002, D17).
+triggers:
+  - all: [diff.touches(api)]
 tools: [read, edit, write, search, gofi]

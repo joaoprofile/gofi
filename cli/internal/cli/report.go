@@ -53,6 +53,23 @@ func writeReport(root string, s *loop.State, rows []trace.Row) (string, error) {
 	return p, os.WriteFile(p, []byte(deliveryReport(s, agents, rows)), 0o644)
 }
 
+// lastAudit are the roles of the run's last audit.
+func lastAudit(agents []loop.AgentState) []string {
+	iter := 0
+	for _, a := range agents {
+		if a.Node == "audit" && a.Iter > iter {
+			iter = a.Iter
+		}
+	}
+	var out []string
+	for _, a := range agents {
+		if a.Node == "audit" && a.Iter == iter {
+			out = append(out, a.Role)
+		}
+	}
+	return out
+}
+
 // deliveryReport is what a run delivered, for the person who reviews it:
 // nothing in it is a model's word — the state, the trace, the graph's
 // diff, the agents' records.
@@ -122,8 +139,8 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 	}
 
 	b.WriteString("\n## Auditoria\n\n")
-	if len(s.Lenses) > 0 {
-		fmt.Fprintf(&b, "Lentes: %s.\n", strings.Join(s.Lenses, ", "))
+	if lenses := lastAudit(agents); len(lenses) > 0 {
+		fmt.Fprintf(&b, "Lentes da última auditoria: %s.\n", strings.Join(lenses, ", "))
 	}
 	fmt.Fprintf(&b, "Achados resolvidos ao longo da execução: %d.", len(s.Resolved))
 	if len(s.Open) > 0 {
