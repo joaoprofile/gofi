@@ -127,8 +127,9 @@ var runPorts = struct {
 	// regenerate writes a worktree's derived files; in a test, the running
 	// binary is the test binary and must not be run as gofi.
 	regenerate func(ctx context.Context, dir string) error
-	// graph and trace are gofi's own sensors' commands, for the same reason.
-	graph, trace *pack.Command
+	// graph, trace and integrity are gofi's own sensors' commands, for the
+	// same reason.
+	graph, trace, integrity *pack.Command
 }{}
 
 // graphSensor is gofi's own stage (0002, D11, S4): this gofi indexes the
@@ -509,8 +510,14 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if _, set := sensors["trace"]; !set {
 		sensors["trace"] = traceSensor(change, run)
 	}
+	if _, set := sensors["integrity"]; !set {
+		sensors["integrity"] = integritySensor(run)
+	}
 	if err := captureBaseline(work, run); err != nil {
 		return "", fmt.Errorf("baseline do grafo: %w", err)
+	}
+	if err := captureIntegrity(ctx, work, run); err != nil {
+		return "", fmt.Errorf("baseline da integridade: %w", err)
 	}
 	gate := runPorts.gate
 	if gate == nil {

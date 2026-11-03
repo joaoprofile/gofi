@@ -6,6 +6,7 @@ schema: gofi-pack/v1
 language: java
 tests: ["*Test.java", "*IT.java"]
 sources: ["*.java"]
+skips: ["@Disabled", "@Ignore", "assumeTrue("]
 sensors:
   # Cheapest first: a run stops at the first stage that fails. javac through
   # Maven places an error as [ERROR] file:[line,col].

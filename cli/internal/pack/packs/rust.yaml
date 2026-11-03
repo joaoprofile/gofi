@@ -8,6 +8,7 @@ language: rust
 # judges it, and the files say which is which.
 tests: ["*_tests.rs"]
 sources: ["*.rs"]
+skips: ["#[ignore"]
 sensors:
   # Cheapest first: a run stops at the first stage that fails.
   build:  {run: "cd {src} && cargo build --all-targets --quiet --message-format short", format: lines}

@@ -47,6 +47,9 @@ type Pack struct {
 	// Sources are the names of the language's source files, tests among
 	// them: what the loop guards the authorship of.
 	Sources []string `yaml:"sources"`
+	// Skips are what marks a test of the language to be skipped, as text in
+	// its file: a run that adds one is refused (0002, D12).
+	Skips []string `yaml:"skips,omitempty"`
 	// Layers are what a backend in the language is divided into, by where
 	// their files are; the first whose paths match a file is its layer.
 	Layers []Layer `yaml:"layers,omitempty"`

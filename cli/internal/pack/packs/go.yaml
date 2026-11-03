@@ -5,6 +5,7 @@ schema: gofi-pack/v1
 language: go
 tests: ["*_test.go"]
 sources: ["*.go"]
+skips: ["t.Skip(", "t.SkipNow(", "t.Skipf("]
 sensors:
   # Cheapest first: a run stops at the first stage that fails.
   build:  {run: "go -C {src} build ./...", format: lines}
