@@ -497,7 +497,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	// The language's pack also says which files are tests: what the loop
 	// sends to the test role, not to the code's.
-	langPack, err := pack.Load(backendLanguage(cfg))
+	langPack, err := projectPack(cfg)
 	if err != nil {
 		return "", err
 	}
@@ -530,7 +530,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		Policy:   policy,
 		IsTest:   langPack.IsTest,
 		IsSource: langPack.IsSource,
-		Reach:    planReach(work, run, backendLanguage(cfg)),
+		Reach:    planReach(work, run, langPack),
 		OnEvent:  report,
 	}
 	if !o.Events {

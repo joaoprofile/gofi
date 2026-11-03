@@ -593,7 +593,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 	testLang, testPath := "", ""
 	var backend *config.Backend
 	if r.Has(wizard.EnvBack) {
-		backend = &config.Backend{Language: r.Language, Path: r.SourcePath}
+		backend = &config.Backend{Language: r.Language, Path: r.SourcePath, Module: r.Module}
 		testLang, testPath = r.Language, r.SourcePath
 	}
 

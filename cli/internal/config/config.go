@@ -262,6 +262,10 @@ func (c *GofiConfig) UISurfaces() []NamedSurface {
 type Backend struct {
 	Language string `yaml:"language"`
 	Path     string `yaml:"path"`
+	// Module is the backend's module or package as the project declared it
+	// — com.acme.svc in Java —: where its code is in a tree whose folders
+	// follow it.
+	Module string `yaml:"module,omitempty"`
 }
 
 // UISurface is one front-end surface — the shape of both the top-level

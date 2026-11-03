@@ -76,8 +76,8 @@ func (r Runner) stage(ctx context.Context, stage string, c pack.Command) ([]loop
 		shell, flag = "cmd", "/C"
 	}
 	// A report an earlier run left never stands for this one.
-	if c.Report != "" {
-		_ = os.Remove(filepath.Join(r.Root, filepath.FromSlash(c.Report)))
+	for _, p := range r.reports(c) {
+		_ = os.Remove(p)
 	}
 	cmd := exec.CommandContext(sctx, shell, flag, c.Run)
 	cmd.Dir = r.Root
@@ -85,13 +85,17 @@ func (r Runner) stage(ctx context.Context, stage string, c pack.Command) ([]loop
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
-	report := stdout.Bytes()
-	if c.Report != "" {
-		if b, rerr := os.ReadFile(filepath.Join(r.Root, filepath.FromSlash(c.Report))); rerr == nil {
-			report = b
+	var findings []loop.SensorFinding
+	if c.Report == "" {
+		findings = ReadWith(stage, c, stdout.Bytes(), stderr.Bytes(), r.srcOf(c))
+	} else {
+		findings = ReadWith(stage, c, nil, stderr.Bytes(), r.srcOf(c))
+		for _, p := range r.reports(c) {
+			if b, rerr := os.ReadFile(p); rerr == nil {
+				findings = append(findings, ReadWith(stage, c, b, nil, r.srcOf(c))...)
+			}
 		}
 	}
-	findings := Read(stage, c.Format, report, stderr.Bytes(), r.srcOf(c))
 	// A tool that names files by their absolute path — ruff, javac — is
 	// placed from the project root, as every other.
 	if root, err := filepath.Abs(r.Root); err == nil {
@@ -124,6 +128,20 @@ func (r Runner) stage(ctx context.Context, stage string, c pack.Command) ([]loop
 	return cap30(findings), output, failed
 }
 
+// reports are the report files of a command as they are now: the one it
+// names, or every one its glob matches.
+func (r Runner) reports(c pack.Command) []string {
+	if c.Report == "" {
+		return nil
+	}
+	p := filepath.Join(r.Root, filepath.FromSlash(c.Report))
+	if !strings.ContainsAny(c.Report, "*?[") {
+		return []string{p}
+	}
+	m, _ := filepath.Glob(p)
+	return m
+}
+
 // srcOf is the folder a command runs its tool in — what its file:line
 // positions are relative to — from `cd <dir> &&`, `go -C <dir>` or
 // `--prefix <dir>`.
@@ -140,7 +158,12 @@ func (r Runner) srcOf(c pack.Command) string {
 // Read reads a stage's report in its format into findings, positions made
 // relative to the project root.
 func Read(stage, format string, stdout, stderr []byte, src string) []loop.SensorFinding {
-	switch format {
+	return ReadWith(stage, pack.Command{Format: format}, stdout, stderr, src)
+}
+
+// ReadWith is Read with what the command says of its report.
+func ReadWith(stage string, c pack.Command, stdout, stderr []byte, src string) []loop.SensorFinding {
+	switch c.Format {
 	case pack.FormatLines:
 		return lines(stage, append(append([]byte{}, stdout...), stderr...), src)
 	case pack.FormatGoTestJSON:
@@ -148,7 +171,7 @@ func Read(stage, format string, stdout, stderr []byte, src string) []loop.Sensor
 	case pack.FormatSARIF:
 		return sarif(stage, stdout)
 	case pack.FormatJUnit:
-		return append(junit(stage, stdout, src), lines(stage, stderr, src)...)
+		return append(junit(stage, stdout, src, c.ClassFile), lines(stage, stderr, src)...)
 	}
 	return nil
 }
@@ -258,7 +281,7 @@ func testFile(pkg string, out *strings.Builder, src string) string {
 
 // junit reads JUnit XML — one suite or many —: each test case that failed
 // or erred, with its message, and each one skipped, which proves nothing.
-func junit(stage string, out []byte, src string) []loop.SensorFinding {
+func junit(stage string, out []byte, src, classFile string) []loop.SensorFinding {
 	type outcome struct {
 		Message string `xml:"message,attr"`
 		Text    string `xml:",chardata"`
@@ -294,6 +317,10 @@ func junit(stage string, out []byte, src string) []loop.SensorFinding {
 			}
 			if file != "" {
 				file = within(src, file)
+			} else if classFile != "" && c.Classname != "" {
+				// The report names the class, not its file: the pack knows
+				// where a class's file is, from the project root.
+				file = strings.ReplaceAll(classFile, "{class}", strings.ReplaceAll(c.Classname, ".", "/"))
 			}
 			name := strings.TrimSpace(strings.Trim(c.Classname+" "+c.Name, " "))
 			switch {

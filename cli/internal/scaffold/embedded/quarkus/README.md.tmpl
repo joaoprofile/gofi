@@ -1,0 +1,24 @@
+# {{.ProjectName}}
+
+Quarkus service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+.
+├── {{.SourceRoot}}/
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/{{.PackagePath}}/<contexto>/    # um pacote por contexto
+│       ├── main/resources/db/migration/
+│       └── test/java/{{.PackagePath}}/<contexto>/
+└── .claude/                                         # gofi agents config
+```
+
+## Build & test
+
+```sh
+cd {{.SourceRoot}}
+mvn compile
+mvn test
+```

@@ -469,7 +469,6 @@ func TestExecutePipeline_NonGoBackendsAreReported(t *testing.T) {
 		manifest string
 	}{
 		{"rust", "", "src/Cargo.toml"},
-		{"java", "com.acme.mysvc", "src/pom.xml"},
 		{"csharp", "Acme.MySvc", "src/my-svc/my-svc.csproj"},
 	}
 	for _, tc := range cases {
@@ -756,5 +755,31 @@ func TestExecutePipeline_FastAPIBackend(t *testing.T) {
 	}
 	if len(made) != 1 || made[0] != filepath.Join(target, "src") {
 		t.Errorf("venv made in %v", made)
+	}
+}
+
+// A Quarkus backend gets the starter under its module's package, and the
+// module is kept in .gofi.yaml: where the pack reads a context's code.
+func TestExecutePipeline_QuarkusBackend(t *testing.T) {
+	useFixtureRepo(t)
+	forceToolchain(t, toolchain.Preflight{})
+	target := filepath.Join(t.TempDir(), "my-svc")
+	r := goWizardResult(target)
+	r.Language, r.Module = "java", "com.acme.mysvc"
+	if err := executePipeline(r); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	for _, p := range []string{"src/pom.xml", "src/src/main/java/com/acme/mysvc", "src/src/test/java/com/acme/mysvc", "src/src/main/resources/application.properties"} {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			t.Errorf("%s not scaffolded: %v", p, err)
+		}
+	}
+	pom, _ := os.ReadFile(filepath.Join(target, "src/pom.xml"))
+	if !strings.Contains(string(pom), "<groupId>com.acme</groupId>") || !strings.Contains(string(pom), "<artifactId>mysvc</artifactId>") {
+		t.Errorf("pom:\n%s", pom)
+	}
+	cfg, err := config.Load(filepath.Join(target, config.FileName))
+	if err != nil || cfg.Backend.Module != "com.acme.mysvc" {
+		t.Errorf("backend.module = %+v, %v", cfg.Backend, err)
 	}
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
-	"github.com/joaoprofile/gofi/cli/internal/pack"
 	"github.com/joaoprofile/gofi/cli/internal/trace"
 )
 
@@ -89,7 +88,7 @@ func traceRows(root string, cfg *config.GofiConfig, ref string) ([]trace.Row, er
 	if err != nil {
 		return nil, err
 	}
-	lp, err := pack.Load(backendLanguage(cfg))
+	lp, err := projectPack(cfg)
 	if err != nil {
 		return nil, err
 	}
