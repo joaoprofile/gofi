@@ -14,7 +14,8 @@ sensors:
   test:   {run: "go -C {src} test -json ./...", format: go-test-json}
 # A context's code is under domain/<context>/, one folder per layer
 # (sdk/go/knowledge/structure.md); a file of the context in no layer's folder
-# is its domain.
+# is its domain. The plan's layer of each is gofi-plan's: the model — entity
+# and DTOs — is data.
 contexts: "domain/{context}/"
 layers:
   - {name: handler,    plan: api,         paths: ["domain/*/handler/**"]}
@@ -22,7 +23,7 @@ layers:
   - {name: migration,  plan: data,        paths: [".migrations/**"]}
   - {name: adapter,    plan: integration, paths: ["domain/*/adapter/**"]}
   - {name: service,    plan: domain,      paths: ["domain/*/service/**"]}
-  - {name: model,      plan: domain,      paths: ["domain/*/model/**"]}
+  - {name: model,      plan: data,        paths: ["domain/*/model/**"]}
   - {name: domain,     plan: domain,      paths: ["domain/*/*"]}
 graph:
   # sdk/go/knowledge/layers.md: a handler never reaches the repository, a

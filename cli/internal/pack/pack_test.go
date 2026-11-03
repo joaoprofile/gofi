@@ -31,7 +31,7 @@ func TestGoLayersAndContexts(t *testing.T) {
 		"domain/pedidos/handler/pedidos_handler.go":       {"handler", "api"},
 		"domain/pedidos/repository/pedidos_repository.go": {"repository", "data"},
 		"domain/pedidos/service/pedidos_service.go":       {"service", "domain"},
-		"domain/pedidos/model/entity.go":                  {"model", "domain"},
+		"domain/pedidos/model/entity.go":                  {"model", "data"},
 		"domain/pedidos/adapter/iam_adapter.go":           {"adapter", "integration"},
 		"domain/pontos/pontos.go":                         {"domain", "domain"},
 		".migrations/0001_pedidos.up.sql":                 {"migration", "data"},
