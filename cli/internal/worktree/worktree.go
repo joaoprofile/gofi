@@ -8,6 +8,8 @@ package worktree
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,9 +19,30 @@ import (
 	"strings"
 )
 
-// Dir is where the worktrees live, under the project root: in .gofi/, which
-// git ignores, so a worktree never shows up in the project's own status.
-const Dir = ".gofi/worktrees"
+// EnvDir names the folder worktrees are made in, over the user's cache.
+const EnvDir = "GOFI_WORKTREES"
+
+// Location is where a run's worktree lives: outside the project, in the
+// user's cache — gofi/worktrees/<project>-<hash>/<run>. Never under the
+// project root: an agent working in a folder inside the project reads the
+// project's own instructions from the folders above it and, seeing the
+// person's tree, writes there.
+func Location(root, run string) string {
+	base := os.Getenv(EnvDir)
+	if base == "" {
+		cache, err := os.UserCacheDir()
+		if err != nil {
+			cache = os.TempDir()
+		}
+		base = filepath.Join(cache, "gofi", "worktrees")
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		abs = root
+	}
+	sum := sha1.Sum([]byte(abs))
+	return filepath.Join(base, filepath.Base(abs)+"-"+hex.EncodeToString(sum[:])[:10], run)
+}
 
 // shared are the ignored folders a worktree links to the project's instead of
 // copying: read by the build and the agents, written by no run.
@@ -58,7 +81,7 @@ func Prepare(ctx context.Context, root, run, change string) (*Tree, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the project has no branch checked out: %w", err)
 	}
-	t := &Tree{Root: root, Dir: filepath.Join(root, filepath.FromSlash(Dir), run), Branch: "gofi/" + change, Base: base}
+	t := &Tree{Root: root, Dir: Location(root, run), Branch: "gofi/" + change, Base: base}
 	if _, err := os.Stat(t.Dir); err == nil {
 		if b, err := git(ctx, t.Dir, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
 			t.Branch = b
@@ -229,6 +252,8 @@ func (t *Tree) Remove(ctx context.Context) error {
 	if _, err := git(ctx, t.Root, "worktree", "remove", "--force", t.Dir); err != nil {
 		return err
 	}
+	// The project's folder of worktrees goes with its last one.
+	_ = os.Remove(filepath.Dir(t.Dir))
 	_, err := git(ctx, t.Root, "branch", "--quiet", "-d", t.Branch)
 	return err
 }

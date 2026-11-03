@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"github.com/joaoprofile/gofi/cli/internal/worktree"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,8 +79,10 @@ func TestARunInAWorktreeLandsOnTheCurrentBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
+	// The agents work in the run's worktree, outside the project: never
+	// in a folder the project's own tree holds.
 	for _, d := range sessionDirs {
-		if !strings.Contains(d, filepath.Join(".gofi", "worktrees")) {
+		if !strings.HasPrefix(d, os.Getenv(worktree.EnvDir)) || strings.HasPrefix(d, root+string(filepath.Separator)) {
 			t.Errorf("an agent worked in %s, not in the run's worktree", d)
 		}
 	}

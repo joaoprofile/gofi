@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"github.com/joaoprofile/gofi/cli/internal/worktree"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,7 +27,13 @@ func TestMain(m *testing.M) {
 		needs.Claude = false
 		return toolchain.Detect(needs)
 	}
-	os.Exit(m.Run())
+	// A run's worktree is made outside its project, in the user's cache: the
+	// tests' go to a folder of their own.
+	trees, _ := os.MkdirTemp("", "gofi-worktrees-")
+	os.Setenv(worktree.EnvDir, trees)
+	code := m.Run()
+	os.RemoveAll(trees)
+	os.Exit(code)
 }
 
 // From the package's folder, no project is found: the fence holds.
