@@ -260,3 +260,24 @@ func TestADerivedFileTheBaseLacksIsNotAConflict(t *testing.T) {
 		t.Error("b did not land")
 	}
 }
+
+func TestMain(m *testing.M) {
+	trees, _ := os.MkdirTemp("", "gofi-worktrees-")
+	os.Setenv(EnvDir, trees)
+	code := m.Run()
+	os.RemoveAll(trees)
+	os.Exit(code)
+}
+
+// A run's worktree is never under its project: an agent in it would read the
+// project's instructions from the folders above and see the person's tree.
+func TestAWorktreeLivesOutsideItsProject(t *testing.T) {
+	root := t.TempDir()
+	dir := Location(root, "r-1")
+	if rel, err := filepath.Rel(root, dir); err == nil && !strings.HasPrefix(rel, "..") {
+		t.Errorf("worktree %s is under the project %s", dir, root)
+	}
+	if Location(root, "r-1") != dir || Location(t.TempDir(), "r-1") == dir {
+		t.Error("the location is not one per project and run")
+	}
+}
