@@ -71,7 +71,8 @@ func installRoles(t *testing.T, root string) {
 func quietPorts(t *testing.T) {
 	t.Helper()
 	runPorts.graph = &pack.Command{Run: "true", Format: pack.FormatExit}
-	t.Cleanup(func() { runPorts.graph = nil })
+	runPorts.trace = &pack.Command{Run: "true", Format: pack.FormatExit}
+	t.Cleanup(func() { runPorts.graph, runPorts.trace = nil, nil })
 }
 
 func (fakeSession) Cancel()      {}

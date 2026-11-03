@@ -120,8 +120,8 @@ var runPorts = struct {
 	// regenerate writes a worktree's derived files; in a test, the running
 	// binary is the test binary and must not be run as gofi.
 	regenerate func(ctx context.Context, dir string) error
-	// graph is the graph sensor's command, for the same reason.
-	graph *pack.Command
+	// graph and trace are gofi's own sensors' commands, for the same reason.
+	graph, trace *pack.Command
 }{}
 
 // graphSensor is gofi's own stage (0002, D11, S4): this gofi indexes the
@@ -141,6 +141,21 @@ func graphSensor(run string) pack.Command {
 		Run:    fmt.Sprintf("%s index code --baseline %s --diff %s --report %s", strconv.Quote(exe), baseline, loop.DiffFile(run), loop.GraphReport(run)),
 		Format: pack.FormatSARIF, Report: loop.GraphReport(run),
 	}
+}
+
+// traceSensor is gofi's own stage too (0002, D10, S5): every requirement
+// the change adds or modifies has the code that implements it, every
+// scenario its test — a gap is a finding at the scenario, in SARIF.
+func traceSensor(change, run string) pack.Command {
+	if runPorts.trace != nil {
+		return *runPorts.trace
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return pack.Command{}
+	}
+	report := path.Join(loop.RunsDir, run, "trace.sarif")
+	return pack.Command{Run: fmt.Sprintf("%s trace %s --report %s", strconv.Quote(exe), change, report), Format: pack.FormatSARIF, Report: report}
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -464,6 +479,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	if _, set := sensors["graph"]; !set {
 		sensors["graph"] = graphSensor(run)
+	}
+	if _, set := sensors["trace"]; !set {
+		sensors["trace"] = traceSensor(change, run)
 	}
 	if err := captureBaseline(work, run); err != nil {
 		return "", fmt.Errorf("baseline do grafo: %w", err)

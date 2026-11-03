@@ -193,6 +193,27 @@ func writeGraphDiff(file string, d *diff.Delta, old, now *model.Graph, lp *pack.
 // writeGraphSARIF writes the broken rules in SARIF, the format the sensor
 // stages are read in, each placed at its symbol.
 func writeGraphSARIF(file string, violations []rules.Violation, g *model.Graph, tree string) error {
+	var results []sarifResult
+	for _, v := range violations {
+		r := sarifResult{Rule: v.Rule, Message: v.Message, Line: v.Line, Symbol: model.ShortID(v.Symbol, g.Module)}
+		if v.File != "" {
+			r.URI = path.Join(tree, v.File)
+		}
+		results = append(results, r)
+	}
+	return writeSARIF(file, "gofi-graph", results)
+}
+
+// sarifResult is one thing a gofi stage refused, where it is.
+type sarifResult struct {
+	Rule, Message, URI, Symbol string
+	Line                       int
+}
+
+// writeSARIF writes what a gofi stage refused as SARIF 2.1, the format the
+// sensor stages are read in: an error each, at its file and line, and its
+// symbol when it has one.
+func writeSARIF(file, tool string, results []sarifResult) error {
 	type logical struct {
 		FullyQualifiedName string `json:"fullyQualifiedName"`
 	}
@@ -215,23 +236,22 @@ func writeGraphSARIF(file string, violations []rules.Violation, g *model.Graph, 
 		} `json:"message"`
 		Locations []location `json:"locations"`
 	}
-	results := []result{}
-	for _, v := range violations {
-		r := result{RuleID: v.Rule, Level: "error"}
-		r.Message.Text = v.Message
+	out := []result{}
+	for _, r := range results {
+		res := result{RuleID: r.Rule, Level: "error"}
+		res.Message.Text = r.Message
 		var loc location
-		if v.File != "" {
-			loc.Physical.Artifact.URI = path.Join(tree, v.File)
-			loc.Physical.Region.StartLine = v.Line
+		loc.Physical.Artifact.URI, loc.Physical.Region.StartLine = r.URI, r.Line
+		if r.Symbol != "" {
+			loc.Logical = []logical{{FullyQualifiedName: r.Symbol}}
 		}
-		loc.Logical = []logical{{FullyQualifiedName: model.ShortID(v.Symbol, g.Module)}}
-		r.Locations = []location{loc}
-		results = append(results, r)
+		res.Locations = []location{loc}
+		out = append(out, res)
 	}
 	doc := map[string]any{
 		"version": "2.1.0",
 		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-		"runs":    []any{map[string]any{"tool": map[string]any{"driver": map[string]any{"name": "gofi-graph"}}, "results": results}},
+		"runs":    []any{map[string]any{"tool": map[string]any{"driver": map[string]any{"name": tool}}, "results": out}},
 	}
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
