@@ -94,7 +94,8 @@ impasse: the person decides.`,
 gofi run --context pedidos
 gofi run --resume r-20261102-101500
 gofi run adicionar-rate-limit --no-archive
-gofi run adicionar-rate-limit --detach`,
+gofi run adicionar-rate-limit --detach
+gofi run --all --parallel 2`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runRun,
 	}
@@ -110,6 +111,10 @@ gofi run adicionar-rate-limit --detach`,
 	cmd.Flags().Bool("worktree", false, i18n.T("cmd.run.flag.worktree"))
 	cmd.Flags().String("run-id", "", "name of the new run (set by --detach)")
 	_ = cmd.Flags().MarkHidden("run-id")
+	cmd.Flags().Float64("budget", 0, "what this run may spend, below loop.budget_usd (set by --all)")
+	_ = cmd.Flags().MarkHidden("budget")
+	cmd.Flags().Bool("all", false, i18n.T("cmd.run.flag.all"))
+	cmd.Flags().Int("parallel", 0, i18n.T("cmd.run.flag.parallel"))
 	return cmd
 }
 
@@ -166,6 +171,26 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	resume, _ := cmd.Flags().GetString("resume")
 	ctxName, _ := cmd.Flags().GetString("context")
+	if all, _ := cmd.Flags().GetBool("all"); all {
+		if resume != "" || len(args) > 0 || ctxName != "" {
+			return errors.New(i18n.T("run.which"))
+		}
+		o := allOpts{}
+		o.Parallel, _ = cmd.Flags().GetInt("parallel")
+		o.Flow, _ = cmd.Flags().GetString("flow")
+		o.Mode, _ = cmd.Flags().GetString("permission-mode")
+		o.GateTimeout, _ = cmd.Flags().GetString("gate-timeout")
+		o.NoArchive, _ = cmd.Flags().GetBool("no-archive")
+		if !cmd.Flags().Changed("flow") {
+			o.Flow = ""
+		}
+		if !cmd.Flags().Changed("permission-mode") {
+			o.Mode = ""
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return runAll(ctx, cmd.OutOrStdout(), root, cfg, o)
+	}
 	named := 0
 	for _, set := range []bool{resume != "", len(args) > 0, ctxName != ""} {
 		if set {
@@ -225,6 +250,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	o.Events, _ = cmd.Flags().GetBool("events")
 	o.Mode, _ = cmd.Flags().GetString("permission-mode")
 	o.GateTimeout, _ = cmd.Flags().GetString("gate-timeout")
+	o.Budget, _ = cmd.Flags().GetFloat64("budget")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var outcome string
@@ -246,6 +272,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 type deliverOpts struct {
 	Change, Resume, Flow, Mode string
 	NoArchive                  bool
+	// Budget, when set, bounds the run below loop.budget_usd: the share of
+	// gofi run --all's budget left to it.
+	Budget float64
 	// Events writes the run's events as NDJSON, one per line, ending with a
 	// run.result line — what the panel and the chat read.
 	Events bool
@@ -375,6 +404,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	policy := loopPolicy(cfg)
 	if err := policy.Check(); err != nil {
 		return "", err
+	}
+	if o.Budget > 0 && (policy.BudgetUSD == 0 || o.Budget < policy.BudgetUSD) {
+		policy.BudgetUSD = o.Budget
 	}
 
 	run, change, ctxName := o.Resume, o.Change, ""

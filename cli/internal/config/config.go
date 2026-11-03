@@ -205,6 +205,12 @@ type Loop struct {
 	Escalate string `yaml:"escalate,omitempty"`
 	// AuditParallel is how many lenses of an audit run at once; 0, all.
 	AuditParallel int `yaml:"audit_parallel,omitempty"`
+	// MaxAgents is how many changes gofi run --all delivers at once, each
+	// in a worktree of its own; 0 or 1, one after another in the tree.
+	MaxAgents int `yaml:"max_agents,omitempty"`
+	// RunBudgetUSD is what gofi run --all may spend on all its changes
+	// together; 0: no budget beyond each run's.
+	RunBudgetUSD float64 `yaml:"run_budget_usd,omitempty"`
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.
