@@ -17,7 +17,8 @@ import (
 func change(t *testing.T, root, id, deps string) {
 	t.Helper()
 	dir := filepath.Join(root, "specs", "changes", id)
-	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: ["+id+"]\nversao: \"1.0\"\nstatus: proposto\ndepende_de: ["+deps+"]\ndesign: n/a\nkeywords: [x]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
+	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: ["+id+"]\nversao: \"1.0\"\nstatus: proposto\ndepende_de: ["+deps+"]\nkeywords: [x]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
+	writeFile(t, filepath.Join(dir, "design.md"), minimalDesign(id))
 	writeFile(t, filepath.Join(dir, "deltas", id+".md"), "---\ntipo: delta\nformato: 3\ncontexto: "+id+"\nversao: \"1.0\"\nstatus: proposto\nkeywords: [x]\n---\n# D\n\n## Propósito\n\nx.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — X\nO sistema DEVE x.\n\n#### Cenário: REQ-01.1 — X\n- DADO x\n- QUANDO y\n- ENTÃO z\n")
 }
 

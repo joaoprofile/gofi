@@ -166,9 +166,9 @@ func TestAChangeThatTouchesCodeNeedsADesign(t *testing.T) {
 	mustHave(t, findingsOf(t, root, dir+"proposal.md"), "não tem design.md")
 
 	write(t, root, dir+"proposal.md", strings.Replace(doc3("mudanca"), "keywords:", "design: n/a\nkeywords:", 1)+"# M\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n")
-	if got := findingsOf(t, root, dir+"proposal.md"); got != "" {
-		t.Errorf("design: n/a still asked for one:\n%s", got)
-	}
+	// A requirement that did not exist is code that does not: n/a is for a
+	// change that changes none.
+	mustHave(t, findingsOf(t, root, dir+"proposal.md"), "a mudança adiciona requisitos e declara design: n/a")
 }
 
 func TestChangesThatDependOnEachOther(t *testing.T) {
