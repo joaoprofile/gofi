@@ -62,11 +62,16 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 			fmt.Fprintf(&b, "- %s — %s (%s) → %s\n", t.ID, t.Summary, strings.Join(t.Reqs, ", "), strings.Join(t.Files, ", "))
 		}
 		b.WriteString("\n")
+	case rl.Contract.Stage == "deliver":
+		fmt.Fprintf(&b, "A mudança foi aceita. Grave a mensagem do commit dela em `%s` — a primeira linha `<tipo>(%s): <o que a mudança faz>`, com até 72 caracteres, uma linha em branco, e o corpo: por que a mudança existe (a proposta) e o que mudou no código (o escopo abaixo), em frases curtas. Sem nome de agente, ferramenta ou modelo. É a única escrita deste turno.\n\n", CommitFile(s.Run), s.Context)
+		if s.Diff != nil && len(s.Diff.Touched) > 0 {
+			b.WriteString(scope(s.Diff, "**O que mudou**, pelo grafo de código:"))
+		}
 	case rl.Contract.Stage == "test":
 		b.WriteString("Escreva os testes **a partir dos cenários dos deltas**, não do código: o código é a coisa testada. Do código, leia só as assinaturas públicas que o teste chama (`gofi show <símbolo>`).\n\n")
 	}
 	if rl.Contract.Stage == "audit" && s.Diff != nil && len(s.Diff.Touched)+len(s.Diff.Removed) > 0 {
-		b.WriteString(auditScope(s.Diff))
+		b.WriteString(scope(s.Diff, "**Escopo da auditoria** — o grafo de código diz o que a mudança tocou desde o início da execução. Audite isto e o que depende disto; o resto do código não é desta mudança:"))
 	}
 	// Triage is where a run that cannot go on says why, for the person.
 	if rl.Contract.Stage == "triage" && s.Proposal != "" {
@@ -98,11 +103,12 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 // files say the rest.
 const maxScope = 40
 
-// auditScope is what the graph says the change touched and what depends on
-// it: the audit's scope, so it reads the change, not the project (0002, D11).
-func auditScope(d *GraphDiff) string {
+// scope is what the graph says the change touched and what depends on it:
+// the audit's scope, so it reads the change, not the project (0002, D11),
+// and what the delivery says changed.
+func scope(d *GraphDiff, intro string) string {
 	var b strings.Builder
-	b.WriteString("**Escopo da auditoria** — o grafo de código diz o que a mudança tocou desde o início da execução. Audite isto e o que depende disto; o resto do código não é desta mudança:\n\n")
+	b.WriteString(intro + "\n\n")
 	for i, t := range d.Touched {
 		if i == maxScope {
 			fmt.Fprintf(&b, "- … +%d símbolos\n", len(d.Touched)-maxScope)

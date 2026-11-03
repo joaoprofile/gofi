@@ -16,9 +16,10 @@ var skipDirs = map[string]bool{".git": true, ".gofi": true, ".claude": true, "no
 
 // guarded are the source files of a tree that a role must not change: the
 // tests, for a role that implements; the code, for the role that writes the
-// tests. Who writes the code never writes the test that judges it (0002,
-// D12, D17). Nil when the role's stage guards nothing or the pack says
-// nothing of the language's files.
+// tests; all of them, for a role that writes no code — the plan, the triage,
+// the delivery. Who writes the code never writes the test that judges it
+// (0002, D12, D17). Nil when the role's stage guards nothing or the pack
+// says nothing of the language's files.
 func (r *Runner) guarded(rl role.Role) func(string) bool {
 	if r.IsTest == nil || r.IsSource == nil {
 		return nil
@@ -30,6 +31,8 @@ func (r *Runner) guarded(rl role.Role) func(string) bool {
 		return r.IsTest
 	case "test":
 		return func(p string) bool { return r.IsSource(p) && !r.IsTest(p) }
+	case "plan", "triage", "deliver":
+		return r.IsSource
 	}
 	return nil
 }

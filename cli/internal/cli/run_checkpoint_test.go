@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +15,8 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
+
+var reCommitFile = regexp.MustCompile("Grave a mensagem do commit dela em `([^`]+)`")
 
 // scriptedSession is a turn that does what a role would on disk: the
 // implementation writes a file, the audit writes the verdict it is given.
@@ -36,6 +39,9 @@ func (s scriptedSession) Send(_ context.Context, t engine.Turn) (<-chan engine.E
 		}
 		v.Run, v.Iter = m[2], iter
 		_, _ = verdict.Write(s.root, v)
+	case isRole(t.Prompt, "gofi-deliver"):
+		m := reCommitFile.FindStringSubmatch(t.Prompt)
+		_ = os.WriteFile(filepath.Join(s.root, m[1]), []byte("feat(pedidos): recusar o pedido de total zero\n\nUm pedido sem valor não fecha.\n"), 0o644)
 	}
 	ch := make(chan engine.Event, 1)
 	ch <- engine.Done{CostUSD: 0.01, Duration: time.Second}
@@ -86,6 +92,22 @@ func checkpointProject(t *testing.T, verdictJSON string) (string, func(...string
 		t.Fatalf("approve: %v\n%s", err, out)
 	}
 	return root, run
+}
+
+// Accepted, the change is committed with the message the delivery wrote.
+func TestTheCommitCarriesTheDeliverysMessage(t *testing.T) {
+	root, run := checkpointProject(t, `{"result":"aprovado"}`)
+	writeFile(t, layout.Roles().Abs(root, "gofi-deliver", "contract.yaml"), readFile(t, filepath.Join(shippedSkills, "gofi-deliver", "contract.yaml")))
+	writeFile(t, layout.Roles().Abs(root, "gofi-deliver", "SKILL.md"), "# /gofi-deliver\n")
+	gitIn(t, root, "add", "-A", ".claude")
+	gitIn(t, root, "commit", "--quiet", "-m", "deliver")
+	out, err := run("criar-pedidos")
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	if got := gitIn(t, root, "log", "-1", "--format=%B"); got != "feat(pedidos): recusar o pedido de total zero\n\nUm pedido sem valor não fecha." {
+		t.Errorf("message = %q\n%s", got, out)
+	}
 }
 
 // In the project's tree, an accepted change is one commit on the current
