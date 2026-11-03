@@ -177,7 +177,7 @@ func writeGraphDiff(file string, d *diff.Delta, old, now *model.Graph, lp *pack.
 			tests[path.Join(tree, n.File)] = true
 		}
 	}
-	gd.Reach = slices.Sorted(maps.Keys(reach))
+	gd.Reach = append([]string{}, slices.Sorted(maps.Keys(reach))...)
 	gd.Tests = slices.Sorted(maps.Keys(tests))
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		return err

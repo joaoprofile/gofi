@@ -133,6 +133,9 @@ func (e *Engine) isFile(ref string) bool {
 	return err == nil && !st.IsDir()
 }
 
+// verbs say what a dependent does to what it depends on.
+var verbs = map[string]string{"calls": "chama", "uses": "usa", "implements": "implementa", "embeds": "embute", "extends": "estende"}
+
 func renderImpact(d ImpactData) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "impacto de %s\n", strings.Join(d.Targets, ", "))
@@ -165,7 +168,7 @@ func renderImpact(d ImpactData) string {
 			if r.Test {
 				test = "  [teste]"
 			}
-			fmt.Fprintf(&b, "    %d· %s %s %s%s%s\n", r.Depth, r.Symbol, r.Rel, r.Via, at, test)
+			fmt.Fprintf(&b, "    %d· %s %s %s%s%s\n", r.Depth, r.Symbol, verbs[r.Rel], r.Via, at, test)
 		}
 	}
 	return b.String()
