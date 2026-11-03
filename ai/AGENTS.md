@@ -130,6 +130,7 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 | `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
 | `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados — começa no tier light e sobe quando não progride |
 | `gofi-triage` | triage | quando o loop não pode seguir (achado do contrato, ou sem progresso no tier mais alto): classifica a causa-raiz e redige a proposta de emenda em `.gofi/proposals/` |
+| `gofi-deliver` | deliver | aceita a mudança, escreve a mensagem do commit dela (o relatório, `gofi report`, o gofi monta sozinho) |
 | `gofi-qa` | audit | lente geral: checklist do SDK, camadas, knowledge — sozinho, audita tudo |
 | `gofi-qa-conformance` | audit | lente: cada requisito realizado como a mudança e o design dizem |
 | `gofi-qa-tests` | audit | lente: cada cenário provado por um teste que prova; regressão |

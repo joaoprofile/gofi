@@ -49,6 +49,10 @@ func DiffFile(run string) string { return slash.Join(RunsDir, run, "diff.json") 
 // BaselineDir is where a run keeps the code graph it started from.
 func BaselineDir(run string) string { return slash.Join(RunsDir, run, "baseline") }
 
+// CommitFile is where the delivery writes the message of an accepted
+// change's commit.
+func CommitFile(run string) string { return slash.Join(RunsDir, run, "commit.md") }
+
 // GraphReport is where the graph stage of a run writes what it refused.
 func GraphReport(run string) string { return slash.Join(RunsDir, run, "graph.sarif") }
 

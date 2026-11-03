@@ -1,0 +1,12 @@
+# The role's contract, read by gofi only — the host never loads this file.
+#   tier       capability the role needs: light (reads and answers), standard
+#              (writes with a clear scope, or reviews), deep (decides and
+#              designs). gofi turns it into the host's model; ai.tiers overrides.
+#   visibility internal: run by the flow alone, once the change is accepted.
+#   stage      deliver: after the policy accepts, before the commit.
+#   tools      it reads, and writes the one message file the turn names; the
+#              source files are guarded.
+tier: light
+visibility: internal
+stage: deliver
+tools: [read, write, search, gofi]

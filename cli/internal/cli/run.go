@@ -566,7 +566,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		fmt.Fprintln(out, "  "+i18n.T("change.archive.moved", res.Dir))
 	}
 	if cp != nil {
-		message := commitMessage(s)
+		message := commitMessage(work, s)
 		if err := cp.Commit(ctx, message, "specs/changes/"+change, filepath.ToSlash(res.Dir)); err != nil {
 			return s.Outcome, fmt.Errorf("commit %s: %w", cp.Branch, err)
 		}
@@ -574,7 +574,8 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		_ = loop.SaveState(root, s)
 		report(loop.AppendEvent(root, s.Run, loop.Event{Ev: "land.done", Node: s.Run, Why: cp.Branch}))
 		if !o.Events {
-			fmt.Fprintln(out, "  "+i18n.T("run.checkpoint.done", message, cp.Branch))
+			subject, _, _ := strings.Cut(message, "\n")
+			fmt.Fprintln(out, "  "+i18n.T("run.checkpoint.done", subject, cp.Branch))
 		}
 	}
 	if tree == nil {
@@ -752,7 +753,7 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 	// Committed here, not where the run was accepted: a resume that lands a
 	// run whose commit failed commits it first. Nothing left to commit is
 	// not an error.
-	message := commitMessage(s)
+	message := commitMessage(tree.Dir, s)
 	if tree.Ahead(ctx) {
 		message = "chore: regenerate the indexes of " + s.Change
 	}
@@ -813,8 +814,21 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 }
 
 // commitMessage is the commit an accepted change becomes.
-func commitMessage(s *loop.State) string {
-	return fmt.Sprintf("feat(%s): %s", s.Context, s.Change)
+func commitMessage(work string, s *loop.State) string {
+	fallback := fmt.Sprintf("feat(%s): %s", s.Context, s.Change)
+	data, err := os.ReadFile(filepath.Join(work, filepath.FromSlash(loop.CommitFile(s.Run))))
+	if err != nil {
+		return fallback
+	}
+	// The delivery's message, when it reads as one: a subject line of a
+	// commit, then the body.
+	msg := strings.TrimSpace(string(data))
+	msg = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(msg, "```"), "```"))
+	subject, _, _ := strings.Cut(msg, "\n")
+	if subject == "" || len(subject) > 100 || strings.HasPrefix(subject, "#") {
+		return fallback
+	}
+	return msg
 }
 
 // checkpoint is the git checkpoint of a run in the project's own tree; nil

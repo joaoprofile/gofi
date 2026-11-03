@@ -169,7 +169,7 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 		}
 	}
 	out, err = run(newLogsCmd, id)
-	if err != nil || !strings.Contains(out, "run.end") || !strings.Contains(out, "policy → accepted") {
+	if err != nil || !strings.Contains(out, "run.end") || !strings.Contains(out, "policy → deliver") {
 		t.Errorf("logs: %v\n%s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".gofi", "runs", id, "agents", "implement-1.ndjson")); err != nil {
