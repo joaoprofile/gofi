@@ -34,6 +34,9 @@ nodes:
   # Accepted, the delivery writes what the person reads of it: the commit's
   # message, from the change and what the graph says changed.
   deliver:   {kind: agent, stage: deliver, optional: true}
+  # A run that had to go back to work proposes what would have spared it,
+  # for the person to accept into the knowledge (0002, §7).
+  learn:     {kind: agent, stage: learn, optional: true}
   plan-decide: {kind: gate}
   decide:      {kind: gate}
   test-decide: {kind: gate}
@@ -62,7 +65,8 @@ edges:
   - {from: repair, to: sense}
   - {from: audit, to: policy}
   - {from: policy, to: deliver, when: {accept: true}}
-  - {from: deliver, to: accepted}
+  - {from: deliver, to: learn}
+  - {from: learn, to: accepted}
   # The contract is wrong, or the discovery behind it: not the loop's to fix.
   - {from: policy, to: triage, when: {owner: [spec, pd]}}
   - {from: policy, to: impasse, when: {oscillation: true}}

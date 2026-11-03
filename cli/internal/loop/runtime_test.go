@@ -976,3 +976,44 @@ func TestARequirementNothingImplementsGoesToItsLayer(t *testing.T) {
 		t.Errorf("implement turns = %s", got)
 	}
 }
+
+// A run that had to go back to work proposes lessons, told what it fixed;
+// they wait at the project root for the person (0002, §7). A run with no
+// rework learns nothing.
+func TestARunThatReworkedProposesLessons(t *testing.T) {
+	w := newWorld(t)
+	w.runner.Roles = append(w.runner.Roles, role.Role{Name: "gofi-learn", Contract: role.Contract{Tier: host.Standard, Visibility: role.VisibilityInternal, Stage: "learn",
+		Triggers: []role.Trigger{{All: []string{"run.reworked"}}}}})
+	w.agent.steps["audit"] = []step{audit(w.root, "reprovado", "major:eng:pedidos/REQ-01.1"), audit(w.root, "aprovado")}
+	w.agent.steps["learn"] = []step{func(t Turn) {
+		p := filepath.Join(w.root, filepath.FromSlash(LessonsFile("r-1")))
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(`{"lessons":[{"scope":"eng","name":"recusa-total-zero","title":"t","body":"b","keywords":["x"],"evidence":"pedidos/REQ-01.1"}]}`), 0o644)
+	}}
+	s := w.run(t)
+	if s.Outcome != "accepted" || !strings.HasSuffix(path(t, w.root), "policy learn accepted") {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	var learnt *Turn
+	for i, turn := range w.agent.turns {
+		if turn.Node == "learn" {
+			learnt = &w.agent.turns[i]
+		}
+	}
+	if learnt == nil || !strings.Contains(learnt.Prompt, "pedidos/REQ-01.1") || !strings.Contains(learnt.Prompt, "1 voltas") {
+		t.Fatalf("the learn turn is not told what the run fixed: %+v", learnt)
+	}
+	if _, err := os.Stat(filepath.Join(w.root, ".gofi", "learn", "r-1.json")); err != nil {
+		t.Errorf("the lessons were not kept: %v", err)
+	}
+
+	clean := newWorld(t)
+	clean.runner.Roles = w.runner.Roles
+	clean.agent.steps["audit"] = []step{audit(clean.root, "aprovado")}
+	clean.run(t)
+	for _, turn := range clean.agent.turns {
+		if turn.Node == "learn" {
+			t.Error("a run with no rework ran the learn stage")
+		}
+	}
+}

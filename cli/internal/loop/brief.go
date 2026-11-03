@@ -67,6 +67,8 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		if s.Diff != nil && len(s.Diff.Touched) > 0 {
 			b.WriteString(scope(s.Diff, "**O que mudou**, pelo grafo de código:"))
 		}
+	case rl.Contract.Stage == "learn":
+		b.WriteString(learnBrief(s))
 	case rl.Contract.Stage == "test":
 		b.WriteString("Escreva os testes **a partir dos cenários dos deltas**, não do código: o código é a coisa testada. Do código, leia só as assinaturas públicas que o teste chama (`gofi show <símbolo>`).\n\n")
 	}

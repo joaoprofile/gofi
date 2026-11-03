@@ -31,7 +31,7 @@ func (r *Runner) guarded(rl role.Role) func(string) bool {
 		return r.IsTest
 	case "test":
 		return func(p string) bool { return r.IsSource(p) && !r.IsTest(p) }
-	case "plan", "triage", "deliver":
+	case "plan", "triage", "deliver", "learn":
 		return r.IsSource
 	}
 	return nil
