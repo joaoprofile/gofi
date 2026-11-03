@@ -75,6 +75,10 @@ func (r Runner) stage(ctx context.Context, stage string, c pack.Command) ([]loop
 	if runtime.GOOS == "windows" {
 		shell, flag = "cmd", "/C"
 	}
+	// A report an earlier run left never stands for this one.
+	if c.Report != "" {
+		_ = os.Remove(filepath.Join(r.Root, filepath.FromSlash(c.Report)))
+	}
 	cmd := exec.CommandContext(sctx, shell, flag, c.Run)
 	cmd.Dir = r.Root
 	cmd.Env = append(os.Environ(), r.Env...)
@@ -110,11 +114,12 @@ func (r Runner) stage(ctx context.Context, stage string, c pack.Command) ([]loop
 }
 
 // srcOf is the folder a command runs its tool in — what its file:line
-// positions are relative to — from `go -C <dir>` or `--prefix <dir>`.
+// positions are relative to — from `cd <dir> &&`, `go -C <dir>` or
+// `--prefix <dir>`.
 func (r Runner) srcOf(c pack.Command) string {
 	f := strings.Fields(c.Run)
 	for i := 0; i+1 < len(f); i++ {
-		if f[i] == "-C" || f[i] == "--prefix" {
+		if f[i] == "-C" || f[i] == "--prefix" || i == 0 && f[i] == "cd" {
 			return f[i+1]
 		}
 	}
