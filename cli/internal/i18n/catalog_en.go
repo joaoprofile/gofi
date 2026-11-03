@@ -567,6 +567,8 @@ var catalogEN = map[string]string{
 	"cmd.path.short":                 "Show how one symbol reaches another in the code graph",
 	"cmd.impact.short":               "Show what a change to some symbols or files can break",
 	"cmd.trace.short":                "Line up a change's requirements with the code that implements them and the tests that test them",
+	"cmd.report.short":               "Show what a run delivered: trace, what changed, the audit and the cost",
+	"run.report":                     "report: %s (gofi report %s)",
 	"trace.gaps":                     "the trace has gaps: gofi:implements REQ-NN on the symbol that realizes the requirement, gofi:tests REQ-NN.n on the scenario's test",
 	"trace.unknown":                  "%q is neither an open change nor a context with a spec — gofi change list",
 	"cmd.impact.flag.min_conf":       "leave out edges below this confidence (0 to 1)",

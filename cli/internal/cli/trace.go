@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/pack"
@@ -50,27 +51,10 @@ func runTrace(cmd *cobra.Command, args []string) error {
 		// A report of an earlier check never stands for this one.
 		_ = os.Remove(filepath.Join(root, filepath.FromSlash(report)))
 	}
-	all, err := contract.Docs(root)
+	rows, err := traceRows(root, cfg, args[0])
 	if err != nil {
 		return err
 	}
-	sources, err := traceSources(all, args[0])
-	if err != nil {
-		return err
-	}
-	lp, err := pack.Load(backendLanguage(cfg))
-	if err != nil {
-		return err
-	}
-	src := ""
-	if cfg.Backend != nil {
-		src = cfg.Backend.Path
-	}
-	marks, err := trace.Scan(root, src, lp)
-	if err != nil {
-		return err
-	}
-	rows := trace.Matrix(sources, marks)
 	gaps := trace.Gaps(rows)
 	if report != "" {
 		var results []sarifResult
@@ -93,6 +77,31 @@ func runTrace(cmd *cobra.Command, args []string) error {
 		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("trace.gaps"))}
 	}
 	return nil
+}
+
+// traceRows is the trace matrix of a change or a context.
+func traceRows(root string, cfg *config.GofiConfig, ref string) ([]trace.Row, error) {
+	all, err := contract.Docs(root)
+	if err != nil {
+		return nil, err
+	}
+	sources, err := traceSources(all, ref)
+	if err != nil {
+		return nil, err
+	}
+	lp, err := pack.Load(backendLanguage(cfg))
+	if err != nil {
+		return nil, err
+	}
+	src := ""
+	if cfg.Backend != nil {
+		src = cfg.Backend.Path
+	}
+	marks, err := trace.Scan(root, src, lp)
+	if err != nil {
+		return nil, err
+	}
+	return trace.Matrix(sources, marks), nil
 }
 
 // traceSources are what a reference traces: the requirements a change adds

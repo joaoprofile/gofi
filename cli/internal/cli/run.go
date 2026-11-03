@@ -33,6 +33,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/pack"
 	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/sensor"
+	"github.com/joaoprofile/gofi/cli/internal/trace"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
@@ -541,6 +542,21 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if !o.Events {
 		fmt.Fprintf(out, "\n  %s\n", i18n.T("run.ended", run, s.Outcome, s.CostUSD))
 	}
+	// The report is written last, with how the run ended — committed, kept,
+	// landed —; an accepted change's trace is read before it is archived.
+	var rows []trace.Row
+	if s.Outcome == "accepted" {
+		rows, _ = traceRows(work, cfg, change)
+		if rows == nil {
+			rows = []trace.Row{}
+		}
+	}
+	defer func() {
+		if p, err := writeReport(root, s, rows); err == nil && !o.Events {
+			rel, _ := filepath.Rel(root, p)
+			fmt.Fprintln(out, "  "+i18n.T("run.report", filepath.ToSlash(rel), s.Run))
+		}
+	}()
 	if s.Outcome != "accepted" && cp != nil {
 		return s.Outcome, keepWork(ctx, out, root, s, cp, o.Events, report)
 	}

@@ -153,6 +153,12 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, ".gofi", "runs", id, "agents", "implement-1.ndjson")); err != nil {
 		t.Error("no transcript of the implementation turn")
 	}
+	// The report says what was delivered, with the trace read before the
+	// change was archived: here, a scenario no test marks.
+	out, err = run(newReportCmd, id)
+	if err != nil || !strings.Contains(out, "# Entrega — criar-pedidos (pedidos)") || !strings.Contains(out, "REQ-01.1 — Zero | **lacuna**") {
+		t.Errorf("report: %v\n%s", err, out)
+	}
 	if _, err := run(newCancelCmd, id); err == nil {
 		t.Error("cancelling an ended run passed")
 	}
