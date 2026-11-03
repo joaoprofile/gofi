@@ -100,8 +100,10 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 		fmt.Fprintf(&b, "| Trabalho guardado | branch `%s` |\n", s.Kept)
 	case s.Branch != "":
 		fmt.Fprintf(&b, "| Branch | `%s` → `%s` (%s) |\n", s.Branch, s.Base, s.Landing)
-	case s.Base != "":
+	case s.Base != "" && s.Landing == landed:
 		fmt.Fprintf(&b, "| Commit | em `%s` |\n", s.Base)
+	case s.Base != "" && s.Outcome == "accepted":
+		fmt.Fprintf(&b, "| Commit | **não feito** — o trabalho está na árvore, sem commit em `%s` |\n", s.Base)
 	}
 	if s.Proposal != "" {
 		fmt.Fprintf(&b, "| Proposta de emenda | `%s` |\n", s.Proposal)

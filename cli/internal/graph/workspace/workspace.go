@@ -166,7 +166,10 @@ type ScopeResult struct {
 	Scope   Scope
 	Result  *graph.Result
 	Skipped bool // the key matched the index, so nothing ran
-	Err     error
+	// Unreadable is a scope in a language this project has no extractor
+	// of: not built, and not an error — nothing a rebuild can fix.
+	Unreadable bool
+	Err        error
 }
 
 // Result is the outcome of a workspace build.
@@ -179,7 +182,18 @@ type Result struct {
 func (r *Result) Built() []ScopeResult {
 	out := make([]ScopeResult, 0, len(r.Scopes))
 	for _, s := range r.Scopes {
-		if s.Err == nil {
+		if s.Err == nil && !s.Unreadable {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Unreadable are the scopes in a language with no extractor.
+func (r *Result) Unreadable() []ScopeResult {
+	var out []ScopeResult
+	for _, s := range r.Scopes {
+		if s.Unreadable {
 			out = append(out, s)
 		}
 	}
@@ -226,6 +240,9 @@ func Build(ctx context.Context, opt Options) (*Result, error) {
 }
 
 func buildScope(ctx context.Context, sc Scope, opt Options, prev *Index, log *slog.Logger) ScopeResult {
+	if !CanExtract(opt.Root, sc.Language) {
+		return ScopeResult{Scope: sc, Unreadable: true}
+	}
 	// A key is a promise from the caller that nothing changed. Trust it only
 	// when a graph is actually on disk to go with it.
 	if sc.Key != "" && prev != nil {

@@ -598,6 +598,7 @@ var catalogEN = map[string]string{
 	"learn.which":                    "name the lesson by the number gofi learn shows",
 	"learn.accepted":                 "written: %s",
 	"learn.rejected":                 "rejected: lesson %[2]d of %[1]s",
+	"graph.build.unreadable":         "%s: no %s extractor in this project — its graph is not built (gofi index install %[2]s)",
 	"trace.gaps":                     "the trace has gaps: gofi:implements REQ-NN on the symbol that realizes the requirement, gofi:tests REQ-NN.n on the scenario's test",
 	"trace.unknown":                  "%q is neither an open change nor a context with a spec — gofi change list",
 	"cmd.impact.flag.min_conf":       "leave out edges below this confidence (0 to 1)",
