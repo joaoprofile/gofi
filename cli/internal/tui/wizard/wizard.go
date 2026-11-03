@@ -260,7 +260,14 @@ func buildSteps(r *Result, found detect.Result, sdkGo *string, configureRemote, 
 			},
 			Text:     &r.Module,
 			Validate: func(s string) error { return validateModule(r.Language, s) },
-			Skip:     func() bool { return !needsModule() },
+			Skip: func() bool {
+				// The suggestion follows the language chosen: one made for
+				// another language is replaced, an answer is kept.
+				if isSuggestion(r.Module, r.Name) {
+					r.Module = suggestedModule(r.Language, r.Name)
+				}
+				return !needsModule()
+			},
 		},
 		{
 			Kind:        flow.Input,
@@ -387,6 +394,11 @@ func (r *Result) finalize(sdkGo string, configureRemote bool) error {
 	r.WebPath = strings.TrimSpace(r.WebPath)
 	r.MobilePath = strings.TrimSpace(r.MobilePath)
 	r.Module = strings.TrimSpace(r.Module)
+	// Rust and Python name their package after the project: a module left
+	// from another language's suggestion is no module of theirs.
+	if r.Language == config.LanguageRust || r.Language == config.LanguagePython {
+		r.Module = ""
+	}
 	r.GitRemote = strings.TrimSpace(r.GitRemote)
 	r.AgentsRef = strings.TrimSpace(r.AgentsRef)
 	r.InstitutionalRef = strings.TrimSpace(r.InstitutionalRef)
@@ -725,13 +737,56 @@ func moduleQuestion(language string) (title, desc string) {
 	}
 }
 
+// suggestedModule is the module a language is offered for a project.
+func suggestedModule(language, name string) string {
+	ident := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + 'a' - 'A'
+		}
+		return -1
+	}, name)
+	if ident == "" || ident[0] >= '0' && ident[0] <= '9' {
+		ident = "app" + ident
+	}
+	switch language {
+	case config.LanguageJava:
+		return "com.example." + ident
+	case config.LanguageCSharp:
+		return "Example." + strings.ToUpper(ident[:1]) + ident[1:]
+	case config.LanguageNodeJS:
+		return ident
+	}
+	return "github.com/your-org/your-repo"
+}
+
+// isSuggestion reports whether a module is what some language was offered.
+func isSuggestion(module, name string) bool {
+	for _, l := range []string{config.LanguageGo, config.LanguageJava, config.LanguageCSharp, config.LanguageNodeJS} {
+		if module == suggestedModule(l, name) {
+			return true
+		}
+	}
+	return false
+}
+
+var reJavaPackage = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$`)
+
 func validateModule(language, s string) error {
 	if err := flow.Required(s); err != nil {
 		return err
 	}
 	s = strings.TrimSpace(s)
 	switch language {
-	case config.LanguageJava, config.LanguageCSharp:
+	case config.LanguageJava:
+		// A Java package is dotted identifiers: it becomes the folders of
+		// src/main/java, and a hyphen or a slash makes no package.
+		if !reJavaPackage.MatchString(s) {
+			return errors.New(i18n.T("wizard.err.dotted"))
+		}
+	case config.LanguageCSharp:
 		if !strings.Contains(s, ".") {
 			return errors.New(i18n.T("wizard.err.dotted"))
 		}
