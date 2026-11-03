@@ -6,6 +6,7 @@ schema: gofi-pack/v1
 language: python
 tests: ["test_*.py", "*_test.py"]
 sources: ["*.py"]
+skips: ["pytest.mark.skip", "pytest.skip(", "unittest.skip", "pytest.mark.xfail"]
 sensors:
   # Cheapest first: a run stops at the first stage that fails. mypy is the
   # build: what does not type does not run as written.

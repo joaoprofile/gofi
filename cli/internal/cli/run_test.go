@@ -91,7 +91,8 @@ func quietPorts(t *testing.T) {
 	t.Helper()
 	runPorts.graph = &pack.Command{Run: "true", Format: pack.FormatExit}
 	runPorts.trace = &pack.Command{Run: "true", Format: pack.FormatExit}
-	t.Cleanup(func() { runPorts.graph, runPorts.trace = nil, nil })
+	runPorts.integrity = &pack.Command{Run: "true", Format: pack.FormatExit}
+	t.Cleanup(func() { runPorts.graph, runPorts.trace, runPorts.integrity = nil, nil, nil })
 }
 
 func (fakeSession) Cancel()      {}

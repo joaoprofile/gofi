@@ -15,11 +15,12 @@ nodes:
   # The tests are written by a role of their own, from the scenarios — not
   # by whoever wrote the code they judge (D17).
   test:      {kind: agent, stage: test, optional: true}
-  # Cheapest first; graph reindexes the code the turn changed, so the audit
-  # reads a map that holds it and no agent rebuilds the index by hand, and
-  # holds it to the architecture rules; trace, that every requirement has
-  # its code and every scenario its test (0002, D10).
-  sense:     {kind: sensor, stages: [build, static, test, graph, trace]}
+  # Cheapest first; integrity refuses a run that changed its contract,
+  # deleted a test or skipped one (D12); graph reindexes the code the turn
+  # changed, so the audit reads a map that holds it and no agent rebuilds the
+  # index by hand, and holds it to the architecture rules; trace, that every
+  # requirement has its code and every scenario its test (0002, D10).
+  sense:     {kind: sensor, stages: [build, integrity, static, test, graph, trace]}
   # What the build, the static analysis or the graph refused is repaired
   # with the findings alone, before anything reaches the audit.
   repair:    {kind: agent, stage: repair}
