@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/graph"
@@ -267,5 +268,53 @@ func symbolAt(root string) func(file string, line int) string {
 			return model.ShortID(id, g.Module)
 		}
 		return ""
+	}
+}
+
+// planReach is the contexts that depend on the code some files — or
+// folders, ending in / — hold, in the graph the run started from: what a
+// plan's files reach before a line of it is written. nil when the run has
+// no baseline.
+func planReach(work, run, language string) func(files []string) []string {
+	_, tree, ok := projectGraph(work)
+	if !ok {
+		return nil
+	}
+	g, err := model.Load(filepath.Join(work, filepath.FromSlash(loop.BaselineDir(run)), graph.GraphFile))
+	if err != nil {
+		return nil
+	}
+	lp, _ := pack.Load(language)
+	return func(files []string) []string {
+		var targets []string
+		for _, f := range files {
+			rel := strings.TrimPrefix(filepath.ToSlash(f), "./")
+			if tree != "" && tree != "." {
+				if !strings.HasPrefix(rel, tree+"/") {
+					continue
+				}
+				rel = strings.TrimPrefix(rel, tree+"/")
+			}
+			for _, n := range g.Nodes {
+				if n.External || n.Kind == model.KindPackage || n.File == "" {
+					continue
+				}
+				if n.File == rel || strings.HasSuffix(rel, "/") && strings.HasPrefix(n.File, rel) {
+					targets = append(targets, n.ID)
+				}
+			}
+		}
+		reach := map[string]bool{}
+		for _, d := range query.Impact(g, targets, 0, 0) {
+			n := g.Get(d.ID)
+			c := n.Context
+			if c == "" {
+				c = lp.ContextOf(n.File)
+			}
+			if c != "" {
+				reach[c] = true
+			}
+		}
+		return slices.Sorted(maps.Keys(reach))
 	}
 }

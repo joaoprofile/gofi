@@ -65,6 +65,9 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	case rl.Contract.Stage == "test":
 		b.WriteString("Escreva os testes **a partir dos cenários dos deltas**, não do código: o código é a coisa testada. Do código, leia só as assinaturas públicas que o teste chama (`gofi show <símbolo>`).\n\n")
 	}
+	if rl.Contract.Stage == "audit" && s.Diff != nil && len(s.Diff.Touched)+len(s.Diff.Removed) > 0 {
+		b.WriteString(auditScope(s.Diff))
+	}
 	// Triage is where a run that cannot go on says why, for the person.
 	if rl.Contract.Stage == "triage" && s.Proposal != "" {
 		why := "a auditoria achou defeito do contrato (dono spec ou pd)"
@@ -88,6 +91,40 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		return b.String()
 	}
 	fmt.Fprintf(&b, "Se o seu papel audita: grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
+	return b.String()
+}
+
+// maxScope is how many touched symbols the audit is named: past it, the
+// files say the rest.
+const maxScope = 40
+
+// auditScope is what the graph says the change touched and what depends on
+// it: the audit's scope, so it reads the change, not the project (0002, D11).
+func auditScope(d *GraphDiff) string {
+	var b strings.Builder
+	b.WriteString("**Escopo da auditoria** — o grafo de código diz o que a mudança tocou desde o início da execução. Audite isto e o que depende disto; o resto do código não é desta mudança:\n\n")
+	for i, t := range d.Touched {
+		if i == maxScope {
+			fmt.Fprintf(&b, "- … +%d símbolos\n", len(d.Touched)-maxScope)
+			break
+		}
+		where := t.File
+		if t.Layer != "" {
+			where += ", " + t.Layer
+		}
+		fmt.Fprintf(&b, "- `%s` (%s)\n", t.Symbol, where)
+	}
+	if len(d.Removed) > 0 {
+		fmt.Fprintf(&b, "- removidos: %s\n", strings.Join(d.Removed, ", "))
+	}
+	switch {
+	case d.Dependents == 0:
+		b.WriteString("\nNenhum outro símbolo do projeto depende do que mudou.\n\n")
+	case len(d.Reach) > 0:
+		fmt.Fprintf(&b, "\n%d símbolos dependem disto, nos contextos %s — `impact` os lista; confira que a mudança não os quebra.\n\n", d.Dependents, strings.Join(d.Reach, ", "))
+	default:
+		fmt.Fprintf(&b, "\n%d símbolos dependem disto — `impact` os lista; confira que a mudança não os quebra.\n\n", d.Dependents)
+	}
 	return b.String()
 }
 

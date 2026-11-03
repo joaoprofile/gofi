@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -851,5 +852,81 @@ func TestALensWithoutItsVerdictStopsTheRun(t *testing.T) {
 	w.agent.steps["audit/gofi-qa-security"] = []step{nil}
 	if _, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos"); err == nil || !strings.Contains(err.Error(), "a lente gofi-qa-security não gravou") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// graphSensors is the sense stage writing the diff the graph stage writes.
+type graphSensors struct {
+	root string
+	diff GraphDiff
+}
+
+func (g graphSensors) Run(context.Context, []string) SensorResult {
+	d := g.diff
+	if err := WriteDiff(g.root, "r-1", &d); err != nil {
+		panic(err)
+	}
+	return SensorResult{}
+}
+
+// The code graph sizes and scopes the run (0002, D11): a plan whose files
+// other contexts depend on runs its writers deep from the first turn; the
+// audit is dispatched by the layers the graph says the change touched, and
+// told what it touched and what depends on it.
+func TestTheGraphSizesTheTierAndScopesTheAudit(t *testing.T) {
+	w := layeredWorld(t)
+	reads := []string{"read", "search", "gofi", "verify", "verdict"}
+	var rs []role.Role
+	for _, r := range w.runner.Roles {
+		if r.Contract.Stage != "audit" {
+			rs = append(rs, r)
+		}
+	}
+	w.runner.Roles = append(rs,
+		role.Role{Name: "gofi-qa", Contract: role.Contract{Tier: host.Standard, ReadsOnly: true, Visibility: role.VisibilityInternal, Stage: "audit", Tools: reads,
+			Triggers: []role.Trigger{{All: []string{"sensor.green"}}}}},
+		role.Role{Name: "gofi-qa-data", Contract: role.Contract{Tier: host.Standard, ReadsOnly: true, Visibility: role.VisibilityInternal, Stage: "audit", Tools: reads,
+			Triggers: []role.Trigger{{All: []string{"sensor.green", "diff.touches(data)"}}}}},
+		role.Role{Name: "gofi-qa-security", Contract: role.Contract{Tier: host.Standard, ReadsOnly: true, Visibility: role.VisibilityInternal, Stage: "audit", Tools: reads,
+			Triggers: []role.Trigger{{All: []string{"sensor.green", "diff.touches(api)"}}}}})
+	w.runner.Reach = func(files []string) []string {
+		if !slices.Contains(files, "backend/pedidos/repository/") {
+			t.Errorf("reach asked of %v", files)
+		}
+		return []string{"estoque", "faturas", "fiscal", "pedidos"}
+	}
+	w.runner.Sensors = graphSensors{root: w.root, diff: GraphDiff{
+		Touched: []Touch{{Symbol: "pedidos/repository.Save", File: "backend/pedidos/repository/r.go", Layer: "data", Context: "pedidos"}},
+		Layers:  []string{"data", "domain"}, Contexts: []string{"pedidos"}, Reach: []string{"faturas"}, Dependents: 4}}
+	w.agent.steps["audit/gofi-qa"] = []step{lensAudit(w.root, "aprovado")}
+	w.agent.steps["audit/gofi-qa-data"] = []step{lensAudit(w.root, "aprovado")}
+	s := w.run(t)
+	if s.Outcome != "accepted" {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if strings.Join(s.Reach, ",") != "estoque,faturas,fiscal" {
+		t.Errorf("reach = %v", s.Reach)
+	}
+	for _, turn := range w.agent.turns {
+		switch {
+		case turn.Node == "implement" && turn.Tier != host.Deep:
+			t.Errorf("%s ran %s on a change three other contexts depend on", turn.Role, turn.Tier)
+		case turn.Node == "audit" && turn.Tier != host.Standard:
+			t.Errorf("the lens %s ran %s: a lens only reads", turn.Role, turn.Tier)
+		}
+	}
+	if !hasEvent(t, w.root, "escalate", "gofi-eng-data") {
+		t.Error("the tier the impact raised is not in the log")
+	}
+	lenses := strings.Fields(roles(w.agent, "audit")) // at once: in any order
+	slices.Sort(lenses)
+	if got := strings.Join(lenses, " "); got != "gofi-qa gofi-qa-data" {
+		t.Errorf("audit lenses = %s", got)
+	}
+	for _, turn := range w.agent.turns {
+		if turn.Node == "audit" && (!strings.Contains(turn.Prompt, "Escopo da auditoria") || !strings.Contains(turn.Prompt, "pedidos/repository.Save") ||
+			!strings.Contains(turn.Prompt, "4 símbolos dependem disto, nos contextos faturas")) {
+			t.Errorf("the audit is not told its scope:\n%s", turn.Prompt)
+		}
 	}
 }

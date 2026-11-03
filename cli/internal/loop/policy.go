@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
 // Policy is the project's convergence policy (0002, D8): what a run may
@@ -70,11 +72,36 @@ type Ran struct {
 func (r *Runner) tierOf(name string, s *State) host.Tier {
 	base := host.Standard
 	for _, rl := range r.Roles {
-		if rl.Name == name && rl.Contract.Tier != "" {
+		if rl.Name != name {
+			continue
+		}
+		if rl.Contract.Tier != "" {
 			base = rl.Contract.Tier
+		}
+		if r.wide(rl, s) != "" {
+			base = host.Deep
 		}
 	}
 	return raise(base, s.Raised[name])
+}
+
+// wide says why a role runs deep from the start: it writes, on the
+// standard tier, code that intake.WideReach contexts or more depend on
+// besides the change's own — a change wide enough to need it (0002, D11).
+// Empty when it is not.
+func (r *Runner) wide(rl role.Role, s *State) string {
+	c := rl.Contract
+	if c.ReadsOnly || c.Tier != host.Standard || len(s.Reach) < intake.WideReach {
+		return ""
+	}
+	return fmt.Sprintf("impacto em %d contextos além de %s (%s): standard → deep", len(s.Reach), s.Context, strings.Join(first(s.Reach, 3), ", "))
+}
+
+func first(s []string, n int) []string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 func raise(t host.Tier, by int) host.Tier {

@@ -48,6 +48,9 @@ var predicates = map[string][]string{
 	// tests.due: the tests are to be written — no test turn yet, or a
 	// finding of the audit is in a test file.
 	"tests.due": nil,
+	// diff.touches(x): the code graph says the change touched layer x —
+	// a symbol added, changed or removed in it since the run started.
+	"diff.touches": Layers,
 }
 
 // Layers are what a plan divides the implementation of a backend change

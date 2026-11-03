@@ -149,6 +149,11 @@ type State struct {
 	// the tests were written by the test stage once.
 	Plan   *Plan `json:"plan,omitempty"`
 	Tested bool  `json:"tested,omitempty"`
+	// Diff is what the graph stage last said the change did to the code;
+	// Reach the contexts besides the change's own that depend on what it
+	// touches — or, before any code, on what its plan writes (0002, D11).
+	Diff  *GraphDiff `json:"diff,omitempty"`
+	Reach []string   `json:"reach,omitempty"`
 	// Lenses are the roles auditing this iteration as lenses; Ambiguous the
 	// findings whose owner they disagreed on.
 	Lenses    []string `json:"lenses,omitempty"`
@@ -208,6 +213,9 @@ type Runner struct {
 	// Policy is the project's convergence policy: budget, iterations,
 	// acceptance, escalation.
 	Policy Policy
+	// Reach is the contexts that depend on the code of some files, from the
+	// graph the run started from; nil when the project has no graph.
+	Reach func(files []string) []string
 	// IsTest says a file is a test of the project's language, IsSource that
 	// it is code or test, from the language's pack.
 	IsTest   func(file string) bool
@@ -348,6 +356,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 		res := r.Sensors.Run(ctx, n.Stages)
 		s.Sensor = &res
 		r.weighSensors(s, n.Stages)
+		r.readDiff(s, n.Stages)
 	case KindPolicy:
 		v, err := r.Verdicts.Read(s.Context)
 		if err != nil {
@@ -465,6 +474,11 @@ func (r *Runner) facts(s *State) role.Facts {
 	if r.testsDue(s) {
 		f["tests.due"] = true
 	}
+	if s.Diff != nil {
+		for _, l := range s.Diff.Layers {
+			f["diff.touches("+l+")"] = true
+		}
+	}
 	return f
 }
 
@@ -482,6 +496,9 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		}
 	}
 	tier := r.tierOf(rl.Name, s)
+	if wide := r.wide(rl, s); wide != "" {
+		r.emit(s, Event{Ev: "escalate", Node: name, To: rl.Name, Why: wide})
+	}
 	s.Worked = append(s.Worked, Ran{Node: name, Role: rl.Name})
 	a := &AgentState{ID: AgentID(name, s.Iter), Node: name, Role: rl.Name, Tier: tier, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 	_ = saveAgent(r.Root, s.Run, a)
@@ -529,6 +546,13 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		if p != nil {
 			s.Plan = p
 			r.emit(s, Event{Ev: "plan", Node: name, Why: fmt.Sprintf("%d tarefas: %s", len(p.Tasks), strings.Join(p.layers(), ", "))})
+			if r.Reach != nil {
+				var files []string
+				for _, t := range p.Tasks {
+					files = append(files, t.Files...)
+				}
+				r.reach(s, r.Reach(files))
+			}
 		}
 	case "test":
 		s.Tested = true

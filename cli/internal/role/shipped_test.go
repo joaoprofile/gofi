@@ -54,6 +54,11 @@ func TestTheShippedRolesCoverEverySurface(t *testing.T) {
 	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "layer(data)": true, "layer(api)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-data gofi-qa-security gofi-qa-tests" {
 		t.Errorf("a data and API change is audited by %s", got)
 	}
+	// A retry that only reworks the domain is still audited for the data
+	// layer the change touched before: the graph says it did.
+	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "layer(domain)": true, "diff.touches(data)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-data gofi-qa-tests" {
+		t.Errorf("a change that touched the data is audited by %s", got)
+	}
 	if got := audit(Facts{"sensor.green": true, "change.surface(web)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-tests gofi-qa-ui" {
 		t.Errorf("a screen is audited by %s", got)
 	}
