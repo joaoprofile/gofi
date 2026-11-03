@@ -73,6 +73,14 @@ gofi index status`,
 	f.Duration("timeout", 10*time.Minute, i18n.T("cmd.index.flag.timeout"))
 	f.Bool("no-html", false, i18n.T("cmd.index.flag.no_html"))
 	f.BoolP("verbose", "v", false, i18n.T("cmd.index.flag.verbose"))
+	// The graph stage of a run: what the code became, held to the graph the
+	// run started from. Set by gofi run, not by a person.
+	f.String("baseline", "", "graph the run started from: diff the code against it and check the architecture rules")
+	f.String("diff", "", "where to write the change's graph diff (with --baseline)")
+	f.String("report", "", "where to write the broken architecture rules, as SARIF (with --baseline)")
+	for _, h := range []string{"baseline", "diff", "report"} {
+		_ = f.MarkHidden(h)
+	}
 	cmd.AddCommand(newIndexStatusCmd(), newIndexHooksCmd(), newIndexCheckCmd(), newIndexMigrateCmd(), newIndexInstallCmd(), newIndexOpenCmd())
 	return cmd
 }
@@ -106,8 +114,19 @@ func runIndex(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if target != indexDocs {
+		// A report of an earlier check never stands for this one.
+		report, _ := cmd.Flags().GetString("report")
+		if report != "" {
+			_ = os.Remove(filepath.Join(root, filepath.FromSlash(report)))
+		}
 		if err := indexCodeGraph(cmd, cfg, root); err != nil {
 			return err
+		}
+		if baseline, _ := cmd.Flags().GetString("baseline"); baseline != "" {
+			diffOut, _ := cmd.Flags().GetString("diff")
+			if err := graphCheck(out, cfg, root, baseline, diffOut, report); err != nil {
+				return err
+			}
 		}
 	}
 	if target != indexCode {

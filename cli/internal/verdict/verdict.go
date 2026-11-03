@@ -97,6 +97,22 @@ func Fingerprint(f Finding) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
+// Locate names the symbol of each finding placed by file and line and not
+// by symbol, from at — the code graph's —, and keys its fingerprint by it: a
+// fingerprint by file changes meaning as the file grows.
+func (v *Verdict) Locate(at func(file string, line int) string) {
+	for i := range v.Findings {
+		f := &v.Findings[i]
+		if f.Symbol != "" || f.File == "" || f.Line <= 0 {
+			continue
+		}
+		if s := at(f.File, f.Line); s != "" {
+			f.Symbol = s
+			f.Fingerprint = Fingerprint(*f)
+		}
+	}
+}
+
 // Parse reads a verdict, checks it and fills in what gofi derives: the schema
 // when missing, ids when missing, every fingerprint. Findings are sorted by
 // severity, then id, so two writes of the same audit are the same bytes.

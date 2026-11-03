@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/graph"
 	"github.com/joaoprofile/gofi/cli/internal/guard"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
@@ -122,9 +124,11 @@ var runPorts = struct {
 	graph *pack.Command
 }{}
 
-// graphSensor is gofi's own stage: this gofi indexes the code the turn
-// changed, in the tree the run works on.
-func graphSensor() pack.Command {
+// graphSensor is gofi's own stage (0002, D11, S4): this gofi indexes the
+// code the turn changed, in the tree the run works on, and holds it to the
+// graph the run started from — the architecture rules the change broke, in
+// SARIF, and its diff, for the run to dispatch and scope the audit by.
+func graphSensor(run string) pack.Command {
 	if runPorts.graph != nil {
 		return *runPorts.graph
 	}
@@ -132,7 +136,11 @@ func graphSensor() pack.Command {
 	if err != nil {
 		return pack.Command{}
 	}
-	return pack.Command{Run: strconv.Quote(exe) + " index code", Format: pack.FormatExit}
+	baseline := path.Join(loop.BaselineDir(run), graph.GraphFile)
+	return pack.Command{
+		Run:    fmt.Sprintf("%s index code --baseline %s --diff %s --report %s", strconv.Quote(exe), baseline, loop.DiffFile(run), loop.GraphReport(run)),
+		Format: pack.FormatSARIF, Report: loop.GraphReport(run),
+	}
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -455,7 +463,10 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		return "", err
 	}
 	if _, set := sensors["graph"]; !set {
-		sensors["graph"] = graphSensor()
+		sensors["graph"] = graphSensor(run)
+	}
+	if err := captureBaseline(work, run); err != nil {
+		return "", fmt.Errorf("baseline do grafo: %w", err)
 	}
 	gate := runPorts.gate
 	if gate == nil {

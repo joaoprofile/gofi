@@ -83,6 +83,9 @@ func writeVerdict(root, context string, data []byte, run string, iter int, lens 
 	if err != nil {
 		return "", err
 	}
+	// A finding placed by line is keyed by the symbol that holds it, which
+	// stays the same as the lines above it move.
+	v.Locate(symbolAt(root))
 	if run != "" {
 		v.Run = run
 	}

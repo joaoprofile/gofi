@@ -1,6 +1,7 @@
 package verdict
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -80,5 +81,31 @@ func TestWriteAndRead(t *testing.T) {
 	got, err := Read(root, "pedidos")
 	if err != nil || got.Result != Approved || len(got.Findings) != 1 || got.Findings[0].Fingerprint == "" {
 		t.Errorf("read = %+v, %v", got, err)
+	}
+}
+
+// A finding placed by line is keyed by the symbol that holds the line: the
+// same defect, with code added above it, is the same finding.
+func TestLocateKeysAFindingByItsSymbol(t *testing.T) {
+	at := func(file string, line int) string {
+		if file == "backend/x.go" && line >= 10 && line <= 30 {
+			return "x.Bill"
+		}
+		return ""
+	}
+	parse := func(line int) Finding {
+		v, err := Parse([]byte(fmt.Sprintf(`{"result":"reprovado","findings":[{"severity":"major","owner":"eng","rule":"x/REQ-01.1","file":"backend/x.go","line":%d,"message":"m"}]}`, line)), "x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		v.Locate(at)
+		return v.Findings[0]
+	}
+	a, b := parse(12), parse(25)
+	if a.Symbol != "x.Bill" || a.Fingerprint != b.Fingerprint {
+		t.Errorf("a %+v, b %+v", a, b)
+	}
+	if c := parse(50); c.Symbol != "" || c.Fingerprint == a.Fingerprint {
+		t.Errorf("a line no symbol holds: %+v", c)
 	}
 }

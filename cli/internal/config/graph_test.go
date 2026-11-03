@@ -56,7 +56,7 @@ func TestGraphRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	cfg := validConfig()
 	no := false
-	cfg.Graph = &Graph{Hooks: &no, Deep: true, Exclude: []string{"testdata"}}
+	cfg.Graph = &Graph{Hooks: &no, Deep: true, Exclude: []string{"testdata"}, Rules: []string{`deny: import "net/http" from model`}}
 	if err := Save(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -70,5 +70,8 @@ func TestGraphRoundTrip(t *testing.T) {
 	}
 	if len(got.Graph.Excludes()) != 1 || got.Graph.Excludes()[0] != "testdata" {
 		t.Errorf("excludes = %v", got.Graph.Excludes())
+	}
+	if r := got.Graph.ProjectRules(); len(r) != 1 || r[0] != `deny: import "net/http" from model` {
+		t.Errorf("rules = %v", r)
 	}
 }

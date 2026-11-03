@@ -86,9 +86,12 @@ type SensorResult struct {
 
 // SensorFinding is one thing a sensor found.
 type SensorFinding struct {
-	Stage    string `json:"stage"`
-	File     string `json:"file,omitempty"`
-	Line     int    `json:"line,omitempty"`
+	Stage string `json:"stage"`
+	File  string `json:"file,omitempty"`
+	Line  int    `json:"line,omitempty"`
+	// Symbol is the code graph's symbol the finding is at, when the tool
+	// names one.
+	Symbol   string `json:"symbol,omitempty"`
 	Rule     string `json:"rule,omitempty"`
 	Severity string `json:"severity"` // blocker | major
 	Message  string `json:"message"`

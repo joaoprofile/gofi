@@ -243,6 +243,9 @@ func sarif(stage string, out []byte) []loop.SensorFinding {
 							StartLine int `json:"startLine"`
 						} `json:"region"`
 					} `json:"physicalLocation"`
+					Logical []struct {
+						FullyQualifiedName string `json:"fullyQualifiedName"`
+					} `json:"logicalLocations"`
 				} `json:"locations"`
 			} `json:"results"`
 		} `json:"runs"`
@@ -260,6 +263,9 @@ func sarif(stage string, out []byte) []loop.SensorFinding {
 			if len(r.Locations) > 0 {
 				f.File = strings.TrimPrefix(r.Locations[0].Physical.Artifact.URI, "file://")
 				f.Line = r.Locations[0].Physical.Region.StartLine
+				if l := r.Locations[0].Logical; len(l) > 0 {
+					f.Symbol = l[0].FullyQualifiedName
+				}
 			}
 			res = append(res, f)
 		}
