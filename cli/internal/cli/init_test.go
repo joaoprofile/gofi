@@ -471,7 +471,6 @@ func TestExecutePipeline_NonGoBackendsAreReported(t *testing.T) {
 		{"rust", "", "src/Cargo.toml"},
 		{"java", "com.acme.mysvc", "src/pom.xml"},
 		{"csharp", "Acme.MySvc", "src/my-svc/my-svc.csproj"},
-		{"nodejs", "@acme/my-svc", "src/package.json"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.language, func(t *testing.T) {
@@ -694,5 +693,40 @@ func TestExecutePipeline_CodexHost(t *testing.T) {
 	cfg, err := config.Load(filepath.Join(target, config.FileName))
 	if err != nil || cfg.AI.Host != host.Codex.ID {
 		t.Errorf("ai.host = %v (%v)", cfg, err)
+	}
+}
+
+// A NestJS backend gets the starter its pack's sensors run — tsc, ESLint,
+// Jest with JUnit — and its dependencies installed, so the first run has
+// them.
+func TestExecutePipeline_NestJSBackend(t *testing.T) {
+	useFixtureRepo(t)
+	forceToolchain(t, toolchain.Preflight{NodeOK: true})
+	var installed []string
+	orig := npmInstall
+	npmInstall = func(dir string) error { installed = append(installed, dir); return nil }
+	t.Cleanup(func() { npmInstall = orig })
+	target := filepath.Join(t.TempDir(), "my-svc")
+	r := goWizardResult(target)
+	r.Language, r.Module = "nodejs", "@acme/my-svc"
+	if err := executePipeline(r); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	for _, p := range []string{"src/package.json", "src/tsconfig.json", "src/eslint.config.mjs", "src/src/main.ts", "src/src/app.module.ts"} {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			t.Errorf("%s not scaffolded: %v", p, err)
+		}
+	}
+	pkg, _ := os.ReadFile(filepath.Join(target, "src/package.json"))
+	for _, want := range []string{`"name": "my-svc"`, `"jest-junit"`, `"@microsoft/eslint-formatter-sarif"`} {
+		if !strings.Contains(string(pkg), want) {
+			t.Errorf("package.json lacks %s:\n%s", want, pkg)
+		}
+	}
+	if len(installed) != 1 || installed[0] != filepath.Join(target, "src") {
+		t.Errorf("npm install ran in %v", installed)
+	}
+	if _, err := os.Stat(filepath.Join(target, "go.work")); !os.IsNotExist(err) {
+		t.Error("go.work written for a Node backend")
 	}
 }

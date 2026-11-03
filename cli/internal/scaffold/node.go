@@ -29,6 +29,11 @@ func execRunner(dir, name string, args ...string) error {
 // nodeRunner runs the web/mobile create commands. Overridden in tests.
 var nodeRunner commandRunner = execRunner
 
+// NpmInstall installs the dependencies of the package at dir.
+func NpmInstall(dir string) error {
+	return nodeRunner(dir, "npm", "install", "--no-audit", "--no-fund")
+}
+
 // CreateViteApp scaffolds a Vite + React + TypeScript app at <root>/<path> by
 // invoking the official `npm create vite` tool. When useDS is true it also
 // installs the gofi-ui design system into the new app. Requires Node.js on PATH

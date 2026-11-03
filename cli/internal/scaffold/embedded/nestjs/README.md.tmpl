@@ -1,0 +1,27 @@
+# {{.ProjectName}}
+
+NestJS service bootstrapped by `gofi init`.
+
+## Layout
+
+```
+.
+├── {{.SourceRoot}}/
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── main.ts
+│       ├── app.module.ts
+│       ├── migrations/
+│       └── <contexto>/        # um módulo Nest por contexto
+└── .claude/                   # gofi agents config
+```
+
+## Build, lint & test
+
+```sh
+cd {{.SourceRoot}}
+npm run build
+npm run lint
+npm test
+```

@@ -28,10 +28,10 @@ func TestBackendScaffolds_MatchConfigLanguages(t *testing.T) {
 			t.Errorf("%s: embedded/%s: %v", language, dir, err)
 		}
 	}
-	// Only a language with a gofi SDK gets a skeleton; the others are accepted
+	// Only a language with a pack gets a skeleton; the others are accepted
 	// by config and adopted or started by hand.
 	for language := range known {
-		want := language == config.LanguageGo
+		want := language == config.LanguageGo || language == config.LanguageNodeJS
 		if HasBackendScaffold(language) != want {
 			t.Errorf("HasBackendScaffold(%q) = %v, want %v", language, !want, want)
 		}
