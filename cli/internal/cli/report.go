@@ -165,6 +165,12 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 		b.WriteString(" Nenhum em aberto.\n")
 	}
 
+	if len(s.Notes) > 0 {
+		b.WriteString("\n## Ressalvas do contrato\n\nA auditoria achou no contrato o que não impede esta entrega — o código cumpre o que ele diz — e cabe numa próxima mudança:\n\n")
+		for _, f := range s.Notes {
+			fmt.Fprintf(&b, "- [%s] %s — %s\n", f.Severity, f.Rule, f.Message)
+		}
+	}
 	if len(agents) > 0 {
 		b.WriteString("\n## Turnos\n\n| Agente | Papel | Tier | US$ | s |\n|---|---|---|---|---|\n")
 		for _, a := range agents {

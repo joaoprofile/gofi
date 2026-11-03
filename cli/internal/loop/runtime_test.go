@@ -1042,3 +1042,24 @@ func TestARunKeepsTheFlowItRuns(t *testing.T) {
 		t.Errorf("edges %+v", v.Edges)
 	}
 }
+
+// A minor of the contract — a scenario the change could also have had — is
+// kept for the person and stops nothing: the code is right, and no role of
+// the run may change the contract. A major of it still goes to triage.
+func TestAMinorOfTheContractIsANoteNotAnImpasse(t *testing.T) {
+	w := newWorld(t)
+	w.agent.steps["audit"] = []step{audit(w.root, "aprovado", "minor:spec:pedidos/REQ-02")}
+	s := w.run(t)
+	if s.Outcome != "accepted" || strings.Contains(path(t, w.root), "triage") {
+		t.Fatalf("outcome %s, path %s", s.Outcome, path(t, w.root))
+	}
+	if len(s.Notes) != 1 || s.Notes[0].Rule != "pedidos/REQ-02" || len(s.Open) != 0 {
+		t.Errorf("notes %+v, open %+v", s.Notes, s.Open)
+	}
+
+	major := newWorld(t)
+	major.agent.steps["audit"] = []step{audit(major.root, "aprovado", "major:spec:pedidos/REQ-02")}
+	if s := major.run(t); s.Outcome != "impasse" || !strings.Contains(path(t, major.root), "triage") {
+		t.Errorf("a major of the contract: outcome %s, path %s", s.Outcome, path(t, major.root))
+	}
+}

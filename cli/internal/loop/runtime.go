@@ -153,7 +153,10 @@ type State struct {
 	// Seen is every finding the audit raised in the run, as first raised, and
 	// SensorFailures how many times each sensor stage refused the work:
 	// what the run had to fix, for the lessons proposed of it (0002, §7).
-	Seen           []Finding      `json:"seen,omitempty"`
+	Seen []Finding `json:"seen,omitempty"`
+	// Notes are the minors of the contract the last audit raised: kept for
+	// the person, they stop nothing.
+	Notes          []Finding      `json:"notes,omitempty"`
 	SensorFailures map[string]int `json:"sensor_failures,omitempty"`
 	// Diff is what the graph stage last said the change did to the code;
 	// Reach the contexts besides the change's own that depend on what it
@@ -595,12 +598,22 @@ var weight = map[string]int{"blocker": 8, "major": 4, "minor": 1}
 // iteration before, and the findings resolved earlier that are open again.
 func (r *Runner) judge(s *State, v *verdict.Verdict) {
 	var open []Finding
+	s.Notes = nil
 	score := 0
 	for _, f := range v.Findings {
 		if f.Severity == "suggestion" {
 			continue
 		}
-		open = append(open, Finding{Fingerprint: f.Fingerprint, Severity: f.Severity, Owner: f.Owner, Rule: f.Rule, File: f.File, Message: f.Message})
+		found := Finding{Fingerprint: f.Fingerprint, Severity: f.Severity, Owner: f.Owner, Rule: f.Rule, File: f.File, Message: f.Message}
+		// A minor of the contract — a scenario the change could also have
+		// had — is the next change's to fix, not this run's: the code is
+		// right, and no role of the run may change the contract. It is kept
+		// for the person, and stops nothing.
+		if f.Severity == "minor" && (f.Owner == "spec" || f.Owner == "pd") {
+			s.Notes = append(s.Notes, found)
+			continue
+		}
+		open = append(open, found)
 		score += weight[f.Severity]
 	}
 	now := map[string]bool{}
@@ -625,7 +638,7 @@ func (r *Runner) judge(s *State, v *verdict.Verdict) {
 	s.Open = open
 	s.Resolved = sortedSet(resolved)
 	switch {
-	case v.Clean():
+	case v.Result == verdict.Approved && len(open) == 0:
 		s.Verdict = "clean"
 	case v.Result == verdict.Approved:
 		s.Verdict = "caveats"
