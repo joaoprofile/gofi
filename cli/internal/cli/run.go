@@ -91,8 +91,11 @@ to --gate-timeout otherwise; never merged, never pushed. A conflict ends in
 "conflito", the branch kept for the person. A run that ends without being
 accepted gives its worktree back, its work committed on its branch; gofi run
 --gc gives back the worktrees no run needs any more.
-The sensors run the language pack's commands, or those of loop.sensors in
-.gofi.yaml — a command, or {run, format, report} for a tool that writes a
+The sensors follow what the change touches (superficies in its proposal):
+the backend runs the language pack's commands; web and mobile run their own
+package.json scripts — the type check, the lint, the tests — in the surface's
+folder, its node_modules linked into the worktree. Any stage is overridden by
+loop.sensors in .gofi.yaml — a command, or {run, format, report} for a tool that writes a
 report (sarif, junit); test defaults to the test section's default task, and
 a stage with no command — security and coverage, unless named — is recorded
 as not checked, never as passed.
@@ -504,7 +507,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	case prior != nil && prior.Worktree != "":
 		tree = &worktree.Tree{Root: root, Dir: prior.Worktree, Branch: prior.Branch, Base: prior.Base}
 	case prior == nil && o.Worktree:
-		if tree, err = worktree.Prepare(ctx, root, run, change); err != nil {
+		if tree, err = worktree.Prepare(ctx, root, run, change, uiDependencies(cfg, root)...); err != nil {
 			return "", err
 		}
 	}
@@ -547,7 +550,11 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if err != nil {
 		return "", err
 	}
-	sensors, err := sensorCommands(cfg)
+	surfaces, err := changeSurfaces(cfg, work, change)
+	if err != nil {
+		return "", err
+	}
+	sensors, err := sensorCommandsFor(cfg, work, surfaces)
 	if err != nil {
 		return "", err
 	}
@@ -766,20 +773,9 @@ func explainRun(out io.Writer, root string, cfg *config.GofiConfig, change, flow
 // surfaces it touches, as its proposal declares them — or, declaring none,
 // the project's backend, else its one other surface.
 func changeFacts(cfg *config.GofiConfig, root, change string) (role.Facts, error) {
-	all, err := contract.Docs(root)
+	surfaces, err := changeSurfaces(cfg, root, change)
 	if err != nil {
 		return nil, err
-	}
-	var surfaces []string
-	for _, c := range contract.Changes(all) {
-		if c.ID == change {
-			surfaces = c.Surfaces
-		}
-	}
-	if len(surfaces) == 0 {
-		if project := projectSurfaces(cfg); len(project) > 0 {
-			surfaces = project[:1]
-		}
 	}
 	facts := role.Facts{}
 	for _, s := range surfaces {

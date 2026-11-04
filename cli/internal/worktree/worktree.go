@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/contract"
@@ -68,6 +69,9 @@ type Tree struct {
 	// write them again from the code they both changed.
 	Derived    func(path string) bool
 	Regenerate func(ctx context.Context, dir string) error
+	// share are the project's own ignored folders linked too — the
+	// dependencies a build needs, node_modules — besides gofi's.
+	share []string
 }
 
 // ErrNotCommitted is a change the worktree would not see: a worktree starts
@@ -79,12 +83,12 @@ var ErrNotCommitted = errors.New("not committed")
 // base branch's head, or reopens it when the run is resumed. The change, and
 // the project's gofi files, must be committed: what is only on disk is not in
 // the worktree.
-func Prepare(ctx context.Context, root, run, change string) (*Tree, error) {
+func Prepare(ctx context.Context, root, run, change string, share ...string) (*Tree, error) {
 	base, err := git(ctx, root, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("the project has no branch checked out: %w", err)
 	}
-	t := &Tree{Root: root, Dir: Location(root, run), Branch: "gofi/" + change, Base: base}
+	t := &Tree{Root: root, Dir: Location(root, run), Branch: "gofi/" + change, Base: base, share: share}
 	if _, err := os.Stat(t.Dir); err == nil {
 		if b, err := git(ctx, t.Dir, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
 			t.Branch = b
@@ -133,7 +137,7 @@ func Scratch(ctx context.Context, root, name string) (*Tree, error) {
 // and copying over it carries the person's uncommitted edits into the run.
 func (t *Tree) furnish(ctx context.Context) error {
 	root := t.Root
-	for _, p := range shared {
+	for _, p := range append(slices.Clone(shared), t.share...) {
 		src := filepath.Join(root, filepath.FromSlash(p))
 		if _, err := os.Stat(src); err != nil || t.versioned(ctx, p) {
 			continue
@@ -144,6 +148,9 @@ func (t *Tree) furnish(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := t.exclude(ctx, t.share); err != nil {
+		return err
+	}
 	for _, p := range copied {
 		if t.versioned(ctx, p) {
 			continue
@@ -153,6 +160,49 @@ func (t *Tree) furnish(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// exclude keeps the links git would see as new files out of the run's
+// commit: an ignore rule with a trailing slash matches a folder, and a link
+// is not one. They go in the repository's info/exclude, which is never
+// versioned and names folders the project ignores anyway.
+func (t *Tree) exclude(ctx context.Context, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	p, err := git(ctx, t.Dir, "rev-parse", "--git-path", "info/exclude")
+	if err != nil {
+		return err
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(t.Dir, p)
+	}
+	have, _ := os.ReadFile(p)
+	lines := strings.Split(string(have), "\n")
+	var add []string
+	for _, s := range paths {
+		rule := "/" + strings.TrimPrefix(filepath.ToSlash(s), "/")
+		if !slices.Contains(lines, rule) {
+			add = append(add, rule)
+		}
+	}
+	if len(add) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	prefix := ""
+	if len(have) > 0 && !strings.HasSuffix(string(have), "\n") {
+		prefix = "\n"
+	}
+	_, err = f.WriteString(prefix + strings.Join(add, "\n") + "\n")
+	return err
 }
 
 // versioned reports whether the commit the worktree was checked out from has
