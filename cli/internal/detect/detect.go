@@ -384,3 +384,8 @@ var ignoredDirs = []string{
 func ignoredDir(name string) bool {
 	return slices.Contains(ignoredDirs, name)
 }
+
+// IgnoredDir reports whether a folder holds dependencies, build output or
+// tooling state rather than the project's own work: what a scan of the
+// repository never reads.
+func IgnoredDir(name string) bool { return ignoredDir(name) }
