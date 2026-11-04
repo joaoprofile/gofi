@@ -475,13 +475,11 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		}
 	}
 	// What the run starts — the agents, the gofi MCP server, the git hooks
-	// of its commit — works on the worktree, not on the project it was
-	// copied from.
-	if tree != nil {
-		_ = os.Setenv(config.EnvRoot, work)
-	} else {
-		_ = os.Unsetenv(config.EnvRoot)
-	}
+	// of its commit — works on the tree the run works on: its worktree, or
+	// the project it found. Always said, never left to the .gofi.yaml, whose
+	// project.root names the project it was written in — the original, in a
+	// copy of it.
+	_ = os.Setenv(config.EnvRoot, work)
 	report := humanReport(out)
 	if o.Events {
 		report = eventReport(out)
