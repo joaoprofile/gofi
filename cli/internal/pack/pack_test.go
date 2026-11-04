@@ -159,3 +159,19 @@ func TestAxumLayersAndContexts(t *testing.T) {
 		t.Error("IsTest")
 	}
 }
+
+// Every pack checks a change three ways before the graph does: it builds,
+// its tests pass, and a linter of its language finds nothing.
+func TestEveryPackBuildsTestsAndLints(t *testing.T) {
+	for _, lang := range Languages() {
+		p, err := Load(lang)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, stage := range []string{"build", "test", "static"} {
+			if c, ok := p.Sensors[stage]; !ok || c.Run == "" {
+				t.Errorf("%s has no %s stage", lang, stage)
+			}
+		}
+	}
+}

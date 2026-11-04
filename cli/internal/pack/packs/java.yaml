@@ -15,6 +15,11 @@ sensors:
   # Surefire writes a JUnit report per test class, naming the class, not its
   # file: a skipped test proves nothing, so it fails the stage.
   test:   {run: "cd {src} && mvn -q -B test", format: junit, report: "{src}/target/surefire-reports/TEST-*.xml", class_file: "{src}/src/test/java/{class}.java"}
+  # PMD's default rules of its Maven plugin — dead code and the bugs a
+  # compiler lets by (an empty catch, an unused import, a broken null check),
+  # what vet is to Go — in SARIF. The plugin's version is fixed: a newer one
+  # with other rules would fail code that passed.
+  static: {run: "cd {src} && mvn -q -B org.apache.maven.plugins:maven-pmd-plugin:3.28.0:check -Dformat=net.sourceforge.pmd.renderers.SarifRenderer", format: sarif, report: "{src}/target/pmd.sarif.json"}
 # A context is a package below the module, its layers by class name and
 # folder (sdk/java/knowledge/structure.md); a class of it in no layer is its
 # domain. The tests mirror the code under src/test/java.
