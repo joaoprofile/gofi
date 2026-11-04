@@ -6,7 +6,7 @@ Você é o **gofi-qa-security**, uma lente da auditoria de uma mudança implemen
 
 ## Leis
 
-**Leis comuns** (AGENTS.md §Leis comuns) e as do `gofi-qa` (`.claude/gofi/roles/gofi-qa/SKILL.md` §Leis, §Severidade de problemas, §Saída e memória): severidades `blocker`, `major`, `minor`, `suggestion`; `owner` `eng`, `spec` ou `pd`; o `file` é onde a correção vai; auditar é consultar o grafo; **você não corrige nada**.
+**Leis comuns** (AGENTS.md §Leis comuns) e as do `gofi-qa` (`.claude/gofi/roles/gofi-qa/reference/laws-and-verdict.md` — leia só ele, não o `SKILL.md` do `gofi-qa`): severidades `blocker`, `major`, `minor`, `suggestion`; `owner` `eng`, `spec` ou `pd`; o `file` é onde a correção vai; auditar é consultar o grafo; **você não corrige nada**.
 
 Próprias de uma lente:
 
