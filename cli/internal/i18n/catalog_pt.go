@@ -128,6 +128,7 @@ var catalogPT = map[string]string{
 	"change.migrate.none":             "toda mudança está no lugar dela",
 	"change.migrate.next":             "faça o commit da mudança de pasta antes de uma execução em worktree",
 	"change.new.format_two":           "%s ainda está no formato 2 (sdd-*.md): migre antes com gofi spec migrate %s (o /gofi-migrate escreve os cenários que ela marca) — uma mudança agora começaria uma spec nova ao lado das antigas",
+	"memory.state_too_big":            "o ## Estado atual tem %d KB, acima dos %d KB que todo turno deveria ler: consolide — o que vale hoje, não o diário de como se chegou nele",
 	"run.land.done":                   "%s integrada em %s (fast-forward)",
 	"run.land.conflict":               "%s conflita com %s: a branch fica como está — faça o rebase à mão em %s",
 	"run.land.waiting":                "%s espera para integrar: %s",

@@ -118,11 +118,14 @@ dados, invariantes, comportamento, acoplamentos cross-context com ponteiros
 > conta estados de produção e não edições. `versao_prd`/`versao_spec` no
 > frontmatter são **ponteiros** para a versão própria de cada documento.
 
-**Regra de escrita (a partir da v1) — mudança nova no contexto:**
+**Regra de escrita (a partir da v1):**
 1. **Reescreva o `## Estado atual`** refletindo a nova verdade (substitui o que
-   mudou; não vira changelog nem cresce sem limite).
-2. **Adicione uma linha** ao `## Histórico de versões` (bump `versao`: 1.0 → 1.1
-   p/ melhoria, → 2.0 p/ mudança estrutural). Uma linha por versão, curta.
+   mudou; não vira changelog nem diário). Passou de 12 KB, o `gofi memory write`
+   avisa: consolide — todo papel de todo turno lê esta seção.
+2. **Quando uma mudança do contexto fecha** (arquivada), adicione **uma**
+   linha ao `## Histórico de versões` (bump `versao`: 1.0 → 1.1 p/ melhoria,
+   → 2.0 p/ mudança estrutural), curta. As fases no meio do caminho — spec,
+   implementação, auditoria — só reescrevem o `## Estado atual` e o `status`.
 3. Atualize o **frontmatter** (`versao`, `status`, `versao_*`, `atualizado`).
 
 **Como gravar:** com `gofi memory write {contexto}`, o arquivo inteiro pela
@@ -132,10 +135,10 @@ seja qual for a regra de permissão — um agente que trabalha sozinho não
 conseguiria fechar. O comando é liberado no projeto e confere o frontmatter
 (`contexto`, `versao`, `status`, `keywords`) antes de gravar.
 
-**Transbordo para chunks (só quando o changelog crescer — ≳ 400 linhas na cabeça):**
-o `## Histórico de versões` antigo migra para `contexts/{contexto}/history.md`
-(sub-pasta; **não** varrida pelo `/gofi-status` — glob `*.md` não-recursivo — e
-**sem** frontmatter), deixando na cabeça só as versões recentes + um ponteiro.
+**Transbordo automático:** o `gofi memory write` mantém na cabeça as 10
+versões mais recentes do `## Histórico de versões`; as mais antigas vão, sem
+nenhuma ação sua, para o topo de `contexts/{contexto}/history.md` (sub-pasta,
+sem frontmatter, não lida pelo `/gofi-status`), e a cabeça ganha o ponteiro.
 O `## Estado atual` **nunca** transborda: é sempre a cabeça. A subpasta preserva
 o invariante "1 dono por contexto = zero conflito de git".
 
