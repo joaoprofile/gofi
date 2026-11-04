@@ -53,7 +53,7 @@ func TestAScanReadsWhatARepositoryHolds(t *testing.T) {
 	var names []string
 	for _, c := range r.Contexts {
 		names = append(names, c.Name)
-		if c.Name == "pedidos" && (c.Sources != 1 || c.Tests != 1 || !slices.Contains(c.Tables, "pedidos") || len(c.Documents) == 0) {
+		if c.Name == "pedidos" && (c.Dir != "domain/pedidos/" || c.Sources != 1 || c.Tests != 1 || !slices.Contains(c.Tables, "pedidos") || len(c.Documents) == 0) {
 			t.Errorf("pedidos %+v", c)
 		}
 		if c.Name == "estoque" && !slices.Contains(c.Tables, "estoque_item") {

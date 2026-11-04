@@ -29,7 +29,7 @@ markdown. **Toda fase atualiza o frontmatter** (`status`, `versao_*`,
 ---
 contexto: {contexto}
 servicos: [{servico}, ...]        # binários/pacotes que hospedam o contexto
-status: prd | spec | em_implementacao | implementado | aprovado | reprovado
+status: adotado | prd | spec | em_implementacao | implementado | aprovado | reprovado
 ressalvas: 0                      # só após QA: MAJOR + MINOR pendentes
 versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
 versao_prd: "{X.Y}"               # ou n/a
@@ -85,7 +85,7 @@ Integrações externas: {lista ou "nenhuma"}
 ---
 contexto: {contexto}
 servicos: [...]
-status: {prd|spec|em_implementacao|implementado|aprovado|reprovado}
+status: {adotado|prd|spec|em_implementacao|implementado|aprovado|reprovado}
 ressalvas: {N}                    # só após QA
 versao: "1.0"                     # baseline consolidada do CONTEXTO (nasce em 1.0)
 versao_prd: "{X.Y}" | n/a         # ponteiro p/ o doc PRD (versão própria dele)
@@ -143,6 +143,7 @@ o invariante "1 dono por contexto = zero conflito de git".
 
 | `status` | Significado | Quem grava |
 |----------|-------------|------------|
+| `adotado` | Código existente adotado pelo gofi, ainda sem PRD nem spec | `gofi context adopt` (e o `gofi init` ao adotar um repositório) |
 | `prd` | PRD criado, aguardando spec | gofi-pd |
 | `spec` | Spec gerada, aguardando implementação | gofi-spec |
 | `em_implementacao` | gofi-eng iniciou, ainda não concluiu | gofi-eng |

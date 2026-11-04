@@ -83,7 +83,9 @@ type Gofi struct {
 // Context is a context the code's folders name, as the language's pack lays
 // them out, with what points at it.
 type Context struct {
-	Name      string   `json:"name"`
+	Name string `json:"name"`
+	// Dir is the folder of the context's code, from the repository root.
+	Dir       string   `json:"dir"`
 	Sources   int      `json:"sources"`
 	Tests     int      `json:"tests"`
 	Tables    []string `json:"tables,omitempty"`
@@ -221,7 +223,7 @@ func Scan(root string) (*Report, error) {
 			if ctx := lp.ContextOf(inner); ctx != "" && !strings.Contains(ctx, "*") {
 				c := contexts[ctx]
 				if c == nil {
-					c = &Context{Name: ctx}
+					c = &Context{Name: ctx, Dir: contextDir(r.Backend.Path, inner, ctx)}
 					contexts[ctx] = c
 				}
 				if test {
@@ -527,6 +529,22 @@ func names(text, ctx string) bool {
 	return slices.ContainsFunc(words, func(w string) bool {
 		return w == ctx || w == stem || strings.TrimSuffix(w, "s") == stem
 	})
+}
+
+// contextDir is the folder of a context's code: the file's path up to the
+// folder that names the context, from the repository root.
+func contextDir(backend, inner, ctx string) string {
+	segs := strings.Split(inner, "/")
+	for i, s := range segs[:len(segs)-1] {
+		if s == ctx {
+			dir := strings.Join(segs[:i+1], "/") + "/"
+			if backend != "." {
+				dir = backend + "/" + dir
+			}
+			return dir
+		}
+	}
+	return ""
 }
 
 func appendOnce(list []string, s string) []string {

@@ -692,6 +692,13 @@ func printNextSteps(r *wizard.Result) {
 	if r.Detected.Any() {
 		fmt.Println()
 		fmt.Println(styles.Bullet(styles.Info, i18n.T("init.adopted")))
+		// The contexts the code's folders name are proposed, and the person
+		// says which become gofi's; with no one at the terminal, how to.
+		if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+			askAdoption(os.Stdin, os.Stdout, r.Root)
+		} else {
+			fmt.Println(styles.Detail(styles.Note(i18n.T("init.adopted.contexts"))))
+		}
 		fmt.Println(styles.Detail(styles.Note(i18n.T("init.adopted.hint"))))
 	}
 
