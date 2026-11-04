@@ -19,7 +19,7 @@ defects:
     file: "{src}/domain/benchpedido/handler/benchpedido_handler.go"
     at: "http.Error(w, err.Error(), http.StatusInternalServerError)"
     rule: REQ-03
-    keywords: ["err.error", "vaza", "intern", "500", "404", "status"]
+    keywords: ["err.error", "erro interno", "internalservererror", "500", "404"]
   - id: D4
     what: a resposta é a entidade, com o cliente, não o DTO {id, total}
     file: "{src}/domain/benchpedido/handler/benchpedido_handler.go"
