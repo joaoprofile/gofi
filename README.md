@@ -530,8 +530,9 @@ Measured with `gofi bench`, `gofi bench audit` and the goldens of this repositor
 
 | What | Result |
 |---|---|
-| Audit recall on planted defects, 4 rounds × 3 cases | lenses **100%** · general lens alone **96.7%** |
-| Audit cost per case | lenses **$2.67** (5 turns) · general lens **$0.99** (1 turn) |
+| Audit recall on planted defects, 5 rounds × 3 cases × 5 defects | lenses **100%** · general lens alone **97.3%** |
+| Audit cost per case | lenses **$2.69** (5 turns) · general lens **$0.97** (1 turn) |
+| Delivery suite (4 changes: easy, contract gap, trap, two layers) | **4/4 accepted**, 3 on the first pass, $15.74 |
 | Fixed prefix of a loop turn (Claude Code) | 42.6k → **33.9k tokens** |
 | Search: right document in the top 3 | **97%** (held-out: 92%) |
 | Planning a request, rules only | **0.4–0.9 s, 0 tokens**; ~10 ms with the index kept loaded |
