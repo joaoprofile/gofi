@@ -89,6 +89,35 @@ func TestARunWorksApartAndLandsByFastForward(t *testing.T) {
 	}
 }
 
+// A project may version what gofi init ignores — the SDK checkout, the
+// installed manifest. The worktree has those from the commit: linking over
+// them failed the run with "file exists", and copying over them carried the
+// person's uncommitted edits into the run's commit.
+func TestAVersionedGofiFileComesFromTheCommit(t *testing.T) {
+	ctx := context.Background()
+	root := project(t)
+	write(t, filepath.Join(root, ".gitignore"), "")
+	write(t, filepath.Join(root, ".gofi/installed.yaml"), "version: 1\n")
+	run(t, root, "add", "-A")
+	run(t, root, "commit", "--quiet", "-m", "version the gofi files")
+	write(t, filepath.Join(root, ".gofi/installed.yaml"), "version: 2\n")
+
+	tr, err := Prepare(ctx, root, "r-1", "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdk := filepath.Join(tr.Dir, ".gofi/gofi-sdk-go")
+	if fi, err := os.Lstat(sdk); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("the versioned SDK must be the commit's checkout, not a link: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(tr.Dir, ".gofi/installed.yaml")); string(b) != "version: 1\n" {
+		t.Errorf("installed.yaml = %q: the worktree must hold the committed one", b)
+	}
+	if s := run(t, tr.Dir, "status", "--porcelain"); s != "" {
+		t.Errorf("a fresh worktree must be clean, got:\n%s", s)
+	}
+}
+
 // Two runs at once each land, the second rebased on the first.
 func TestTwoRunsLandOneAfterTheOther(t *testing.T) {
 	ctx := context.Background()
@@ -279,5 +308,73 @@ func TestAWorktreeLivesOutsideItsProject(t *testing.T) {
 	}
 	if Location(root, "r-1") != dir || Location(t.TempDir(), "r-1") == dir {
 		t.Error("the location is not one per project and run")
+	}
+}
+
+// A worktree that could not be furnished is undone: no checkout, no branch
+// left behind for every attempt to pile up as gofi/<change>-2, -3.
+func TestAWorktreeThatCannotBeFurnishedLeavesNothing(t *testing.T) {
+	ctx := context.Background()
+	root := project(t)
+	env := filepath.Join(root, ".env")
+	write(t, env, "SECRET=1\n")
+	if err := os.Chmod(env, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(env, 0o644) })
+	if _, err := os.ReadFile(env); err == nil {
+		t.Skip("running with permissions that read any file")
+	}
+
+	if _, err := Prepare(ctx, root, "r-1", "a"); err == nil {
+		t.Fatal("an unreadable .env must fail the worktree")
+	}
+	if _, err := os.Stat(Location(root, "r-1")); !os.IsNotExist(err) {
+		t.Errorf("the checkout must be removed: %v", err)
+	}
+	if b := run(t, root, "branch", "--list", "gofi/*"); b != "" {
+		t.Errorf("the branch must be removed, got %q", b)
+	}
+	if trees, _ := Trees(ctx, root); len(trees) != 0 {
+		t.Errorf("git must know no worktree of the run, got %d", len(trees))
+	}
+}
+
+// A run that ends without landing keeps its work on its branch and gives
+// its checkout back; one that wrote nothing leaves no branch either.
+func TestARetiredRunKeepsItsWorkOnItsBranchOnly(t *testing.T) {
+	ctx := context.Background()
+	root := project(t)
+	worked, err := Prepare(ctx, root, "r-1", "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(worked.Dir, "app.txt"), "v2\n")
+	idle, err := Prepare(ctx, root, "r-2", "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trees, err := Trees(ctx, root)
+	if err != nil || len(trees) != 2 {
+		t.Fatalf("Trees = %d, %v; want the 2 runs", len(trees), err)
+	}
+
+	if kept, err := worked.Retire(ctx, "wip(a): impasse"); err != nil || !kept {
+		t.Fatalf("Retire(worked) = %v, %v; want the branch kept", kept, err)
+	}
+	if got := run(t, root, "show", worked.Branch+":app.txt"); got != "v2" {
+		t.Errorf("the branch must hold the run's edit, got %q", got)
+	}
+	if _, err := os.Stat(worked.Dir); !os.IsNotExist(err) {
+		t.Errorf("the checkout must go: %v", err)
+	}
+	if kept, err := idle.Retire(ctx, "wip(b): impasse"); err != nil || kept {
+		t.Fatalf("Retire(idle) = %v, %v; want the empty branch removed", kept, err)
+	}
+	if b := run(t, root, "branch", "--list", idle.Branch); b != "" {
+		t.Errorf("an empty branch must be removed, got %q", b)
+	}
+	if trees, _ := Trees(ctx, root); len(trees) != 0 {
+		t.Errorf("no worktree must be left, got %d", len(trees))
 	}
 }
