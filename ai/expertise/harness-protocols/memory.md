@@ -148,12 +148,13 @@ o invariante "1 dono por contexto = zero conflito de git".
 | `spec` | Spec gerada, aguardando implementação | gofi-spec |
 | `em_implementacao` | gofi-eng iniciou, ainda não concluiu | gofi-eng |
 | `implementado` | Implementação concluída, aguardando QA | gofi-eng |
-| `aprovado` | QA aprovou | gofi-qa |
-| `reprovado` | QA reprovou (blockers pendentes) | gofi-qa |
+| `auditado` | QA aprovou a entrega (memória antiga: `aprovado`) | `gofi verdict write` |
+| `reprovado` | QA reprovou (blockers pendentes) | `gofi verdict write` |
 
 `ressalvas` acompanha o veredicto do QA: MAJOR + MINOR pendentes. Só
-`aprovado` com `ressalvas: 0` encerra o ciclo — `aprovado` com ressalvas reabre
-a implementação no loop (`gofi run`), seja quem o tenha iniciado.
+`auditado` com `ressalvas: 0` encerra o ciclo — `auditado` com ressalvas reabre
+a implementação no loop (`gofi run`), seja quem o tenha iniciado. "Aprovado"
+é só o selo da pessoa num contrato (mudança ou spec), nunca o veredicto do QA.
 
 ## Regras de escrita por agent
 

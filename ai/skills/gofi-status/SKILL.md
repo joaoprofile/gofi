@@ -85,7 +85,7 @@ gofi status --json            # ou: gofi status <contexto> --json
    | PRD criado | `prd` |
    | Spec gerada | `spec` |
    | Em implementação | `em_implementacao` |
-   | Implementados | `implementado`, `aprovado` (✅; ⚠️ com ressalvas), `reprovado` (❌) |
+   | Implementados | `implementado`, `auditado` (✅; ⚠️ com ressalvas — memória antiga diz `aprovado`), `reprovado` (❌) |
 
    Colunas: Contexto · PRD · Spec (`spec_state`) · Mudanças (abertas/aprovadas) ·
    Rastreio (requisitos e cenários) · **Próximo passo** (`next`, ou ✓ em dia).
@@ -93,9 +93,9 @@ gofi status --json            # ou: gofi status <contexto> --json
 
 3. **Avisos de consistência** (lista ao final; não bloqueia):
    - a memória diz uma fase que o disco desmente: `memory` ∈ {`spec`, `implementado`,
-     `aprovado`} sem `spec`; `adotado` ou `prd` com `spec_state: aprovada`;
+     `auditado`} sem `spec`; `adotado` ou `prd` com `spec_state: aprovada`;
    - `spec_state` `vencida` (editada depois de aprovada) ou `com-erros`;
-   - rastreio incompleto num contexto `aprovado`.
+   - rastreio incompleto num contexto `auditado`.
 
 4. **Um contexto pedido** (`/gofi-status pedidos`): a linha dele e o `## Estado atual`
    do `contexts/pedidos.md`.

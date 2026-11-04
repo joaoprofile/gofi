@@ -108,6 +108,19 @@ func writeVerdict(root, context string, data []byte, run string, iter int, lens 
 	return i18n.T("verdict.written", filepath.ToSlash(rel), v.Result, v.Caveats(), len(v.Findings)), nil
 }
 
+// MemoryAudited is the status an approving verdict leaves in the context's
+// memory. "aprovado" is the person's seal on a contract, and only that; an
+// audit that passes says auditado, its ressalvas beside it.
+const MemoryAudited = "auditado"
+
+// memoryStatus is the status a verdict leaves in the context's memory.
+func memoryStatus(v *verdict.Verdict) string {
+	if v.Result == verdict.Approved {
+		return MemoryAudited
+	}
+	return v.Result
+}
+
 // recordVerdict carries the verdict into the context's memory: status and
 // ressalvas, the fields every conductor and gofi-status read.
 func recordVerdict(root string, v *verdict.Verdict) error {
@@ -120,7 +133,7 @@ func recordVerdict(root string, v *verdict.Verdict) error {
 		return err
 	}
 	out, err := docs.SetFields(string(raw), [][2]string{
-		{"status", v.Result},
+		{"status", memoryStatus(v)},
 		{"ressalvas", fmt.Sprint(v.Caveats())},
 		{"atualizado", time.Now().Format("2006-01-02")},
 	})
