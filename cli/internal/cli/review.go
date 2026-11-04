@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -215,4 +217,34 @@ func contractGate(cmd *cobra.Command, root string, cfg *config.GofiConfig, chang
 		}
 	}
 	return approveDocs(cmd, root, all, mine)
+}
+
+// chatReview is the chat's review stop on a spec: every open change of the
+// context not approved as it is, checked and reviewed — the lines to show,
+// and how many findings block.
+func chatReview(root string, cfg *config.GofiConfig) func(string) ([]string, int, error) {
+	return func(ctxName string) ([]string, int, error) {
+		all, err := contract.Docs(root)
+		if err != nil {
+			return nil, 0, err
+		}
+		var out bytes.Buffer
+		blocking := 0
+		for _, c := range contract.Changes(all) {
+			if c.Sealed || !slices.Contains(c.Contexts, ctxName) {
+				continue
+			}
+			r, err := reviewChange(context.Background(), &out, root, cfg, c.ID, false)
+			if err != nil {
+				return strings.Split(strings.TrimSpace(out.String()), "\n"), 0, err
+			}
+			printReview(&out, r)
+			blocking += len(r.Blocking())
+		}
+		text := strings.TrimSpace(out.String())
+		if text == "" {
+			return nil, 0, nil
+		}
+		return strings.Split(text, "\n"), blocking, nil
+	}
 }

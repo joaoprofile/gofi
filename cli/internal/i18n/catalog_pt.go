@@ -449,6 +449,8 @@ var catalogPT = map[string]string{
 	"ask.elicit.questions":        "%d decisões em aberto, levantadas para /%s:",
 	"ask.elicit.stopped":          "parado para as suas respostas (as perguntas estão em %s): rode de novo no terminal, ou com --proceed para seguir com as recomendações",
 	"chat.plan.next":              "Depois, se quiser: /%s",
+	"chat.plan.reviewing":         "revisando as mudanças de %s antes da aprovação (gofi-spec-review)…",
+	"chat.plan.review_blocking":   "a revisão achou %d pontos que pedem correção.",
 	"chat.plan.review":            "%s escrito — revise antes de /%s construir em cima dele. Enter segue · n para",
 	"chat.plan.no_brief":          "nenhum plano aberto",
 	"chat.help.brief":             "o pedido montado do plano aberto",

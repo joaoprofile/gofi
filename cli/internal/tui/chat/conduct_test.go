@@ -349,3 +349,32 @@ func TestAQuestionGoesWithItsPointers(t *testing.T) {
 		t.Errorf("sent = %q", s.sent)
 	}
 }
+
+// A spec is reviewed at its review stop: what the reviewer found comes
+// before the stop, and the approval stays the person's.
+func TestASpecIsReviewedBeforeTheApproval(t *testing.T) {
+	m, _, _ := planModel(t, []*intake.Result{threePhases()}, nil)
+	var asked []string
+	m.opts.Review = func(ctx string) ([]string, int, error) {
+		asked = append(asked, ctx)
+		return []string{"[major] ambiguidade — deltas/pricing.md#REQ-01.2"}, 1, nil
+	}
+	m = ask(t, m, "altere o fluxo de pricing")
+	// The spec's turn, to its end, keeping what its end issues.
+	var last tea.Cmd
+	for i := 0; m.running && i < 50; i++ {
+		next, c := m.Update(waitEvent(m.events)())
+		m, last = next.(model), c
+	}
+	msg := findMsg(last, func(msg tea.Msg) bool { _, ok := msg.(reviewed); return ok })
+	if msg == nil || strings.Join(asked, ",") != "pricing" {
+		t.Fatalf("the spec was not reviewed: %v", asked)
+	}
+	if m.wait == waitContinue {
+		t.Error("the stop came before the review")
+	}
+	next, cmd := m.Update(msg)
+	if m = next.(model); m.wait != waitContinue || cmd == nil {
+		t.Errorf("after the review the chat must stop for the person: wait=%q", m.wait)
+	}
+}

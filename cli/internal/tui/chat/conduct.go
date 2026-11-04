@@ -416,11 +416,56 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 		return m, tea.Println("\n" + k.bullet(k.good, msg, k.text, m.width))
 	}
 	if done.ReviewAfter || intake.ApprovalAfter(r, p.next-1) {
+		// A spec is read by the reviewer first: the person approves knowing
+		// what it found. It runs aside — a turn of its own.
+		if done.Produces == "spec" && m.opts.Review != nil && r.Context != nil {
+			review, ctx := m.opts.Review, r.Context.Name
+			return m, tea.Batch(tea.Println(k.nested([]string{i18n.T("chat.plan.reviewing", ctx)}, k.dim)), func() tea.Msg {
+				lines, blocking, err := review(ctx)
+				return reviewed{lines: lines, blocking: blocking, err: err}
+			})
+		}
 		// An approval point: what the next phases build rests on this document.
 		m.wait = waitContinue
 		return m, tea.Println("\n" + k.nested([]string{i18n.T("chat.plan.review", done.Produces, r.Plan[p.next].Role)}, k.accent))
 	}
 	return m.startPhase(nil)
+}
+
+// reviewed is the review of a spec at its review stop.
+type reviewed struct {
+	lines    []string
+	blocking int
+	err      error
+}
+
+// onReviewed shows what the review found and stops for the person: the
+// approval stays theirs, the blocking findings said before it.
+func (m model) onReviewed(msg reviewed) (tea.Model, tea.Cmd) {
+	k := m.look
+	p := m.plan
+	if p == nil {
+		return m, nil
+	}
+	out := []tea.Cmd{}
+	if msg.err != nil {
+		out = append(out, tea.Println(k.nested([]string{msg.err.Error()}, k.warn)))
+	} else if len(msg.lines) > 0 {
+		style := k.dim
+		if msg.blocking > 0 {
+			style = k.warn
+		}
+		out = append(out, tea.Println(k.nested(msg.lines, style)))
+	}
+	r := p.res
+	done := r.Plan[p.next-1]
+	m.wait = waitContinue
+	prompt := i18n.T("chat.plan.review", done.Produces, r.Plan[p.next].Role)
+	if msg.blocking > 0 {
+		prompt = i18n.T("chat.plan.review_blocking", msg.blocking) + " " + prompt
+	}
+	out = append(out, tea.Println("\n"+k.nested([]string{prompt}, k.accent)))
+	return m, tea.Sequence(out...)
 }
 
 // record writes a finished phase into the run's record.
