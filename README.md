@@ -84,7 +84,7 @@ gofi init my-service
 # Write the contract with the agents, then approve it
 gofi chat                                   # or the GOFI AI panel in VS Code
 gofi review add-rate-limit                  # the reviewer reads the change first
-gofi change approve add-rate-limit          # your approval seals it
+gofi change approve add-rate-limit          # your approval seals it — or say so in the chat
 
 # Let the loop deliver it
 gofi run add-rate-limit --detach
@@ -416,6 +416,7 @@ Embedded in the binary; `gofi init` installs it, `gofi install extensions` updat
 | `index_status`, `index` | Check or rebuild the index |
 | `verify` | Run the loop's sensors — build, static, test, and with a run the graph and trace |
 | `verdict_write`, `memory_write` | Record an audit's verdict, write a context's memory — checked first |
+| `approve` | Approve a change or a living spec the person approved in the conversation — the host asks the person to confirm every call; no loop role ever gets it |
 
 ### Hosts
 
