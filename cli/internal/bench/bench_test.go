@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -142,7 +143,8 @@ func TestAnAuditCaseIsJudgedByWhereAndWhat(t *testing.T) {
 		{Severity: "major", Rule: "benchreembolso/REQ-02.1", Message: "o cenário REQ-02.1 não tem teste"},
 	}}
 	s := c.Judge(v, "backend")
-	if strings.Join(s.Found, ",") != "D1,D5" || strings.Join(s.Missed, ",") != "D2,D3,D4" || s.Extra != 1 {
+	// The second is in D2's file, off its line, but names REQ-03 and says it.
+	if strings.Join(s.Found, ",") != "D1,D2,D5" || strings.Join(s.Missed, ",") != "D3,D4" || s.Extra != 0 {
 		t.Errorf("score %+v", s)
 	}
 }
@@ -193,6 +195,40 @@ func TestARequirementIsNotOneOfItsScenarios(t *testing.T) {
 	for rule, want := range map[string]bool{"ctx/REQ-01": true, "REQ-01 e REQ-01.2": true, "ctx/REQ-01.2": false, "REQ-012": false, "req-01": true} {
 		if namesRequirement(rule, "REQ-01") != want {
 			t.Errorf("%q names REQ-01: %v", rule, !want)
+		}
+	}
+}
+
+// A finding placed on the defect's function finds it when it names one of
+// the defect's lines; there, saying only what it is about is not enough.
+func TestAFindingOnTheDefectsFunctionFindsItByTheLineItNames(t *testing.T) {
+	cases, _ := AuditCases("go")
+	for _, c := range cases {
+		if c.Name != "pedido" {
+			continue
+		}
+		cc := *c
+		cc.Defects = append([]Defect{}, c.Defects...)
+		root := t.TempDir()
+		if err := cc.Write(root, "backend"); err != nil {
+			t.Fatal(err)
+		}
+		file := "backend/domain/benchpedido/handler/benchpedido_handler.go"
+		var d2 Defect
+		for _, d := range cc.Defects {
+			if d.ID == "D2" {
+				d2 = d
+			}
+		}
+		decl := d2.Lines[0] - 3
+		judge := func(msg string) []string {
+			return cc.Judge(&verdict.Verdict{Findings: []verdict.Finding{{Severity: "major", Rule: "qa-checklist.md §10", File: file, Line: decl, Message: msg}}}, "backend").Found
+		}
+		if got := judge(fmt.Sprintf("o handler usa o repositório direto (h.repo.Buscar(id), linha %d)", d2.Lines[0])); !slices.Contains(got, "D2") {
+			t.Errorf("naming line %d: found %v", d2.Lines[0], got)
+		}
+		if got := judge("o handler usa o repositório direto"); slices.Contains(got, "D2") {
+			t.Errorf("naming no line: found %v", got)
 		}
 	}
 }
