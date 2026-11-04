@@ -199,6 +199,9 @@ type Event struct {
 	Node string    `json:"node,omitempty"`
 	To   string    `json:"to,omitempty"`
 	Why  string    `json:"why,omitempty"`
+	// CostUSD is what the run had spent when the event happened: what a
+	// batch of runs side by side adds up as they go.
+	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
 // Runner carries out a flow over one change.
@@ -771,6 +774,7 @@ func (r *Runner) emit(s *State, e Event) {
 	r.seq++
 	e.Seq = r.seq
 	e.T = r.now()
+	e.CostUSD = s.CostUSD
 	line, _ := json.Marshal(e)
 	p := filepath.Join(Dir(r.Root, s.Run), "events.ndjson")
 	if f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {

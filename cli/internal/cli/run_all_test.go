@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/joaoprofile/gofi/cli/internal/loop"
 )
@@ -206,5 +207,55 @@ func TestRunAllResumesABatch(t *testing.T) {
 	}
 	if out := run("--all", "--resume", "b-nada"); !strings.Contains(out, "b-nada") {
 		t.Errorf("an unknown batch: %s", out)
+	}
+}
+
+// Side by side, the runs spend from one budget as they go: once together
+// they spend it, the ones under way stop — to go on with --resume — and
+// the rest does not start.
+func TestRunAllStopsTheRunsUnderWayWhenTogetherTheySpendTheBudget(t *testing.T) {
+	root := configuredProject(t)
+	t.Chdir(root)
+	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  run_budget_usd: 1\n")
+	for _, id := range []string{"a", "b", "c"} {
+		change(t, root, id, "")
+		c := newChangeCmd()
+		c.SetOut(io.Discard)
+		c.SetArgs([]string{"approve", id})
+		if err := c.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	orig := startChange
+	t.Cleanup(func() { startChange = orig })
+	var mu sync.Mutex
+	var started []string
+	startChange = func(ctx context.Context, root string, j job, _ allOpts, _ io.Writer) (*loop.State, error) {
+		mu.Lock()
+		started = append(started, j.Change)
+		mu.Unlock()
+		j.Spent(0.6)
+		s := &loop.State{Schema: loop.StateSchema, Run: j.Run, Change: j.Change, CostUSD: 0.6}
+		select {
+		case <-ctx.Done():
+			s.Node = "implement" // checkpointed where it stopped
+		case <-time.After(5 * time.Second):
+			s.Outcome = "accepted"
+		}
+		return s, loop.SaveState(root, s)
+	}
+	var out bytes.Buffer
+	cmd := newRunCmd()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--all", "--parallel", "2"})
+	_ = cmd.Execute()
+	if len(started) != 2 {
+		t.Errorf("started %v — two side by side, the third never", started)
+	}
+	for _, want := range []string{"| 0 | a | stopped |", "| 0 | b | stopped |", "| 0 | c | skipped |", "US$ 1.20 de US$ 1.00"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("summary lacks %q:\n%s", want, out.String())
+		}
 	}
 }

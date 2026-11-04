@@ -58,8 +58,10 @@ agent's turn to agents/<node>-<iter>.ndjson.
 dependencies allow, and stops at the first not accepted.
 
 --all delivers every open change, level by level of their depende_de, up to
---parallel at once (loop.max_agents), within loop.run_budget_usd; its
-summary and its state go to .gofi/batches/<batch>. A batch cut short — or
+--parallel at once (loop.max_agents), within loop.run_budget_usd: the runs
+side by side spend from it together, and once it is spent the ones under way
+stop at their next checkpoint and the rest does not start. Its summary and
+its state go to .gofi/batches/<batch>. A batch cut short — or
 with changes not accepted — goes on with --all --resume <batch>: what it
 accepted stays, a run it left midway goes on, and the rest runs again.
 

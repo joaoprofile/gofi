@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
@@ -51,6 +52,9 @@ const batchSchema = "gofi-batch/v1"
 
 // running is a change whose run is under way: what a batch cut short says.
 const running = "running"
+
+// errBatchBudget stops the runs under way once the batch's budget is spent.
+var errBatchBudget = errors.New("the batch's budget is spent")
 
 // batch is the state of a gofi run --all, written as each change ends: what
 // --resume goes on from.
@@ -104,6 +108,8 @@ type job struct {
 	Resume   bool
 	Worktree bool
 	Budget   float64
+	// Spent hears what the run has spent, as it goes.
+	Spent func(usd float64)
 }
 
 // startChange delivers one change of a batch and returns how its run ended.
@@ -135,6 +141,15 @@ var startChange = func(ctx context.Context, root string, j job, o allOpts, progr
 	}
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = root
+	// Stopped — Ctrl+C, the batch's budget spent —, the run checkpoints and
+	// ends as gofi cancel ends it: it can go on with --resume.
+	cmd.Cancel = func() error {
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	cmd.WaitDelay = time.Minute
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
@@ -146,6 +161,9 @@ var startChange = func(ctx context.Context, root string, j job, o allOpts, progr
 	}
 	why := ""
 	for e := range loop.Stream(stdout) {
+		if e.CostUSD > 0 && j.Spent != nil {
+			j.Spent(e.CostUSD)
+		}
 		switch e.Ev {
 		case "node.start":
 			fmt.Fprintf(progress, "  [%s] ● %s\n", change, e.Node)
@@ -242,6 +260,19 @@ func runAll(ctx context.Context, out io.Writer, root string, cfg *config.GofiCon
 			fmt.Fprintf(out, "  %s: %v\n", batchPath(root, b.ID), err)
 		}
 	}
+	// The runs under way, to stop once the batch's budget is spent: each
+	// stops at its next checkpoint, what it spent counted.
+	stops := map[string]context.CancelCauseFunc{}
+	spend := func(run string, usd float64) {
+		mu.Lock()
+		defer mu.Unlock()
+		b.Spent[run] = max(b.Spent[run], usd)
+		if budget > 0 && spent() >= budget {
+			for _, stop := range stops {
+				stop(errBatchBudget)
+			}
+		}
+	}
 	ended := func(d delivered) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -311,21 +342,38 @@ func runAll(ctx context.Context, out io.Writer, root string, cfg *config.GofiCon
 				j.Run = reserveRun(root)
 			}
 			run := j.Run
+			j.Spent = func(usd float64) { spend(run, usd) }
+			jobCtx, stop := context.WithCancelCause(ctx)
 			mu.Lock()
 			record(delivered{Change: id, Run: run, Outcome: running})
+			stops[run] = stop
 			mu.Unlock()
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				defer func() { <-sem }()
-				s, err := startChange(ctx, root, j, o, out)
+				defer func() {
+					mu.Lock()
+					delete(stops, run)
+					mu.Unlock()
+					stop(nil)
+				}()
+				s, err := startChange(jobCtx, root, j, o, out)
+				byBudget := errors.Is(context.Cause(jobCtx), errBatchBudget)
 				if err != nil {
-					ended(delivered{Change: id, Run: run, Outcome: "stopped", Why: err.Error()})
+					why := err.Error()
+					if byBudget {
+						why = i18n.T("run.all.budget", budget)
+					}
+					ended(delivered{Change: id, Run: run, Outcome: "stopped", Why: why})
 					return
 				}
 				d := delivered{Change: id, Run: run, Outcome: s.Outcome, CostUSD: s.CostUSD}
 				if s.Outcome == "" {
 					d.Outcome = "stopped"
+				}
+				if byBudget && s.Outcome != "accepted" {
+					d.Outcome, s.Why = "stopped", i18n.T("run.all.budget", budget)
 				}
 				if s.Outcome != "accepted" {
 					// What the person decides on: the run's reason, and the
