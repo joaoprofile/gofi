@@ -68,7 +68,7 @@ const GRAPH_DIR = '.gofi/index/';
 /** The ledger name of a row that came from an index query. */
 const GRAPH_ROW = 'gofi find';
 
-const GRAPH_QUERY = /\bgofi\s+(?:find|show|path)\b/;
+const GRAPH_QUERY = /\bgofi\s+(?:find|show|path|impact|trace)\b/;
 
 /** The shell command a Bash call ran, whatever key the engine used for it. */
 function bashCommand(input) {
@@ -84,7 +84,7 @@ function graphQueryOf(input) {
 	if (!GRAPH_QUERY.test(command)) {
 		return '';
 	}
-	const match = /\bgofi\s+((?:find|show|path)\b[^\n|;&]*)/.exec(command);
+	const match = /\bgofi\s+((?:find|show|path|impact|trace)\b[^\n|;&]*)/.exec(command);
 	return match ? match[1].trim() : 'find';
 }
 
@@ -109,6 +109,8 @@ function mcpQueryOf(name, input) {
 			return `show ${String(args.ref || '')}`.trim();
 		case 'path':
 			return `path ${String(args.from || '')} ${String(args.to || '')}`.trim();
+		case 'impact':
+			return `impact ${(Array.isArray(args.targets) ? args.targets : []).join(' ')}`.trim();
 		default:
 			return '';
 	}
