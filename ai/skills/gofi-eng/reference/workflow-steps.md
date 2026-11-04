@@ -67,7 +67,7 @@ Do `gofi-test`, a partir dos cenários.
 Quem fecha a implementação — no loop, o loop reindexa depois de cada turno.
 
 ```
-13. Atualizar os grafos e os índices: `gofi index code` (código) e `gofi index docs` (reconstrói índice, grafo de documentos e os `INDEX.md`) e `gofi index check` (faceta fora do léxico reprova). Artefato derivado que não se reconstrói envelhece, e **índice desatualizado é pior que índice nenhum**: sem índice o agente sabe que não sabe, com um velho ele aponta com confiança para o lugar errado. Depois a memória (ver `reference/memory-and-output.md` §"Atualização de memória ao concluir")
+13. Índices: num turno do loop, nada — o loop reindexa depois do turno. Fora dele, `gofi index code` (código) e, se mexeu em spec ou PRD, `gofi index check` (faceta fora do léxico reprova); o índice de documentos se refaz sozinho na consulta. Depois a memória (ver `reference/memory-and-output.md` §"Atualização de memória ao concluir")
 ```
 
 A ordem é guia, não rígida — ajuste se a mudança exigir; com plano, a ordem é a dele.
