@@ -193,7 +193,7 @@ func runBenchAudit(cmd *cobra.Command, _ []string) error {
 		wg     sync.WaitGroup
 	)
 	for _, c := range cases {
-		for _, mode := range []string{"lentes", auditSingle} {
+		for _, mode := range []string{auditLenses, auditSingle} {
 			wg.Go(func() {
 				s, err := auditCase(ctx, root, src, id, c, mode)
 				mu.Lock()

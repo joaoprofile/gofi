@@ -205,6 +205,10 @@ type Loop struct {
 	Escalate string `yaml:"escalate,omitempty"`
 	// AuditParallel is how many lenses of an audit run at once; 0, all.
 	AuditParallel int `yaml:"audit_parallel,omitempty"`
+	// Audit is how the audit runs: lenses (the default — every lens the
+	// change's facts dispatch, at once) or single (the general lens alone,
+	// a fraction of the cost; gofi bench audit measures what it misses).
+	Audit string `yaml:"audit,omitempty"`
 	// MaxAgents is how many changes gofi run --all delivers at once, each
 	// in a worktree of its own; 0 or 1, one after another in the tree.
 	MaxAgents int `yaml:"max_agents,omitempty"`
