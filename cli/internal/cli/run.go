@@ -273,8 +273,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// The audit by the general lens alone, and that lens.
+// How an audit runs — in lenses, or by the general lens alone — and that
+// lens.
 const (
+	auditLenses = "lenses"
 	auditSingle = "single"
 	generalLens = "gofi-qa"
 )
@@ -421,6 +423,12 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	if o.Budget > 0 && (policy.BudgetUSD == 0 || o.Budget < policy.BudgetUSD) {
 		policy.BudgetUSD = o.Budget
+	}
+	if o.Audit == "" && cfg.Loop != nil {
+		o.Audit = cfg.Loop.Audit
+	}
+	if o.Audit != "" && o.Audit != auditSingle && o.Audit != auditLenses {
+		return "", fmt.Errorf("loop.audit: %q — %s or %s", o.Audit, auditLenses, auditSingle)
 	}
 
 	run, change, ctxName := o.Resume, o.Change, ""
