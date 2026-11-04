@@ -100,7 +100,11 @@ func Prepare(ctx context.Context, root, run, change string) (*Tree, error) {
 	if _, err := git(ctx, root, "worktree", "add", "-b", t.Branch, t.Dir, "HEAD"); err != nil {
 		return nil, fmt.Errorf("git worktree add %s: %w", t.Branch, err)
 	}
-	return t, t.furnish()
+	if err := t.furnish(ctx); err != nil {
+		_ = t.Discard(ctx)
+		return nil, fmt.Errorf("furnish the worktree of %s: %w", run, err)
+	}
+	return t, nil
 }
 
 // Scratch is a worktree of the project's head on a branch of its own, for
@@ -116,16 +120,22 @@ func Scratch(ctx context.Context, root, name string) (*Tree, error) {
 	if _, err := git(ctx, root, "worktree", "add", "-b", t.Branch, t.Dir, "HEAD"); err != nil {
 		return nil, fmt.Errorf("git worktree add %s: %w", t.Branch, err)
 	}
-	return t, t.furnish()
+	if err := t.furnish(ctx); err != nil {
+		_ = t.Discard(ctx)
+		return nil, fmt.Errorf("furnish the worktree of %s: %w", name, err)
+	}
+	return t, nil
 }
 
 // furnish gives a new worktree the project's ignored files: the shared ones
-// linked, the rest copied.
-func (t *Tree) furnish() error {
+// linked, the rest copied. A path the project versions instead came with the
+// checkout, and the commit is what the run starts from: linking over it fails,
+// and copying over it carries the person's uncommitted edits into the run.
+func (t *Tree) furnish(ctx context.Context) error {
 	root := t.Root
 	for _, p := range shared {
 		src := filepath.Join(root, filepath.FromSlash(p))
-		if _, err := os.Stat(src); err != nil {
+		if _, err := os.Stat(src); err != nil || t.versioned(ctx, p) {
 			continue
 		}
 		dst := filepath.Join(t.Dir, filepath.FromSlash(p))
@@ -135,11 +145,21 @@ func (t *Tree) furnish() error {
 		}
 	}
 	for _, p := range copied {
+		if t.versioned(ctx, p) {
+			continue
+		}
 		if err := copyTree(filepath.Join(root, filepath.FromSlash(p)), filepath.Join(t.Dir, filepath.FromSlash(p))); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// versioned reports whether the commit the worktree was checked out from has
+// any file under p.
+func (t *Tree) versioned(ctx context.Context, p string) bool {
+	out, err := git(ctx, t.Dir, "ls-files", "--", p)
+	return err == nil && out != ""
 }
 
 // Discard removes a scratch worktree and its branch, landed or not.
@@ -286,6 +306,66 @@ func Landed(ctx context.Context, root, base, change string) bool {
 		}
 	}
 	return false
+}
+
+// Retire ends the checkout of a run that will not land: what its tree holds
+// uncommitted is committed on its branch, the checkout is removed, and the
+// branch is kept only when it has commits the base does not. kept reports
+// whether the branch stayed.
+func (t *Tree) Retire(ctx context.Context, message string) (kept bool, err error) {
+	if _, err := os.Stat(t.Dir); err == nil {
+		if _, err := git(ctx, t.Dir, "add", "-A"); err != nil {
+			return false, err
+		}
+		if _, err := git(ctx, t.Dir, "diff", "--cached", "--quiet"); err != nil {
+			if _, err := git(ctx, t.Dir, "commit", "--quiet", "--no-verify", "-m", message); err != nil {
+				return false, fmt.Errorf("commit the work of %s: %w", t.Branch, err)
+			}
+		}
+		if _, err := git(ctx, t.Root, "worktree", "remove", "--force", t.Dir); err != nil {
+			return false, err
+		}
+		_ = os.Remove(filepath.Dir(t.Dir))
+	}
+	_, _ = git(ctx, t.Root, "worktree", "prune")
+	if t.Branch == "" {
+		return false, nil
+	}
+	if t.Base != "" {
+		if n, err := git(ctx, t.Root, "rev-list", "--count", t.Base+".."+t.Branch); err == nil && n == "0" {
+			_, err := git(ctx, t.Root, "branch", "--quiet", "-D", t.Branch)
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// Trees lists the worktrees gofi made for the project's runs, as git knows
+// them: each with its run's name as the last element of Dir, and the base the
+// project has checked out now.
+func Trees(ctx context.Context, root string) ([]*Tree, error) {
+	out, err := git(ctx, root, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	base, _ := git(ctx, root, "symbolic-ref", "--quiet", "--short", "HEAD")
+	home := filepath.Dir(Location(root, "_"))
+	var trees []*Tree
+	var cur *Tree
+	for _, line := range strings.Split(out, "\n") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			cur = nil
+			dir := strings.TrimPrefix(line, "worktree ")
+			if filepath.Dir(dir) == home {
+				cur = &Tree{Root: root, Dir: dir, Base: base}
+				trees = append(trees, cur)
+			}
+		case cur != nil && strings.HasPrefix(line, "branch refs/heads/"):
+			cur.Branch = strings.TrimPrefix(line, "branch refs/heads/")
+		}
+	}
+	return trees, nil
 }
 
 // Remove deletes a landed run's worktree and its branch, which the base now

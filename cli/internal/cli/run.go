@@ -88,7 +88,9 @@ The change must be committed. Accepted, the branch is committed, rebased on
 the current branch once every change it depends on has landed, and
 fast-forwarded into it — only while the project's tree is clean, waiting up
 to --gate-timeout otherwise; never merged, never pushed. A conflict ends in
-"conflito", the branch kept for the person.
+"conflito", the branch kept for the person. A run that ends without being
+accepted gives its worktree back, its work committed on its branch; gofi run
+--gc gives back the worktrees no run needs any more.
 The sensors run the language pack's commands, or those of loop.sensors in
 .gofi.yaml — a command, or {run, format, report} for a tool that writes a
 report (sarif, junit); test defaults to the test section's default task, and
@@ -108,6 +110,7 @@ gofi run --resume r-20261102-101500
 gofi run adicionar-rate-limit --no-archive
 gofi run adicionar-rate-limit --detach
 gofi run --all --parallel 2
+gofi run --gc
 gofi run --all --resume b-20261104-101500`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runRun,
@@ -122,6 +125,7 @@ gofi run --all --resume b-20261104-101500`,
 	cmd.Flags().Bool("detach", false, i18n.T("cmd.run.flag.detach"))
 	cmd.Flags().Bool("explain", false, i18n.T("cmd.run.flag.explain"))
 	cmd.Flags().Bool("worktree", false, i18n.T("cmd.run.flag.worktree"))
+	cmd.Flags().Bool("gc", false, i18n.T("cmd.run.flag.gc"))
 	cmd.Flags().String("run-id", "", "name of the new run (set by --detach)")
 	_ = cmd.Flags().MarkHidden("run-id")
 	cmd.Flags().Float64("budget", 0, "what this run may spend, below loop.budget_usd (set by --all)")
@@ -184,6 +188,12 @@ func runRun(cmd *cobra.Command, args []string) error {
 	cfg, root, err := loadProjectConfig()
 	if err != nil {
 		return err
+	}
+	if gc, _ := cmd.Flags().GetBool("gc"); gc {
+		if len(args) > 0 {
+			return errors.New(i18n.T("run.gc.alone"))
+		}
+		return collectWorktrees(cmd.Context(), cmd.OutOrStdout(), root)
 	}
 	resume, _ := cmd.Flags().GetString("resume")
 	ctxName, _ := cmd.Flags().GetString("context")
@@ -626,6 +636,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if s.Outcome != "accepted" && cp != nil {
 		return s.Outcome, keepWork(ctx, out, root, s, cp, o.Events, report)
 	}
+	if s.Outcome != "accepted" && tree != nil {
+		return s.Outcome, retireRun(ctx, out, root, s, tree, o.Events, report)
+	}
 	if s.Outcome != "accepted" || o.NoArchive {
 		return s.Outcome, nil
 	}
@@ -968,6 +981,80 @@ func keepWork(ctx context.Context, out io.Writer, root string, s *loop.State, cp
 	if !events {
 		fmt.Fprintln(out, "  "+i18n.T("run.checkpoint.kept", branch))
 	}
+	return nil
+}
+
+// retireRun gives back the worktree of a run that ended without being
+// accepted: its work is committed on its branch, which is kept when it holds
+// something, and the checkout is removed — an ended run is never resumed.
+func retireRun(ctx context.Context, out io.Writer, root string, s *loop.State, tree *worktree.Tree, events bool, report func(loop.Event)) error {
+	kept, err := tree.Retire(ctx, fmt.Sprintf("wip(%s): %s — %s (%s)", s.Context, s.Change, s.Outcome, s.Run))
+	if err != nil {
+		return fmt.Errorf("give back the worktree of %s: %w", s.Run, err)
+	}
+	if kept {
+		s.Kept = tree.Branch
+	}
+	s.Worktree = ""
+	_ = loop.SaveState(root, s)
+	report(loop.AppendEvent(root, s.Run, loop.Event{Ev: "worktree.retired", Node: s.Run, To: s.Kept}))
+	if !events {
+		if kept {
+			fmt.Fprintln(out, "  "+i18n.T("run.checkpoint.kept", tree.Branch))
+		} else {
+			fmt.Fprintln(out, "  "+i18n.T("run.retired.empty", tree.Branch))
+		}
+	}
+	return nil
+}
+
+// collectWorktrees gives back every worktree gofi made for a run that no
+// longer needs one: ended without landing, or that never got a state. A run
+// in progress, paused, interrupted or with a landing still to do keeps its
+// tree.
+func collectWorktrees(ctx context.Context, out io.Writer, root string) error {
+	trees, err := worktree.Trees(ctx, root)
+	if err != nil {
+		return err
+	}
+	freed := 0
+	for _, t := range trees {
+		run := filepath.Base(t.Dir)
+		if l, ok := loop.ReadLock(root, run); ok && loop.Alive(l.PID) {
+			fmt.Fprintln(out, "  "+i18n.T("run.gc.busy", run))
+			continue
+		}
+		s, serr := loop.LoadState(root, run)
+		if serr != nil {
+			s = nil
+		}
+		if s != nil && (s.Node != "" || landable(s)) {
+			fmt.Fprintln(out, "  "+i18n.T("run.gc.open", run))
+			continue
+		}
+		if s != nil && s.Base != "" {
+			t.Base = s.Base
+		}
+		kept, err := t.Retire(ctx, fmt.Sprintf("wip: %s — given back by gofi run --gc", run))
+		if err != nil {
+			fmt.Fprintln(out, "  "+i18n.T("run.gc.failed", run, err))
+			continue
+		}
+		freed++
+		if kept {
+			fmt.Fprintln(out, "  "+i18n.T("run.gc.kept", run, t.Branch))
+		} else {
+			fmt.Fprintln(out, "  "+i18n.T("run.gc.removed", run))
+		}
+		if s != nil {
+			s.Worktree = ""
+			if kept {
+				s.Kept = t.Branch
+			}
+			_ = loop.SaveState(root, s)
+		}
+	}
+	fmt.Fprintln(out, "  "+i18n.T("run.gc.done", freed, len(trees)))
 	return nil
 }
 
