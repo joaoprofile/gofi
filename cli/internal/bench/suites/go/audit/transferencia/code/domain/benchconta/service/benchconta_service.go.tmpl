@@ -1,0 +1,41 @@
+package service
+
+import (
+	"context"
+	"errors"
+
+	"{module}/domain/benchconta/repository"
+)
+
+// ErrValorInvalido é a recusa de um valor menor ou igual a zero.
+var ErrValorInvalido = errors.New("valor inválido")
+
+// ErrSaldoInsuficiente é a recusa de um valor maior que o saldo.
+var ErrSaldoInsuficiente = errors.New("saldo insuficiente")
+
+// ContaService move saldo entre contas.
+type ContaService struct{ repo *repository.ContaRepository }
+
+// New monta o serviço.
+func New(repo *repository.ContaRepository) *ContaService { return &ContaService{repo: repo} }
+
+// gofi:implements REQ-01
+// Transferir move valor da origem para o destino.
+func (s *ContaService) Transferir(ctx context.Context, origem, destino string, valor int64) error {
+	// gofi:implements REQ-02
+	if valor <= 0 {
+		return ErrValorInvalido
+	}
+	saldo, err := s.repo.Saldo(ctx, origem)
+	if err != nil {
+		return err
+	}
+	if saldo < valor {
+		return ErrSaldoInsuficiente
+	}
+	if err := s.repo.Ajustar(ctx, origem, -valor); err != nil {
+		return err
+	}
+	_ = s.repo.Ajustar(ctx, destino, valor)
+	return nil
+}

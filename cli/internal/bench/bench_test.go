@@ -3,6 +3,7 @@ package bench
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -93,8 +94,20 @@ func TestAnAuditCaseIsJudgedByWhereAndWhat(t *testing.T) {
 	}
 	for _, c := range cases {
 		root := t.TempDir()
+		// The case's code imports its own packages by the module: a backend
+		// with a go.mod of its own, as gofi init writes it.
+		if err := os.MkdirAll(filepath.Join(root, "backend"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.WriteFile(filepath.Join(root, "backend", "go.mod"), []byte("module example.com/bench\n\ngo 1.22\n"), 0o644)
 		if err := c.Write(root, "backend"); err != nil {
 			t.Fatal(err)
+		}
+		build := exec.Command("go", "build", "./...")
+		build.Dir = filepath.Join(root, "backend")
+		build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Errorf("case %s: its code does not build: %v\n%s", c.Name, err, out)
 		}
 		all, _ := contract.Docs(root)
 		placeholders, _ := contract.Placeholders(root)
@@ -115,7 +128,12 @@ func TestAnAuditCaseIsJudgedByWhereAndWhat(t *testing.T) {
 			}
 		}
 	}
-	c := cases[0]
+	var c *AuditCase
+	for _, x := range cases {
+		if x.Name == "reembolso" {
+			c = x
+		}
+	}
 	file := "backend/domain/benchreembolso/service/benchreembolso_service.go"
 	v := &verdict.Verdict{Findings: []verdict.Finding{
 		{Severity: "blocker", Rule: "benchreembolso/REQ-01.1", File: file, Line: 22, Message: "a taxa é 3%, o requisito diz 2%"},

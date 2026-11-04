@@ -1,0 +1,20 @@
+package repository
+
+// Pedido é um pedido de um cliente.
+type Pedido struct {
+	ID      string
+	Cliente string
+	Total   int64
+}
+
+// PedidoRepository guarda os pedidos.
+type PedidoRepository struct{ pedidos map[string]Pedido }
+
+// New monta o repositório sobre os pedidos dados.
+func New(p map[string]Pedido) *PedidoRepository { return &PedidoRepository{pedidos: p} }
+
+// Buscar devolve o pedido de um id, e se ele existe.
+func (r *PedidoRepository) Buscar(id string) (Pedido, bool) {
+	p, ok := r.pedidos[id]
+	return p, ok
+}

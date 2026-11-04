@@ -29,10 +29,14 @@ type AuditCase struct {
 // within its lines, and says what it is about — or, with no file, names its
 // requirement and says it.
 type Defect struct {
-	ID       string   `yaml:"id" json:"id"`
-	What     string   `yaml:"what" json:"what"`
-	File     string   `yaml:"file,omitempty" json:"file,omitempty"`
-	Lines    [2]int   `yaml:"lines,omitempty" json:"lines,omitempty"`
+	ID    string `yaml:"id" json:"id"`
+	What  string `yaml:"what" json:"what"`
+	File  string `yaml:"file,omitempty" json:"file,omitempty"`
+	Lines [2]int `yaml:"lines,omitempty" json:"lines,omitempty"`
+	// At places the defect by the text of its line, instead of Lines: the
+	// first line of File holding it, and Span lines after it.
+	At       string   `yaml:"at,omitempty" json:"at,omitempty"`
+	Span     int      `yaml:"span,omitempty" json:"span,omitempty"`
 	Rule     string   `yaml:"rule,omitempty" json:"rule,omitempty"`
 	Keywords []string `yaml:"keywords" json:"keywords"`
 }
@@ -60,8 +64,17 @@ func AuditCases(language string) ([]*AuditCase, error) {
 }
 
 // Write puts the case in a project: its change in specs/changes/, its code
-// in the backend folder src.
+// in the backend folder src — {module} in it the module its go.mod names —,
+// and places each defect given by the text of its line.
 func (c *AuditCase) Write(root, src string) error {
+	module := ""
+	if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(src), "go.mod")); err == nil {
+		for _, ln := range strings.Split(string(data), "\n") {
+			if m, ok := strings.CutPrefix(strings.TrimSpace(ln), "module "); ok {
+				module = strings.TrimSpace(m)
+			}
+		}
+	}
 	base := path.Join("suites", c.lang, "audit", c.Name)
 	copyDir := func(from, to string) error {
 		return fs.WalkDir(suites, from, func(p string, d fs.DirEntry, err error) error {
@@ -71,6 +84,9 @@ func (c *AuditCase) Write(root, src string) error {
 			data, err := suites.ReadFile(p)
 			if err != nil {
 				return err
+			}
+			if strings.HasSuffix(p, ".tmpl") {
+				data = []byte(strings.ReplaceAll(string(data), "{module}", module))
 			}
 			// Code is kept as .tmpl, so gofi's own module never builds it.
 			dst := filepath.Join(to, filepath.FromSlash(strings.TrimSuffix(strings.TrimPrefix(p, from+"/"), ".tmpl")))
@@ -83,7 +99,35 @@ func (c *AuditCase) Write(root, src string) error {
 	if err := copyDir(path.Join(base, "change"), filepath.Join(root, "specs", "changes", c.Change)); err != nil {
 		return err
 	}
-	return copyDir(path.Join(base, "code"), filepath.Join(root, filepath.FromSlash(src)))
+	if err := copyDir(path.Join(base, "code"), filepath.Join(root, filepath.FromSlash(src))); err != nil {
+		return err
+	}
+	return c.place(root, src)
+}
+
+// place resolves the defects given by the text of their line.
+func (c *AuditCase) place(root, src string) error {
+	for i := range c.Defects {
+		d := &c.Defects[i]
+		if d.At == "" || d.File == "" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(strings.ReplaceAll(d.File, "{src}", src))))
+		if err != nil {
+			return fmt.Errorf("defect %s: %w", d.ID, err)
+		}
+		found := false
+		for n, ln := range strings.Split(string(data), "\n") {
+			if strings.Contains(ln, d.At) {
+				d.Lines, found = [2]int{n + 1, n + 1 + d.Span}, true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("defect %s: %q is in no line of %s", d.ID, d.At, d.File)
+		}
+	}
+	return nil
 }
 
 // Score is how an audit did on a case.

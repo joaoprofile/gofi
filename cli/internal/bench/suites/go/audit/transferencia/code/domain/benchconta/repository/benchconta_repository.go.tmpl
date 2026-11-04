@@ -1,0 +1,26 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+)
+
+// ContaRepository grava os saldos das contas.
+type ContaRepository struct{ db *sql.DB }
+
+// New monta o repositório sobre o banco.
+func New(db *sql.DB) *ContaRepository { return &ContaRepository{db: db} }
+
+// Saldo lê o saldo de uma conta, em centavos.
+func (r *ContaRepository) Saldo(ctx context.Context, conta string) (int64, error) {
+	var saldo int64
+	err := r.db.QueryRowContext(ctx, fmt.Sprintf("SELECT saldo FROM benchconta_conta WHERE id = '%s'", conta)).Scan(&saldo)
+	return saldo, err
+}
+
+// Ajustar soma delta ao saldo de uma conta.
+func (r *ContaRepository) Ajustar(ctx context.Context, conta string, delta int64) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE benchconta_conta SET saldo = saldo + $1 WHERE id = $2", delta, conta)
+	return err
+}

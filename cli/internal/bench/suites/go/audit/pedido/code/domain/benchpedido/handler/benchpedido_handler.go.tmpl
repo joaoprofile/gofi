@@ -1,0 +1,37 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"{module}/domain/benchpedido/repository"
+	"{module}/domain/benchpedido/service"
+)
+
+// PedidoHandler responde a consulta de pedidos.
+type PedidoHandler struct {
+	svc  *service.PedidoService
+	repo *repository.PedidoRepository
+}
+
+// New monta o handler.
+func New(svc *service.PedidoService, repo *repository.PedidoRepository) *PedidoHandler {
+	return &PedidoHandler{svc: svc, repo: repo}
+}
+
+// gofi:implements REQ-03
+// Consultar responde GET /pedidos?id=<id>.
+func (h *PedidoHandler) Consultar(w http.ResponseWriter, r *http.Request) {
+	cliente := r.Header.Get("X-Cliente")
+	id := r.URL.Query().Get("id")
+	if _, ok := h.repo.Buscar(id); !ok {
+		http.Error(w, "pedido "+id+" não existe", http.StatusNotFound)
+		return
+	}
+	p, err := h.svc.Consultar(cliente, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(p)
+}
