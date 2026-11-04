@@ -378,3 +378,25 @@ func TestARetiredRunKeepsItsWorkOnItsBranchOnly(t *testing.T) {
 		t.Errorf("no worktree must be left, got %d", len(trees))
 	}
 }
+
+// The folders a project's build needs and git ignores — node_modules — are
+// linked into the worktree too.
+func TestAWorktreeLinksTheDependenciesItIsGiven(t *testing.T) {
+	ctx := context.Background()
+	root := project(t)
+	write(t, filepath.Join(root, ".gitignore"), ".gofi/*\nnode_modules/\n")
+	run(t, root, "add", "-A")
+	run(t, root, "commit", "--quiet", "-m", "ignore node_modules")
+	write(t, filepath.Join(root, "frontend/node_modules/jest/package.json"), "{}")
+	tr, err := Prepare(ctx, root, "r-1", "a", "frontend/node_modules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Lstat(filepath.Join(tr.Dir, "frontend/node_modules"))
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("node_modules not linked: %v", err)
+	}
+	if s := run(t, tr.Dir, "status", "--porcelain"); s != "" {
+		t.Errorf("the link must not dirty the worktree:\n%s", s)
+	}
+}

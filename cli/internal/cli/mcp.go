@@ -176,7 +176,13 @@ func (g *gofiMCP) verify(ctx context.Context, _ *mcp.CallToolRequest, a verifyAr
 	if err != nil {
 		return nil, nil, err
 	}
-	cmds, err := sensorCommands(cfg)
+	var surfaces []string
+	if a.Change != "" {
+		if surfaces, err = changeSurfaces(cfg, g.root, a.Change); err != nil {
+			return nil, nil, err
+		}
+	}
+	cmds, err := sensorCommandsFor(cfg, g.root, surfaces)
 	if err != nil {
 		return nil, nil, err
 	}
