@@ -32,7 +32,7 @@ const (
 // whichever host does the work. mode and tools are Claude Code's permission
 // mode and allowed tools; the other hosts run in their own sandbox.
 func agentEngine(cfg *config.GofiConfig, root, mode string, tools []string) (func(model string) engine.Session, error) {
-	open, err := agentSessions(cfg, root, mode, tools)
+	open, err := agentSessions(cfg, root, mode, tools, false)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,10 @@ func agentEngine(cfg *config.GofiConfig, root, mode string, tools []string) (fun
 // Claude Code gets exactly the grant, and every tool that edits a file or
 // runs a command outside it refused; Codex and Copilot grant per sandbox,
 // not per tool, and run the role in theirs.
-func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string) (func(model string, grant []string) engine.Session, error) {
+//
+// A turn of the loop is isolated: it runs on the project alone, with gofi's
+// MCP server only, and its system prompt says no one reads its text.
+func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, loopTurn bool) (func(model string, grant []string) engine.Session, error) {
 	h, ok := host.Get(cfg.AI.Host)
 	if !ok {
 		return nil, fmt.Errorf("ai.host %q — %s", cfg.AI.Host, strings.Join(host.IDs(), ", "))
@@ -79,10 +82,20 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string) (f
 		// The contract is the person's: no turn of the loop writes it, and
 		// the engine refuses before the integrity stage would (0002, D12).
 		denied = append(denied, protectedWrites...)
-		return claude.New(claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, Model: model,
-			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied})
+		o := claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, Model: model,
+			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied}
+		if loopTurn {
+			o.SystemPrompt, o.Isolated, o.MCPConfig = loopSystemPrompt, true, host.MCPConfig()
+		}
+		return claude.New(o)
 	}, nil
 }
+
+// loopSystemPrompt is what a turn of the loop is told beyond its brief: the
+// chat's "ask in text" would lose the question.
+const loopSystemPrompt = "You are one turn of gofi's delivery loop, not a conversation: no one reads your text. " +
+	"Do what the prompt asks with the tools you have and end the turn. " +
+	"A decision you lack goes to the elicitation file the prompt names, never to the text of your answer."
 
 // claudeGrants are Claude Code's own tools for each tool a contract grants;
 // gofi's are in gofiGrants.

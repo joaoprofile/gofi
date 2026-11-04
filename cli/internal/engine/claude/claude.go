@@ -56,6 +56,15 @@ type Options struct {
 	// settings allow, passed with --disallowed-tools: what keeps a role to
 	// the tools its contract grants.
 	DisallowedTools []string
+	// SystemPrompt replaces the chat's appended system prompt: a turn of the
+	// loop has no one to answer it in text.
+	SystemPrompt string
+	// Isolated runs the session on the project alone — its settings and
+	// CLAUDE.md, not the person's own —, with only the MCP servers of
+	// MCPConfig and the dynamic sections of the system prompt left out, so
+	// turns side by side share a cached prefix.
+	Isolated  bool
+	MCPConfig string // JSON or a file, passed as --mcp-config
 }
 
 // Session is a conversation held by one long-lived claude process, restarted
@@ -191,7 +200,17 @@ func (s *Session) args() []string {
 		"--output-format", "stream-json",
 		"--verbose",
 		"--include-partial-messages",
-		"--append-system-prompt", systemPrompt,
+	}
+	prompt := systemPrompt
+	if s.opts.SystemPrompt != "" {
+		prompt = s.opts.SystemPrompt
+	}
+	a = append(a, "--append-system-prompt", prompt)
+	if s.opts.Isolated {
+		a = append(a, "--setting-sources", "project", "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections")
+	}
+	if c := strings.TrimSpace(s.opts.MCPConfig); c != "" {
+		a = append(a, "--mcp-config", c)
 	}
 	if mode := strings.TrimSpace(s.opts.PermissionMode); mode != "" && mode != "default" {
 		a = append(a, "--permission-mode", mode)

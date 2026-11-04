@@ -63,6 +63,13 @@ func (h Host) Registered(root string) bool {
 // jsonEntry is how a host starts the server, in the JSON formats.
 var jsonEntry = map[string]any{"type": "stdio", "command": "gofi", "args": []any{"mcp"}}
 
+// MCPConfig is gofi's server alone, as Claude Code's --mcp-config reads it:
+// what a turn of the loop runs with, whatever else the person installed.
+func MCPConfig() string {
+	b, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{ServerName: jsonEntry}})
+	return string(b)
+}
+
 func registerJSON(path, name, key string) (bool, error) {
 	doc := map[string]any{}
 	b, err := os.ReadFile(path)
