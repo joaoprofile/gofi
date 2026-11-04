@@ -433,7 +433,8 @@ Embedded in the binary; `gofi init` installs it, `gofi install extensions` updat
 | Command | |
 |---|---|
 | `gofi scan [path]` · `--json` | Read any repository: code and contexts, documents that read as PRD, spec, decision or API contract, Gherkin scenarios, API contracts, tables — and what is next. Writes nothing |
-| `gofi init` | Create a project or adopt a repository |
+| `gofi init` | Create a project or adopt a repository; adopting, it asks which of the contexts the code names to adopt |
+| `gofi context adopt [<ctx>...]` · `--all` | Adopt the contexts the code's folders name: each one's memory, with its code, tables, documents and what is missing |
 | `gofi config` · `gofi settings` | The project's `.gofi.yaml` · the CLI's own settings |
 | `gofi update [skills\|agents\|expertise\|templates\|sdk\|ds\|institutional\|audit]` | Pull what is gofi's from upstream; `audit` changes nothing |
 | `gofi install [extensions\|mcp\|guard\|hooks]` | Wire gofi into the editor and the agent |
