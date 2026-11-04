@@ -319,3 +319,18 @@ func TestWarmStartsTheEngineAheadOfTheFirstTurn(t *testing.T) {
 		t.Errorf("engine started %d times, want once", n)
 	}
 }
+
+// A turn of the loop runs on the project alone, with the MCP servers it is
+// given and its own system prompt; the chat's session keeps the person's.
+func TestAnIsolatedSessionRunsOnTheProjectAlone(t *testing.T) {
+	loop := strings.Join((&Session{opts: Options{Isolated: true, SystemPrompt: "turn of the loop", MCPConfig: `{"mcpServers":{}}`}}).args(), " ")
+	for _, want := range []string{"--setting-sources project", "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections", `--mcp-config {"mcpServers":{}}`, "--append-system-prompt turn of the loop"} {
+		if !strings.Contains(loop, want) {
+			t.Errorf("isolated args lack %q: %s", want, loop)
+		}
+	}
+	chat := strings.Join((&Session{}).args(), " ")
+	if strings.Contains(chat, "--setting-sources") || strings.Contains(chat, "--strict-mcp-config") || !strings.Contains(chat, systemPrompt) {
+		t.Errorf("chat args: %s", chat)
+	}
+}

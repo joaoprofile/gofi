@@ -1078,7 +1078,7 @@ func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, t
 	if mode == "" {
 		mode = "acceptEdits"
 	}
-	session, err := agentSessions(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...))
+	session, err := agentSessions(cfg, work, mode, append(append([]string{}, guard.ReadOnlyRules...), guard.WriteRules...), true)
 	if err != nil {
 		return nil, err
 	}
