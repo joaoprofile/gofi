@@ -227,8 +227,16 @@ func run(root, text string, opts Options, s settled) (*Result, error) {
 	// A role's verb names its artifact ("especifique" → spec), unless it is
 	// a verb of every task ("implemente", "desenvolva") and the request names
 	// the artifact outright: in "desenvolva a tela …" the screen decides.
+	//
+	// The first verb of the task says what it is: a role's verb after a
+	// stronger one that asks for something else — "criar uma camada …,
+	// validar …" — describes what is built, not the task.
 	if roleArtifact, word, ok := contractArtifact(roles, ws); ok && (!hasArtifact || (word.Pos < artifact.Pos && !isIntentWord(lex, word.Word))) {
-		artifact, hasArtifact = match{ID: roleArtifact, Word: word.Word, Pos: word.Pos}, true
+		if hasIntent && !weak && intent.Pos >= 0 && intent.Pos < word.Pos && intentFor(roleArtifact, "") != intent.ID && intentFor(roleArtifact, "") != "create" {
+			res.Signals = append(res.Signals, fmt.Sprintf("\"%s\" depois de \"%s\": descreve o que se faz, não a tarefa", word.Word, intent.Word))
+		} else {
+			artifact, hasArtifact = match{ID: roleArtifact, Word: word.Word, Pos: word.Pos}, true
+		}
 	}
 	if s.artifact != "" {
 		artifact, hasArtifact = match{ID: s.artifact, Word: s.why, Pos: -1}, true
@@ -566,7 +574,11 @@ func sufficiency(res *Result, related []candidate, roles []role.Role, ws []strin
 			Text:    fmt.Sprintf("Contexto novo `%s`, ou parte de um que já existe?", ctx.Name),
 			Options: append([]string{"novo: " + ctx.Name}, options...)})
 	case ctx.New:
-		assume = append(assume, "contexto novo `"+ctx.Name+"`: nada no índice se relaciona ao pedido")
+		// A new context is the person's to choose, even with nothing in the
+		// index to set it against: the name was taken from the request.
+		qs = append(qs, Question{ID: "context",
+			Text:    fmt.Sprintf("Contexto novo `%s`? Nada no índice se relaciona ao pedido — ou diga em qual contexto existente ele entra.", ctx.Name),
+			Options: []string{"novo: " + ctx.Name}})
 	}
 	// "What changes?" is only a question when there is something to change —
 	// the artifact exists — and the request says nothing about it: no word
