@@ -117,8 +117,9 @@ em passagens:
 - Tudo sai `status: proposto`. **Não grave `aprovado`**: aprovar é da pessoa,
   que sela cada documento com um hash. Quando ela disser na conversa que aprova,
   use a ferramenta `approve` do gofi (o id da mudança, ou o contexto na baseline) —
-  o host pede a confirmação dela; sem a ferramenta, `gofi change approve <id>` ou
-  `gofi spec approve <ctx>`.
+  o host pede a confirmação dela. Sem a ferramenta, peça que ela rode no
+  terminal dela `gofi change approve <id>` ou `gofi spec approve <ctx>` — o
+  comando recusa quando quem o roda é um agente.
 - Atualiza `.claude/memory/contexts/{contexto}.md` de cada contexto tocado
   (`status: spec`, `atualizado`, handoff com o id da mudança) → `reference/memory-and-closing.md`.
 - Entrega para `/gofi-eng` (e `/gofi-ui`, `/gofi-ops`), via a mudança aprovada.

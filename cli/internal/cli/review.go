@@ -240,7 +240,10 @@ func contractGate(cmd *cobra.Command, root string, cfg *config.GofiConfig, chang
 			mine = append(mine, d)
 		}
 	}
-	return approveDocs(cmd, root, all, mine)
+	if approvePorts.agent() {
+		return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("approve.agent"))}
+	}
+	return approveDocsTo(out, root, all, mine)
 }
 
 // chatReview is the chat's review stop on a spec: every open change of the

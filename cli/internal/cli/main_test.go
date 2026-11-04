@@ -23,6 +23,10 @@ func TestMain(m *testing.M) {
 	if module, err := filepath.Abs("../.."); err == nil {
 		os.Setenv(EnvCeilingDirs, module)
 	}
+	// The tests run inside coding agents too: approving in them is the
+	// test's, and a test about the agent sets the port itself.
+	approvePorts.agent = func() bool { return false }
+	approvePorts.tty = func() bool { return false }
 	detectToolchain = func(needs toolchain.Needs) toolchain.Preflight {
 		needs.Claude = false
 		return toolchain.Detect(needs)
