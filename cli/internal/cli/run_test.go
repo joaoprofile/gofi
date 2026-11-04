@@ -68,7 +68,8 @@ func writeReviewFile(p string) {
 // internal role the agent is told to follow.
 func isRole(prompt, name string) bool {
 	first, _, _ := strings.Cut(prompt, "\n")
-	return strings.HasPrefix(first, "/"+name+" ") || strings.Contains(first, "/"+name+"/SKILL.md")
+	// A skill opens on its slash command; an internal role is named last.
+	return strings.HasPrefix(first, "/"+name+" ") || strings.Contains(prompt, "/"+name+"/SKILL.md")
 }
 
 // shippedSkills is ai/skills/ of this repository, resolved before any test

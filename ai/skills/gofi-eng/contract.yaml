@@ -17,7 +17,9 @@
 #   triggers   all/any lists of facts gofi computes, never a model:
 #              change.surface(backend|web|mobile|infra), sensor.green,
 #              sensor.failed(<stage>), verdict(<clean|caveats|rejected>),
-#              owner(<eng|spec|pd>).
+#              owner(<eng|spec|pd>), stuck, layer(<layer>), plan.none,
+#              tests.due, run.reworked, diff.touches(<layer>) — the list is
+#              cli/internal/role/dispatch.go's.
 #   tools      what the role may use in its turn (0002, D15): read, edit, write,
 #              search, gofi (the index), verify (the loop's sensors), verdict,
 #              memory, shell. Exactly these are granted; no role gets a shell.

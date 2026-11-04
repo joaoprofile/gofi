@@ -191,7 +191,7 @@ func TestAFailingSensorGoesBackWithItsFindings(t *testing.T) {
 	if s.Outcome != "accepted" || path(t, w.root) != "implement sense repair sense audit policy accepted" {
 		t.Errorf("outcome %s, path %s", s.Outcome, path(t, w.root))
 	}
-	if w.agent.turns[1].Role != "gofi-repair" || !strings.Contains(w.agent.turns[1].Prompt, "`backend/pedidos/service.go:12` undefined: Total") {
+	if w.agent.turns[1].Role != "gofi-repair" || !strings.Contains(w.agent.turns[1].Prompt, "- `backend/pedidos/service.go`\n  - :12 undefined: Total") {
 		t.Errorf("the repair turn does not carry the finding:\n%s", w.agent.turns[1].Prompt)
 	}
 
@@ -549,7 +549,7 @@ func TestTheStageDispatchesByTheChangesFacts(t *testing.T) {
 	if s := w.run(t); s.Outcome != "accepted" {
 		t.Fatalf("outcome %s", s.Outcome)
 	}
-	if w.agent.turns[0].Role != "gofi-ui" || !strings.HasPrefix(w.agent.turns[0].Prompt, "Siga o papel descrito em ") {
+	if w.agent.turns[0].Role != "gofi-ui" || !strings.HasSuffix(w.agent.turns[0].Prompt, "Siga o papel descrito em .claude/gofi/roles/gofi-ui/SKILL.md.\n") {
 		t.Errorf("first turn: %s\n%s", w.agent.turns[0].Role, w.agent.turns[0].Prompt)
 	}
 	evs, _ := Events(w.root, "r-1")
@@ -1061,5 +1061,34 @@ func TestAMinorOfTheContractIsANoteNotAnImpasse(t *testing.T) {
 	major.agent.steps["audit"] = []step{audit(major.root, "aprovado", "major:spec:pedidos/REQ-02")}
 	if s := major.run(t); s.Outcome != "impasse" || !strings.Contains(path(t, major.root), "triage") {
 		t.Errorf("a major of the contract: outcome %s, path %s", s.Outcome, path(t, major.root))
+	}
+}
+
+// The brief is what the role needs: what failed and what is open goes to the
+// roles that fix it, the verdict's tool to an audit, and a finding is read
+// once, short.
+func TestTheBriefIsWhatTheRoleNeeds(t *testing.T) {
+	long := strings.Repeat("x", 2000)
+	s := &State{Change: "c", Context: "ctx", Run: "r-1", Iter: 2,
+		Sensor: &SensorResult{Failed: []string{"static"}, Findings: []SensorFinding{
+			{File: "a.go", Line: 3, Rule: "vet", Message: long}, {File: "a.go", Line: 3, Rule: "vet", Message: long}, {File: "b.go", Line: 1, Message: "y"}}},
+		Open: []Finding{{Severity: "major", Rule: "ctx/REQ-01", Message: "aberto", Fingerprint: "f1"}}}
+	brief := func(stage string) string {
+		return DefaultBrief(role.Role{Name: "gofi-x", Contract: role.Contract{Stage: stage}}, s, "elicit.json")
+	}
+	repair := brief("repair")
+	if strings.Count(repair, ":3 ") != 1 || strings.Contains(repair, strings.Repeat("x", maxFinding+1)) || !strings.Contains(repair, "aberto") {
+		t.Errorf("repair:\n%s", repair)
+	}
+	for _, stage := range []string{"deliver", "learn", "audit"} {
+		if b := brief(stage); strings.Contains(b, "sensores falharam") || strings.Contains(b, "aberto") {
+			t.Errorf("%s is told what to fix:\n%s", stage, b)
+		}
+	}
+	if b := brief("deliver"); strings.Contains(b, "verdict_write") || strings.Contains(b, "elicit.json") {
+		t.Errorf("deliver:\n%s", b)
+	}
+	if b := brief("audit"); !strings.Contains(b, "verdict_write") {
+		t.Errorf("audit:\n%s", b)
 	}
 }
