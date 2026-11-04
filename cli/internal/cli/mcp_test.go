@@ -285,7 +285,7 @@ func TestMCPVerifiesWithTheLoopsSensors(t *testing.T) {
 	writeFile(t, filepath.Join(root, "src", "frete", "frete.go"), "package frete\n\nfunc Calcular() int { return \"x\" }\n")
 	cs := mcpSession(t, root)
 	out, _ := callText(t, cs, "verify", map[string]any{"stages": []string{"build"}})
-	if !strings.Contains(out, "falhou: build") || !strings.Contains(out, "src/frete/frete.go:3") {
+	if !strings.Contains(out, "falhou: build") || !strings.Contains(out, "- `src/frete/frete.go`\n  - :3 ") {
 		t.Fatalf("verify:\n%s", out)
 	}
 	writeFile(t, filepath.Join(root, "src", "frete", "frete.go"), "package frete\n\nfunc Calcular() int { return 1 }\n")

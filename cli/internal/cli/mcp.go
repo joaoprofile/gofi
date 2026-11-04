@@ -15,10 +15,12 @@ import (
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/docs"
+	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/retrieval"
 	"github.com/joaoprofile/gofi/cli/internal/sensor"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
@@ -123,7 +125,7 @@ func newMCPServer(root, language string) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "verify", Title: "Check the code with the loop's sensors",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
-		Description: `Run the checks the delivery loop runs — build, static analysis, tests (stages, in that order; empty for all) — and get what failed, placed by file and line, with what each tool said. A skipped test fails the tests. The same commands the loop runs after your turn; only the loop's result counts. Use it instead of a shell.`,
+		Description: `Run the checks the delivery loop runs — build, static analysis, tests (stages, in that order; empty for those three), and with run and change the graph's rules and the traceability too — and get what failed, placed by file and line, short. A skipped test fails the tests. The same commands the loop runs after your turn; only the loop's result counts. Use it instead of a shell.`,
 	}, g.verify)
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "verdict_write", Title: "Record an audit's verdict",
@@ -139,7 +141,9 @@ func newMCPServer(root, language string) *mcp.Server {
 }
 
 type verifyArgs struct {
-	Stages []string `json:"stages,omitempty" jsonschema:"stages to run, in order: build, static, test; empty for all three"`
+	Stages []string `json:"stages,omitempty" jsonschema:"stages to run, in order: build, static, test, graph, trace; empty for build, static and test"`
+	Run    string   `json:"run,omitempty" jsonschema:"the run the turn names: graph and trace read its baseline"`
+	Change string   `json:"change,omitempty" jsonschema:"the change the turn works on: what trace checks"`
 }
 
 type verdictArgs struct {
@@ -170,6 +174,20 @@ func (g *gofiMCP) verify(ctx context.Context, _ *mcp.CallToolRequest, a verifyAr
 	if len(stages) == 0 {
 		stages = []string{"build", "static", "test"}
 	}
+	// The graph and the trace are of a run: its baseline, its change.
+	for _, st := range stages {
+		if st != "graph" && st != "trace" {
+			continue
+		}
+		if a.Run == "" || a.Change == "" {
+			return nil, nil, fmt.Errorf("verify %s: name the run and the change the turn names", st)
+		}
+		if st == "trace" {
+			cmds["trace"] = traceSensor(a.Change, a.Run)
+		} else if graphEnabled(cfg) && workspace.CanExtract(g.root, backendLanguage(cfg)) {
+			cmds["graph"] = graphSensor(a.Change, a.Run)
+		}
+	}
 	res := sensor.Runner{Root: g.root, Commands: cmds}.Run(ctx, stages)
 	var b strings.Builder
 	if len(res.Failed) == 0 {
@@ -179,18 +197,10 @@ func (g *gofiMCP) verify(ctx context.Context, _ *mcp.CallToolRequest, a verifyAr
 		}
 	} else {
 		fmt.Fprintf(&b, "falhou: %s\n", strings.Join(res.Failed, ", "))
-		for _, f := range res.Findings {
-			where := f.File
-			if f.Line > 0 {
-				where = fmt.Sprintf("%s:%d", f.File, f.Line)
-			}
-			if where == "" {
-				where = f.Rule
-			}
-			fmt.Fprintf(&b, "- %s %s\n", where, f.Message)
-		}
-		if len(res.Findings) == 0 {
-			b.WriteString(res.Output)
+		if len(res.Findings) > 0 {
+			b.WriteString(loop.FormatFindings(res.Findings))
+		} else {
+			b.WriteString(clipTail(res.Output, 4000))
 		}
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: b.String()}}}, nil, nil
@@ -445,4 +455,12 @@ func projectHost() host.Host {
 		}
 	}
 	return host.ClaudeCode
+}
+
+// clipTail keeps the end of a long output, where a tool says what broke.
+func clipTail(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return "…\n" + s[len(s)-max:]
 }

@@ -17,36 +17,28 @@ import (
 // said before: each turn runs in a fresh session and reads the rest on disk.
 func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	var b strings.Builder
-	// An internal role is no slash command: the agent follows it.
-	if rl.Contract.Internal() {
-		fmt.Fprintf(&b, "Siga o papel descrito em %s.\n\n", layout.RoleSkill(rl.Name, true))
-	} else {
+	// A skill is invoked by its slash command, first; an internal role is
+	// named last, so the lenses of one audit open on the same words — the
+	// cached prefix they share.
+	if !rl.Contract.Internal() {
 		fmt.Fprintf(&b, "/%s ", rl.Name)
 	}
 	fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list`, os deltas e o design em `specs/changes/%s/`. Iteração %d da execução %s.\n\n",
 		s.Change, s.Context, s.Change, s.Iter, s.Run)
-	if s.Sensor != nil && len(s.Sensor.Failed) > 0 {
+	// What failed and what is open is for the roles that change the code:
+	// the others — an audit, the delivery, the lesson — have nothing to fix;
+	// the triage, what is open.
+	fixes := slices.Contains(fixingStages, rl.Contract.Stage)
+	if fixes && s.Sensor != nil && len(s.Sensor.Failed) > 0 {
 		fmt.Fprintf(&b, "**Os sensores falharam em %s.** Corrija antes de qualquer outra coisa:\n\n", strings.Join(s.Sensor.Failed, ", "))
 		if len(s.Sensor.Findings) > 0 {
-			for _, f := range s.Sensor.Findings {
-				where := f.File
-				if f.Line > 0 {
-					where = fmt.Sprintf("%s:%d", f.File, f.Line)
-				}
-				if where == "" {
-					where = f.Rule
-				}
-				if f.Symbol != "" {
-					where += " · " + f.Symbol
-				}
-				fmt.Fprintf(&b, "- `%s` %s\n", where, clip(f.Message, 1200))
-			}
-			b.WriteString("\n")
+			b.WriteString(FormatFindings(s.Sensor.Findings))
 		} else {
 			fmt.Fprintf(&b, "```\n%s\n```\n\n", clip(s.Sensor.Output, 4000))
 		}
 	}
-	if len(s.Open) > 0 {
+	// The triage reads what is open too: it is what its proposal is about.
+	if (fixes || rl.Contract.Stage == "triage") && len(s.Open) > 0 {
 		b.WriteString("**Achados abertos da auditoria** — corrija todos, sem ampliar o escopo:\n\n")
 		for _, f := range s.Open {
 			fmt.Fprintf(&b, "- [%s] %s — %s (`%s`)\n", f.Severity, f.Rule, f.Message, f.Fingerprint)
@@ -86,18 +78,79 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		}
 		fmt.Fprintf(&b, "**A execução não pode seguir:** %s. Grave a proposta de emenda em `%s` — é a única escrita deste turno — e encerre: a execução para em impasse e a pessoa decide pela sua proposta.\n\n", why, s.Proposal)
 	}
-	fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s`, exatamente neste formato, e encerre o turno:\n\n```json\n%s\n```\n\n", elicitFile, intake.ElicitExample)
+	// The delivery and the lesson write one file each and decide nothing.
+	if rl.Contract.Stage != "deliver" && rl.Contract.Stage != "learn" {
+		fmt.Fprintf(&b, "Faltou uma decisão que a mudança não cobre? Não suponha nem pergunte na conversa: grave a pergunta em `%s`, exatamente neste formato, e encerre o turno:\n\n```json\n%s\n```\n\n", elicitFile, intake.ElicitExample)
+	}
 	// A role with a grant has no shell: it is told what to use instead, so a
 	// turn is not spent on commands that are refused.
 	if len(rl.Contract.Tools) > 0 && !slices.Contains(rl.Contract.Tools, "shell") {
-		b.WriteString("Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi; para achar e entender código e documentos, `find`, `show` e `path`; para saber o que depende de um símbolo ou arquivo, `impact`. O índice, o loop atualiza depois do seu turno.\n\n")
+		fmt.Fprintf(&b, "Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi — com run %s e change %s ela confere também o grafo e a rastreabilidade —; para achar e entender código e documentos, `find`, `show` e `path`; para saber o que depende de um símbolo ou arquivo, `impact`. O índice, o loop atualiza depois do seu turno.\n\n", s.Run, s.Change)
 	}
-	if slices.Contains(s.Lenses, rl.Name) {
+	switch {
+	case slices.Contains(s.Lenses, rl.Name):
 		// One lens of several: its verdict is a part, merged by gofi.
 		fmt.Fprintf(&b, "Você é uma das lentes desta auditoria (%s): audite só o que o seu papel cobre — as outras lentes cobrem o resto. Grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d, lens %s) — o mesmo que `gofi verdict write %s --run %s --iter %d --lens %s`. Não grave a memória do contexto: o gofi junta as lentes.\n", strings.Join(s.Lenses, ", "), s.Context, s.Run, s.Iter, rl.Name, s.Context, s.Run, s.Iter, rl.Name)
-		return b.String()
+	case rl.Contract.Stage == "audit":
+		fmt.Fprintf(&b, "Grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
 	}
-	fmt.Fprintf(&b, "Se o seu papel audita: grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
+	if rl.Contract.Internal() {
+		fmt.Fprintf(&b, "\nSiga o papel descrito em %s.\n", layout.RoleSkill(rl.Name, true))
+	}
+	return b.String()
+}
+
+// fixingStages are the roles that change the code, and so are told what
+// failed and what the audit left open.
+var fixingStages = []string{"implement", "test", "repair"}
+
+// maxFinding is how much of a sensor finding a turn reads: what broke and
+// where, not the tool's whole page about it.
+const maxFinding = 300
+
+// FormatFindings lists the sensors' findings by file, each said once and
+// short: what a turn reads of them, in the brief and from verify.
+func FormatFindings(fs []SensorFinding) string {
+	var b strings.Builder
+	seen := map[string]bool{}
+	var files []string
+	byFile := map[string][]string{}
+	for _, f := range fs {
+		file := f.File
+		if file == "" {
+			file = f.Rule
+		}
+		at := ""
+		if f.Line > 0 {
+			at = fmt.Sprintf(":%d", f.Line)
+		}
+		if f.Symbol != "" {
+			at += " · " + f.Symbol
+		}
+		msg := strings.TrimSpace(f.Message)
+		if len(msg) > maxFinding {
+			msg = msg[:maxFinding] + "…"
+		}
+		line := fmt.Sprintf("%s %s", at, msg)
+		if f.Rule != "" && f.Rule != file {
+			line += " [" + f.Rule + "]"
+		}
+		if seen[file+line] {
+			continue
+		}
+		seen[file+line] = true
+		if _, ok := byFile[file]; !ok {
+			files = append(files, file)
+		}
+		byFile[file] = append(byFile[file], strings.TrimSpace(line))
+	}
+	for _, file := range files {
+		fmt.Fprintf(&b, "- `%s`\n", file)
+		for _, l := range byFile[file] {
+			fmt.Fprintf(&b, "  - %s\n", l)
+		}
+	}
+	b.WriteString("\n")
 	return b.String()
 }
 
