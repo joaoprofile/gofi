@@ -137,8 +137,11 @@ type Score struct {
 	Found []string `json:"found"`
 	// Missed are the defects no finding found; Extra the findings that
 	// found none — a defect not planted, or noise.
-	Missed  []string `json:"missed"`
-	Extra   int      `json:"extra"`
+	Missed []string `json:"missed"`
+	Extra  int      `json:"extra"`
+	// Extras are those findings, as the audit wrote them: what to read to
+	// tell a defect nobody planted from noise.
+	Extras  []string `json:"extras,omitempty"`
 	CostUSD float64  `json:"cost_usd"`
 	Turns   int      `json:"turns"`
 }
@@ -173,6 +176,7 @@ func (c *AuditCase) Judge(v *verdict.Verdict, src string) Score {
 	for i, f := range v.Findings {
 		if !matched[i] && f.Severity != "suggestion" {
 			s.Extra++
+			s.Extras = append(s.Extras, fmt.Sprintf("[%s] %s — %s", f.Severity, f.Rule, f.Message))
 		}
 	}
 	return s
@@ -200,10 +204,25 @@ func AuditReport(id string, scores []Score) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Benchmark de auditoria `%s`\n\nA mesma implementação, com defeitos plantados, auditada em lentes e pela lente geral sozinha.\n\n", id)
 	b.WriteString("| Caso | Auditoria | Recall | Achou | Perdeu | Achados a mais | Turnos | US$ |\n|---|---|---|---|---|---|---|---|\n")
-	sort.SliceStable(scores, func(i, j int) bool { return scores[i].Case < scores[j].Case })
+	sort.SliceStable(scores, func(i, j int) bool {
+		if scores[i].Case != scores[j].Case {
+			return scores[i].Case < scores[j].Case
+		}
+		return scores[i].Mode < scores[j].Mode
+	})
 	for _, s := range scores {
 		fmt.Fprintf(&b, "| %s | %s | %.0f%% | %s | %s | %d | %d | %.2f |\n", s.Case, s.Mode, 100*s.Recall(),
 			strings.Join(s.Found, " "), strings.Join(s.Missed, " "), s.Extra, s.Turns, s.CostUSD)
+	}
+	b.WriteString("\n## Achados além dos plantados\n\nUm defeito real que ninguém plantou, ou ruído: leia para decidir.\n")
+	for _, s := range scores {
+		if len(s.Extras) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "\n### %s · %s\n\n", s.Case, s.Mode)
+		for _, e := range s.Extras {
+			fmt.Fprintf(&b, "- %s\n", e)
+		}
 	}
 	return b.String()
 }
