@@ -38,6 +38,7 @@ type AgentState struct {
 	Ended   time.Time `json:"ended,omitzero"`
 	CostUSD float64   `json:"cost_usd"`
 	Seconds float64   `json:"seconds"`
+	Usage   *Usage    `json:"usage,omitempty"`
 	Error   string    `json:"error,omitempty"`
 }
 

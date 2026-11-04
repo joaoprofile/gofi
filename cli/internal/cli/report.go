@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -95,6 +97,10 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 	}
 	fmt.Fprintf(&b, "| Resultado | %s · %d voltas de retrabalho |\n", outcome, s.Rounds)
 	fmt.Fprintf(&b, "| Custo | US$ %.2f · %d turnos |\n", s.CostUSD, len(agents))
+	if u, secs := totalUsage(agents); u.Input+u.Output+u.Tools > 0 || secs > 0 {
+		fmt.Fprintf(&b, "| Uso | %s tokens de entrada (%s do cache) · %s de saída · %d chamadas de ferramenta · %s de agentes |\n",
+			thousands(u.Input+u.CacheRead+u.CacheWrite), thousands(u.CacheRead), thousands(u.Output), u.Tools, (time.Duration(secs) * time.Second).Round(time.Second))
+	}
 	switch {
 	case s.Kept != "":
 		fmt.Fprintf(&b, "| Trabalho guardado | branch `%s` |\n", s.Kept)
@@ -151,6 +157,10 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 		}
 	}
 
+	if table := usageByRole(agents); table != "" {
+		b.WriteString("\n## Uso por papel\n\n" + table)
+	}
+
 	b.WriteString("\n## Auditoria\n\n")
 	if lenses := lastAudit(agents); len(lenses) > 0 {
 		fmt.Fprintf(&b, "Lentes da última auditoria: %s.\n", strings.Join(lenses, ", "))
@@ -178,4 +188,77 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 		}
 	}
 	return b.String()
+}
+
+// totalUsage adds up what every agent of a run spent in tokens, tool calls
+// and seconds.
+func totalUsage(agents []loop.AgentState) (loop.Usage, float64) {
+	var u loop.Usage
+	secs := 0.0
+	for _, a := range agents {
+		secs += a.Seconds
+		if a.Usage != nil {
+			u.Input += a.Usage.Input
+			u.Output += a.Usage.Output
+			u.CacheRead += a.Usage.CacheRead
+			u.CacheWrite += a.Usage.CacheWrite
+			u.Tools += a.Usage.Tools
+		}
+	}
+	return u, secs
+}
+
+// usageByRole is the report's table of what each role spent, dearest first:
+// where a run's cost went.
+func usageByRole(agents []loop.AgentState) string {
+	type row struct {
+		role         string
+		turns, tools int
+		in, out      int
+		usd, secs    float64
+	}
+	by := map[string]*row{}
+	for _, a := range agents {
+		r := by[a.Role]
+		if r == nil {
+			r = &row{role: a.Role}
+			by[a.Role] = r
+		}
+		r.turns++
+		r.usd += a.CostUSD
+		r.secs += a.Seconds
+		if a.Usage != nil {
+			r.tools += a.Usage.Tools
+			r.in += a.Usage.Input + a.Usage.CacheRead + a.Usage.CacheWrite
+			r.out += a.Usage.Output
+		}
+	}
+	if len(by) == 0 {
+		return ""
+	}
+	rows := make([]*row, 0, len(by))
+	for _, r := range by {
+		rows = append(rows, r)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].usd != rows[j].usd {
+			return rows[i].usd > rows[j].usd
+		}
+		return rows[i].role < rows[j].role
+	})
+	var b strings.Builder
+	b.WriteString("| Papel | Turnos | Ferramentas | Tokens de entrada | Tokens de saída | US$ | Tempo |\n|---|---|---|---|---|---|---|\n")
+	for _, r := range rows {
+		fmt.Fprintf(&b, "| %s | %d | %d | %s | %s | %.2f | %s |\n", r.role, r.turns, r.tools, thousands(r.in), thousands(r.out), r.usd, (time.Duration(r.secs) * time.Second).Round(time.Second))
+	}
+	return b.String()
+}
+
+// thousands writes a count with a dot between each group of three digits.
+func thousands(n int) string {
+	s := fmt.Sprint(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "." + s[i:]
+	}
+	return s
 }
