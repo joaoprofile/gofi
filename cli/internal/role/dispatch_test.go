@@ -43,10 +43,10 @@ func TestATriggerNamesOnlyKnownFacts(t *testing.T) {
 	for y, want := range map[string]string{
 		"tier: standard\nstage: implement\ntriggers:\n  - any: [change.surfaces(backend)]\n": "is not a fact",
 		"tier: standard\nstage: implement\ntriggers:\n  - any: [change.surface(desktop)]\n":  "takes one of",
-		"tier: standard\nstage: audit\ntriggers:\n  - all: [sensor.green(build)]\n":         "takes no argument",
-		"tier: standard\ntriggers:\n  - all: [sensor.green]\n":                             "needs the stage",
-		"tier: standard\nstage: review\n":                                                   "is not a stage",
-		"tier: standard\nvisibility: hidden\n":                                              "visibility",
+		"tier: standard\nstage: audit\ntriggers:\n  - all: [sensor.green(build)]\n":          "takes no argument",
+		"tier: standard\ntriggers:\n  - all: [sensor.green]\n":                               "needs the stage",
+		"tier: standard\nstage: review\n":                                                    "is not a stage",
+		"tier: standard\nvisibility: hidden\n":                                               "visibility",
 	} {
 		if _, err := Parse([]byte(y)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: %v, want %q", y, err, want)

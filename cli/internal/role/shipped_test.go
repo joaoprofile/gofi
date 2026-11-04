@@ -23,10 +23,16 @@ func TestTheShippedRolesCoverEverySurface(t *testing.T) {
 			t.Errorf("surface %s dispatches %+v, want exactly one role", surface, got)
 		}
 	}
-	// A backend change is planned, and each layer of the plan has exactly
-	// the one role that implements it; the tests have their own.
+	// A backend change is not planned unless the project asks: one role does
+	// every layer in one turn, instead of a plan and a turn per layer. Asked
+	// (loop.plan: layers), each layer of the plan has exactly the one role
+	// that implements it; the tests have their own.
 	backend := Facts{"change.surface(backend)": true}
-	if got := Dispatch(roles, "plan", backend); len(got) != 1 || got[0].Role != "gofi-plan" {
+	if got := Dispatch(roles, "plan", backend); len(got) != 0 {
+		t.Errorf("a backend change was planned without loop.plan: %+v", got)
+	}
+	layered := Facts{"change.surface(backend)": true, "loop.plan(layers)": true}
+	if got := Dispatch(roles, "plan", layered); len(got) != 1 || got[0].Role != "gofi-plan" {
 		t.Errorf("plan dispatches %+v", got)
 	}
 	for _, layer := range Layers {
@@ -58,6 +64,15 @@ func TestTheShippedRolesCoverEverySurface(t *testing.T) {
 	// layer the change touched before: the graph says it did.
 	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "layer(domain)": true, "diff.touches(data)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-data gofi-qa-tests" {
 		t.Errorf("a change that touched the data is audited by %s", got)
+	}
+	// With no plan, the data and security lenses run when the graph says the
+	// change touched their layers — not on every backend change, as they did
+	// on plan.none — and, with no graph diff to say, by caution.
+	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "plan.none": true, "diff.touches(domain)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-tests" {
+		t.Errorf("an unplanned change that touched the domain is audited by %s", got)
+	}
+	if got := audit(Facts{"sensor.green": true, "change.surface(backend)": true, "plan.none": true, "diff.none": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-data gofi-qa-security gofi-qa-tests" {
+		t.Errorf("an unplanned change with no diff is audited by %s", got)
 	}
 	if got := audit(Facts{"sensor.green": true, "change.surface(web)": true}); got != "gofi-qa gofi-qa-conformance gofi-qa-tests gofi-qa-ui" {
 		t.Errorf("a screen is audited by %s", got)

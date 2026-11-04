@@ -513,6 +513,8 @@ func (r *Runner) facts(s *State) role.Facts {
 		for _, l := range s.Diff.Layers {
 			f["diff.touches("+l+")"] = true
 		}
+	} else {
+		f["diff.none"] = true
 	}
 	return f
 }

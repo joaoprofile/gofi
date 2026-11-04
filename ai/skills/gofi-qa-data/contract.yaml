@@ -17,5 +17,5 @@ stage: audit
 triggers:
   - all: [sensor.green, diff.touches(data)]
   - all: [sensor.green, layer(data)]
-  - all: [sensor.green, change.surface(backend), plan.none]
+  - all: [sensor.green, change.surface(backend), diff.none]
 tools: [read, search, gofi, verify, verdict]

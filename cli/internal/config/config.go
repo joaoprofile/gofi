@@ -205,6 +205,10 @@ type Loop struct {
 	Escalate string `yaml:"escalate,omitempty"`
 	// AuditParallel is how many lenses of an audit run at once; 0, all.
 	AuditParallel int `yaml:"audit_parallel,omitempty"`
+	// Plan is how a backend change is implemented: empty, one role does every
+	// layer in one turn; layers, gofi-plan splits it and a role per layer
+	// implements its part — more turns, each narrower.
+	Plan string `yaml:"plan,omitempty"`
 	// TurnBudgetUSD bounds what one agent turn may spend; 0, only what is
 	// left of budget_usd. The engine stops the turn there.
 	TurnBudgetUSD float64 `yaml:"turn_budget_usd,omitempty"`
