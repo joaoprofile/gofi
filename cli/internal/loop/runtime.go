@@ -524,7 +524,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	s.Agent = name
 	s.Lenses = nil
 	elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
-	prompt := r.Brief(rl, s, elicit)
+	prompt := withChange(r.Brief(rl, s, elicit), r.work(), s)
 	if s.Answered && s.Elicit != "" {
 		if e, err := intake.ReadElicitation(r.work(), s.Elicit); err == nil && e != nil {
 			prompt = intake.WithDecisions(prompt, e, s.Answers)
