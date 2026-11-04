@@ -59,9 +59,10 @@ const AUDIT_DEBOUNCE_MS = 600;
  * Cap on a file inlined into the prompt.
  *
  * Only reached by files outside the workspace, which the agent cannot open for
- * itself; ~40k characters is a long file and still a fraction of the window.
+ * itself; ~12k characters — about 3k tokens — is what a turn can carry of one
+ * file without a question about it costing more than the answer.
  */
-const MAX_INLINE_CHARS = 40000;
+const MAX_INLINE_CHARS = 12000;
 
 /**
  * Settle time before writing the transcript to disk.
@@ -552,8 +553,15 @@ class Chat {
 		config.onDidChange(refreshSkills);
 
 		const tree = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, '**/*'));
-		tree.onDidCreate(dropIndex);
-		tree.onDidDelete(dropIndex);
+		// A delivery writes its run under .gofi/ many times a second: none of
+		// it is a file the `@` picker offers.
+		const ofTree = (fn) => (uri) => {
+			if (!/[\\/]\.gofi[\\/]/.test(uri.fsPath)) {
+				fn(uri);
+			}
+		};
+		tree.onDidCreate(ofTree(dropIndex));
+		tree.onDidDelete(ofTree(dropIndex));
 
 		// The audit describes what is on disk, so it has to follow disk. Without
 		// this the panel keeps offering to index a file that was indexed a
@@ -581,6 +589,7 @@ class Chat {
 	 * for the whole burst.
 	 */
 	scheduleAudit() {
+		this.corpusScan = null;
 		if (this.auditTimer !== null) {
 			clearTimeout(this.auditTimer);
 		}
@@ -1591,7 +1600,13 @@ class Chat {
 		// tokens" is worth more than the same problem stated in the abstract.
 		const advice = ragAudit.review(root, this.ledger.rows);
 		const seen = new Set(advice.map((f) => f.id));
-		advice.push(...ragAudit.scanCorpora(root, seen));
+		// The corpus scan reads the disk, and the disk changes only when a
+		// watcher says so: it is kept until scheduleAudit drops it, not redone
+		// on every event of a streamed turn.
+		if (!this.corpusScan || this.corpusScan.root !== root) {
+			this.corpusScan = { root, findings: ragAudit.scanCorpora(root, new Set()) };
+		}
+		advice.push(...this.corpusScan.findings.filter((f) => !seen.has(f.id)));
 
 		const dismissed = this.dismissedIds();
 		const kept = advice.filter((f) => !dismissed.has(f.id));

@@ -307,7 +307,7 @@
 	/** Bigger than this and neither the engine nor the window wants it. */
 	const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 	const MAX_TEXT_BYTES = 2 * 1024 * 1024;
-	const MAX_INLINE_CHARS = 40000;
+	const MAX_INLINE_CHARS = 12000; // the same limit as src/chat.js
 
 	/**
 	 * A file the user picked in the OS dialog.
