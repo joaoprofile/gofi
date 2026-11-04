@@ -1,0 +1,29 @@
+# Defects of data and concurrency, the kind a lens of persistence reads for.
+change: bench-auditar-transferencia
+defects:
+  - id: D1
+    what: débito e crédito em duas escritas sem transação (REQ-01, atômica)
+    file: "{src}/domain/benchconta/service/benchconta_service.go"
+    at: "s.repo.Ajustar(ctx, origem, -valor)"
+    span: 4
+    keywords: ["transa", "atômic", "atomic", "tx", "begin", "rollback"]
+  - id: D2
+    what: SQL montado por concatenação com a entrada (injeção)
+    file: "{src}/domain/benchconta/repository/benchconta_repository.go"
+    at: "fmt.Sprintf(\"SELECT"
+    keywords: ["injeç", "inject", "sprintf", "concaten", "parametr", "bind", "placeholder"]
+  - id: D3
+    what: o erro do crédito é ignorado
+    file: "{src}/domain/benchconta/service/benchconta_service.go"
+    at: "_ = s.repo.Ajustar(ctx, destino, valor)"
+    keywords: ["ignor", "descart", "_ =", "engol"]
+  - id: D4
+    what: saldo lido e debitado sem bloqueio — duas transferências ao mesmo tempo passam do saldo
+    file: "{src}/domain/benchconta/service/benchconta_service.go"
+    at: "saldo, err := s.repo.Saldo(ctx, origem)"
+    span: 9
+    keywords: ["concorr", "race", "corrida", "for update", "lock", "bloque", "simultâne", "ao mesmo tempo"]
+  - id: D5
+    what: nenhum cenário tem teste
+    rule: "REQ-0"
+    keywords: ["teste", "test"]

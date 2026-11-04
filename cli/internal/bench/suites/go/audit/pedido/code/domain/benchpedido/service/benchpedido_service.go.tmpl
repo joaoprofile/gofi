@@ -1,0 +1,27 @@
+package service
+
+import (
+	"errors"
+
+	"{module}/domain/benchpedido/repository"
+)
+
+// ErrNaoEncontrado é a recusa de um pedido que não existe.
+var ErrNaoEncontrado = errors.New("pedido não encontrado")
+
+// PedidoService consulta os pedidos.
+type PedidoService struct{ repo *repository.PedidoRepository }
+
+// New monta o serviço.
+func New(repo *repository.PedidoRepository) *PedidoService { return &PedidoService{repo: repo} }
+
+// gofi:implements REQ-01
+// gofi:implements REQ-02
+// Consultar devolve o pedido de um id.
+func (s *PedidoService) Consultar(cliente, id string) (repository.Pedido, error) {
+	p, ok := s.repo.Buscar(id)
+	if !ok {
+		return repository.Pedido{}, ErrNaoEncontrado
+	}
+	return p, nil
+}

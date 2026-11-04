@@ -225,8 +225,12 @@ func runBenchAudit(cmd *cobra.Command, _ []string) error {
 	return errors.Join(errs...)
 }
 
-// auditCase audits one case's code in one mode, on a copy of its own.
-func auditCase(ctx context.Context, root, src, id string, c *bench.AuditCase, mode string) (bench.Score, error) {
+// auditCase audits one case's code in one mode, on a copy of its own — of
+// the case too: placing its defects writes them.
+func auditCase(ctx context.Context, root, src, id string, shared *bench.AuditCase, mode string) (bench.Score, error) {
+	cc := *shared
+	cc.Defects = append([]bench.Defect{}, shared.Defects...)
+	c := &cc
 	tree, err := worktree.Scratch(ctx, root, fmt.Sprintf("bench-%s-%s-%s", id, c.Name, mode))
 	if err != nil {
 		return bench.Score{}, err

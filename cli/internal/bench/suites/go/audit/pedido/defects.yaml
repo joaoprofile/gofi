@@ -1,0 +1,30 @@
+# Defects of authorization, layers and the HTTP contract, the kind a lens of
+# security reads for.
+change: bench-auditar-pedido
+defects:
+  - id: D1
+    what: o pedido de outro cliente é devolvido — o dono nunca é checado (REQ-02)
+    file: "{src}/domain/benchpedido/service/benchpedido_service.go"
+    at: "func (s *PedidoService) Consultar"
+    span: 6
+    keywords: ["dono", "outro cliente", "autoriz", "owner", "pertence", "cliente"]
+  - id: D2
+    what: o handler alcança o repositório
+    file: "{src}/domain/benchpedido/handler/benchpedido_handler.go"
+    at: "h.repo.Buscar(id)"
+    keywords: ["repositor", "camada", "layer"]
+  - id: D3
+    what: o erro interno vai ao cliente, com 500 em vez de 404
+    file: "{src}/domain/benchpedido/handler/benchpedido_handler.go"
+    at: "http.Error(w, err.Error(), http.StatusInternalServerError)"
+    keywords: ["err.error", "vaza", "intern", "500", "404", "status"]
+  - id: D4
+    what: a resposta é a entidade, com o cliente, não o DTO {id, total}
+    file: "{src}/domain/benchpedido/handler/benchpedido_handler.go"
+    at: "json.NewEncoder(w).Encode(p)"
+    keywords: ["dto", "entidade", "cliente", "expõe", "exp", "campo", "resposta", "contrato"]
+  - id: D5
+    what: a identidade vem de um header que a request traz, não da sessão autenticada
+    file: "{src}/domain/benchpedido/handler/benchpedido_handler.go"
+    at: "r.Header.Get(\"X-Cliente\")"
+    keywords: ["header", "x-cliente", "autentic", "sessão", "confia", "forj", "falsific", "spoof"]
