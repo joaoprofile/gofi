@@ -4,7 +4,8 @@ const vscode = require('vscode');
 const path = require('path');
 
 const { findProjectRoot } = require('./gofiConfig.js');
-const { listRuns, readRun, runMarkup, RUNS } = require('./runView.js');
+const fs = require('fs');
+const { listRuns, listBatches, readRun, runMarkup, RUNS } = require('./runView.js');
 
 const PANEL_TYPE = 'gofi-ai.runPanel';
 
@@ -34,17 +35,35 @@ class RunPanel {
 			return;
 		}
 		const runs = listRuns(root);
-		if (!runs.length) {
+		const batches = listBatches(root);
+		if (!runs.length && !batches.length) {
 			vscode.window.showInformationMessage('GOFI AI: nenhuma execução neste projeto — gofi run <mudança>.');
 			return;
 		}
-		const chosen = await vscode.window.showQuickPick(runs.map((r) => ({
-			label: r.change || r.run,
-			description: r.run,
-			detail: r.node ? `em ${r.node}` : `terminou ${r.outcome}`,
-			run: r.run,
-		})), { placeHolder: 'Qual execução?' });
-		if (chosen) {
+		// A batch of gofi run --all opens as its summary; its runs are
+		// among the runs, each with its own tab.
+		const items = [
+			...batches.map((b) => ({
+				label: `$(layers) lote ${b.id}`,
+				description: `US$ ${b.spent.toFixed(2)}`,
+				detail: Object.entries(b.counts).map(([k, n]) => `${n} ${k}`).join(' · ') + (b.counts.running || Object.keys(b.counts).some((k) => k !== 'accepted') ? ` — gofi run --all --resume ${b.id}` : ''),
+				batch: b,
+			})),
+			...runs.map((r) => ({
+				label: r.change || r.run,
+				description: r.run,
+				detail: r.node ? `em ${r.node}` : `terminou ${r.outcome}`,
+				run: r.run,
+			})),
+		];
+		const chosen = await vscode.window.showQuickPick(items, { placeHolder: 'Qual execução ou lote?' });
+		if (chosen && chosen.batch) {
+			if (fs.existsSync(chosen.batch.summary)) {
+				await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(chosen.batch.summary));
+			} else {
+				vscode.window.showInformationMessage(`GOFI AI: o lote ${chosen.batch.id} ainda não escreveu o resumo — está em andamento.`);
+			}
+		} else if (chosen) {
 			this.open(root, chosen.run);
 		}
 	}
