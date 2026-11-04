@@ -163,6 +163,19 @@ e o selo vale como a aprovação dela. `gofi change approve` e `gofi spec approv
 são da pessoa, no terminal dela: rodados por um agente, recusam. Nunca aprove por iniciativa própria nem para
 destravar o seu trabalho.
 
+**Decisões da pessoa** — as únicas cinco; nenhum agente as toma por ela:
+
+| Decisão | Quando | Como a pessoa decide | Trava o loop? |
+|---|---|---|---|
+| Revisar | antes de aprovar | lê os achados de `gofi review <mudança>` e corrige a mudança, ou diz que o achado não procede | não — informa |
+| Aprovar | contrato pronto | ferramenta `approve` (o host confirma), ou `gofi change approve` / `gofi spec approve` no terminal dela | sim — sem selo não roda; editar depois desfaz o selo |
+| Responder o portão | uma execução parou numa decisão que a mudança não cobre | `gofi answer` (ou os cartões do painel) | sim — a execução espera |
+| Decidir a emenda | a execução terminou em `impasse` e a triagem escreveu `.gofi/proposals/` | edita a mudança e aprova de novo, ou escreve outra mudança | sim — a mudança só volta a rodar aprovada |
+| Aceitar a lição | uma execução aceita com retrabalho propôs uma lição | `gofi learn accept` / `gofi learn reject` | não |
+
+"Aprovado" é só o selo da pessoa num contrato. O veredicto do QA na memória do
+contexto é `auditado` ou `reprovado`.
+
 Apresentação, infraestrutura e doc de contrato também são papéis do loop:
 `gofi-ui` entra quando a mudança é de `web` ou `mobile`, `gofi-ops` quando é de
 `infra`, e `gofi-doc` quando o grafo diz que ela tocou a camada `api`.

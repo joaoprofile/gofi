@@ -33,8 +33,10 @@ func TestVerdictWrite(t *testing.T) {
 	if !strings.Contains(string(b), `"run": "r-1"`) || !strings.Contains(string(b), `"iter": 2`) {
 		t.Errorf("verdict:\n%s", b)
 	}
+	// "aprovado" is the person's seal on a contract: a passing audit leaves
+	// auditado in the memory, so the two are never read as one.
 	m, _ := os.ReadFile(mem)
-	if !strings.Contains(string(m), "status: aprovado") || !strings.Contains(string(m), "ressalvas: 1") {
+	if !strings.Contains(string(m), "status: auditado") || !strings.Contains(string(m), "ressalvas: 1") || strings.Contains(string(m), "status: aprovado") {
 		t.Errorf("memory not carried:\n%s", m)
 	}
 

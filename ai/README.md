@@ -303,7 +303,7 @@ Canal de comunicação entre skills e entre sessões.
   - `gofi-eng`  → arquivos criados + decisões não-óbvias
   - `gofi-ui`   → telas/componentes implementados
   - `gofi-ops`  → recursos provisionados + pipelines
-  - `gofi-qa`   → score + pendências (`aprovado` / `rejeitado`)
+  - `gofi-qa`   → score + pendências (`auditado` / `reprovado`)
 
 O índice global (Implementados / Spec / PRD) é **gerado sob demanda** por
 `/gofi-status`, lendo o frontmatter de cada `contexts/*.md`. Protocolo completo
