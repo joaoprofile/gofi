@@ -75,6 +75,9 @@ curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | 
 # Install (Windows, PowerShell)
 iwr -useb https://raw.githubusercontent.com/joaoprofile/gofi/main/install.ps1 | iex
 
+# See what an existing repository already holds — writes nothing, no model
+gofi scan
+
 # Create a project, or adopt an existing repository
 gofi init my-service
 
@@ -429,6 +432,7 @@ Embedded in the binary; `gofi init` installs it, `gofi install extensions` updat
 
 | Command | |
 |---|---|
+| `gofi scan [path]` · `--json` | Read any repository: code and contexts, documents that read as PRD, spec, decision or API contract, Gherkin scenarios, API contracts, tables — and what is next. Writes nothing |
 | `gofi init` | Create a project or adopt a repository |
 | `gofi config` · `gofi settings` | The project's `.gofi.yaml` · the CLI's own settings |
 | `gofi update [skills\|agents\|expertise\|templates\|sdk\|ds\|institutional\|audit]` | Pull what is gofi's from upstream; `audit` changes nothing |
