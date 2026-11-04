@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/graph"
 	"github.com/joaoprofile/gofi/cli/internal/graph/diff"
 	"github.com/joaoprofile/gofi/cli/internal/graph/model"
@@ -79,7 +80,7 @@ func captureBaseline(work, run string) error {
 // — the graph stage of a run, after the index is rebuilt: the change's
 // diff, with what depends on it, to diffOut; the architecture rules it
 // broke to report, as SARIF. A broken rule fails it.
-func graphCheck(out io.Writer, cfg *config.GofiConfig, root, baseline, diffOut, report string) error {
+func graphCheck(out io.Writer, cfg *config.GofiConfig, root, baseline, diffOut, report, change string) error {
 	abs := func(p string) string {
 		if p == "" || filepath.IsAbs(p) {
 			return p
@@ -123,7 +124,7 @@ func graphCheck(out io.Writer, cfg *config.GofiConfig, root, baseline, diffOut, 
 	}
 	layerOf := func(f string) string { l, _ := lp.LayerOf(f); return l }
 	d := diff.Of(old, now)
-	violations := rules.Check(rs, d, now, layerOf)
+	violations := rules.Check(rs, d, now, rules.Scope{LayerOf: layerOf, ContextOf: lp.ContextOf, Declared: declaredContexts(root, change)})
 	if diffOut != "" {
 		if err := writeGraphDiff(abs(diffOut), d, old, now, lp, tree); err != nil {
 			return err
@@ -300,6 +301,31 @@ func symbolAt(root string) func(file string, line int) string {
 		}
 		return ""
 	}
+}
+
+// declaredContexts are the contexts a change may reach across: its own, and
+// those of the open changes it depends on.
+func declaredContexts(root, change string) []string {
+	if change == "" {
+		return nil
+	}
+	all, err := contract.Docs(root)
+	if err != nil {
+		return nil
+	}
+	byID := map[string]contract.Change{}
+	for _, c := range contract.Changes(all) {
+		byID[c.ID] = c
+	}
+	c, ok := byID[change]
+	if !ok {
+		return nil
+	}
+	out := append([]string{}, c.Contexts...)
+	for _, dep := range c.DependsOn {
+		out = append(out, byID[dep].Contexts...)
+	}
+	return out
 }
 
 // planReach is the contexts that depend on the code some files — or

@@ -78,7 +78,8 @@ gofi index status`,
 	f.String("baseline", "", "graph the run started from: diff the code against it and check the architecture rules")
 	f.String("diff", "", "where to write the change's graph diff (with --baseline)")
 	f.String("report", "", "where to write the broken architecture rules, as SARIF (with --baseline)")
-	for _, h := range []string{"baseline", "diff", "report"} {
+	f.String("change", "", "the change the run carries out: the contexts it declares (with --baseline)")
+	for _, h := range []string{"baseline", "diff", "report", "change"} {
 		_ = f.MarkHidden(h)
 	}
 	cmd.AddCommand(newIndexStatusCmd(), newIndexHooksCmd(), newIndexCheckCmd(), newIndexMigrateCmd(), newIndexInstallCmd(), newIndexOpenCmd())
@@ -124,7 +125,8 @@ func runIndex(cmd *cobra.Command, args []string) error {
 		}
 		if baseline, _ := cmd.Flags().GetString("baseline"); baseline != "" {
 			diffOut, _ := cmd.Flags().GetString("diff")
-			if err := graphCheck(out, cfg, root, baseline, diffOut, report); err != nil {
+			change, _ := cmd.Flags().GetString("change")
+			if err := graphCheck(out, cfg, root, baseline, diffOut, report, change); err != nil {
 				return err
 			}
 		}

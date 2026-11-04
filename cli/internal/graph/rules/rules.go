@@ -60,6 +60,8 @@ func parse(line string, layers []string) (Rule, error) {
 	switch {
 	case body == "new-cycle":
 		return Rule{Text: text, kind: "cycle"}, nil
+	case body == "new-cross-context-edge":
+		return Rule{Text: text, kind: "context"}, nil
 	case strings.HasPrefix(body, "import "):
 		rest := strings.TrimSpace(strings.TrimPrefix(body, "import "))
 		pkg, from, ok := strings.Cut(rest, " from ")
@@ -76,7 +78,7 @@ func parse(line string, layers []string) (Rule, error) {
 	from, to, ok := strings.Cut(body, "->")
 	from, to = strings.TrimSpace(from), strings.TrimSpace(to)
 	if !ok || from == "" || to == "" {
-		return Rule{}, fmt.Errorf("%q: deny: <layer> -> <layer>, deny: import \"<package>\" from <layer> or deny: new-cycle", line)
+		return Rule{}, fmt.Errorf("%q: deny: <layer> -> <layer>, deny: import \"<package>\" from <layer>, deny: new-cycle or deny: new-cross-context-edge", line)
 	}
 	if err := layer(from); err != nil {
 		return Rule{}, err
@@ -107,9 +109,21 @@ var verbs = map[model.Rel]string{model.RelCalls: "chama", model.RelUses: "usa", 
 var reach = map[model.Rel]bool{model.RelCalls: true, model.RelUses: true, model.RelImplements: true,
 	model.RelEmbeds: true, model.RelExtends: true, model.RelImports: true}
 
-// Check holds the change d made to the graph g to the rules. layerOf is the
-// layer of a file of g's tree, empty for a file in none.
-func Check(rules []Rule, d *diff.Delta, g *model.Graph, layerOf func(file string) string) []Violation {
+// Scope is what a check knows of the tree and of the change: the layer and
+// the context of a file — empty for one in none —, and the contexts the
+// change declares, which its code may reach one another across.
+type Scope struct {
+	LayerOf   func(file string) string
+	ContextOf func(file string) string
+	Declared  []string
+}
+
+// Check holds the change d made to the graph g to the rules.
+func Check(rules []Rule, d *diff.Delta, g *model.Graph, sc Scope) []Violation {
+	layerOf := sc.LayerOf
+	if layerOf == nil {
+		layerOf = func(string) string { return "" }
+	}
 	units := unitLayers(g, layerOf)
 	nodeLayer := func(id string) string {
 		n := g.Get(id)
@@ -165,6 +179,33 @@ func Check(rules []Rule, d *diff.Delta, g *model.Graph, layerOf func(file string
 				out = append(out, Violation{Rule: r.Text, Symbol: e.From, File: e.File, Line: e.Line, pair: pair, imports: e.Rel == model.RelImports,
 					Message: fmt.Sprintf("%s (%s) %s %s (%s): a camada %s não alcança a %s (%s)", short(e.From), r.from, verbs[e.Rel], short(e.To), r.to, r.from, r.to, r.Text)})
 			}
+		case "context":
+			ctxs := unitLayers(g, contextOrNone(sc.ContextOf))
+			ctxOf := func(id string) string {
+				n := g.Get(id)
+				if n == nil || sc.ContextOf == nil {
+					return ""
+				}
+				if n.File != "" {
+					return sc.ContextOf(n.File)
+				}
+				return ctxs[n.Unit]
+			}
+			for _, e := range d.Edges {
+				if !reach[e.Rel] {
+					continue
+				}
+				from, to := ctxOf(e.From), ctxOf(e.To)
+				if from == "" || to == "" || from == to || slices.Contains(sc.Declared, from) && slices.Contains(sc.Declared, to) {
+					continue
+				}
+				pair := r.Text + "\x00" + unitOf(e.From) + "\x00" + unitOf(e.To)
+				if e.Rel != model.RelImports {
+					bySymbol[pair] = true
+				}
+				out = append(out, Violation{Rule: r.Text, Symbol: e.From, File: e.File, Line: e.Line, pair: pair, imports: e.Rel == model.RelImports,
+					Message: fmt.Sprintf("%s (contexto %s) %s %s (contexto %s): a mudança não declara %s — um contexto só alcança outro que a mudança declara, em contextos ou no depende_de (%s)", short(e.From), from, verbs[e.Rel], short(e.To), to, to, r.Text)})
+			}
 		case "cycle":
 			for _, c := range d.Cycles {
 				if !crossesUnits(g, c) {
@@ -210,6 +251,13 @@ func unitLayers(g *model.Graph, layerOf func(string) string) map[string]string {
 		}
 	}
 	return out
+}
+
+func contextOrNone(f func(string) string) func(string) string {
+	if f == nil {
+		return func(string) string { return "" }
+	}
+	return f
 }
 
 func crossesUnits(g *model.Graph, cycle []string) bool {

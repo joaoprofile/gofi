@@ -626,7 +626,8 @@ func (g Graph) MarshalYAML() (interface{}, error) {
 		}
 		add("rules", "regras de arquitetura do projeto, além das do pack da linguagem — cada\n"+
 			"execução checa as arestas que a mudança criou: deny: handler -> repository,\n"+
-			"deny: import \"net/http\" from service, deny: new-cycle.", seq)
+			"deny: import \"net/http\" from service, deny: new-cycle,\n"+
+			"deny: new-cross-context-edge (um contexto só alcança outro que a mudança declara).", seq)
 	}
 	return node, nil
 }

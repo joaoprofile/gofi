@@ -76,7 +76,7 @@ func TestCheckHoldsTheChangeNotTheCodeItStartedFrom(t *testing.T) {
 	if strings.Join(d.Files, ",") != "d/x/handler/h.go" || strings.Join(d.Changed, ",") != "func:m/d/x/handler.Create" || len(d.Edges) != 2 {
 		t.Fatalf("delta = %+v", d)
 	}
-	vs := Check(rs, d, now, layerOf)
+	vs := Check(rs, d, now, Scope{LayerOf: layerOf})
 	if len(vs) != 3 {
 		t.Fatalf("violations = %+v", vs)
 	}
@@ -94,7 +94,7 @@ func TestCheckHoldsTheChangeNotTheCodeItStartedFrom(t *testing.T) {
 	}
 	// The same violations already in the code a change starts from are not
 	// the change's.
-	if vs := Check(rs, diff.Of(now, now), now, layerOf); len(vs) != 0 {
+	if vs := Check(rs, diff.Of(now, now), now, Scope{LayerOf: layerOf}); len(vs) != 0 {
 		t.Errorf("unchanged code: %+v", vs)
 	}
 }
@@ -116,5 +116,39 @@ func TestThePacksRulesParse(t *testing.T) {
 		if _, err := Parse(p.Graph.Rules, names); err != nil {
 			t.Errorf("pack %s: %v", lang, err)
 		}
+	}
+}
+
+// A new edge from one context's code to another's is refused unless the
+// change declares both: an undeclared dependency is the contract's, for the
+// person to decide.
+func TestACrossContextEdgeNeedsTheChangeToDeclareIt(t *testing.T) {
+	rs, err := Parse([]string{"deny: new-cross-context-edge"}, layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := model.New("m", "", "fast")
+	for _, n := range []*model.Node{
+		{ID: "func:m/d/pedidos/service.Fechar", Kind: model.KindFunc, Unit: "m/d/pedidos/service", File: "d/pedidos/service/s.go", Line: 3},
+		{ID: "func:m/d/estoque/service.Reservar", Kind: model.KindFunc, Unit: "m/d/estoque/service", File: "d/estoque/service/s.go", Line: 3},
+	} {
+		g.AddNode(n)
+	}
+	g.AddEdge(&model.Edge{From: "func:m/d/pedidos/service.Fechar", To: "func:m/d/estoque/service.Reservar", Rel: model.RelCalls, File: "d/pedidos/service/s.go", Line: 5, Conf: 1})
+	g.Index()
+	old := model.New("m", "", "fast")
+	old.Index()
+	ctxOf := func(f string) string {
+		if p := strings.Split(f, "/"); len(p) > 2 {
+			return p[1]
+		}
+		return ""
+	}
+	d := diff.Of(old, g)
+	if vs := Check(rs, d, g, Scope{ContextOf: ctxOf, Declared: []string{"pedidos"}}); len(vs) != 1 || !strings.Contains(vs[0].Message, "não declara estoque") {
+		t.Errorf("undeclared: %+v", vs)
+	}
+	if vs := Check(rs, d, g, Scope{ContextOf: ctxOf, Declared: []string{"pedidos", "estoque"}}); len(vs) != 0 {
+		t.Errorf("declared: %+v", vs)
 	}
 }
