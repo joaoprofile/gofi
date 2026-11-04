@@ -596,6 +596,8 @@ var catalogEN = map[string]string{
 	"cmd.review.short":               "Review a change before it is approved: ambiguity, contradiction, untestable scenarios, gaps",
 	"cmd.review.flag.again":          "review again even if nothing changed since the last review",
 	"review.blocking":                "%d findings block the approval: correct the change and run gofi review %s again — or approve it as it is, if the finding does not hold",
+	"review.which":                "name the change, or --context for every change of a context not approved yet",
+	"cmd.review.flag.context":     "review every change of the context not approved yet",
 	"review.kept":                    "the review of %s already read the change as it is (gofi review --again to review it again)",
 	"review.nobody":                  "no role reviews the change — gofi update installs gofi-spec-review",
 	"review.started":                 "reviewing %s (%s)…",

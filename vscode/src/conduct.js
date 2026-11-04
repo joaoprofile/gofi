@@ -2,7 +2,7 @@
 
 const {
 	runIntakeKept, phaseTurn, nextStep, deliveryFlow, deliverable, deliverContext,
-	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract, readGate, answerGate,
+	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract, readGate, answerGate, reviewContext,
 } = require('./intake.js');
 
 /** The decisions a delivery's gate waits on, asked as an elicitation's are. */
@@ -333,6 +333,21 @@ const conduct = {
 		if (done.review_after) {
 			this.running = false;
 			this.setRunning(false);
+			const context = plan.result.context && plan.result.context.name;
+			if (done.produces === 'spec' && context) {
+				// The reviewer reads the change before the person approves it,
+				// as gofi chat does: what it found comes first, then the stop.
+				this.post({ type: 'notice', text: `Revisando as mudanças de ${context} antes da aprovação…` });
+				this.reviewRunner(this.gofiPath(), this.projectRoot, context).then((r) => {
+					if (r.output) {
+						this.post({ type: 'notice', text: r.ok ? 'Revisão da mudança:' : 'A revisão achou bloqueios — corrija, ou aprove como está se o achado não procede:', hint: r.output });
+					}
+					if (this.plan === plan) {
+						this.post({ type: 'planReview', produces: done.produces, next: phases[plan.next].role });
+					}
+				});
+				return;
+			}
 			this.post({ type: 'planReview', produces: done.produces, next: phases[plan.next].role });
 			return;
 		}
@@ -500,6 +515,7 @@ function installConduct(ChatClass) {
 	ChatClass.prototype.sealRunner = sealContract;
 	ChatClass.prototype.deliveryRunner = deliverContext;
 	ChatClass.prototype.gateReader = readGate;
+	ChatClass.prototype.reviewRunner = reviewContext;
 	ChatClass.prototype.gateAnswerer = answerGate;
 }
 

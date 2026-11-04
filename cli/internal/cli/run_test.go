@@ -253,3 +253,36 @@ func TestTheAgentsCallTheGofiThatSupervisesThem(t *testing.T) {
 		t.Errorf("PATH = %q, want %q", os.Getenv("PATH"), want)
 	}
 }
+
+// gofi review --context reviews every change of a context not approved yet —
+// what a chat shows at its review stop —, and names one or the other.
+func TestReviewByContextReviewsItsChangesNotApproved(t *testing.T) {
+	root := configuredProject(t)
+	t.Chdir(root)
+	installRoles(t, root)
+	change(t, root, "a", "")
+	var prompts []string
+	runPorts.open = func(dir string) engine.Session { return fakeSession{root: dir, prompts: &prompts} }
+	t.Cleanup(func() { runPorts.open = nil })
+	review := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		cmd := newReviewCmd()
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		err := cmd.Execute()
+		return out.String(), err
+	}
+	if _, err := review("--context", "a"); err != nil {
+		t.Fatalf("review --context: %v", err)
+	}
+	if len(prompts) != 1 || !isRole(prompts[0], "gofi-spec-review") {
+		t.Errorf("the reviewer read %d turns", len(prompts))
+	}
+	if _, err := review("a", "--context", "a"); err == nil {
+		t.Error("a change and a context were both taken")
+	}
+	if _, err := review(); err == nil {
+		t.Error("neither a change nor a context was asked for")
+	}
+}

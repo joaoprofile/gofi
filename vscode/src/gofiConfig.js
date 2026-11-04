@@ -35,6 +35,7 @@ function readGofiProject(root) {
 
 	let name = '';
 	let model = '';
+	let host = '';
 	/** @type {string[]} */
 	const models = [];
 	/** @type {string|null} */
@@ -81,6 +82,9 @@ function readGofiProject(root) {
 		const [, key, value] = pair;
 		if (section === 'project' && key === 'name') {
 			name = unquote(stripComment(value));
+		} else if (section === 'ai' && key === 'host') {
+			host = unquote(stripComment(value));
+			subsection = null;
 		} else if (section === 'ai' && key === 'model') {
 			model = unquote(stripComment(value));
 			subsection = null;
@@ -94,7 +98,23 @@ function readGofiProject(root) {
 	if (name === '') {
 		return null; // no identity — treat it as not a gofi project
 	}
-	return { name, model, models };
+	return { name, model, models, host };
+}
+
+/**
+ * The hosts whose agent the panel's chat drives: Claude Code, as `gofi
+ * chat` — the others run gofi through their own tools.
+ */
+const CHAT_HOSTS = new Set(['', 'claude-code', 'claude-vscode']);
+
+/**
+ * Why the panel's chat does not run on a project's host, or '' when it does.
+ *
+ * @param {{host?: string} | null} project
+ */
+function hostWithoutChat(project) {
+	const host = (project && project.host) || '';
+	return CHAT_HOSTS.has(host) ? '' : host;
 }
 
 /**
@@ -385,4 +405,4 @@ function persistSelectedModel(root, newModel) {
 	return 'written';
 }
 
-module.exports = { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, PINNED_MODELS, SKILLS_DIR, SKILL_FILE, CONFIG_FILE };
+module.exports = { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, hostWithoutChat, PINNED_MODELS, SKILLS_DIR, SKILL_FILE, CONFIG_FILE };

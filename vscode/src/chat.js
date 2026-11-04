@@ -4,7 +4,7 @@ const vscode = require('vscode');
 const crypto = require('crypto');
 const path = require('path');
 const { resolveProvider } = require('./providers/index.js');
-const { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, PINNED_MODELS, SKILLS_DIR, SKILL_FILE } = require('./gofiConfig.js');
+const { readGofiProject, readGofiSkills, findProjectRoot, persistSelectedModel, hostWithoutChat, PINNED_MODELS, SKILLS_DIR, SKILL_FILE } = require('./gofiConfig.js');
 const { installConduct } = require('./conduct.js');
 const { shouldPlan } = require('./intake.js');
 const { UsageLedger, GRAPH_ROW } = require('./usage.js');
@@ -723,6 +723,15 @@ class Chat {
 			: null;
 		if (modelMatch) {
 			this.handleModelCommand((modelMatch[1] || '').trim());
+			return;
+		}
+
+		// The chat drives Claude Code, as gofi chat does: a project on
+		// another host is told to use its own, with gofi's MCP tools — its
+		// model would otherwise go to claude --model.
+		const other = this.projectRoot ? hostWithoutChat(readGofiProject(this.projectRoot)) : '';
+		if (other) {
+			this.post({ type: 'notice', text: `O chat do gofi roda sobre o Claude Code; este projeto usa ${other} (ai.host). Use o próprio ${other}, com as ferramentas MCP do gofi.` });
 			return;
 		}
 
