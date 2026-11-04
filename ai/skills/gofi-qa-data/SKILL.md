@@ -1,4 +1,4 @@
-# /gofi-qa-data — Data Lens (transação, consistência, migrations e índices)
+# gofi-qa-data — Data Lens (transação, consistência, migrations e índices)
 
 ## Identidade
 

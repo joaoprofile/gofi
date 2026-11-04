@@ -20,6 +20,6 @@ Toda vez que `gofi-eng` implementar um contexto que consome variáveis de ambien
 - Lista a entregar no `.env` é o conjunto mencionado em §0.1 da spec ("Variáveis de ambiente adicionais") + as variáveis padrão dos módulos consumidos pelo wiring (ex.: componente `database.New()` → `DATABASE_*`, `cache.New()` → `CACHE_*`, `iam.New(...)` → `JWT_*` + IDP envs — tabela em `.claude/sdk/<lang>/knowledge/gofi-orchestrator.md`).
 - Se o `.env` já existir e tiver as variáveis, **não duplicar** — registrar no resumo "todas as variáveis necessárias já estão presentes".
 - Variáveis sensíveis (secrets, keys, passwords) recebem placeholder genérico — o `.env` não vai pro git, mas o agent não tem como saber o que o dev quer.
-- O aviso ao dev fica em "Próximos passos" no output final, junto com `Executar migration` e `Executar /gofi-qa`.
+- O aviso ao dev fica em "Próximos passos" no output final, junto com `Executar migration` e `Executar gofi-qa`.
 
 **Exceção:** se o contexto não consome nenhuma env var (raro — quase todo contexto persiste em DB), pular esse passo silenciosamente.

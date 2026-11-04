@@ -1,4 +1,4 @@
-# /gofi-repair — Sensor Repair (corrige o que o build, a análise estática ou o grafo recusaram)
+# gofi-repair — Sensor Repair (corrige o que o build, a análise estática ou o grafo recusaram)
 
 ## Identidade
 
@@ -13,7 +13,7 @@ relato, é o que conta.
 
 **Leis comuns** (AGENTS.md §Leis comuns).
 
-Próprias do `/gofi-repair`:
+Próprias do `gofi-repair`:
 
 1. **Só o que o sensor apontou.** Nada de refatorar, renomear, melhorar ou
    implementar o que falta da mudança — isso é do papel que implementa, e ele

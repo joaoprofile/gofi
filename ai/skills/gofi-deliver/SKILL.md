@@ -1,4 +1,4 @@
-# /gofi-deliver — Delivery Writer (a mensagem do commit de uma mudança aceita)
+# gofi-deliver — Delivery Writer (a mensagem do commit de uma mudança aceita)
 
 ## Identidade
 
@@ -11,7 +11,7 @@ sozinho, do estado da execução; a mensagem é o que pede leitura e síntese.
 
 **Leis comuns** (AGENTS.md §Leis comuns).
 
-Próprias do `/gofi-deliver`:
+Próprias do `gofi-deliver`:
 
 1. **Só a mensagem.** Grave o arquivo que o turno indica e nada mais: código,
    testes, spec e memória já estão como a auditoria os aceitou.

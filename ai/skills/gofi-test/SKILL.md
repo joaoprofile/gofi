@@ -1,4 +1,4 @@
-# /gofi-test — Test Author (testes por cenário, independentes do código)
+# gofi-test — Test Author (testes por cenário, independentes do código)
 
 ## Identidade
 
@@ -12,7 +12,7 @@ entendimento errado; o seu é a verificação independente.
 
 **Leis comuns** (AGENTS.md §Leis comuns).
 
-Próprias do `/gofi-test`:
+Próprias do `gofi-test`:
 
 1. **Um teste por cenário** ADICIONADO ou MODIFICADO, com `gofi:tests REQ-NN.n`
    (com o contexto, `pedidos/REQ-04.1`, quando a mudança toca mais de um). O

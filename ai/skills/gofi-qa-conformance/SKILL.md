@@ -1,4 +1,4 @@
-# /gofi-qa-conformance — Conformance Lens (cada requisito realizado como a mudança e o design dizem)
+# gofi-qa-conformance — Conformance Lens (cada requisito realizado como a mudança e o design dizem)
 
 ## Identidade
 

@@ -1,9 +1,9 @@
 ---
 name: gofi-doc
-description: Documentation Generator (Frontend & QA) — agente do projeto gofi, invocado por /gofi-doc.
+description: Documentation Generator (Frontend & QA) — papel interno do loop do gofi — despachado pelo `gofi run`, não é slash command.
 ---
 
-# /gofi-doc — Documentation Generator (Frontend & QA)
+# gofi-doc — Documentation Generator (Frontend & QA)
 
 ## Identidade
 

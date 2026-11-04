@@ -1,9 +1,9 @@
 ---
 name: gofi-ui
-description: Context UI e UX — agente do projeto gofi, invocado por /gofi-ui.
+description: Context UI e UX — papel interno do loop do gofi — despachado pelo `gofi run`, não é slash command.
 ---
 
-# /gofi-ui — Context UI e UX
+# gofi-ui — Context UI e UX
 
 ## Identidade
 
@@ -54,7 +54,7 @@ A ordem é guia, não rígida — ajuste se a mudança exigir.
 
 ## Saída e memória
 
-- Código da UI em `{pathUI}/src/` (features, pages, components, `lib/api`, router) e resumo: arquivos criados, jornada coberta, decisões de UX, próximos passos (`/gofi-qa`) → `reference/memory-and-output.md` §Output esperado.
+- Código da UI em `{pathUI}/src/` (features, pages, components, `lib/api`, router) e resumo: arquivos criados, jornada coberta, decisões de UX, próximos passos (`gofi-qa`) → `reference/memory-and-output.md` §Output esperado.
 - `.claude/memory/contexts/{contexto}.md`: refresh do `## Estado atual`, 1 linha no Histórico, `status`/`atualizado` no frontmatter; `project.md` só se nasceu frontend/app novo.
 - Microcopy final e estrutura de telas no `## Estado atual` da memória do contexto; texto que um cenário prescreve é usado como está. Teste de cenário leva `gofi:tests REQ-NN.n`.
 - Correção/ensino do usuário → `.claude/expertise/harness-protocols/learning.md` (knowledge é domínio-neutro).

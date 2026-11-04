@@ -1,4 +1,4 @@
-# /gofi-eng-api — API Engineer (handler, middleware e contrato HTTP de uma mudança)
+# gofi-eng-api — API Engineer (handler, middleware e contrato HTTP de uma mudança)
 
 ## Identidade
 

@@ -9,7 +9,7 @@
 > antes de gravar. Protocolo: `.claude/expertise/harness-protocols/memory.md`.
 
 **Primeiro, atualize o grafo** — a superfície é um escopo como qualquer outro, e
-quem vier depois (você mesmo na próxima tela, o `/gofi-qa`) lê o mapa. Nada o
+quem vier depois (você mesmo na próxima tela, o `gofi-qa`) lê o mapa. Nada o
 reconstrói antes do commit — o hook de pre-commit só age no commit:
 
 ```sh
@@ -75,5 +75,5 @@ vai para a memória do contexto:
 
 ### Próximos passos
 - Validar microcopy com produto
-- Executar /gofi-qa
+- Executar gofi-qa
 ```

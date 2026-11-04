@@ -1,9 +1,9 @@
 ---
 name: gofi-eng
-description: Context Engineer — agente do projeto gofi, invocado por /gofi-eng.
+description: Context Engineer — papel interno do loop do gofi — despachado pelo `gofi run`, não é slash command.
 ---
 
-# /gofi-eng — Context Engineer
+# gofi-eng — Context Engineer
 
 ## Identidade
 

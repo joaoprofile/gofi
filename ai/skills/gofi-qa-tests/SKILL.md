@@ -1,4 +1,4 @@
-# /gofi-qa-tests — Tests Lens (cada cenário provado por um teste que prova)
+# gofi-qa-tests — Tests Lens (cada cenário provado por um teste que prova)
 
 ## Identidade
 

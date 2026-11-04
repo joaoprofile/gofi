@@ -1,9 +1,9 @@
 ---
 name: gofi-ops
-description: Platform & Delivery Engineer — agente do projeto gofi, invocado por /gofi-ops.
+description: Platform & Delivery Engineer — papel interno do loop do gofi — despachado pelo `gofi run`, não é slash command.
 ---
 
-# /gofi-ops — Platform & Delivery Engineer
+# gofi-ops — Platform & Delivery Engineer
 
 ## Identidade
 

@@ -8,7 +8,7 @@
 > fecha. O comando confere o frontmatter (`contexto`, `versao`, `status`, `keywords`)
 > antes de gravar. Protocolo: `.claude/expertise/harness-protocols/memory.md`.
 
-**Primeiro, atualize o grafo.** As fases seguintes (`/gofi-qa`, `/gofi-doc`) e a
+**Primeiro, atualize o grafo.** As fases seguintes (`gofi-qa`, `gofi-doc`) e a
 próxima tarefa consultam o mapa antes de qualquer commit — e só no commit o
 hook de pre-commit o atualiza. Sem isto o QA auditaria um
 mapa que não contém a implementação recém-escrita:
@@ -90,5 +90,5 @@ a aprovação. A implementação não as corrige para casar com o código.
 ### Próximos passos
 - Executar migration
 - Configurar variáveis de ambiente (se houver fora do padrão gofi)
-- Executar /gofi-qa
+- Executar gofi-qa
 ```

@@ -124,7 +124,7 @@ em passagens:
   comando recusa quando quem o roda é um agente.
 - Atualiza `.claude/memory/contexts/{contexto}.md` de cada contexto tocado
   (`status: spec`, `atualizado`, handoff com o id da mudança) → `reference/memory-and-closing.md`.
-- Entrega para `/gofi-eng` (e `/gofi-ui`, `/gofi-ops`), via a mudança aprovada.
+- Entrega para `gofi-eng` (e `gofi-ui`, `gofi-ops`), via a mudança aprovada.
 
 ## Output esperado
 
@@ -138,7 +138,7 @@ em passagens:
 
 ### Próximos passos
 - Revisar e aprovar: gofi change approve {id}
-- Depois: o loop implementa (/gofi-eng) e arquiva (gofi change archive {id})
+- Depois: o loop implementa (gofi-eng) e arquiva (gofi change archive {id})
 ```
 
 ---

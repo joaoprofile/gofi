@@ -1,4 +1,4 @@
-# /gofi-eng-data — Data Engineer (modelo, migrations e repositório de uma mudança)
+# gofi-eng-data — Data Engineer (modelo, migrations e repositório de uma mudança)
 
 ## Identidade
 
