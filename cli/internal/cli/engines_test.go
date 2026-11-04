@@ -110,3 +110,21 @@ func TestARolesGrantHoldsOnCodexAndCopilot(t *testing.T) {
 		t.Error("a skill's turn refuses tools on Copilot")
 	}
 }
+
+// A turn of the loop reads the sections of AGENTS.md it works by, in its
+// system prompt, and Claude Code is told to leave the whole file out.
+func TestALoopTurnReadsTheSectionsOfAGENTSItWorksBy(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "# AGENTS.md\n\nintro\n\n## Leis comuns a todas as skills\n\nlei 1\n\n## Skills disponíveis\n\n| /gofi-pd |\n\n## Projeto\n\n- nome: x\n")
+	common, settings := loopMemory(root)
+	if !strings.Contains(common, "lei 1") || !strings.Contains(common, "nome: x") || strings.Contains(common, "/gofi-pd") || strings.Contains(common, "intro") {
+		t.Errorf("common:\n%s", common)
+	}
+	abs, _ := filepath.Abs(filepath.Join(root, "AGENTS.md"))
+	if !strings.Contains(settings, `"claudeMdExcludes":["`+abs+`"]`) {
+		t.Errorf("settings %s", settings)
+	}
+	if c, s := loopMemory(t.TempDir()); c != "" || s != "" {
+		t.Errorf("no AGENTS.md: %q %q", c, s)
+	}
+}

@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -86,6 +89,10 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, lo
 			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied}
 		if loopTurn {
 			o.SystemPrompt, o.Isolated, o.MCPConfig = loopSystemPrompt, true, host.MCPConfig()
+			if common, settings := loopMemory(root); common != "" {
+				o.SystemPrompt += "\n\n" + common
+				o.Settings = settings
+			}
 		}
 		return claude.New(o)
 	}, nil
@@ -255,4 +262,37 @@ func asSkill(prompt string) string {
 		return prompt
 	}
 	return fmt.Sprintf("Siga o papel descrito em %s.\n\n%s", layout.Skills().Path(role, "SKILL.md"), strings.TrimLeft(rest, " "))
+}
+
+// loopSections are the parts of the project's AGENTS.md a turn of the loop
+// works by: the laws, where things are, how state and lessons are kept, the
+// project. The tables of slash commands, the intake and the doctrine of the
+// skills are the person's and the maintainer's — a turn that needs another
+// section reads it.
+var loopSections = []string{"## Leis comuns", "## Onde os agents leem", "## Persistência de estado", "## Aprendizado contínuo", "## Projeto"}
+
+// loopMemory is what a turn of the loop reads of AGENTS.md, instead of the
+// whole file Claude Code would load — and the settings that leave the file
+// out. Nothing, when the project has no AGENTS.md.
+func loopMemory(root string) (common, settings string) {
+	abs, err := filepath.Abs(filepath.Join(root, "AGENTS.md"))
+	if err != nil {
+		return "", ""
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", ""
+	}
+	var b strings.Builder
+	b.WriteString("# AGENTS.md do projeto — as seções de um turno do loop\n\nO arquivo inteiro está em `AGENTS.md`: leia nele a §seção que a sua skill citar e que não esteja aqui.\n\n")
+	for _, part := range regexp.MustCompile(`(?m)^## `).Split(string(data), -1)[1:] {
+		part = "## " + part
+		for _, want := range loopSections {
+			if strings.HasPrefix(part, want) {
+				b.WriteString(strings.TrimRight(part, "\n") + "\n\n")
+			}
+		}
+	}
+	raw, _ := json.Marshal(map[string]any{"claudeMdExcludes": []string{abs}})
+	return strings.TrimSpace(b.String()), string(raw)
 }
