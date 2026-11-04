@@ -138,7 +138,7 @@ var runPorts = struct {
 // code the turn changed, in the tree the run works on, and holds it to the
 // graph the run started from — the architecture rules the change broke, in
 // SARIF, and its diff, for the run to dispatch and scope the audit by.
-func graphSensor(run string) pack.Command {
+func graphSensor(change, run string) pack.Command {
 	if runPorts.graph != nil {
 		return *runPorts.graph
 	}
@@ -148,7 +148,7 @@ func graphSensor(run string) pack.Command {
 	}
 	baseline := path.Join(loop.BaselineDir(run), graph.GraphFile)
 	return pack.Command{
-		Run:    fmt.Sprintf("%s index code --baseline %s --diff %s --report %s", strconv.Quote(exe), baseline, loop.DiffFile(run), loop.GraphReport(run)),
+		Run:    fmt.Sprintf("%s index code --baseline %s --diff %s --report %s --change %s", strconv.Quote(exe), baseline, loop.DiffFile(run), loop.GraphReport(run), change),
 		Format: pack.FormatSARIF, Report: loop.GraphReport(run),
 	}
 }
@@ -526,7 +526,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	// The graph stage needs an extractor of the backend's language: without
 	// one it is not checked, never failed — a repair cannot install it.
 	if _, set := sensors["graph"]; !set && graphEnabled(cfg) && workspace.CanExtract(work, backendLanguage(cfg)) {
-		sensors["graph"] = graphSensor(run)
+		sensors["graph"] = graphSensor(change, run)
 	}
 	if _, set := sensors["trace"]; !set {
 		sensors["trace"] = traceSensor(change, run)
