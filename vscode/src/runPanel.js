@@ -85,12 +85,18 @@ class RunPanel {
 		this.stopWatching();
 		const pattern = new vscode.RelativePattern(path.join(this.root, RUNS, this.run), '*.{json,ndjson}');
 		this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
-		const redraw = () => this.draw();
+		// A node writes several files at once: one redraw for them, not one
+		// each — reassigning the page loses its scroll.
+		const redraw = () => {
+			clearTimeout(this.pending);
+			this.pending = setTimeout(() => this.draw(), 200);
+		};
 		this.watcher.onDidChange(redraw);
 		this.watcher.onDidCreate(redraw);
 	}
 
 	stopWatching() {
+		clearTimeout(this.pending);
 		if (this.watcher) {
 			this.watcher.dispose();
 			this.watcher = null;

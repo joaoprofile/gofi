@@ -307,12 +307,21 @@ function deliverable(phase) {
  * @param {string} root
  * @param {string} flow
  * @param {string} context
- * @param {(e: {ev: string, node?: string, to?: string, why?: string}) => void} onEvent
+ * @param {(e: {ev: string, node?: string, to?: string, why?: string, run?: string, cost_usd?: number}) => void} onEvent
+ * @param {{stop?: () => void}} [control] given stop(): it ends the delivery
+ *   as gofi cancel does — at its next checkpoint, to go on with --resume.
  * @returns {Promise<{ok: boolean, outcome: string, output: string}>}
  */
-function deliverContext(gofiPath, root, flow, context, onEvent) {
+function deliverContext(gofiPath, root, flow, context, onEvent, control) {
 	return new Promise((resolve) => {
 		const child = spawn(gofiPath || 'gofi', ['run', '--context', context, '--flow', flow, '--events'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+		if (control) {
+			control.stop = () => {
+				if (child.exitCode === null && !child.killed) {
+					child.kill('SIGTERM');
+				}
+			};
+		}
 		let buffer = '';
 		let stderr = '';
 		let outcome = '';
@@ -403,6 +412,44 @@ function clearElicitation(root, rel) {
 }
 
 /** The decisions as the panel asks them: the recommended option first. */
+/**
+ * The decisions a delivery's run waits on at its gate, as an elicitation —
+ * null when none is open.
+ *
+ * @param {string} root
+ * @param {string} run
+ */
+function readGate(root, run) {
+	try {
+		const q = JSON.parse(fs.readFileSync(path.join(root, '.gofi', 'runs', run, 'gate.json'), 'utf8'));
+		return Array.isArray(q.questions) && q.questions.length > 0 ? { questions: q.questions, derived: [] } : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Answers a run's gate as gofi answer does: a question left out takes its
+ * recommendation, recorded as assumed.
+ *
+ * @param {string} gofiPath
+ * @param {string} root
+ * @param {string} run
+ * @param {Record<string, string>} answers
+ * @returns {Promise<{ok: boolean, output: string}>}
+ */
+function answerGate(gofiPath, root, run, answers) {
+	const args = ['answer', run];
+	for (const [id, value] of Object.entries(answers)) {
+		args.push('--set', `${id}=${value}`);
+	}
+	return new Promise((resolve) => {
+		execFile(gofiPath || 'gofi', args, { cwd: root }, (err, stdout, stderr) => {
+			resolve({ ok: !err, output: String(stderr || stdout || (err && err.message) || '').trim() });
+		});
+	});
+}
+
 function elicitQuestions(e) {
 	return e.questions.map((q) => {
 		const options = q.recommended ? [q.recommended] : [];
@@ -438,5 +485,5 @@ function withDecisions(turn, e, answers) {
 
 module.exports = {
 	SCHEMA, shouldPlan, intakeArgs, runIntake, runIntakeKept, stopIntakeServers, IntakeServer, phaseTurn, nextStep, deliveryFlow, deliverable, deliverContext,
-	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract,
+	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract, readGate, answerGate,
 };
