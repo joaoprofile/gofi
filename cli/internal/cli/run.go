@@ -57,6 +57,12 @@ agent's turn to agents/<node>-<iter>.ndjson.
 --context delivers every sealed change of a context, in the order their
 dependencies allow, and stops at the first not accepted.
 
+--all delivers every open change, level by level of their depende_de, up to
+--parallel at once (loop.max_agents), within loop.run_budget_usd; its
+summary and its state go to .gofi/batches/<batch>. A batch cut short — or
+with changes not accepted — goes on with --all --resume <batch>: what it
+accepted stays, a run it left midway goes on, and the rest runs again.
+
 A decision the change does not cover stops the implementation at the gate:
 the question goes to .gofi/runs/<run>/gate.json and is answered with
 gofi answer <run> from any terminal — or right there, when the run has one.
@@ -80,9 +86,11 @@ the current branch once every change it depends on has landed, and
 fast-forwarded into it — only while the project's tree is clean, waiting up
 to --gate-timeout otherwise; never merged, never pushed. A conflict ends in
 "conflito", the branch kept for the person.
-The sensors run the commands of loop.sensors in .gofi.yaml; test defaults to
-the test section's default task, and a stage with no command is recorded as
-not checked, never as passed.
+The sensors run the language pack's commands, or those of loop.sensors in
+.gofi.yaml — a command, or {run, format, report} for a tool that writes a
+report (sarif, junit); test defaults to the test section's default task, and
+a stage with no command — security and coverage, unless named — is recorded
+as not checked, never as passed.
 
 The policy is loop in .gofi.yaml: budget_usd stops the agents once spent,
 max_iterations bounds the ways back to work, accept is clean or ressalvas,
@@ -96,7 +104,8 @@ gofi run --context pedidos
 gofi run --resume r-20261102-101500
 gofi run adicionar-rate-limit --no-archive
 gofi run adicionar-rate-limit --detach
-gofi run --all --parallel 2`,
+gofi run --all --parallel 2
+gofi run --all --resume b-20261104-101500`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runRun,
 	}
@@ -176,10 +185,11 @@ func runRun(cmd *cobra.Command, args []string) error {
 	resume, _ := cmd.Flags().GetString("resume")
 	ctxName, _ := cmd.Flags().GetString("context")
 	if all, _ := cmd.Flags().GetBool("all"); all {
-		if resume != "" || len(args) > 0 || ctxName != "" {
+		if len(args) > 0 || ctxName != "" {
 			return errors.New(i18n.T("run.which"))
 		}
-		o := allOpts{}
+		// With --all, --resume names a batch, not a run.
+		o := allOpts{Resume: resume}
 		o.Parallel, _ = cmd.Flags().GetInt("parallel")
 		o.Flow, _ = cmd.Flags().GetString("flow")
 		o.Mode, _ = cmd.Flags().GetString("permission-mode")
