@@ -66,6 +66,13 @@ gofi change new remover-desconto-manual --context pedidos --no-design`,
 			}
 			contexts, _ := cmd.Flags().GetStringArray("context")
 			noDesign, _ := cmd.Flags().GetBool("no-design")
+			if all, err := contract.Docs(root); err == nil {
+				for _, ctx := range contexts {
+					if contract.FormatTwo(all, ctx) {
+						return errors.New(i18n.T("change.new.format_two", ctx, ctx))
+					}
+				}
+			}
 			written, err := contract.Create(root, contract.NewChange{
 				ID: args[0], Contexts: contexts, Language: backendLanguage(cfg),
 				NoDesign: noDesign, Date: time.Now().Format("2006-01-02"),

@@ -60,11 +60,7 @@ func contractState(root string, c *Context) {
 	if err != nil {
 		return
 	}
-	for _, d := range all {
-		if d.Kind == contract.KindSpec && d.Change == "" && d.Context == c.Name && d.Format < contract.FormatSplit {
-			c.FormatTwo = true
-		}
-	}
+	c.FormatTwo = contract.FormatTwo(all, c.Name)
 	for _, ch := range contract.Changes(all) {
 		if ch.Sealed && slices.Contains(ch.Contexts, c.Name) {
 			c.Sealed = append(c.Sealed, ch.ID)

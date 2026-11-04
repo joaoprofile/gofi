@@ -128,6 +128,7 @@ var catalogEN = map[string]string{
 	"change.migrate.moved":            "%s → %s",
 	"change.migrate.none":             "every change is in its place",
 	"change.migrate.next":             "commit the move before a run in a worktree",
+	"change.new.format_two":           "%s is still in format 2 (sdd-*.md): migrate it first with gofi spec migrate %s (/gofi-migrate writes the scenarios it marks) — a change now would start a new spec beside the old ones",
 	"run.land.done":                   "%s landed on %s (fast-forward)",
 	"run.land.conflict":               "%s conflicts with %s: the branch is kept as it is — rebase it by hand in %s",
 	"run.land.waiting":                "%s waits to land: %s",

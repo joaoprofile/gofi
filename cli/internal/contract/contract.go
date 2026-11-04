@@ -146,11 +146,27 @@ func Select(all []Doc, names []string) (picked []Doc, missing []string) {
 // change.
 func Living(all []Doc, ctx string) (Doc, bool) {
 	for _, d := range all {
-		if d.Kind == KindSpec && d.Change == "" && d.Context == ctx {
+		if d.Kind == KindSpec && d.Change == "" && d.Context == ctx && d.Format >= FormatSplit {
 			return d, true
 		}
 	}
 	return Doc{}, false
+}
+
+// FormatTwo reports whether a context still has specs of the format before
+// the split (sdd-*.md) and no living spec: it is migrated (gofi spec migrate)
+// before any change builds on it, or the change would start a spec of its own
+// beside the old ones.
+func FormatTwo(all []Doc, ctx string) bool {
+	if _, ok := Living(all, ctx); ok {
+		return false
+	}
+	for _, d := range all {
+		if d.Kind == KindSpec && d.Change == "" && d.Context == ctx && d.Format < FormatSplit {
+			return true
+		}
+	}
+	return false
 }
 
 // bodyLine is the 1-based file line the body starts at, counted the way

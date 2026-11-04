@@ -264,6 +264,9 @@ func (f *finder) delta(all []Doc) {
 	if f.doc.Change == "" {
 		f.add(0, true, "delta fora de uma pasta de mudança: o lugar dele é specs/<contexto>/%s/<id>/deltas/ (ou specs/%s/<id>/deltas/)", ChangesDir, ChangesDir)
 	}
+	if FormatTwo(all, f.doc.Context) {
+		f.add(0, true, "%[1]s ainda está no formato 2 (sdd-*.md): migre com `gofi spec migrate %[1]s` antes de mudar o contexto — a mudança começaria uma spec nova ao lado das antigas", f.doc.Context)
+	}
 	existing := map[string]bool{}
 	living, hasLiving := Living(all, f.doc.Context)
 	if !hasLiving && strings.TrimSpace(strings.Join(sectionBody(f.doc, "Propósito"), "")) == "" {
