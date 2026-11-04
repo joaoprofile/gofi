@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.0
+
+Requer o gofi 0.4.0 (`gofi review --context` e o campo `run` dos eventos).
+
+- **A entrega para pelo painel.** O botão de parar encerra a entrega no
+  próximo checkpoint, como o `gofi cancel`: ela continua depois com
+  `gofi run --resume`. Antes, parar só cancelava a conversa e o loop seguia.
+- **O portão vira cartões.** Quando uma execução espera uma decisão que a
+  mudança não cobre, as perguntas aparecem no painel, como as da elicitação;
+  a pergunta deixada de fora segue a recomendação, como no `gofi answer`.
+- **O custo de cada execução aparece** ao fim dela, e entra no registro da
+  entrega.
+- **A spec é revisada antes da aprovação.** Na parada de revisão, o painel
+  roda o revisor (`gofi review --context`) e mostra o que ele achou antes de
+  pedir o sim, como o `gofi chat`.
+- **A aba de execução mostra o que a execução sabe:** o que os sensores
+  acharam — um estágio não verificado não aparece como aprovado —, o
+  veredicto e os achados abertos, a proposta de emenda, a branch e o
+  relatório. Lê só o que foi acrescentado aos eventos e redesenha uma vez por
+  rajada de escritas.
+- **Os lotes do `gofi run --all`** aparecem no seletor de execuções, com
+  como cada mudança terminou e o que o lote gastou.
+- **`/model` não apaga configuração.** Só `ai.model` e `ai.models` mudam;
+  `host`, `tiers` e `guard` ficam como estavam.
+- **Projeto em Codex ou Copilot:** o chat avisa que roda sobre o Claude Code,
+  em vez de mandar o modelo do projeto para o `claude`.
+- **Mais leve:** a varredura do corpus é refeita só quando o disco muda; o
+  watcher ignora `.gofi/`; um arquivo de fora do projeto vai até 12 mil
+  caracteres.
+- `impact` e `trace` contam como consultas ao índice, e o grafo usa o
+  `gofiAI.gofiPath` configurado.
+
 ## 0.3.5
 
 - **A mensagem vai ao modelo como foi escrita.** O painel não planeja mais o
