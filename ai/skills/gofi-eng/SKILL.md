@@ -85,10 +85,12 @@ Repositório adotado (`//gofi:context` no legado, só aditivo) →
 
 ## Saída e memória
 
-- **Grafo primeiro:** `gofi index code` (`--deep` se mexeu em artefato compartilhado).
-- `memory/contexts/{contexto}.md`: `## Estado atual` reescrito, 1 linha no
-  Histórico, frontmatter (`status`, `versao_spec`, `atualizado`); `project.md`
-  só se nasceu serviço/binário novo.
+- **Índice:** num turno do loop, nada — o loop reindexa depois do turno. Fora
+  dele, `gofi index code` (`--deep` só se for afirmar que nada mais usa o que
+  mudou).
+- `.claude/memory/contexts/{contexto}.md`: `## Estado atual` reescrito e
+  frontmatter (`status`, `atualizado`); a linha do Histórico só quando a
+  mudança fecha; `.claude/memory/project.md` só se nasceu serviço/binário novo.
 - Spec viva e mudança: **não se editam** (lei 1). Tarefas feitas são marcadas
   no `tasks.md`, quando houver — ele é derivado, não selado.
 - Output: `### Arquivos criados` (com o par de migrations) · `### Decisões` ·

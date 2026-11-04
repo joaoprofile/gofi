@@ -28,10 +28,10 @@ com `Read(offset, limit)`, não o arquivo inteiro.
 
 1. `gofi find` — sempre o primeiro movimento.
 2. Vazio? Reformule com o **termo técnico** (o corpus costuma nomear em inglês:
-   `retry`, `logout`, `buybox`, `purge`). Se o par que faltou é entre a língua da
-   pergunta e a do identificador, **registre-o** em
-   `.claude/lexicon/sinonimos.md` — é assim que a busca melhora com uso em vez
-   de apodrecer.
+   `retry`, `logout`, `buybox`, `purge`). Achou pelo termo técnico um par que
+   faltava entre a língua da pergunta e a do identificador? Diga-o à pessoa no
+   fim do trabalho, para ela pôr em `.claude/lexicon/sinonimos.md` — não pare a
+   tarefa para escrever no léxico, e num turno do loop não escreva nele.
 3. Só então os `INDEX.md`: o roteador de contextos e o shard. Use quando quer
    **navegar** um contexto, não quando quer **achar** um assunto.
 4. `gofi find --text "<literal>"` (ou `--regex`, `-i`; `--in specs,prd` estreita)
