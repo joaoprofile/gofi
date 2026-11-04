@@ -633,6 +633,8 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	if err != nil {
 		return s.Outcome, err
 	}
+	// Where the change was, for the commit that moves it to its archive.
+	from, _ := contract.FindChange(work, change)
 	res, err := contract.Archive(work, all, change, time.Now().Format("2006-01-02"))
 	if err != nil {
 		return s.Outcome, fmt.Errorf("%s — gofi change archive %s: %w", i18n.T("run.archive_failed"), change, err)
@@ -643,7 +645,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 	if cp != nil {
 		message := commitMessage(work, s)
-		if err := cp.Commit(ctx, message, "specs/changes/"+change, filepath.ToSlash(res.Dir)); err != nil {
+		if err := cp.Commit(ctx, message, from, filepath.ToSlash(res.Dir)); err != nil {
 			return s.Outcome, fmt.Errorf("commit %s: %w", cp.Branch, err)
 		}
 		s.Landing = landed
@@ -920,7 +922,12 @@ func checkpoint(ctx context.Context, root, run, change string, prior *loop.State
 	if !ok {
 		return nil, nil
 	}
+	// The change's own folder may be edited while the run is not started:
+	// it is the contract the person is writing.
 	cp.Keep = []string{"specs/changes"}
+	if dir, ok := contract.FindChange(root, change); ok {
+		cp.Keep = append(cp.Keep, dir)
+	}
 	cp.Derived, cp.Regenerate = derivedFile, regenerateIndexes
 	if runPorts.regenerate != nil {
 		cp.Regenerate = runPorts.regenerate

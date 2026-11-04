@@ -276,7 +276,7 @@ specs/<ctx>/spec.md, in format 3 (decision 0003). Deterministic, no model:
     format-2 rule had none: the spec does not pass gofi spec check until a
     person writes them, and that is the point;
   - the old documents are the how, already in the code: they move whole to
-    specs/changes/archive/<date>-baseline-<ctx>/, marked arquivado;
+    specs/<ctx>/changes/archive/<date>-baseline-<ctx>/, marked arquivado;
   - the context's memory points at the new spec.
 
 The living spec is born proposto. Write the scenarios (the gofi-migrate skill

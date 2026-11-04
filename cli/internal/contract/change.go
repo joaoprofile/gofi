@@ -38,10 +38,12 @@ type NewChange struct {
 	Date     string // YYYY-MM-DD, for the templates' atualizado
 }
 
-// Create writes the folder of a new change, specs/changes/<id>/, from the
-// project's templates: the proposal, a delta per context and the design. It
-// returns the paths written, relative to root. It refuses an id that is not
-// kebab-case or that an open or archived change already has.
+// Create writes the folder of a new change from the project's templates: the
+// proposal, a delta per context and the design — in the context's folder,
+// specs/<context>/changes/<id>/, when it changes one context, and in
+// specs/changes/<id>/ when it changes several. It returns the paths written,
+// relative to root. It refuses an id that is not kebab-case or that an open
+// or archived change already has, wherever it lives.
 func Create(root string, c NewChange) ([]string, error) {
 	if !reChangeID.MatchString(c.ID) {
 		return nil, fmt.Errorf("%q não é um id de mudança: kebab-case começando por verbo (adicionar-rate-limit)", c.ID)
@@ -59,10 +61,10 @@ func Create(root string, c NewChange) ([]string, error) {
 			return nil, fmt.Errorf("contexto %s repetido", ctx)
 		}
 	}
-	dir := layout.Specs().Abs(root, ChangesDir, c.ID)
-	if _, err := os.Stat(dir); err == nil {
-		return nil, fmt.Errorf("a mudança %s já existe em %s", c.ID, layout.Specs().Path(ChangesDir, c.ID))
+	if at, ok := FindChange(root, c.ID); ok {
+		return nil, fmt.Errorf("a mudança %s já existe em %s", c.ID, at)
 	}
+	dir := filepath.Join(root, filepath.FromSlash(NewChangeDir(c.ID, contexts)))
 	if archived(root, c.ID) {
 		return nil, fmt.Errorf("a mudança %s já foi arquivada: escolha outro id", c.ID)
 	}

@@ -43,7 +43,7 @@ gofi verdict write {contexto} <<'JSON'
   {"severity": "major", "rule": "{contexto}/REQ-04.1", "symbol": "{pacote}.{Tipo}.{Método}",
    "file": "{arquivo}", "line": 88, "owner": "eng",
    "message": "cancelamento após envio não é recusado",
-   "evidence": "specs/changes/{id}/deltas/{contexto}.md#REQ-04"}
+   "evidence": "specs/{contexto}/changes/{id}/deltas/{contexto}.md#REQ-04"}
 ]}
 JSON
 ```

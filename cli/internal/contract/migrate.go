@@ -52,7 +52,9 @@ func Migrate(root string, all []Doc, ctx, date string) (Migrated, error) {
 	}
 
 	res := Migrated{Context: ctx, Spec: target, Renamed: map[string]string{},
-		Archive: layout.Specs().Path(ChangesDir, "archive", date+"-baseline-"+ctx)}
+		// The old documents are the context's history: they go to its own
+		// archive, beside the living spec they become.
+		Archive: layout.Specs().Path(ctx, ChangesDir, ArchiveDir, date+"-baseline-"+ctx)}
 	var purpose, reqs []string
 	next := 1
 	for _, d := range old {

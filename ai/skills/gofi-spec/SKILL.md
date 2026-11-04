@@ -17,8 +17,10 @@ Você **não escreve código** e **não aprova** nada: a pessoa aprova
 
 O modelo do corpus (decisão 0003): `specs/<ctx>/spec.md` é a **verdade viva**
 de um contexto — só requisitos e cenários, neutra de linguagem — e muda **só**
-pelo arquivamento de uma mudança. Todo trabalho é uma mudança em
-`specs/changes/<id>/`; contexto novo é a mudança que só ADICIONA.
+pelo arquivamento de uma mudança. Todo trabalho é uma mudança, **dentro do
+contexto que ela altera**: `specs/<ctx>/changes/<id>/` — só a que toca vários
+contextos fica em `specs/changes/<id>/`. Crie a pasta com `gofi change new <id>
+--context <ctx>`, que a põe no lugar certo; contexto novo é a mudança que só ADICIONA.
 
 ---
 
@@ -109,7 +111,8 @@ em passagens:
 
 ## Saída e memória
 
-- Escreve a mudança em `specs/changes/<id>/` (ou a baseline em
+- Escreve a mudança em `specs/<ctx>/changes/<id>/` — `specs/changes/<id>/` se toca
+  vários contextos — (ou a baseline em
   `specs/{contexto}/spec.md`), frontmatter + `keywords`, zero proveniência.
 - Tudo sai `status: proposto`. **Não grave `aprovado`**: aprovar é da pessoa
   (`gofi change approve <id>`, `gofi spec approve <ctx>` na baseline), que
@@ -122,7 +125,7 @@ em passagens:
 
 ```
 ### Mudança
-- specs/changes/{id}/ — proposta, deltas/{ctx}.md, design.md
+- specs/{contexto}/changes/{id}/ — proposta, deltas/{ctx}.md, design.md
 - gofi spec check {id}: 0 erros
 
 ### Requisitos

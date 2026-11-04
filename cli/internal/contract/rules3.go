@@ -173,7 +173,7 @@ func (f *finder) proposal(all []Doc, root string) {
 	f.requireSections("Por quê", "O que muda")
 	c := docsOf(all, f.doc.Change)
 	if f.doc.Change == "" {
-		f.add(0, true, "proposta fora de uma pasta de mudança: o lugar dela é specs/%s/<id>/", ChangesDir)
+		f.add(0, true, "proposta fora de uma pasta de mudança: o lugar dela é specs/<contexto>/%s/<id>/ (ou specs/%s/<id>/ quando toca vários contextos)", ChangesDir, ChangesDir)
 	}
 	named := map[string]bool{}
 	for _, ctx := range f.doc.Contexts {
@@ -226,10 +226,12 @@ func (f *finder) proposal(all []Doc, root string) {
 	}
 }
 
-// archived reports whether a change was applied: archive/<data>-<id>/.
+// archived reports whether a change was applied: archive/<data>-<id>/, in
+// the shared changes/ or in a context's.
 func archived(root, change string) bool {
-	m, _ := filepath.Glob(layout.Specs().Abs(root, ChangesDir, "archive", "*-"+change))
-	for _, p := range m {
+	m, _ := filepath.Glob(layout.Specs().Abs(root, ChangesDir, ArchiveDir, "*-"+change))
+	more, _ := filepath.Glob(layout.Specs().Abs(root, "*", ChangesDir, ArchiveDir, "*-"+change))
+	for _, p := range append(m, more...) {
 		if st, err := os.Stat(p); err == nil && st.IsDir() {
 			return true
 		}
@@ -255,7 +257,7 @@ func (f *finder) delta(all []Doc) {
 		return
 	}
 	if f.doc.Change == "" {
-		f.add(0, true, "delta fora de uma pasta de mudança: o lugar dele é specs/%s/<id>/deltas/", ChangesDir)
+		f.add(0, true, "delta fora de uma pasta de mudança: o lugar dele é specs/<contexto>/%s/<id>/deltas/ (ou specs/%s/<id>/deltas/)", ChangesDir, ChangesDir)
 	}
 	existing := map[string]bool{}
 	living, hasLiving := Living(all, f.doc.Context)

@@ -36,8 +36,9 @@ var contractKinds = map[string]bool{KindSpec: true, KindChange: true, KindDelta:
 // until gofi-migrate converts it.
 const FormatSplit = 3
 
-// ChangesDir is where changes live, under specs/: one folder per change, and
-// archive/ for the ones applied.
+// ChangesDir is the folder changes live in — specs/<context>/changes/ for a
+// change of one context, specs/changes/ for one of several (place.go): one
+// folder per change, and archive/ for the ones applied.
 const ChangesDir = "changes"
 
 // Doc is one document of the contract.
@@ -66,7 +67,6 @@ type Doc struct {
 // is history, not contract, and is left out.
 func Docs(root string) ([]Doc, error) {
 	dir := layout.Specs().Abs(root)
-	archive := filepath.Join(dir, ChangesDir, "archive")
 	var out []Doc
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -76,7 +76,7 @@ func Docs(root string) ([]Doc, error) {
 			return err
 		}
 		if d.IsDir() {
-			if p == archive {
+			if isArchive(p) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -111,20 +111,6 @@ func Docs(root string) ([]Doc, error) {
 	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, err
-}
-
-// changeOf is the change a path sits in: specs/changes/<id>/…, or "".
-func changeOf(rel string) string {
-	prefix := layout.Specs().Path(ChangesDir) + "/"
-	rest, ok := strings.CutPrefix(rel, prefix)
-	if !ok {
-		return ""
-	}
-	id, _, nested := strings.Cut(rest, "/")
-	if !nested {
-		return ""
-	}
-	return id
 }
 
 // Select narrows the corpus to what the person named: a context takes its

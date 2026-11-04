@@ -68,7 +68,11 @@ func Archive(root string, all []Doc, id, date string) (Archived, error) {
 		}
 	}
 
-	res := Archived{Dir: layout.Specs().Path(ChangesDir, "archive", date+"-"+id)}
+	from, ok := FindChange(root, id)
+	if !ok {
+		return Archived{}, fmt.Errorf("a pasta da mudança %s não foi encontrada", id)
+	}
+	res := Archived{Dir: archiveOf(from, date, id)}
 	for _, o := range outs {
 		if err := writeAtomic(filepath.Join(root, filepath.FromSlash(o.path)), o.text); err != nil {
 			return res, err
@@ -85,7 +89,7 @@ func Archive(root string, all []Doc, id, date string) (Archived, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return res, err
 	}
-	return res, os.Rename(layout.Specs().Abs(root, ChangesDir, id), dest)
+	return res, os.Rename(filepath.Join(root, filepath.FromSlash(from)), dest)
 }
 
 func designDocs(c changeDocs) []Doc {

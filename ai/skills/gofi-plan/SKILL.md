@@ -43,7 +43,7 @@ Só as camadas que a mudança toca: um cálculo de domínio puro é uma tarefa
 
 ## Workflow
 
-1. `gofi show specs/changes/<id>/proposal.md`, os deltas e o design (o
+1. `gofi show specs/{contexto}/changes/<id>/proposal.md`, os deltas e o design (o
    `tasks.md`, quando houver, é a ordem sugerida).
 2. `gofi show ctx:{contexto}` — pacotes, tabelas e símbolos que já existem.
 3. Decomponha: tarefas pequenas, uma camada cada, na ordem em que são feitas —

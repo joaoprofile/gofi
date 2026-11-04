@@ -150,7 +150,8 @@ Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change app
 **verdade viva** de um contexto: só requisitos `### Requisito: REQ-NN` com
 DEVE / NÃO DEVE e cenários `#### Cenário: REQ-NN.n` com DADO / QUANDO /
 ENTÃO — neutra de linguagem. **Ela não se edita**: todo trabalho é uma
-**mudança** em `specs/changes/{id}/` (proposta, um delta por contexto, design no
+**mudança** dentro do contexto que ela altera, em `specs/{contexto}/changes/{id}/` —
+a que toca vários contextos fica em `specs/changes/{id}/` — (proposta, um delta por contexto, design no
 template do pack), aprovada pela pessoa (`gofi change approve`), implementada e
 aplicada às specs vivas no arquivamento (`gofi change archive`). Contexto novo é
 a mudança que só ADICIONA. Leia um requisito com `gofi show
@@ -203,7 +204,7 @@ vale neste projeto — nunca entra em skill).
 | Versões antigas transbordadas (só quando o changelog cresce) | `.claude/memory/contexts/{contexto}/history.md` | Específico |
 | Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |
 | Spec viva de um contexto (requisitos + cenários) | `specs/{contexto}/spec.md` (formato 2, até migrar: `sdd-{contexto}.md`) | Específico |
-| Mudanças (o contrato em andamento) | `specs/changes/{id}/` — `proposal.md`, `deltas/{ctx}.md`, `design.md`, `tasks.md`; aplicadas em `specs/changes/archive/` | Específico |
+| Mudanças (o contrato em andamento) | `specs/{contexto}/changes/{id}/` — `proposal.md`, `deltas/{ctx}.md`, `design.md`, `tasks.md`; aplicadas em `specs/changes/archive/` | Específico |
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
 | Índice de retrieval de specs/PRDs (2 níveis) | `specs/INDEX.md` (roteador de contextos) + `specs/{contexto}/INDEX.md` (shard); idem `prd/`. Derivado: `gofi index docs` | Específico (derivado) |
 | **Busca e navegação no corpus** | `gofi find "<pergunta>"` — busca documentos e código de uma vez e devolve doc/§/linhas (`--in` estreita as áreas); `gofi show` descreve um doc, §seção, `ctx:`, `table:` ou símbolo; `gofi index check` aponta os órfãos | Específico (derivado) |

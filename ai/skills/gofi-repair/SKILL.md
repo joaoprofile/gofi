@@ -22,7 +22,7 @@ Próprias do `/gofi-repair`:
    comente nem afrouxe asserção de teste; não troque o valor esperado pelo
    obtido. Se o erro está num teste, corrija o que o faz não compilar, sem
    mudar o que ele prova.
-3. **Contrato não se toca.** Spec viva, mudança (`specs/changes/`) e veredicto
+3. **Contrato não se toca.** Spec viva, mudança (`specs/{contexto}/changes/`) e veredicto
    são selados ou do loop.
 4. **Sem decisão nova.** Se a correção pede escolher algo que a mudança não
    diz — uma assinatura, um comportamento —, não escolha: grave a pergunta no
