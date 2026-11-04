@@ -187,8 +187,8 @@ func (c *AuditCase) Judge(v *verdict.Verdict, src string) Score {
 }
 
 func (d Defect) finds(f verdict.Finding, src string) bool {
-	text := strings.ToLower(f.Rule + " " + f.Message + " " + f.Evidence)
-	said := len(d.Keywords) == 0 || slices.ContainsFunc(d.Keywords, func(k string) bool { return strings.Contains(text, strings.ToLower(k)) })
+	text := fold(f.Rule + " " + f.Message + " " + f.Evidence)
+	said := len(d.Keywords) == 0 || slices.ContainsFunc(d.Keywords, func(k string) bool { return strings.Contains(text, fold(k)) })
 	if !said {
 		return false
 	}
@@ -202,8 +202,10 @@ func (d Defect) finds(f verdict.Finding, src string) bool {
 	if f.File == "" {
 		return d.Rule != "" && namesRequirement(f.Rule, d.Rule)
 	}
-	// A finding with no line is placed by its file and what it says.
-	if strings.TrimPrefix(f.File, "./") == file && (f.Line == 0 || d.near(f.Line)) {
+	// In its file: a finding with no line, on its lines, naming one of them
+	// — placed on the function, it says "linha 27" —, or naming the
+	// requirement it breaks.
+	if strings.TrimPrefix(f.File, "./") == file && (f.Line == 0 || d.near(f.Line) || d.namedLine(f.Message+" "+f.Evidence) || d.Rule != "" && namesRequirement(f.Rule, d.Rule)) {
 		return true
 	}
 	// One kept on another file finds it by the place it names: "the handler
@@ -217,11 +219,36 @@ func (d Defect) finds(f verdict.Finding, src string) bool {
 	return false
 }
 
+// unaccent folds what an audit writes and a case's keywords alike:
+// "repositor" says "repositório", "atômic" says "atomic".
+var unaccent = strings.NewReplacer("á", "a", "à", "a", "â", "a", "ã", "a", "é", "e", "ê", "e", "í", "i", "ó", "o", "ô", "o", "õ", "o", "ú", "u", "ü", "u", "ç", "c")
+
+func fold(s string) string { return unaccent.Replace(strings.ToLower(s)) }
+
 // rePlace is a place a finding names in its text: file.ext:line.
 var rePlace = regexp.MustCompile(`([\w./-]+\.\w+):(\d+)`)
 
 func (d Defect) near(line int) bool {
 	return line >= d.Lines[0]-2 && line <= d.Lines[1]+2
+}
+
+// reLine is a line a finding names in its text: linha 27, linhas 32-34,
+// L29, line 12.
+var reLine = regexp.MustCompile(`(?i)\b(?:linhas?|lines?|l)\s?(\d+)(?:\s?[-–]\s?(\d+))?\b`)
+
+// namedLine reports whether a text names a line of the defect.
+func (d Defect) namedLine(text string) bool {
+	for _, m := range reLine.FindAllStringSubmatch(text, -1) {
+		from, _ := strconv.Atoi(m[1])
+		to := from
+		if m[2] != "" {
+			to, _ = strconv.Atoi(m[2])
+		}
+		if from <= d.Lines[1]+2 && to >= d.Lines[0]-2 {
+			return true
+		}
+	}
+	return false
 }
 
 // namesRequirement reports whether a finding's rule names the requirement
