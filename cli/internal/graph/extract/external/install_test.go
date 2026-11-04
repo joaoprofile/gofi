@@ -117,7 +117,8 @@ func TestInstallRejects(t *testing.T) {
 		// steer the write out of the extractors directory.
 		{"traversal", InstallOptions{Language: "../../etc/cron.d/x", From: from}, "linguagem invalida"},
 		{"separator", InstallOptions{Language: "ja/va", From: from}, "linguagem invalida"},
-		{"no source", InstallOptions{Language: "java"}, "--from"},
+		// A language gofi carries no extractor of needs an origin.
+		{"no source", InstallOptions{Language: "kotlin"}, "--from"},
 		{"plain http", InstallOptions{Language: "java", From: "http://example.com/x"}, "https"},
 		{"missing file", InstallOptions{Language: "java", From: filepath.Join(t.TempDir(), "nope")}, "no such file"},
 		{"empty source", InstallOptions{Language: "java", From: empty}, "vazia"},

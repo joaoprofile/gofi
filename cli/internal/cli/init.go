@@ -368,10 +368,14 @@ func executePipeline(r *wizard.Result) error {
 			if err := pythonEnv(filepath.Join(r.Root, r.SourcePath)); err != nil {
 				fmt.Fprintln(os.Stderr, "  "+i18n.T("init.venv_failed", r.SourcePath, err))
 			}
-			// The graph of a Python tree is read by the extractor gofi carries:
-			// installed now, the code graph and its rules are there from the
-			// first run.
-			if _, err := external.Install(context.Background(), external.InstallOptions{ProjectRoot: r.Root, Language: config.LanguagePython}); err != nil {
+			return nil
+		}})
+	}
+	// A language gofi reads with an extractor it carries has it installed
+	// now: the code graph and its rules are there from the first run.
+	if _, bundled := external.Bundled(r.Language); hasBack && bundled {
+		steps = append(steps, spinner.Step{Name: i18n.T("init.step.extractor", r.Language), Fn: func() error {
+			if _, err := external.Install(context.Background(), external.InstallOptions{ProjectRoot: r.Root, Language: r.Language}); err != nil {
 				fmt.Fprintln(os.Stderr, "  "+err.Error())
 			}
 			return nil
