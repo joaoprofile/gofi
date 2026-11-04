@@ -269,10 +269,11 @@ function unquote(value) {
 }
 
 /**
- * Rewrites the `ai:` block of `.gofi.yaml` so `newModel` becomes both the
- * default (`ai.model`) and the only active entry in `ai.models` — every other
- * known model is written back as a `# - id` comment, preserving the
- * "cardápio" pattern that `gofi init` establishes.
+ * Writes `newModel` into the `ai:` block of `.gofi.yaml` as both the default
+ * (`ai.model`) and the only active entry in `ai.models` — every other known
+ * model is written back as a `# - id` comment, preserving the "cardápio"
+ * pattern that `gofi init` establishes. Only those two keys change: host,
+ * tiers, guard and the rest of the block are kept as written.
  *
  * The known-models list is taken from the current file (active + commented),
  * so anything the user or `gofi config` already introduced is kept. If
@@ -281,8 +282,8 @@ function unquote(value) {
  * The write is line-based on purpose: pulling a YAML dependency in just to
  * rewrite a single block would be the extension's only runtime dep, and a
  * naïve full re-serialisation would drop the comments the Go marshaller
- * produces. Only the `ai:` block is touched — every other section of the
- * file is spliced through byte-for-byte.
+ * produces. Only `ai.model` and `ai.models` are touched — every other line
+ * of the file is spliced through byte-for-byte.
  *
  * @param {string} root      Project root (folder holding `.gofi.yaml`)
  * @param {string} newModel  Model ID (e.g. `claude-opus-5`)
@@ -305,67 +306,52 @@ function persistSelectedModel(root, newModel) {
 	const eol = raw.includes('\r\n') ? '\r\n' : '\n';
 	const lines = raw.split(/\r?\n/);
 
-	// Find `ai:` (top-level key, no indent) and the next top-level key that closes it.
-	let aiStart = -1;
-	let aiEnd = lines.length;
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		if (aiStart === -1) {
-			if (/^ai\s*:\s*(#.*)?$/.test(line)) {
-				aiStart = i;
-			}
-			continue;
-		}
-		// A non-indented `key:` after `ai:` ends the block. Comments and
-		// blanks belong to whatever comes next — go-yaml groups them with
-		// the following key — so they close the ai block too.
-		if (line.trim() === '' || /^#/.test(line)) {
-			aiEnd = i;
-			break;
-		}
-		if (/^[A-Za-z_][\w-]*\s*:/.test(line)) {
-			aiEnd = i;
-			break;
-		}
-	}
+	// The ai: block runs from `ai:` to the next top-level key. Blank lines
+	// and comments inside it are its own; only `model:` and the `models:`
+	// list are rewritten — host, tiers, guard and every other key stay as
+	// they are, byte for byte.
+	const aiStart = lines.findIndex((line) => /^ai\s*:\s*(#.*)?$/.test(line));
 	if (aiStart === -1) {
 		return 'no-ai-block';
 	}
+	let aiEnd = lines.length;
+	for (let i = aiStart + 1; i < lines.length; i++) {
+		if (/^[A-Za-z_][\w-]*\s*:/.test(lines[i])) {
+			aiEnd = i;
+			break;
+		}
+	}
+	// The indent of the block's own keys, as the file writes it.
+	let indent = '    ';
+	for (let i = aiStart + 1; i < aiEnd; i++) {
+		const m = /^(\s+)[A-Za-z_][\w-]*\s*:/.exec(lines[i]);
+		if (m) { indent = m[1]; break; }
+	}
+	const ownKey = (line, key) => new RegExp(`^${indent}${key}\\s*:`).test(line);
+	const childKey = (line) => new RegExp(`^${indent}[A-Za-z_][\\w-]*\\s*:`).test(line);
 
-	// Walk the ai: block to pull host and the union of active + commented models.
-	let host = 'claude-vscode';
-	/** @type {string[]} */
+	// The models the file knows — active and commented —, and where the
+	// models: list is.
 	const knownModels = [];
 	const seen = new Set();
-	let inModels = false;
+	const remember = (id) => { if (id && !seen.has(id)) { seen.add(id); knownModels.push(id); } };
+	let modelLine = -1;
+	let listStart = -1;
+	let listEnd = -1;
 	for (let i = aiStart + 1; i < aiEnd; i++) {
 		const line = lines[i];
-		const hostMatch = /^\s+host\s*:\s*(\S+)/.exec(line);
-		if (hostMatch) {
-			host = unquote(stripComment(hostMatch[1]));
-			inModels = false;
-			continue;
-		}
-		if (/^\s+models\s*:\s*$/.test(line)) {
-			inModels = true;
-			continue;
-		}
-		if (inModels) {
-			const active = /^\s+-\s*(\S+)/.exec(line);
-			if (active) {
-				const id = unquote(stripComment(active[1]));
-				if (id && !seen.has(id)) { seen.add(id); knownModels.push(id); }
-				continue;
-			}
-			const commented = /^\s*#\s*-\s*(\S+)/.exec(line);
-			if (commented) {
-				const id = unquote(stripComment(commented[1]));
-				if (id && !seen.has(id)) { seen.add(id); knownModels.push(id); }
-				continue;
-			}
-			// Another key at the same indent as `models` ends the sublist.
-			if (/^\s+[A-Za-z_][\w-]*\s*:/.test(line)) {
-				inModels = false;
+		if (ownKey(line, 'model')) { modelLine = i; continue; }
+		if (ownKey(line, 'models')) {
+			listStart = i;
+			listEnd = i + 1;
+			for (let j = i + 1; j < aiEnd; j++) {
+				if (childKey(lines[j])) { break; }
+				const active = /^\s+-\s*(\S+)/.exec(lines[j]);
+				const commented = /^\s*#\s*-\s*(\S+)/.exec(lines[j]);
+				if (active) { remember(unquote(stripComment(active[1]))); listEnd = j + 1; continue; }
+				if (commented) { remember(unquote(stripComment(commented[1]))); listEnd = j + 1; continue; }
+				if (lines[j].trim() === '' || /^\s*#/.test(lines[j])) { continue; }
+				break;
 			}
 		}
 	}
@@ -373,30 +359,29 @@ function persistSelectedModel(root, newModel) {
 	// list ends up carrying every pinned version — the ones not in use as
 	// `# - id` comments. Without this, picking one model would silently prune
 	// the menu the next `/model` sees.
-	for (const id of PINNED_MODELS) {
-		if (!seen.has(id)) { seen.add(id); knownModels.push(id); }
-	}
-	if (!seen.has(newModel)) {
-		knownModels.unshift(newModel);
-	}
+	for (const id of PINNED_MODELS) { remember(id); }
 
-	// Rebuild the ai: block. Indentation matches what MarshalYAML in Go emits (4 spaces).
-	const indent = '    ';
-	const rebuilt = [
-		'ai:',
-		`${indent}host: ${host}`,
-		`${indent}model: ${newModel}`,
-		`${indent}# Modelos exibidos pelo /model no gofi-ai. Descomente para adicionar ao picker.`,
-		`${indent}models:`,
-		`${indent}${indent}- ${newModel}`,
-	];
+	const list = [`${indent}models:`, `${indent}${indent}- ${newModel}`];
 	for (const id of knownModels) {
-		if (id === newModel) { continue; }
-		rebuilt.push(`${indent}${indent}# - ${id}`);
+		if (id !== newModel) { list.push(`${indent}${indent}# - ${id}`); }
 	}
-
-	const updated = [...lines.slice(0, aiStart), ...rebuilt, ...lines.slice(aiEnd)].join(eol);
-	fs.writeFileSync(filePath, updated, 'utf8');
+	const out = lines.slice();
+	// The model line is replaced in place first — it moves no index —, then
+	// the list, then what is missing goes in above both.
+	if (modelLine !== -1) {
+		out[modelLine] = `${indent}model: ${newModel}`;
+	}
+	if (listStart !== -1) {
+		out.splice(listStart, listEnd - listStart, ...list);
+	}
+	if (listStart === -1 || modelLine === -1) {
+		// What is missing goes right after `ai:`, the model first.
+		const add = [];
+		if (modelLine === -1) { add.push(`${indent}model: ${newModel}`); }
+		if (listStart === -1) { add.push(...list); }
+		out.splice(aiStart + 1, 0, ...add);
+	}
+	fs.writeFileSync(filePath, out.join(eol), 'utf8');
 	return 'written';
 }
 
