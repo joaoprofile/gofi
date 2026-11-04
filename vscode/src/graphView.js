@@ -206,7 +206,9 @@ class GraphSource {
 			iconPath: new vscode.ThemeIcon('type-hierarchy'),
 		});
 		terminal.show();
-		terminal.sendText('gofi index docs');
+		// The gofi the person configured, as every other call of the panel.
+		const gofi = vscode.workspace.getConfiguration('gofiAI').get('gofiPath') || 'gofi';
+		terminal.sendText(`${/\s/.test(gofi) ? `"${gofi}"` : gofi} index docs`);
 	}
 
 	dispose() {
