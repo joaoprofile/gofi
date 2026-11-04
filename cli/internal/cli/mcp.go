@@ -236,7 +236,11 @@ func (g *gofiMCP) memoryWrite(_ context.Context, _ *mcp.CallToolRequest, a memor
 		return nil, nil, err
 	}
 	rel, _ := filepath.Rel(g.root, path)
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: i18n.T("memory.written", filepath.ToSlash(rel))}}}, nil, nil
+	text := i18n.T("memory.written", filepath.ToSlash(rel))
+	if note := memoryNote(a.Content); note != "" {
+		text += "\n" + note
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 }
 
 type findArgs struct {

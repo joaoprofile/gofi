@@ -76,6 +76,9 @@ EOF`,
 			}
 			rel, _ := filepath.Rel(root, path)
 			fmt.Fprintln(cmd.OutOrStdout(), i18n.T("memory.written", filepath.ToSlash(rel)))
+			if note := memoryNote(string(body)); note != "" {
+				fmt.Fprintln(cmd.OutOrStdout(), note)
+			}
 			return nil
 		},
 	})
@@ -104,6 +107,13 @@ func writeMemory(root, name string, body []byte) (string, error) {
 			}
 		}
 		path = layout.Contexts().Abs(root, name+".md")
+		head, taken := overflowHistory(string(body), name)
+		if len(taken) > 0 {
+			if err := appendHistory(root, name, taken); err != nil {
+				return "", fmt.Errorf("move the older versions to history.md: %w", err)
+			}
+			body = []byte(head)
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
