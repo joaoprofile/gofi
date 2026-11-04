@@ -1,12 +1,15 @@
 package loop
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
@@ -24,7 +27,44 @@ type Policy struct {
 	Escalate      string
 	// AuditParallel is how many lenses of an audit run at once; 0, all.
 	AuditParallel int
+	// TurnBudgetUSD bounds what one agent turn may spend; 0, only what is
+	// left of BudgetUSD.
+	TurnBudgetUSD float64
+	// TurnTimeout bounds how long one agent turn may take; 0, no bound.
+	TurnTimeout time.Duration
 }
+
+// turnBudget is what the next turns may spend, shared by n of them at once:
+// the per-turn limit, or what is left of the run's budget when lower. 0 is no
+// limit.
+func (p Policy) turnBudget(spent float64, n int) float64 {
+	b := p.TurnBudgetUSD
+	if p.BudgetUSD > 0 {
+		left := (p.BudgetUSD - spent) / float64(max(n, 1))
+		if b == 0 || left < b {
+			b = left
+		}
+	}
+	return max(b, 0)
+}
+
+// turnContext bounds a turn by the policy's timeout, and says why it was cut.
+func (p Policy) turnContext(ctx context.Context, role string) (context.Context, func(err error) error, context.CancelFunc) {
+	if p.TurnTimeout <= 0 {
+		return ctx, func(err error) error { return err }, func() {}
+	}
+	tctx, cancel := context.WithTimeout(ctx, p.TurnTimeout)
+	why := func(err error) error {
+		if err != nil && errors.Is(tctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return fmt.Errorf("o turno de %s passou de %s e foi cortado: %w", role, p.TurnTimeout, ErrTurnTimeout)
+		}
+		return err
+	}
+	return tctx, why, cancel
+}
+
+// ErrTurnTimeout is a turn cut by the policy's timeout.
+var ErrTurnTimeout = errors.New("turn timeout")
 
 // The verdicts a change is accepted on, and when a tier is raised.
 const (
@@ -46,6 +86,10 @@ func (p Policy) Check() error {
 	switch {
 	case p.MaxIterations < 0:
 		return fmt.Errorf("loop.max_iterations: %d — a positive number, or 0 for the flow's limits", p.MaxIterations)
+	case p.TurnBudgetUSD < 0:
+		return fmt.Errorf("loop.turn_budget_usd: %v — a positive amount, or 0 for no per-turn limit", p.TurnBudgetUSD)
+	case p.TurnTimeout < 0:
+		return fmt.Errorf("loop.turn_timeout: %v — a positive duration, or 0 for no limit", p.TurnTimeout)
 	case p.BudgetUSD < 0:
 		return fmt.Errorf("loop.budget_usd: %v — a positive amount, or 0 for no budget", p.BudgetUSD)
 	case p.Accept != "" && p.Accept != AcceptClean && p.Accept != AcceptCaveats:

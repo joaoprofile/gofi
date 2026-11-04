@@ -205,6 +205,12 @@ type Loop struct {
 	Escalate string `yaml:"escalate,omitempty"`
 	// AuditParallel is how many lenses of an audit run at once; 0, all.
 	AuditParallel int `yaml:"audit_parallel,omitempty"`
+	// TurnBudgetUSD bounds what one agent turn may spend; 0, only what is
+	// left of budget_usd. The engine stops the turn there.
+	TurnBudgetUSD float64 `yaml:"turn_budget_usd,omitempty"`
+	// TurnTimeout bounds how long one agent turn may take: a Go duration,
+	// 45m when empty, 0 for no limit. A turn cut stops the run, resumable.
+	TurnTimeout string `yaml:"turn_timeout,omitempty"`
 	// Audit is how the audit runs: lenses (the default — every lens the
 	// change's facts dispatch, at once) or single (the general lens alone,
 	// a fraction of the cost; gofi bench audit measures what it misses).

@@ -60,7 +60,7 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 		elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, "elicit-"+id+".json"))
 		a := &AgentState{ID: id, Node: name, Role: rl.Name, Tier: tier, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 		_ = saveAgent(r.Root, s.Run, a)
-		jobs[i] = &job{a: a, turn: Turn{Node: name, Role: rl.Name, Agent: id, Iter: s.Iter, Prompt: r.Brief(rl, s, elicit), ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools}}
+		jobs[i] = &job{a: a, turn: Turn{Node: name, Role: rl.Name, Agent: id, Iter: s.Iter, Prompt: r.Brief(rl, s, elicit), ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, len(roles))}}
 	}
 	limit := r.Policy.AuditParallel
 	if limit <= 0 || limit > len(jobs) {
@@ -74,7 +74,10 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			j.res, j.err = r.Agent.Run(ctx, j.turn)
+			tctx, why, cancel := r.Policy.turnContext(ctx, j.turn.Role)
+			j.res, j.err = r.Agent.Run(tctx, j.turn)
+			cancel()
+			j.err = why(j.err)
 		}()
 	}
 	wg.Wait()
