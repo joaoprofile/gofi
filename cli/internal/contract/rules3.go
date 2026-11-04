@@ -175,6 +175,11 @@ func (f *finder) proposal(all []Doc, root string) {
 	if f.doc.Change == "" {
 		f.add(0, true, "proposta fora de uma pasta de mudança: o lugar dela é specs/<contexto>/%s/<id>/ (ou specs/%s/<id>/ quando toca vários contextos)", ChangesDir, ChangesDir)
 	}
+	if len(f.doc.Contexts) == 1 && f.doc.Change != "" {
+		if want := NewChangeDir(f.doc.Change, f.doc.Contexts); !strings.HasPrefix(f.doc.Path, want+"/") && strings.HasPrefix(f.doc.Path, layout.Specs().Path(ChangesDir)+"/") {
+			f.add(0, false, "a mudança toca só %s e está em %s/: o lugar dela é %s/ — gofi change migrate a move", f.doc.Contexts[0], layout.Specs().Path(ChangesDir), want)
+		}
+	}
 	named := map[string]bool{}
 	for _, ctx := range f.doc.Contexts {
 		named[ctx] = true

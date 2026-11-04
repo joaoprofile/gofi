@@ -41,8 +41,10 @@ func FindChange(root, id string) (string, bool) {
 	return "", false
 }
 
-// changeHomes are every changes/ folder of the project: the shared one and
+// ChangeHomes are every changes/ folder of the project: the shared one and
 // each context's, relative to the root.
+func ChangeHomes(root string) []string { return changeHomes(root) }
+
 func changeHomes(root string) []string {
 	homes := []string{layout.Specs().Path(ChangesDir)}
 	entries, _ := os.ReadDir(layout.Specs().Abs(root))
