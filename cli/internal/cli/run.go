@@ -1246,14 +1246,20 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 	}
 	var res loop.TurnResult
 	var failure error
+	usage := &loop.Usage{}
 	for e := range events {
 		switch ev := e.(type) {
+		case engine.Usage:
+			if ev.Total {
+				usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite = ev.Input, ev.Output, ev.CacheRead, ev.CacheWrite
+			}
 		case engine.Message:
 			for _, b := range ev.Blocks {
 				switch b.Kind {
 				case engine.BlockText:
 					record("text", b.Text)
 				case engine.BlockToolUse:
+					usage.Tools++
 					record("tool", b.Name+" "+string(b.Input))
 					if !a.quiet {
 						fmt.Fprintf(a.out, "  · %s\n", b.Name)
@@ -1272,6 +1278,9 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 			failure = errors.New(ev.Message)
 			record("failure", ev.Message)
 		}
+	}
+	if *usage != (loop.Usage{}) {
+		res.Usage = usage
 	}
 	return res, failure
 }

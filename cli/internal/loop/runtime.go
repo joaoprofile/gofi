@@ -77,6 +77,18 @@ type Turn struct {
 type TurnResult struct {
 	CostUSD float64
 	Seconds float64
+	// Usage is what the engine said the turn read and wrote, when it says.
+	Usage *Usage
+}
+
+// Usage is what a turn cost in tokens and tool calls: what the report adds
+// up, to tell a cheaper run from a dearer one by more than its price.
+type Usage struct {
+	Input      int `json:"input"`
+	Output     int `json:"output"`
+	CacheRead  int `json:"cache_read,omitempty"`
+	CacheWrite int `json:"cache_write,omitempty"`
+	Tools      int `json:"tools,omitempty"`
 }
 
 // SensorResult is one sensor run: the stages that failed, and what they said.
@@ -549,7 +561,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	cancel()
 	err = why(err)
 	s.CostUSD += res.CostUSD
-	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
+	a.Ended, a.CostUSD, a.Seconds, a.Usage = r.now(), res.CostUSD, res.Seconds, res.Usage
 	if err != nil {
 		a.Status, a.Error = AgentFailed, err.Error()
 		_ = saveAgent(r.Root, s.Run, a)

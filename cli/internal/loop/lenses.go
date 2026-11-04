@@ -84,7 +84,7 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 	var failed []error
 	for _, j := range jobs {
 		s.CostUSD += j.res.CostUSD
-		j.a.Ended, j.a.CostUSD, j.a.Seconds, j.a.Status = r.now(), j.res.CostUSD, j.res.Seconds, AgentDone
+		j.a.Ended, j.a.CostUSD, j.a.Seconds, j.a.Status, j.a.Usage = r.now(), j.res.CostUSD, j.res.Seconds, AgentDone, j.res.Usage
 		if j.err != nil {
 			j.a.Status, j.a.Error = AgentFailed, j.err.Error()
 			failed = append(failed, fmt.Errorf("%s: %w", j.turn.Role, j.err))
