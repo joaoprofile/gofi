@@ -595,6 +595,8 @@ var catalogPT = map[string]string{
 	"cmd.review.short":               "Revisa uma mudança antes da aprovação: ambiguidade, contradição, cenário não testável, lacuna",
 	"cmd.review.flag.again":          "revisa de novo mesmo sem mudança desde a última revisão",
 	"review.blocking":                "%d achados bloqueiam a aprovação: corrija a mudança e rode gofi review %s de novo — ou aprove-a como está, se o achado não procede",
+	"review.which":                "informe a mudança, ou --context para todas as de um contexto ainda não aprovadas",
+	"cmd.review.flag.context":     "revisa todas as mudanças do contexto ainda não aprovadas",
 	"review.kept":                    "a revisão de %s já leu a mudança como ela está (gofi review --again para revisar de novo)",
 	"review.nobody":                  "nenhum papel revisa a mudança — gofi update instala o gofi-spec-review",
 	"review.started":                 "revisando %s (%s)…",

@@ -26,7 +26,7 @@ import (
 
 func newReviewCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "review <change>",
+		Use:   "review <change> | --context <ctx>",
 		Short: i18n.T("cmd.review.short"),
 		Long: `Review a change before it is approved: gofi spec check first, at no cost, then
 the reviewer reads it as the implementation would — a requirement two
@@ -37,14 +37,37 @@ proposal does not hold to.
 Blockers and majors fail the command: correct the change, or approve it as it
 is if the finding does not hold. A review is kept with the hash of what it
 read, so an unchanged change is not reviewed — nor paid for — twice; --again
-reviews it anyway. The review never edits the change.`,
+reviews it anyway. The review never edits the change.
+
+--context reviews every change of a context not approved yet: what a chat
+shows at its review stop, before the person approves the spec.`,
 		Example: `gofi review expor-pontos
-gofi review expor-pontos --again`,
-		Args: cobra.ExactArgs(1),
+gofi review expor-pontos --again
+gofi review --context pontos`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, root, err := loadProjectConfig()
 			if err != nil {
 				return err
+			}
+			if ctxName, _ := cmd.Flags().GetString("context"); ctxName != "" {
+				if len(args) > 0 {
+					return errors.New(i18n.T("review.which"))
+				}
+				lines, blocking, err := chatReview(root, cfg)(ctxName)
+				if len(lines) > 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), strings.Join(lines, "\n"))
+				}
+				if err != nil {
+					return err
+				}
+				if blocking > 0 {
+					return &ExitCodeError{Code: 1, Err: errors.New(i18n.T("review.blocking", blocking, ctxName))}
+				}
+				return nil
+			}
+			if len(args) == 0 {
+				return errors.New(i18n.T("review.which"))
 			}
 			again, _ := cmd.Flags().GetBool("again")
 			r, err := reviewChange(cmd.Context(), cmd.OutOrStdout(), root, cfg, args[0], again)
@@ -59,6 +82,7 @@ gofi review expor-pontos --again`,
 		},
 	}
 	cmd.Flags().Bool("again", false, i18n.T("cmd.review.flag.again"))
+	cmd.Flags().String("context", "", i18n.T("cmd.review.flag.context"))
 	return cmd
 }
 

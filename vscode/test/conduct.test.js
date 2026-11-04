@@ -54,6 +54,8 @@ function makeChat(script) {
 	// approve and gofi run --context — so both are recorded, not run.
 	const deliveries = [];
 	chat.sealRunner = async () => ({ ok: true, output: '' });
+	chat.reviewed = [];
+	chat.reviewRunner = async (gofi, root, context) => { chat.reviewed.push(context); return { ok: true, output: '' }; };
 	chat.deliveryRunner = async (gofi, root, flow, context, onEvent) => {
 		deliveries.push(`${flow} ${context}`);
 		onEvent({ ev: 'node.start', node: 'implement' });
@@ -83,6 +85,8 @@ test('o plano é conduzido: spec, parada para revisão, depois a entrega é do l
 	await tick();
 	assert.deepStrictEqual(turns.map((t) => t.prompt), ['/gofi-spec pedido']);
 	done(chat);
+	await tick();
+	assert.deepStrictEqual(chat.reviewed, ['pricing'], 'o revisor lê as mudanças antes da aprovação');
 	assert.ok(posted.some((m) => m.type === 'planReview' && m.next === 'gofi-eng'), 'depois da spec, o painel pede revisão');
 	assert.strictEqual(turns.length, 1, 'nada roda antes da revisão');
 	chat.onWebviewMessage({ type: 'planContinue' });

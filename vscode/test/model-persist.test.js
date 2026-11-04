@@ -56,4 +56,12 @@ out = read(dir);
 assert.match(out, /^ai:\n    model: c\n    models:\n        - c\n/);
 assert.match(out, /    host: claude-code\nother: 1\n$/);
 
+// The chat runs on Claude Code: another host is named, so the panel says so.
+const { readGofiProject, hostWithoutChat } = require('../src/gofiConfig.js');
+dir = project('project:\n    name: x\nai:\n    host: codex\n    model: gpt\n');
+assert.strictEqual(hostWithoutChat(readGofiProject(dir)), 'codex');
+dir = project('project:\n    name: x\nai:\n    host: claude-code\n');
+assert.strictEqual(hostWithoutChat(readGofiProject(dir)), '');
+assert.strictEqual(hostWithoutChat(null), '');
+
 console.log('model-persist: ok');

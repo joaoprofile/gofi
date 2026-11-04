@@ -371,6 +371,27 @@ function sealContract(gofiPath, root, context) {
 	});
 }
 
+/**
+ * Reviews every change of a context not approved yet — `gofi review
+ * --context` —: what the person reads before approving the spec. ok is
+ * false when the review found blockers.
+ *
+ * @param {string} gofiPath
+ * @param {string} root
+ * @param {string} context
+ * @returns {Promise<{ok: boolean, output: string}>}
+ */
+function reviewContext(gofiPath, root, context) {
+	return new Promise((resolve) => {
+		execFile(gofiPath || 'gofi', ['review', '--context', context], { cwd: root, timeout: REVIEW_TIMEOUT_MS }, (err, stdout, stderr) => {
+			resolve({ ok: !err, output: `${stdout || ''}${stderr || ''}`.trim() });
+		});
+	});
+}
+
+/** A review is a model's turn per change: it gets longer than a check. */
+const REVIEW_TIMEOUT_MS = 15 * 60 * 1000;
+
 /** The shape of an elicitation file (`gofi.elicit/v1`). */
 const ELICIT_SCHEMA = 'gofi.elicit/v1';
 
@@ -485,5 +506,5 @@ function withDecisions(turn, e, answers) {
 
 module.exports = {
 	SCHEMA, shouldPlan, intakeArgs, runIntake, runIntakeKept, stopIntakeServers, IntakeServer, phaseTurn, nextStep, deliveryFlow, deliverable, deliverContext,
-	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract, readGate, answerGate,
+	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract, readGate, answerGate, reviewContext,
 };
