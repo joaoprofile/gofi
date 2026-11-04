@@ -39,7 +39,7 @@ problema bruto  →  /gofi-pd  →  /gofi-spec  →  aprovação  →  /gofi-eng
 
 **O contrato.** `specs/{contexto}/spec.md` é a verdade viva de cada contexto —
 requisitos `REQ-NN` com DEVE e cenários DADO/QUANDO/ENTÃO, sem tecnologia — e
-não se edita à mão. Todo trabalho é uma **mudança** em `specs/changes/{id}/`:
+não se edita à mão. Todo trabalho é uma **mudança** em `specs/{contexto}/changes/{id}/`:
 proposta, um delta por contexto (ADICIONADO / MODIFICADO / REMOVIDO) e o design
 no template do pack da linguagem. A pessoa aprova (`gofi change approve`), o
 loop implementa e audita por cenário, e `gofi change archive` aplica os deltas
@@ -372,7 +372,7 @@ Output típico do pipeline no serviço-alvo (backend):
 ## Como Usar
 
 1. **Descoberta** — `/gofi-pd` transforma problema em PRD em `prd/{contexto}/`
-2. **Especificação** — `/gofi-spec` escreve a mudança em `specs/changes/{id}/`; `gofi spec check {id}`; a pessoa aprova com `gofi change approve {id}`
+2. **Especificação** — `/gofi-spec` escreve a mudança em `specs/{contexto}/changes/{id}/`; `gofi spec check {id}`; a pessoa aprova com `gofi change approve {id}`
 3. **Implementação (backend)** — `/gofi-eng` implementa a mudança aprovada
 4. **Apresentação** — `/gofi-ui` implementa a UI da mudança, sobre o contrato do backend
 5. **Plataforma** — `/gofi-ops` provisiona IaC + pipelines de uma mudança de infra

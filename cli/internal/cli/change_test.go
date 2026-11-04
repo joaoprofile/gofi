@@ -31,7 +31,7 @@ func TestChangeNewCheckApprove(t *testing.T) {
 	writeFile(t, filepath.Join(tmpl, "design-template.md"), "---\ntipo: design\nformato: 3\ncontexto: {contexto}\nversao: \"1.0\"\nstatus: proposto\nkeywords: [{Termo}]\n---\n# Design\n\n## Abordagem\n\n## Mapa de requisitos\n")
 
 	out, err := runChange(t, root, "new", "criar-pedidos", "--context", "pedidos")
-	if err != nil || !strings.Contains(out, "specs/changes/criar-pedidos/proposal.md") {
+	if err != nil || !strings.Contains(out, "specs/pedidos/changes/criar-pedidos/proposal.md") {
 		t.Fatalf("new: err=%v\n%s", err, out)
 	}
 
@@ -42,7 +42,7 @@ func TestChangeNewCheckApprove(t *testing.T) {
 		t.Fatalf("approve of a skeleton: err=%v\n%s", err, out)
 	}
 
-	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
+	dir := filepath.Join(root, "specs", "pedidos", "changes", "criar-pedidos")
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Mudança — criar-pedidos\n\n## Por quê\n\nNão há pedidos.\n\n## O que muda\n\nREQ-01 novo.\n")
 	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Delta — pedidos\n\n## Propósito\n\nPedidos do cliente.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Total zero\n- DADO um carrinho vazio\n- QUANDO o cliente fecha\n- ENTÃO recebe recusa\n")
 	writeFile(t, filepath.Join(dir, "design.md"), "---\ntipo: design\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Design\n\n## Abordagem\n\nUm serviço.\n\n## Mapa de requisitos\n\n| REQ-01 | Service.Create |\n")
@@ -55,7 +55,7 @@ func TestChangeNewCheckApprove(t *testing.T) {
 	}
 	sealed, _ := os.ReadFile(filepath.Join(dir, "design.md"))
 	writeFile(t, filepath.Join(dir, "design.md"), strings.Replace(string(sealed), "Um serviço.", "Dois serviços.", 1))
-	if out, _ := runChange(t, root, "list"); !strings.Contains(out, "approval broken in specs/changes/criar-pedidos/design.md") {
+	if out, _ := runChange(t, root, "list"); !strings.Contains(out, "approval broken in specs/pedidos/changes/criar-pedidos/design.md") {
 		t.Errorf("list after an edit:\n%s", out)
 	}
 	if _, err := runChange(t, root, "approve", "sumida"); err == nil {
@@ -70,7 +70,7 @@ func TestChangeNewCheckApprove(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err = runChange(t, root, "archive", "criar-pedidos")
-	if err != nil || !strings.Contains(out, "specs/pedidos/spec.md") || !strings.Contains(out, "specs/changes/archive/") {
+	if err != nil || !strings.Contains(out, "specs/pedidos/spec.md") || !strings.Contains(out, "specs/pedidos/changes/archive/") {
 		t.Fatalf("archive: err=%v\n%s", err, out)
 	}
 	if out, err := runSpec(t, root, "check", "pedidos"); err != nil {

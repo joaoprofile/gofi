@@ -23,8 +23,12 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	if !rl.Contract.Internal() {
 		fmt.Fprintf(&b, "/%s ", rl.Name)
 	}
-	fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list`, os deltas e o design em `specs/changes/%s/`. Iteração %d da execução %s.\n\n",
-		s.Change, s.Context, s.Change, s.Iter, s.Run)
+	dir := s.ChangeDir
+	if dir == "" {
+		dir = "specs/changes/" + s.Change
+	}
+	fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list`, os deltas e o design em `%s/`. Iteração %d da execução %s.\n\n",
+		s.Change, s.Context, dir, s.Iter, s.Run)
 	// What failed and what is open is for the roles that change the code:
 	// the others — an audit, the delivery, the lesson — have nothing to fix;
 	// the triage, what is open.

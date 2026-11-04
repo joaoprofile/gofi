@@ -42,7 +42,7 @@ Próprias do `/gofi-spec-review`:
 
 ## Workflow
 
-1. `gofi show specs/changes/<id>/proposal.md`, os deltas e o design.
+1. `gofi show specs/{contexto}/changes/<id>/proposal.md`, os deltas e o design.
 2. O PRD do contexto, quando houver (`gofi find --in prd <contexto>`), e a spec
    viva que o delta altera (`gofi show ctx:<contexto>`).
 3. Requisito por requisito, cenário por cenário: os sinais da tabela.

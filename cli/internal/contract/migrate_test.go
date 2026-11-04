@@ -60,7 +60,7 @@ func TestMigrateTurnsAFormatTwoSpecIntoTheLivingSpec(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Spec != "specs/pedidos/spec.md" || res.Pending != 2 || len(res.Renamed) != 0 ||
-		res.Archive != "specs/changes/archive/2026-11-02-baseline-pedidos" {
+		res.Archive != "specs/pedidos/changes/archive/2026-11-02-baseline-pedidos" {
 		t.Fatalf("migrated = %+v", res)
 	}
 	got := read(t, root, "specs/pedidos/spec.md")

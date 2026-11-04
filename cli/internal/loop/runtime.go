@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
 	"github.com/joaoprofile/gofi/cli/internal/role"
@@ -111,11 +112,14 @@ type Finding struct {
 // State is a run, as the runtime leaves it after each node: enough to resume
 // from the node it points at, and nothing a model wrote.
 type State struct {
-	Schema  string `json:"schema"`
-	Run     string `json:"run"`
-	Flow    string `json:"flow"`
-	Change  string `json:"mudanca"`
-	Context string `json:"contexto"`
+	Schema string `json:"schema"`
+	Run    string `json:"run"`
+	Flow   string `json:"flow"`
+	Change string `json:"mudanca"`
+	// ChangeDir is the change's folder: in its context's folder, or in
+	// specs/changes/ when it changes several.
+	ChangeDir string `json:"mudanca_dir,omitempty"`
+	Context   string `json:"contexto"`
 	// Node is the next node to run; empty once the run has ended.
 	Node    string `json:"node"`
 	Outcome string `json:"outcome,omitempty"`
@@ -262,6 +266,9 @@ func (r *Runner) Start(ctx context.Context, run, change, context string) (*State
 func (r *Runner) StartIn(ctx context.Context, run, change, context string, setup func(*State)) (*State, error) {
 	s := &State{Schema: StateSchema, Run: run, Flow: r.Flow.Name, Change: change, Context: context,
 		Node: r.Flow.Start, Taken: map[string]int{}}
+	if dir, ok := contract.FindChange(r.work(), change); ok {
+		s.ChangeDir = dir
+	}
 	if setup != nil {
 		setup(s)
 	}

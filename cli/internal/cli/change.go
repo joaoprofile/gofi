@@ -18,7 +18,8 @@ func newChangeCmd() *cobra.Command {
 		Use:   "change",
 		Short: i18n.T("cmd.change.short"),
 		Long: `Changes are how the contract moves (decision 0003): a folder under
-specs/changes/<id>/ with a proposal, a delta per context it touches and the
+specs/<context>/changes/<id>/ — or specs/changes/<id>/ when it touches several
+contexts — with a proposal, a delta per context it touches and the
 design of how. A new context is a change that only adds; an existing one is
 altered by a change, never by editing its living spec. Approved, the change is
 what the loop implements; accepted, it is archived and its deltas become the
@@ -36,8 +37,10 @@ func newChangeNewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "new <id> --context <ctx>...",
 		Short: i18n.T("cmd.change.new.short"),
-		Long: `Create the folder of a change from the project's templates:
-specs/changes/<id>/proposal.md, a deltas/<ctx>.md for each context, and
+		Long: `Create the folder of a change from the project's templates — in the
+context's folder, specs/<ctx>/changes/<id>/, when it touches one context, and
+in specs/changes/<id>/ when it touches several: proposal.md, a deltas/<ctx>.md
+for each context, and
 design.md from the design template of the backend language's pack (the neutral
 one when the pack has none).
 
@@ -171,7 +174,7 @@ becomes its context's spec: requirements ADICIONADO after the last one,
 MODIFICADO replaced in place, REMOVIDO taken out; a context with no spec yet
 gets one from the delta's Propósito. The version goes up one minor step, the
 spec is sealed again — it is the mechanical application of what the person
-approved — and the folder moves to specs/changes/archive/<date>-<id>/ with the
+approved — and the folder moves to the archive/ beside it, <date>-<id>/, with the
 proposal marked arquivado.
 
 No model is involved, and nothing is written unless all of it can be: a change

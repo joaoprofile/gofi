@@ -15,8 +15,11 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 )
 
 // EnvDir names the folder worktrees are made in, over the user's cache.
@@ -152,7 +155,11 @@ func (t *Tree) Discard(ctx context.Context) error {
 // Ready reports whether a change can run in a worktree: it, and the
 // project's configuration, are committed as they are on disk.
 func Ready(ctx context.Context, root, change string) error {
-	for _, p := range []string{".gofi.yaml", "specs/changes/" + change} {
+	dir, ok := contract.FindChange(root, change)
+	if !ok {
+		dir = "specs/changes/" + change
+	}
+	for _, p := range []string{".gofi.yaml", dir} {
 		if out, _ := git(ctx, root, "ls-files", "--", p); out == "" {
 			return fmt.Errorf("%s: %w — commit it before a run in a worktree", p, ErrNotCommitted)
 		}
@@ -264,15 +271,17 @@ func (t *Tree) rebase(ctx context.Context) error {
 }
 
 // Landed reports whether the base branch holds a change already: its
-// archive, specs/changes/archive/<date>-<change>/, is on the branch. It is
-// what a change that depends on another waits for.
+// archive — changes/archive/<date>-<change>/, in the context's folder or in
+// specs/ — is on the branch. It is what a change that depends on another
+// waits for.
 func Landed(ctx context.Context, root, base, change string) bool {
-	out, err := git(ctx, root, "ls-tree", "--name-only", base+":specs/changes/archive/")
+	out, err := git(ctx, root, "ls-tree", "-r", "-d", "--name-only", base, "--", "specs")
 	if err != nil {
 		return false
 	}
 	for _, name := range strings.Split(out, "\n") {
-		if strings.HasSuffix(name, "-"+change) {
+		dir, leaf := path.Split(name)
+		if strings.HasSuffix(dir, contract.ChangesDir+"/"+contract.ArchiveDir+"/") && strings.HasSuffix(leaf, "-"+change) {
 			return true
 		}
 	}

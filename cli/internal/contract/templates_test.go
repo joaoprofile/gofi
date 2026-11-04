@@ -93,7 +93,7 @@ func TestTheRealTemplatesAndTheCheckAgree(t *testing.T) {
 			t.Errorf("%s is not read as a contract document", p)
 		}
 	}
-	if d := read(t, root, "specs/changes/criar-pedidos/design.md"); !strings.Contains(d, "gofi-sdk-go") {
+	if d := read(t, root, "specs/pedidos/changes/criar-pedidos/design.md"); !strings.Contains(d, "gofi-sdk-go") {
 		t.Error("the change took the neutral design, not the go pack's")
 	}
 

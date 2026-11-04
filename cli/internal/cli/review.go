@@ -152,7 +152,7 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 	agent := &engineAgent{root: root, work: root, open: open, out: out,
 		transcript: filepath.Join(filepath.Dir(file), change+".ndjson")}
 	res, err := agent.Run(ctx, loop.Turn{Node: "review", Role: rl.Name, Agent: "review-" + change, Iter: 1,
-		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, Prompt: reviewBrief(rl, change, filepath.ToSlash(rel))})
+		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, Prompt: reviewBrief(rl, change, changeDirOf(root, change), filepath.ToSlash(rel))})
 	if err != nil {
 		return nil, err
 	}
@@ -174,12 +174,12 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 
 // reviewBrief is the reviewer's turn: the change, not yet approved, and the
 // one file the turn writes.
-func reviewBrief(rl role.Role, change, file string) string {
+func reviewBrief(rl role.Role, change, dir, file string) string {
 	return fmt.Sprintf("Siga o papel descrito em %s.\n\n"+
-		"Revise a mudança `%s` antes da aprovação — `gofi change list`, a proposta, os deltas e o design em `specs/changes/%s/`. A pessoa ainda não a aprovou: o que você achar é o que ela corrige antes de aprovar.\n\n"+
+		"Revise a mudança `%s` antes da aprovação — `gofi change list`, a proposta, os deltas e o design em `%s/`. A pessoa ainda não a aprovou: o que você achar é o que ela corrige antes de aprovar.\n\n"+
 		"Grave os achados em `%s`, exatamente neste formato — `severity` blocker, major ou minor; `kind` ambiguidade, contradição, não testável, lacuna ou escopo; sem achado, `findings` vazio:\n\n```json\n%s\n```\n\n"+
 		"É a única escrita deste turno: não edite a mudança, a spec nem o código.\n",
-		layout.RoleSkill(rl.Name, true), change, change, file, review.Example)
+		layout.RoleSkill(rl.Name, true), change, dir, file, review.Example)
 }
 
 func printReview(out io.Writer, r *review.Review) {
@@ -271,4 +271,13 @@ func chatReview(root string, cfg *config.GofiConfig) func(string) ([]string, int
 		}
 		return strings.Split(text, "\n"), blocking, nil
 	}
+}
+
+// changeDirOf is the folder of an open change, as a turn is told where to
+// read it.
+func changeDirOf(root, change string) string {
+	if dir, ok := contract.FindChange(root, change); ok {
+		return dir
+	}
+	return "specs/changes/" + change
 }

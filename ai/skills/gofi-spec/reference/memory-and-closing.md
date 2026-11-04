@@ -94,7 +94,7 @@ Conteúdo mínimo:
 
 ### Checklist de fechamento (rode mentalmente antes de devolver "spec gerada")
 
-- [ ] A mudança está em `specs/changes/{id}/` — proposta, um delta por contexto tocado, design (ou `design: n/a`)
+- [ ] A mudança está em `specs/{contexto}/changes/{id}/` — proposta, um delta por contexto tocado, design (ou `design: n/a`)
 - [ ] `gofi spec check {id}` sai com 0 erros
 - [ ] Nenhuma spec viva foi editada à mão — o que muda está nos deltas
 - [ ] `.claude/memory/contexts/{contexto}.md` frontmatter (`status: spec`, `versao_spec`, `atualizado`) + histórico refletem o estado atual

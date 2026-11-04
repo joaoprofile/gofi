@@ -63,14 +63,14 @@ func TestCreateWithoutADesign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 2 || !strings.Contains(read(t, root, "specs/changes/remover-desconto/proposal.md"), "design: n/a") {
+	if len(written) != 2 || !strings.Contains(read(t, root, "specs/pedidos/changes/remover-desconto/proposal.md"), "design: n/a") {
 		t.Errorf("written = %v", written)
 	}
 	// A language with no pack template takes the neutral one.
 	if _, err := Create(root, NewChange{ID: "criar-estoque", Contexts: []string{"estoque"}, Language: "rust"}); err != nil {
 		t.Fatal(err)
 	}
-	if d := read(t, root, "specs/changes/criar-estoque/design.md"); !strings.Contains(d, "# Design neutro") {
+	if d := read(t, root, "specs/estoque/changes/criar-estoque/design.md"); !strings.Contains(d, "# Design neutro") {
 		t.Errorf("design:\n%s", d)
 	}
 }

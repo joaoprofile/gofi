@@ -52,7 +52,7 @@ Antes de qualquer linha de código (detalhe de cada passo →
 `reference/pre-execution.md` §Pré-execução obrigatória):
 
 1. Passos 1–4 da *Convenção de leitura dos agents* (AGENTS.md): `.gofi.yaml`, `AGENTS.md`, `project.md`, `memory/contexts/{contexto}.md` (handoff do gofi-spec).
-2. A mudança — `gofi change list` para o id; os deltas (`specs/changes/{id}/deltas/{ctx}.md`), o design e o `tasks.md` quando houver. Requisito vivo citado: `gofi show specs/{ctx}/spec.md#REQ-NN`. Contexto inteiro: `gofi show ctx:{contexto}`. Nunca a spec inteira.
+2. A mudança — `gofi change list` para o id; os deltas (`specs/{contexto}/changes/{id}/deltas/{ctx}.md`), o design e o `tasks.md` quando houver. Requisito vivo citado: `gofi show specs/{ctx}/spec.md#REQ-NN`. Contexto inteiro: `gofi show ctx:{contexto}`. Nunca a spec inteira.
 3. Código: `gofi find --in code` / `gofi show` pelo grafo; busca literal só declarada.
 4. `.claude/knowledge/INDEX.md` (núcleo ⬤ + módulos da tarefa, inclui `expertise/diagramming/conventions.md`) e `.claude/knowledge/eng/*.md`.
 5. `sdk/<lang>/`: `knowledge/{absolute-rules,structure,layers,naming}.md` + armadilhas pelo INDEX, `api/INDEX.md` + só os pacotes pertinentes (ou `gofi find --in sdk "<símbolo>"`), `boilerplates/*.md`.
