@@ -1,0 +1,23 @@
+# An audit alone of code already written (gofi bench audit): the code must
+# build, then the audit judges it — in lenses, or by the general lens alone
+# — and the run ends with the verdict. Nothing is implemented or fixed.
+schema: gofi-flow/v1
+name: audit
+start: sense
+
+nodes:
+  sense:    {kind: sensor, stages: [build]}
+  audit:    {kind: agent, stage: audit, parallel: true}
+  policy:   {kind: policy}
+  judged:   {kind: terminal, outcome: accepted}
+  refused:  {kind: terminal, outcome: impasse}
+  stopped:  {kind: terminal, outcome: stopped}
+
+edges:
+  - {from: sense, to: stopped, when: {sensor_failed: []}}
+  - {from: sense, to: audit}
+  - {from: audit, to: policy}
+  - {from: policy, to: judged, when: {accept: true}}
+  - {from: policy, to: refused}
+
+on_limit: stopped

@@ -1,0 +1,29 @@
+# The defects planted in this case's code: what an audit that reads it well
+# finds. A finding finds a defect when it is in its file, within its lines —
+# or names its requirement —, and says what it is about.
+change: bench-auditar-reembolso
+defects:
+  - id: D1
+    what: a taxa é de 3%, não de 2% (REQ-01)
+    file: "{src}/domain/benchreembolso/service/benchreembolso_service.go"
+    lines: [22, 22]
+    keywords: ["3%", "0.03", "0,03", "2%", "taxa"]
+  - id: D2
+    what: o prazo recusa só depois de 31 dias, não de 30 (REQ-03)
+    file: "{src}/domain/benchreembolso/service/benchreembolso_service.go"
+    lines: [19, 19]
+    keywords: ["31", "30", "prazo", "limite"]
+  - id: D3
+    what: dinheiro calculado em ponto flutuante
+    file: "{src}/domain/benchreembolso/service/benchreembolso_service.go"
+    lines: [22, 22]
+    keywords: ["float", "ponto flutuante", "flutuante"]
+  - id: D4
+    what: o teste do prazo não verifica nada
+    file: "{src}/domain/benchreembolso/service/benchreembolso_service_test.go"
+    lines: [13, 16]
+    keywords: ["asser", "verifica", "nada", "nenhum", "ignora", "descarta"]
+  - id: D5
+    what: o cenário REQ-02.1 não tem teste
+    rule: "REQ-02"
+    keywords: ["teste", "test", "cenário"]

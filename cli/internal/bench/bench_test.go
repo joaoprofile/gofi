@@ -9,6 +9,7 @@ import (
 
 	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
+	"github.com/joaoprofile/gofi/cli/internal/verdict"
 )
 
 // Every suite gofi ships is a contract gofi spec check passes: a suite with
@@ -80,5 +81,49 @@ func TestCollectReadsTheRuns(t *testing.T) {
 	}
 	if rep := r.Report(); !strings.Contains(rep, "2 de 3 aceitas") || !strings.Contains(rep, "| gofi-eng | 1.50 |") {
 		t.Errorf("report:\n%s", rep)
+	}
+}
+
+// An audit case is a contract the check passes and code that builds; a
+// verdict finds a planted defect only where it is and saying what it is.
+func TestAnAuditCaseIsJudgedByWhereAndWhat(t *testing.T) {
+	cases, err := AuditCases("go")
+	if err != nil || len(cases) == 0 {
+		t.Fatalf("cases %v, %v", cases, err)
+	}
+	for _, c := range cases {
+		root := t.TempDir()
+		if err := c.Write(root, "backend"); err != nil {
+			t.Fatal(err)
+		}
+		all, _ := contract.Docs(root)
+		placeholders, _ := contract.Placeholders(root)
+		for _, d := range all {
+			for _, f := range contract.Blocking(root, all, d, placeholders) {
+				t.Errorf("case %s: %s: %s", c.Name, f.Path, f.Message)
+			}
+		}
+		if len(c.Defects) == 0 {
+			t.Errorf("case %s plants no defect", c.Name)
+		}
+		for _, d := range c.Defects {
+			if d.File == "" {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(root, strings.ReplaceAll(d.File, "{src}", "backend"))); err != nil {
+				t.Errorf("case %s: defect %s is in a file the case does not write: %v", c.Name, d.ID, err)
+			}
+		}
+	}
+	c := cases[0]
+	file := "backend/domain/benchreembolso/service/benchreembolso_service.go"
+	v := &verdict.Verdict{Findings: []verdict.Finding{
+		{Severity: "blocker", Rule: "benchreembolso/REQ-01.1", File: file, Line: 22, Message: "a taxa é 3%, o requisito diz 2%"},
+		{Severity: "major", Rule: "benchreembolso/REQ-03", File: file, Line: 40, Message: "o prazo usa 31"},
+		{Severity: "major", Rule: "benchreembolso/REQ-02.1", Message: "o cenário REQ-02.1 não tem teste"},
+	}}
+	s := c.Judge(v, "backend")
+	if strings.Join(s.Found, ",") != "D1,D5" || strings.Join(s.Missed, ",") != "D2,D3,D4" || s.Extra != 1 {
+		t.Errorf("score %+v", s)
 	}
 }

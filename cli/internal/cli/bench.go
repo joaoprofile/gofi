@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,14 +10,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi/cli/internal/bench"
 	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/learn"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
+	"github.com/joaoprofile/gofi/cli/internal/verdict"
 	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
 
@@ -43,6 +49,7 @@ gofi bench --keep`,
 	}
 	cmd.Flags().Int("parallel", 1, i18n.T("cmd.bench.flag.parallel"))
 	cmd.Flags().Bool("keep", false, i18n.T("cmd.bench.flag.keep"))
+	cmd.AddCommand(newBenchAuditCmd())
 	return cmd
 }
 
@@ -138,4 +145,152 @@ func runBench(cmd *cobra.Command, _ []string) error {
 	rel, _ := filepath.Rel(root, p)
 	fmt.Fprintln(out, "\n  "+i18n.T("bench.saved", filepath.ToSlash(rel)))
 	return nil
+}
+
+func newBenchAuditCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "audit",
+		Short: i18n.T("cmd.bench.audit.short"),
+		Long: `Measure the audit's recall: for each of gofi's audit cases — code already
+written with defects planted in it, and the change it claims to realize —
+the same code is audited twice, in lenses and by the general lens alone,
+each on a copy of the project of its own, with nothing implemented or fixed
+(the audit flow). A finding finds a planted defect when it is in its file,
+within its lines, and says what it is about. The result is the recall of
+each, the defects each missed, the findings beyond the planted ones, the
+turns and the cost — in .gofi/bench/<id>-audit.md and .json.`,
+		Example: `gofi bench audit`,
+		Args:    cobra.NoArgs,
+		RunE:    runBenchAudit,
+	}
+}
+
+func runBenchAudit(cmd *cobra.Command, _ []string) error {
+	cfg, root, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	lang := backendLanguage(cfg)
+	cases, err := bench.AuditCases(lang)
+	if err != nil {
+		return err
+	}
+	if len(cases) == 0 {
+		return errors.New(i18n.T("bench.no_suite", lang))
+	}
+	src := "."
+	if cfg.Backend != nil && cfg.Backend.Path != "" {
+		src = cfg.Backend.Path
+	}
+	out := cmd.OutOrStdout()
+	ctx := cmd.Context()
+	id := "b-" + time.Now().Format("20060102-150405")
+	fmt.Fprintln(out, i18n.T("bench.audit.started", id, len(cases)))
+	var (
+		mu     sync.Mutex
+		scores []bench.Score
+		errs   []error
+		wg     sync.WaitGroup
+	)
+	for _, c := range cases {
+		for _, mode := range []string{"lentes", auditSingle} {
+			wg.Go(func() {
+				s, err := auditCase(ctx, root, src, id, c, mode)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					errs = append(errs, fmt.Errorf("%s (%s): %w", c.Name, mode, err))
+					return
+				}
+				fmt.Fprintf(out, "  [%s · %s] recall %.0f%% — achou %v, perdeu %v\n", c.Name, mode, 100*s.Recall(), s.Found, s.Missed)
+				scores = append(scores, s)
+			})
+		}
+	}
+	wg.Wait()
+	report := bench.AuditReport(id, scores)
+	dir := filepath.Join(root, filepath.FromSlash(bench.Dir))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, _ := json.MarshalIndent(map[string]any{"schema": bench.Schema, "id": id, "scores": scores}, "", "  ")
+	_ = os.WriteFile(filepath.Join(dir, id+"-audit.json"), append(data, '\n'), 0o644)
+	p := filepath.Join(dir, id+"-audit.md")
+	if err := os.WriteFile(p, []byte(report), 0o644); err != nil {
+		return err
+	}
+	fmt.Fprint(out, "\n"+report)
+	rel, _ := filepath.Rel(root, p)
+	fmt.Fprintln(out, "\n  "+i18n.T("bench.saved", filepath.ToSlash(rel)))
+	return errors.Join(errs...)
+}
+
+// auditCase audits one case's code in one mode, on a copy of its own.
+func auditCase(ctx context.Context, root, src, id string, c *bench.AuditCase, mode string) (bench.Score, error) {
+	tree, err := worktree.Scratch(ctx, root, fmt.Sprintf("bench-%s-%s-%s", id, c.Name, mode))
+	if err != nil {
+		return bench.Score{}, err
+	}
+	defer func() { _ = tree.Discard(context.Background()) }()
+	if err := c.Write(tree.Dir, src); err != nil {
+		return bench.Score{}, err
+	}
+	gofi := func(args ...string) error {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		cmd := exec.CommandContext(ctx, exe, args...)
+		cmd.Dir = tree.Dir
+		cmd.Env = append(os.Environ(), config.EnvRoot+"="+tree.Dir)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("gofi %v: %v\n%s", args, err, tailLines(string(b), 20))
+		}
+		return nil
+	}
+	if err := gofi("change", "approve", c.Change); err != nil {
+		return bench.Score{}, err
+	}
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "--quiet", "--no-verify", "-m", "bench: caso " + c.Name}} {
+		if b, err := exec.CommandContext(ctx, "git", append([]string{"-C", tree.Dir}, args...)...).CombinedOutput(); err != nil {
+			return bench.Score{}, fmt.Errorf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	args := []string{"run", c.Change, "--flow", "audit", "--gate-timeout", "0", "--no-archive"}
+	if mode == auditSingle {
+		args = append(args, "--audit", auditSingle)
+	}
+	// The audit refusing the code is the point: the run's outcome is no
+	// error of the benchmark.
+	_ = gofi(args...)
+	all, err := contract.Docs(tree.Dir)
+	if err != nil {
+		return bench.Score{}, err
+	}
+	ctxName := ""
+	for _, ch := range contract.Changes(all) {
+		if ch.ID == c.Change && len(ch.Contexts) > 0 {
+			ctxName = ch.Contexts[0]
+		}
+	}
+	v, err := verdict.Read(tree.Dir, ctxName)
+	if err != nil || v == nil {
+		return bench.Score{}, fmt.Errorf("the audit wrote no verdict of %s: %v", ctxName, err)
+	}
+	s := c.Judge(v, src)
+	s.Mode = mode
+	if infos, err := loop.List(tree.Dir); err == nil && len(infos) > 0 && infos[0].State != nil {
+		s.CostUSD = infos[0].State.CostUSD
+		agents, _ := loop.Agents(tree.Dir, infos[0].State.Run)
+		s.Turns = len(agents)
+	}
+	return s, nil
+}
+
+func tailLines(s string, n int) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }

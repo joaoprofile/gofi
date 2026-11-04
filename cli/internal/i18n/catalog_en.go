@@ -605,6 +605,8 @@ var catalogEN = map[string]string{
 	"bench.no_suite":                 "gofi has no benchmark suite for %q yet",
 	"bench.started":                  "benchmark %s: %d changes of %s, on a copy of the project at %s",
 	"bench.kept":                     "the copy stayed at %s (branch %s)",
+	"cmd.bench.audit.short":          "Measure the audit's recall: code with planted defects, audited in lenses and by the general lens",
+	"bench.audit.started":            "audit benchmark %s: %d cases, each in lenses and by the general lens",
 	"bench.saved":                    "result: %s",
 	"trace.gaps":                     "the trace has gaps: gofi:implements REQ-NN on the symbol that realizes the requirement, gofi:tests REQ-NN.n on the scenario's test",
 	"trace.unknown":                  "%q is neither an open change nor a context with a spec — gofi change list",

@@ -1,0 +1,16 @@
+package service
+
+import "testing"
+
+// gofi:tests REQ-01.1
+func TestReembolsoDescontaATaxa(t *testing.T) {
+	got, err := Reembolso(10000, 5)
+	if err != nil || got != 9700 {
+		t.Fatalf("Reembolso(10000, 5) = %d, %v", got, err)
+	}
+}
+
+// gofi:tests REQ-03.1
+func TestReembolsoForaDoPrazo(t *testing.T) {
+	_, _ = Reembolso(10000, 31)
+}

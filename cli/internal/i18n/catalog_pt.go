@@ -604,6 +604,8 @@ var catalogPT = map[string]string{
 	"bench.no_suite":                 "o gofi não tem suíte de benchmark para %q ainda",
 	"bench.started":                  "benchmark %s: %d mudanças de %s, numa cópia do projeto em %s",
 	"bench.kept":                     "a cópia ficou em %s (branch %s)",
+	"cmd.bench.audit.short":          "Mede o recall da auditoria: código com defeitos plantados, auditado em lentes e pela lente geral",
+	"bench.audit.started":            "benchmark de auditoria %s: %d casos, cada um em lentes e pela lente geral",
 	"bench.saved":                    "resultado: %s",
 	"trace.gaps":                     "o rastreio tem lacunas: gofi:implements REQ-NN no símbolo que realiza o requisito, gofi:tests REQ-NN.n no teste do cenário",
 	"trace.unknown":                  "%q não é uma mudança aberta nem um contexto com spec — gofi change list",
