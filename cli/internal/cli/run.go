@@ -564,7 +564,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	r := &loop.Runner{
 		Root: root, Work: work, Flow: f, Brief: loop.DefaultBrief, Roles: roles, Facts: facts,
 		Agent:    &engineAgent{root: root, work: work, run: run, open: open, out: out, quiet: o.Events},
-		Sensors:  sensor.Runner{Root: work, Commands: sensors},
+		Sensors:  sensor.Runner{Root: work, Commands: sensors, Cache: true},
 		Verdicts: diskVerdicts{root: work},
 		Gate:     gate,
 		Policy:   policy,
