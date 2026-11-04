@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ const (
 	waitConfirm  = "confirm"  // the plan, before it starts
 	waitContinue = "continue" // the next phase, after a PRD or a spec
 	waitElicit   = "elicit"   // a decision an elicitation left
+	waitGate     = "gate"     // a decision a delivery's run waits on
 )
 
 // intakeDone carries the intake's answer back into the update loop.
@@ -174,6 +176,37 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 		}
 		m.wait = waitNone
 		return m.startPhase(echo)
+	case waitGate:
+		d := m.plan.delivery
+		p := m.plan
+		if d == nil || d.gate == nil {
+			m.wait = waitNone
+			return m, echo
+		}
+		if t != "seguir" && t != "/seguir" {
+			q := p.asking[0]
+			answer := strings.TrimSpace(text)
+			if n, err := strconv.Atoi(t); err == nil && n >= 1 && n <= len(q.Options) {
+				answer = q.Options[n-1]
+			}
+			d.gateAnswers[q.ID] = answer
+			p.asking = p.asking[1:]
+		} else {
+			p.asking = nil
+		}
+		if len(p.asking) > 0 {
+			return m, tea.Sequence(echo, tea.Println(m.questionBlock(p.asking[0])))
+		}
+		// What was not answered takes its recommendation, as gofi answer
+		// does.
+		answers := d.gate.Elicitation().Defaults()
+		maps.Copy(answers, d.gateAnswers)
+		run := d.gate.Run
+		d.gate, d.gateAnswers, m.wait = nil, nil, waitNone
+		if err := loop.Answer(m.opts.Root, run, answers); err != nil {
+			return m, tea.Sequence(echo, tea.Println(k.nested([]string{err.Error()}, k.warn)))
+		}
+		return m, echo
 	case waitConfirm, waitContinue:
 		if yes(t) {
 			m.wait = waitNone
@@ -218,9 +251,40 @@ func no(t string) bool {
 
 // delivery is a delivery the loop is carrying out for the plan.
 type delivery struct {
-	events  <-chan loop.Event
-	wait    func() error
-	outcome string
+	events   <-chan loop.Event
+	wait     func() error
+	stop     func()
+	stopping bool
+	outcome  string
+	// spent is what each run of it has spent, as its events say.
+	spent map[string]float64
+	// gate is the run whose gate is being answered here, and its answers.
+	gate        *loop.Question
+	gateAnswers map[string]string
+}
+
+// total is what the delivery has spent, all its runs together.
+func (d *delivery) total() float64 {
+	t := 0.0
+	for _, usd := range d.spent {
+		t += usd
+	}
+	return t
+}
+
+// stopDelivery stops the delivery under way, once: the run checkpoints and
+// can go on with gofi run --resume. It reports whether there was one.
+func (m *model) stopDelivery() bool {
+	p := m.plan
+	if p == nil || p.delivery == nil {
+		return false
+	}
+	if d := p.delivery; !d.stopping && d.stop != nil {
+		d.stopping = true
+		d.stop()
+		m.notice = i18n.T("chat.delivery.stopping")
+	}
+	return true
 }
 
 // startDelivery hands what the plan builds to the loop — the sealed changes
@@ -235,8 +299,9 @@ func (m model) startDelivery(flow string, before tea.Cmd) (tea.Model, tea.Cmd) {
 		return m, tea.Sequence(before, tea.Println(k.nested([]string{i18n.T("chat.plan.no_delivery")}, k.warn)))
 	}
 	p.closePhase()
-	events, wait := m.opts.Deliver(flow, r.Context.Name)
-	p.delivery = &delivery{events: events, wait: wait}
+	d := m.opts.Deliver(flow, r.Context.Name)
+	events := d.Events
+	p.delivery = &delivery{events: d.Events, wait: d.Wait, stop: d.Stop, spent: map[string]float64{}}
 	for p.next++; p.next < len(r.Plan) && loop.Delivers(r.Plan[p.next].Produces) && !r.Plan[p.next].Elicit; p.next++ {
 	}
 	m.conducting = true
@@ -264,20 +329,39 @@ func (m model) onDeliveryEvent(e loop.Event) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	k := m.look
+	d := p.delivery
+	if e.Run != "" && e.CostUSD > d.spent[e.Run] {
+		d.spent[e.Run] = e.CostUSD
+	}
 	var line string
 	switch e.Ev {
 	case "node.start":
 		line = k.nested([]string{"● " + e.Node}, k.text)
 	case "edge":
 		line = k.nested([]string{"→ " + e.To + "  (" + e.Why + ")"}, k.dim)
-	case "node.failed", "run.cancelled":
+	case "node.failed", "run.cancelled", "land.conflict":
 		line = k.nested([]string{e.Ev + " " + e.Why}, k.warn)
+	case "dispatch", "escalate", "plan", "skip":
+		line = k.nested([]string{e.Ev + " " + strings.TrimSpace(e.To+" "+e.Why)}, k.dim)
 	case "gate.open":
+		// The run waits on decisions the change does not cover: asked here,
+		// answered into the run's gate — any terminal could answer it too.
+		if q, ok := loop.OpenGate(m.opts.Root, e.Run); ok && m.wait == waitNone {
+			if qs := q.Elicitation().AsQuestions(); len(qs) > 0 {
+				d.gate, d.gateAnswers = q, map[string]string{}
+				p.asking, m.wait = qs, waitGate
+				head := k.nested([]string{i18n.T("chat.delivery.gate_ask", len(qs), e.Run)}, k.accent)
+				return m, tea.Sequence(tea.Println("\n"+head), tea.Println(m.questionBlock(qs[0])), readDelivery(d.events))
+			}
+		}
 		line = k.nested([]string{i18n.T("chat.delivery.gate", e.Why)}, k.warn)
+	case "gate.answered":
+		line = k.nested([]string{i18n.T("chat.delivery.gate_answered")}, k.dim)
 	case "run.result":
-		p.delivery.outcome = e.Why
+		d.outcome = e.Why
+		line = k.nested([]string{i18n.T("chat.delivery.result", e.Node, e.Why, d.spent[e.Node])}, k.text)
 	}
-	next := readDelivery(p.delivery.events)
+	next := readDelivery(d.events)
 	if line == "" {
 		return m, next
 	}
@@ -295,6 +379,9 @@ func (m model) onDeliveryDone() (tea.Model, tea.Cmd) {
 	d := p.delivery
 	p.delivery = nil
 	err := d.wait()
+	if d.total() > 0 {
+		m.notice = i18n.T("chat.delivery.spent", d.total())
+	}
 	if err != nil || d.outcome != "accepted" {
 		why := d.outcome
 		if why == "" && err != nil {
@@ -484,6 +571,7 @@ func (p *plan) record(ph intake.Phase, d engine.Done, failed bool, asked int) {
 // stopPlan ends the plan, closes its record and puts the session's model back
 // if a phase set it.
 func (m *model) stopPlan() {
+	m.stopDelivery()
 	if p := m.plan; p != nil && p.rec != nil {
 		outcome := p.outcome
 		if outcome == "" {

@@ -59,7 +59,7 @@ type Options struct {
 	// Deliver hands what a plan builds to the loop: every sealed change of a
 	// context through a flow, its events as they come and, once they end, the
 	// error the delivery ended with. Nil leaves the plan to stop there.
-	Deliver func(flow, context string) (events <-chan loop.Event, wait func() error)
+	Deliver func(flow, context string) Delivery
 	// Review reads a context's open changes before the person approves them
 	// (gofi-spec-review): the lines to show, and how many findings block.
 	// Nil leaves the review stop to the person alone.
@@ -241,6 +241,9 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.interrupt()
 			return m, nil
 		}
+		if m.stopDelivery() {
+			return m, nil
+		}
 		if m.input.Value() != "" {
 			m.input.Reset()
 			return m, nil
@@ -259,6 +262,7 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.running {
 			m.interrupt()
 		}
+		m.stopDelivery()
 		return m, nil
 	case "up":
 		if m.histPos > 0 {
@@ -682,4 +686,13 @@ func projectSkills(root string) []string {
 		}
 	}
 	return out
+}
+
+// Delivery is the loop carrying out what a plan builds: its events as they
+// happen, how it ended, and how to stop it — at its next checkpoint, so it
+// goes on with gofi run --resume.
+type Delivery struct {
+	Events <-chan loop.Event
+	Wait   func() error
+	Stop   func()
 }
