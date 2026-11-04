@@ -1,0 +1,8 @@
+# The Go suite of gofi bench: four changes, each built to measure one thing.
+schema: gofi-bench/v1
+language: go
+changes:
+  - {id: bench-somar-itens,     kind: facil,    expect: "aceita na primeira volta"}
+  - {id: bench-lacuna-contrato, kind: contrato, expect: "aceita, com ressalva do contrato: REQ-02 cita dois casos e tem cenário para um"}
+  - {id: bench-arredondar-par,  kind: armadilha, expect: "o meio para o par costuma pedir retrabalho: a execução propõe lição"}
+  - {id: bench-consultar-preco, kind: camadas,  expect: "duas camadas, domain e api, cada uma pelo seu papel"}
