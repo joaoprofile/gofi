@@ -97,6 +97,29 @@ func Prepare(ctx context.Context, root, run, change string) (*Tree, error) {
 	if _, err := git(ctx, root, "worktree", "add", "-b", t.Branch, t.Dir, "HEAD"); err != nil {
 		return nil, fmt.Errorf("git worktree add %s: %w", t.Branch, err)
 	}
+	return t, t.furnish()
+}
+
+// Scratch is a worktree of the project's head on a branch of its own, for
+// work that never lands — a benchmark's project: it starts from the head as
+// it is committed, with the project's ignored files linked or copied as a
+// run's worktree has them.
+func Scratch(ctx context.Context, root, name string) (*Tree, error) {
+	base, err := git(ctx, root, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("the project has no branch checked out: %w", err)
+	}
+	t := &Tree{Root: root, Dir: Location(root, name), Branch: FreeBranch(ctx, root, "gofi/"+name), Base: base}
+	if _, err := git(ctx, root, "worktree", "add", "-b", t.Branch, t.Dir, "HEAD"); err != nil {
+		return nil, fmt.Errorf("git worktree add %s: %w", t.Branch, err)
+	}
+	return t, t.furnish()
+}
+
+// furnish gives a new worktree the project's ignored files: the shared ones
+// linked, the rest copied.
+func (t *Tree) furnish() error {
+	root := t.Root
 	for _, p := range shared {
 		src := filepath.Join(root, filepath.FromSlash(p))
 		if _, err := os.Stat(src); err != nil {
@@ -105,15 +128,25 @@ func Prepare(ctx context.Context, root, run, change string) (*Tree, error) {
 		dst := filepath.Join(t.Dir, filepath.FromSlash(p))
 		_ = os.MkdirAll(filepath.Dir(dst), 0o755)
 		if err := os.Symlink(src, dst); err != nil {
-			return t, err
+			return err
 		}
 	}
 	for _, p := range copied {
 		if err := copyTree(filepath.Join(root, filepath.FromSlash(p)), filepath.Join(t.Dir, filepath.FromSlash(p))); err != nil {
-			return t, err
+			return err
 		}
 	}
-	return t, nil
+	return nil
+}
+
+// Discard removes a scratch worktree and its branch, landed or not.
+func (t *Tree) Discard(ctx context.Context) error {
+	if _, err := git(ctx, t.Root, "worktree", "remove", "--force", t.Dir); err != nil {
+		return err
+	}
+	_ = os.Remove(filepath.Dir(t.Dir))
+	_, err := git(ctx, t.Root, "branch", "--quiet", "-D", t.Branch)
+	return err
 }
 
 // Ready reports whether a change can run in a worktree: it, and the
