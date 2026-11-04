@@ -114,6 +114,8 @@ gofi run --all --parallel 2`,
 	_ = cmd.Flags().MarkHidden("run-id")
 	cmd.Flags().Float64("budget", 0, "what this run may spend, below loop.budget_usd (set by --all)")
 	_ = cmd.Flags().MarkHidden("budget")
+	cmd.Flags().String("audit", "", "single: the audit by the general lens alone, not in lenses (set by gofi bench audit)")
+	_ = cmd.Flags().MarkHidden("audit")
 	cmd.Flags().Bool("all", false, i18n.T("cmd.run.flag.all"))
 	cmd.Flags().Int("parallel", 0, i18n.T("cmd.run.flag.parallel"))
 	return cmd
@@ -253,6 +255,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	o.Mode, _ = cmd.Flags().GetString("permission-mode")
 	o.GateTimeout, _ = cmd.Flags().GetString("gate-timeout")
 	o.Budget, _ = cmd.Flags().GetFloat64("budget")
+	o.Audit, _ = cmd.Flags().GetString("audit")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var outcome string
@@ -270,6 +273,12 @@ func runRun(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// The audit by the general lens alone, and that lens.
+const (
+	auditSingle = "single"
+	generalLens = "gofi-qa"
+)
+
 // deliverOpts is one delivery: a change to run, or a run to resume.
 type deliverOpts struct {
 	Change, Resume, Flow, Mode string
@@ -277,6 +286,9 @@ type deliverOpts struct {
 	// Budget, when set, bounds the run below loop.budget_usd: the share of
 	// gofi run --all's budget left to it.
 	Budget float64
+	// Audit single audits by the general lens alone: what the lenses are
+	// measured against.
+	Audit string
 	// Events writes the run's events as NDJSON, one per line, ending with a
 	// run.result line — what the panel and the chat read.
 	Events bool
@@ -487,6 +499,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	roles, problems := role.Load(layout.RoleDirs(work)...)
 	if len(problems) > 0 {
 		return "", errors.Join(problems...)
+	}
+	if o.Audit == auditSingle {
+		roles = slices.DeleteFunc(roles, func(r role.Role) bool { return r.Contract.Stage == "audit" && r.Name != generalLens })
 	}
 	facts, err := changeFacts(cfg, work, change)
 	if err != nil {

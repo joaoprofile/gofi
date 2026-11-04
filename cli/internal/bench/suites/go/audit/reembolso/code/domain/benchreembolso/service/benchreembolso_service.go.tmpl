@@ -1,0 +1,24 @@
+package service
+
+import "errors"
+
+// ErrValorInvalido é a recusa de um valor pago negativo.
+var ErrValorInvalido = errors.New("valor inválido")
+
+// ErrPrazoExpirado é a recusa de um reembolso fora do prazo.
+var ErrPrazoExpirado = errors.New("prazo de reembolso expirado")
+
+// gofi:implements REQ-01
+// Reembolso devolve o valor pago menos a taxa, arredondada para baixo.
+func Reembolso(pagoCentavos int64, dias int) (int64, error) {
+	// gofi:implements REQ-02
+	if pagoCentavos < 0 {
+		return 0, ErrValorInvalido
+	}
+	// gofi:implements REQ-03
+	if dias > 31 {
+		return 0, ErrPrazoExpirado
+	}
+	taxa := int64(float64(pagoCentavos) * 0.03)
+	return pagoCentavos - taxa, nil
+}
