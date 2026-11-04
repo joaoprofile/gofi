@@ -80,5 +80,14 @@ fs.appendFileSync(path.join(dir, 'events.ndjson'), '\n' + JSON.stringify({ ev: '
 assert.strictEqual(readRun(root, 'r-1').visits.policy, 1);
 assert.strictEqual(readRun(root, 'r-1').visits.implement, 2, 'nothing is counted twice');
 
+// A batch of gofi run --all: what it delivered, how, and what it spent.
+const { listBatches } = require('../src/runView.js');
+fs.mkdirSync(path.join(root, '.gofi', 'batches'), { recursive: true });
+fs.writeFileSync(path.join(root, '.gofi', 'batches', 'b-1.json'), JSON.stringify({ schema: 'gofi-batch/v1', id: 'b-1',
+	done: [{ change: 'a', outcome: 'accepted' }, { change: 'b', outcome: 'stopped' }], spent: { 'r-1': 1.5, 'r-2': 0.25 } }));
+const [batch] = listBatches(root);
+assert.deepStrictEqual(batch.counts, { accepted: 1, stopped: 1 });
+assert.strictEqual(batch.spent, 1.75);
+
 fs.rmSync(root, { recursive: true, force: true });
 console.log('run-view: ok');

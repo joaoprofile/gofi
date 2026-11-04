@@ -355,4 +355,36 @@ function detailsHTML(model) {
 	return out.join('');
 }
 
-module.exports = { listRuns, readRun, layout, flowSVG, matrixHTML, runMarkup, RUNS };
+/** Where gofi run --all keeps each batch: its state and its summary. */
+const BATCHES = path.join('.gofi', 'batches');
+
+/**
+ * The batches of a project, newest first: what each delivered and how.
+ *
+ * @param {string} root
+ * @returns {{id: string, summary: string, counts: Record<string, number>, spent: number}[]}
+ */
+function listBatches(root) {
+	let names = [];
+	try {
+		names = fs.readdirSync(path.join(root, BATCHES)).filter((n) => n.endsWith('.json'));
+	} catch {
+		return [];
+	}
+	const out = [];
+	for (const name of names) {
+		const b = readJSON(path.join(root, BATCHES, name));
+		if (!b || b.schema !== 'gofi-batch/v1') {
+			continue;
+		}
+		const counts = {};
+		for (const d of b.done || []) {
+			counts[d.outcome] = (counts[d.outcome] || 0) + 1;
+		}
+		const spent = Object.values(b.spent || {}).reduce((a, x) => a + x, 0);
+		out.push({ id: b.id, summary: path.join(root, BATCHES, `${b.id}.md`), counts, spent });
+	}
+	return out.sort((a, b) => (a.id < b.id ? 1 : -1));
+}
+
+module.exports = { listRuns, listBatches, readRun, layout, flowSVG, matrixHTML, runMarkup, RUNS, BATCHES };
