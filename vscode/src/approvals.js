@@ -143,7 +143,8 @@ function hookSettings(scriptPath, ipcDir) {
 		hooks: {
 			PreToolUse: [
 				{
-					matcher: 'Edit|Write|NotebookEdit|Bash',
+					// gofi's approval of the contract asks too, every time.
+					matcher: 'Edit|Write|NotebookEdit|Bash|mcp__gofi__approve',
 					hooks: [{ type: 'command', command, timeout: 330 }],
 				},
 			],

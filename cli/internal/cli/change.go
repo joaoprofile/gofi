@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -211,7 +212,13 @@ delivery; run by hand, it is the step after the delivery is accepted.`,
 // approveDocs checks the documents and, when none has an error, seals them
 // all. It is how a spec and a change are approved alike.
 func approveDocs(cmd *cobra.Command, root string, all, docs []contract.Doc) error {
-	out := cmd.OutOrStdout()
+	return approveDocsTo(cmd.OutOrStdout(), root, all, docs)
+}
+
+// approveDocsTo checks every document and, only when none blocks, seals
+// them all — what gofi change approve, gofi spec approve and the MCP approve
+// tool do.
+func approveDocsTo(out io.Writer, root string, all, docs []contract.Doc) error {
 	placeholders, _ := contract.Placeholders(root)
 	blocked := 0
 	for _, d := range docs {

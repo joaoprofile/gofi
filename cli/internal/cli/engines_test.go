@@ -128,3 +128,19 @@ func TestALoopTurnReadsTheSectionsOfAGENTSItWorksBy(t *testing.T) {
 		t.Errorf("no AGENTS.md: %q %q", c, s)
 	}
 }
+
+// Approving is the person's: no turn of the loop gets the approve tool, on
+// any host.
+func TestNoLoopTurnApproves(t *testing.T) {
+	if !slices.Contains(protectedWrites, "mcp__gofi__approve") {
+		t.Error("Claude Code's loop turns may approve")
+	}
+	for _, grant := range [][]string{{"read", "edit", "write", "gofi", "verify", "verdict", "memory"}, {"read"}} {
+		if slices.Contains(grantedGofi(grant), "approve") {
+			t.Errorf("grant %v reaches approve on Codex", grant)
+		}
+		if d := copilotDenied(grant); !slices.Contains(d, "gofi(approve)") && !slices.Contains(d, "gofi") {
+			t.Errorf("grant %v does not deny approve on Copilot: %v", grant, d)
+		}
+	}
+}

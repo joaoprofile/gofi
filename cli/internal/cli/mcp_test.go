@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -62,7 +64,7 @@ func TestMCPServesTheIndex(t *testing.T) {
 	}
 	// The tools that write — derived files, a verdict, a memory — or run the
 	// project's checks; every other is a query.
-	acts := map[string]bool{"index": true, "verify": true, "verdict_write": true, "memory_write": true}
+	acts := map[string]bool{"index": true, "verify": true, "verdict_write": true, "approve": true, "memory_write": true}
 	var names []string
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
@@ -312,5 +314,30 @@ func TestMCPWritesTheVerdictAndTheMemory(t *testing.T) {
 	mem := "---\ncontexto: frete\nformato: 3\nstatus: implementado\nversao: \"1.0\"\nkeywords: [frete]\n---\n# frete\n"
 	if out, isErr := callText(t, cs, "memory_write", map[string]any{"name": "frete", "content": mem}); isErr {
 		t.Fatalf("memory_write: %s", out)
+	}
+}
+
+// The person approves in the conversation and the agent calls approve: a
+// change by its id is checked and sealed, as gofi change approve does, and a
+// ref that names nothing is an error.
+func TestMCPApprovesWhatThePersonApproved(t *testing.T) {
+	root := configuredProject(t)
+	change(t, root, "a", "")
+	cs := mcpSession(t, root)
+	out, isErr := callText(t, cs, "approve", map[string]any{"ref": "a"})
+	if isErr {
+		t.Fatalf("approve: %s", out)
+	}
+	all, err := contract.Docs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range contract.Changes(all) {
+		if c.ID == "a" && !c.Sealed {
+			t.Errorf("not sealed: %+v\n%s", c, out)
+		}
+	}
+	if _, isErr := callText(t, cs, "approve", map[string]any{"ref": "nada"}); !isErr {
+		t.Error("a ref that names nothing was approved")
 	}
 }

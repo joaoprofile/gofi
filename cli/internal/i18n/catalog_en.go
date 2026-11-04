@@ -485,6 +485,7 @@ var catalogEN = map[string]string{
 	"chat.help.history":           "previous messages",
 	"chat.help.skills":            "Skills of this project:",
 	"chat.approve.question":       "Allow %s?",
+	"chat.approve.contract":       "approve the contract %s? Only you approve: the seal stands for your approval",
 	"chat.approve.yes":            "Yes",
 	"chat.approve.always":         "Yes, don't ask again for %s",
 	"chat.approve.no":             "No",

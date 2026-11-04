@@ -7,6 +7,9 @@ Requer o gofi 0.4.0 (`gofi review --context` e o campo `run` dos eventos).
 - **A entrega para pelo painel.** O botão de parar encerra a entrega no
   próximo checkpoint, como o `gofi cancel`: ela continua depois com
   `gofi run --resume`. Antes, parar só cancelava a conversa e o loop seguia.
+- **Aprovar pela conversa.** Diga no chat que aprova a mudança ou a spec: o agente
+  chama a aprovação do gofi e o painel mostra um cartão **Aprovar** — sempre, a cada
+  vez, sem "sempre permitir". O selo vale como a sua aprovação.
 - **O portão vira cartões.** Quando uma execução espera uma decisão que a
   mudança não cobre, as perguntas aparecem no painel, como as da elicitação;
   a pergunta deixada de fora segue a recomendação, como no `gofi answer`.
