@@ -261,8 +261,9 @@ func auditCase(ctx context.Context, root, src, id string, c *bench.AuditCase, mo
 		args = append(args, "--audit", auditSingle)
 	}
 	// The audit refusing the code is the point: the run's outcome is no
-	// error of the benchmark.
-	_ = gofi(args...)
+	// error of the benchmark — but what it said is why, when it left no
+	// verdict.
+	runErr := gofi(args...)
 	all, err := contract.Docs(tree.Dir)
 	if err != nil {
 		return bench.Score{}, err
@@ -275,7 +276,7 @@ func auditCase(ctx context.Context, root, src, id string, c *bench.AuditCase, mo
 	}
 	v, err := verdict.Read(tree.Dir, ctxName)
 	if err != nil || v == nil {
-		return bench.Score{}, fmt.Errorf("the audit wrote no verdict of %s: %v", ctxName, err)
+		return bench.Score{}, fmt.Errorf("the audit wrote no verdict of %s: %v", ctxName, errors.Join(err, runErr))
 	}
 	s := c.Judge(v, src)
 	s.Mode = mode
