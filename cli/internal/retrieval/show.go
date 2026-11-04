@@ -25,6 +25,7 @@ import (
 //	specs/order/sdd-order.md#RN-01 one section of it: only its lines
 //	ctx:order                      everything filed under a context
 //	table:order_order              which documents own a table, which code touches it
+//	req:order/REQ-01               a requirement: what implements it, what tests each scenario
 //
 // Without a prefix the reference is tried as each kind. One match is shown;
 // several are listed as candidates, never guessed between.
@@ -82,6 +83,8 @@ func (e *Engine) Show(ref string, limit int) (*View, error) {
 			return e.showContext(name)
 		case "table", "ent":
 			return e.showEntity(name, limit)
+		case "req", "rn":
+			return e.showRequirement(name)
 		}
 		// Not a known prefix: a Go ID (func:pkg.F) or a C++ name — try as is.
 		name = ref

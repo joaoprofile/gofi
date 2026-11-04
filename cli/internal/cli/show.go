@@ -26,6 +26,8 @@ The kind comes from the reference:
   ctx:<name>                    everything filed under a context — specs, PRD,
                                 memory, tables, code and the gaps between them
   table:<name>                  the documents that own a table and the code that touches it
+  req:<ctx>/REQ-NN              a requirement of the living spec: the symbols marked
+                                gofi:implements, and each scenario's tests (gofi:tests)
 
 A name that could be two things — a context and a table, two symbols — is
 listed with the prefixed references to pick from (sym:, doc:, ctx:, table:);
@@ -34,7 +36,8 @@ nothing is guessed. Use 'gofi find' first when you have words, not a name.`,
 gofi show "specs/order/sdd-order.md#RN-01"
 gofi show service.Bill
 gofi show ctx:order
-gofi show table:order_order`,
+gofi show table:order_order
+gofi show req:order/REQ-01`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			engine, err := openEngine()
