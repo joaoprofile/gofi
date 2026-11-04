@@ -1062,7 +1062,9 @@ class Chat {
 			return;
 		}
 		this.pendingApprovals.delete(id);
-		if (decision === 'always') {
+		// gofi's approval of the contract is asked every time: "always" is
+		// one approval, never a standing one.
+		if (decision === 'always' && pending.tool !== 'mcp__gofi__approve') {
 			this.alwaysAllow.add(pending.tool);
 		}
 		if (decision === 'deny') {

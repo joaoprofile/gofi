@@ -330,6 +330,11 @@ func (m model) onApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "1", "y", "s", "enter":
 		d, note = approval.Decision{Allow: true}, i18n.T("chat.approve.allowed")
 	case "2", "a":
+		// An approval of the contract is asked each time: "always" is not
+		// offered for it, and a 2 is a no.
+		if req.Tool == approval.ApproveTool {
+			return m, nil
+		}
 		m.always[req.Tool] = true
 		d, note = approval.Decision{Allow: true}, i18n.T("chat.approve.allowed_always", req.Tool)
 	case "3", "n", "esc":
@@ -571,6 +576,11 @@ func (m model) approvalView(r *approval.Request) string {
 	options := "  " + k.accent.Render("1.") + " " + i18n.T("chat.approve.yes") + "   " +
 		k.accent.Render("2.") + " " + i18n.T("chat.approve.always", r.Tool) + "   " +
 		k.accent.Render("3.") + " " + i18n.T("chat.approve.no")
+	if r.Tool == approval.ApproveTool {
+		question = k.accent.Render("● ") + i18n.T("chat.approve.contract", call)
+		options = "  " + k.accent.Render("1.") + " " + i18n.T("chat.approve.yes") + "   " +
+			k.accent.Render("3.") + " " + i18n.T("chat.approve.no")
+	}
 	if more := len(m.asking) - 1; more > 0 {
 		options += k.dim.Render("  " + i18n.T("chat.approve.more", more))
 	}

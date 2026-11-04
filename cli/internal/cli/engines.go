@@ -124,7 +124,7 @@ var gofiGrants = map[string][]string{
 }
 
 // gofiServerTools are every tool gofi's MCP server serves.
-var gofiServerTools = []string{"find", "show", "path", "impact", "intake", "index_status", "index", "verify", "verdict_write", "memory_write"}
+var gofiServerTools = []string{"find", "show", "path", "impact", "intake", "index_status", "index", "verify", "verdict_write", "approve", "memory_write"}
 
 // grantedGofi are the server's tools a grant names, in the server's order.
 func grantedGofi(grant []string) []string {
@@ -203,6 +203,8 @@ func copilotDenied(grant []string) []string {
 var protectedWrites = []string{
 	"Edit(specs/**)", "MultiEdit(specs/**)", "Write(specs/**)",
 	"Edit(prd/**)", "MultiEdit(prd/**)", "Write(prd/**)",
+	// Approving is the person's: no turn of the loop approves the contract.
+	guard.MCPPrefix + "approve",
 }
 
 // gated are the tools that change the project or reach past it, refused to

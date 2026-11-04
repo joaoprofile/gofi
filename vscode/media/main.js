@@ -1978,10 +1978,14 @@
 			vscode.postMessage({ type: 'approve', id: request.id, decision, reason });
 		};
 
-		actions.appendChild(approvalButton('Permitir', 'yes', () => choose('allow')));
-		actions.appendChild(
-			approvalButton(`Sempre permitir ${request.tool}`, 'always', () => choose('always')),
-		);
+		// gofi's approval of the contract: only once, and said as what it is.
+		const contract = request.tool === 'mcp__gofi__approve';
+		actions.appendChild(approvalButton(contract ? 'Aprovar' : 'Permitir', 'yes', () => choose('allow')));
+		if (!contract) {
+			actions.appendChild(
+				approvalButton(`Sempre permitir ${request.tool}`, 'always', () => choose('always')),
+			);
+		}
 		actions.appendChild(approvalButton('Recusar', 'no', () => choose('deny', instruction.value.trim())));
 		card.appendChild(actions);
 

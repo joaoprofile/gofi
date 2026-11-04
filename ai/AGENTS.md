@@ -156,7 +156,11 @@ template do pack), aprovada pela pessoa (`gofi change approve`), implementada e
 aplicada às specs vivas no arquivamento (`gofi change archive`). Contexto novo é
 a mudança que só ADICIONA. Leia um requisito com `gofi show
 specs/{contexto}/spec.md#REQ-NN`; valide qualquer documento do contrato com
-`gofi spec check`. Aprovar nunca é do agente.
+`gofi spec check`. **Aprovar é da pessoa:** quando ela disser na conversa que
+aprova uma mudança ou uma spec, use a ferramenta `approve` do gofi (`ref`: o id da
+mudança, ou o contexto da spec viva) — o host pede a confirmação dela a cada chamada,
+e o selo vale como a aprovação dela. Nunca aprove por iniciativa própria nem para
+destravar o seu trabalho.
 
 Apresentação, infraestrutura e doc de contrato também são papéis do loop:
 `gofi-ui` entra quando a mudança é de `web` ou `mobile`, `gofi-ops` quando é de

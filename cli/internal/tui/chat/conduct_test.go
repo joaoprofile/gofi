@@ -11,6 +11,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/joaoprofile/gofi/cli/internal/approval"
+
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
@@ -425,5 +427,22 @@ func TestADeliveryIsStoppedAndItsGateAnsweredFromTheChat(t *testing.T) {
 	m.stopDelivery()
 	if stops != 1 || m.notice == "" {
 		t.Errorf("stops %d, notice %q", stops, m.notice)
+	}
+}
+
+// Approving the contract is asked every time: the chat offers no "always"
+// for it, and a 2 approves nothing.
+func TestApprovingTheContractIsNeverAlways(t *testing.T) {
+	m, _, _ := planModel(t, nil, nil)
+	req := &approval.Request{Tool: approval.ApproveTool, Input: json.RawMessage(`{"ref":"adicionar-filtro"}`)}
+	m.asking = []*approval.Request{req}
+	view := m.approvalView(req)
+	if strings.Contains(view, "2.") || !strings.Contains(view, "adicionar-filtro") {
+		t.Errorf("view:\n%s", view)
+	}
+	next, _ := m.onApprovalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m = next.(model)
+	if len(m.asking) != 1 || m.always[approval.ApproveTool] {
+		t.Errorf("a 2 settled the approval: asking %d, always %v", len(m.asking), m.always)
 	}
 }

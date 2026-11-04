@@ -33,7 +33,11 @@ import (
 // Matcher selects the tools that ask first: the ones that can change
 // something. Reads are never worth a prompt, and asking about them would
 // train the user to approve without reading.
-const Matcher = "Edit|MultiEdit|Write|NotebookEdit|Bash"
+const Matcher = "Edit|MultiEdit|Write|NotebookEdit|Bash|" + ApproveTool
+
+// ApproveTool is gofi's approval of the contract: the person confirms every
+// call, and "allow always" never covers it.
+const ApproveTool = "mcp__gofi__approve"
 
 // Timeout is how long a request waits for the user before it is denied.
 const Timeout = 5 * time.Minute

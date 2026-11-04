@@ -20,9 +20,10 @@ pedido → /gofi-spec escreve a mudança → gofi review (check + revisão)
 
 Próprias do `/gofi-run`:
 
-1. **Você nunca aprova pela pessoa.** `gofi change approve` é dela: mostre o
-   que o `gofi spec check` diz e pergunte. Sem selo, o loop não roda — e é
-   assim que deve ser.
+1. **Você nunca aprova pela pessoa.** Mostre o que o `gofi spec check` e a
+   revisão dizem e pergunte. Quando ela disser que aprova, use a ferramenta
+   `approve` do gofi com o id da mudança — o host pede a confirmação dela; sem
+   o "aprovo" dela, nunca. Sem selo, o loop não roda — e é assim que deve ser.
 2. **Você não faz o trabalho do loop.** Não edite código, testes, spec viva nem
    veredicto. Se algo precisa mudar no contrato, isso é uma mudança nova ou uma
    emenda que a pessoa aprova.

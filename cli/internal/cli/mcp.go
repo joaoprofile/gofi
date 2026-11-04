@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"github.com/joaoprofile/gofi/cli/internal/docs"
 	"github.com/joaoprofile/gofi/cli/internal/graph/workspace"
 	"github.com/joaoprofile/gofi/cli/internal/host"
@@ -133,6 +134,11 @@ func newMCPServer(root, language string) *mcp.Server {
 		Description: `Record a context's verdict: json is the verdict (` + verdict.Schema + `: result aprovado or reprovado, findings with severity, owner, rule and message); run, iter and lens are the ones the turn names. Checked before it is written; status and ressalvas go into the context's memory. What gofi verdict write does.`,
 	}, g.verdictWrite)
 	mcp.AddTool(s, &mcp.Tool{
+		Name: "approve", Title: "Approve a change or a living spec, as the person said",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		Description: `Approve what the person approved in this conversation: ref is a change id (its proposal, deltas and design) or a context (its living spec). Checked first; sealed only when nothing blocks — what gofi change approve and gofi spec approve do. Call it only after the person said, in this conversation, that they approve that change or spec — never on your own, never to unblock your work. The host asks the person to confirm every call; it is never allowed ahead of time.`,
+	}, g.approve)
+	mcp.AddTool(s, &mcp.Tool{
 		Name: "memory_write", Title: "Write a context's memory",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 		Description: `Write a context's memory (.claude/memory/contexts/<name>.md), or name "project" for project.md: content is the whole file, frontmatter first. Checked before it is written. What gofi memory write does.`,
@@ -152,6 +158,10 @@ type verdictArgs struct {
 	Run     string `json:"run,omitempty" jsonschema:"the run the turn names"`
 	Iter    int    `json:"iter,omitempty" jsonschema:"the iteration the turn names"`
 	Lens    string `json:"lens,omitempty" jsonschema:"the lens the turn names, when the audit runs in lenses"`
+}
+
+type approveArgs struct {
+	Ref string `json:"ref" jsonschema:"the change id, or the context whose living spec the person approved"`
 }
 
 type memoryArgs struct {
@@ -463,4 +473,39 @@ func clipTail(s string, max int) string {
 		return s
 	}
 	return "…\n" + s[len(s)-max:]
+}
+
+// approve seals what the person approved in the conversation: a change by
+// its id, or a context's living spec. The host's confirmation of the call is
+// the person's act; the tool is never granted to a role of the loop.
+func (g *gofiMCP) approve(_ context.Context, _ *mcp.CallToolRequest, a approveArgs) (*mcp.CallToolResult, any, error) {
+	ref := strings.TrimSpace(a.Ref)
+	if ref == "" {
+		return nil, nil, fmt.Errorf("ref: the change id or the context the person approved")
+	}
+	all, err := contract.Docs(g.root)
+	if err != nil {
+		return nil, nil, err
+	}
+	var docs []contract.Doc
+	for _, d := range all {
+		if d.Change == ref {
+			docs = append(docs, d)
+		}
+	}
+	if len(docs) == 0 {
+		for _, d := range all {
+			if d.Kind == contract.KindSpec && d.Change == "" && d.Context == ref {
+				docs = append(docs, d)
+			}
+		}
+	}
+	if len(docs) == 0 {
+		return nil, nil, fmt.Errorf("%s is no open change nor a context with a living spec — gofi change list", ref)
+	}
+	var b strings.Builder
+	if err := approveDocsTo(&b, g.root, all, docs); err != nil {
+		return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: strings.TrimSpace(b.String() + "\n" + err.Error())}}}, nil, nil
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.TrimSpace(b.String())}}}, nil, nil
 }
