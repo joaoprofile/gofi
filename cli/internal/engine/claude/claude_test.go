@@ -334,3 +334,14 @@ func TestAnIsolatedSessionRunsOnTheProjectAlone(t *testing.T) {
 		t.Errorf("chat args: %s", chat)
 	}
 }
+
+// A session given a budget passes it to the engine, which stops itself there;
+// one without a budget passes nothing.
+func TestABudgetIsPassedAsMaxBudgetUSD(t *testing.T) {
+	if a := strings.Join((&Session{opts: Options{MaxBudgetUSD: 1.5}}).args(), " "); !strings.Contains(a, "--max-budget-usd 1.50") {
+		t.Errorf("args = %s", a)
+	}
+	if a := strings.Join((&Session{}).args(), " "); strings.Contains(a, "--max-budget-usd") {
+		t.Errorf("args without a budget = %s", a)
+	}
+}

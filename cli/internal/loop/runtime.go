@@ -68,6 +68,9 @@ type Turn struct {
 	// ElicitFile is where the agent writes a decision it cannot find, relative
 	// to the project root.
 	ElicitFile string
+	// BudgetUSD is what the turn may spend, 0 for no limit: what is left of
+	// the run's budget, or the policy's per-turn limit when lower.
+	BudgetUSD float64
 }
 
 // TurnResult is what the turn cost.
@@ -539,7 +542,10 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	if guard != nil {
 		before = snapshot(r.work(), guard)
 	}
-	res, err := r.Agent.Run(ctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools})
+	tctx, why, cancel := r.Policy.turnContext(ctx, rl.Name)
+	res, err := r.Agent.Run(tctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, 1)})
+	cancel()
+	err = why(err)
 	s.CostUSD += res.CostUSD
 	a.Ended, a.CostUSD, a.Seconds = r.now(), res.CostUSD, res.Seconds
 	if err != nil {

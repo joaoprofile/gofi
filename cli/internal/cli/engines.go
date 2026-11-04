@@ -39,7 +39,7 @@ func agentEngine(cfg *config.GofiConfig, root, mode string, tools []string) (fun
 	if err != nil {
 		return nil, err
 	}
-	return func(model string) engine.Session { return open(model, nil) }, nil
+	return func(model string) engine.Session { return open(model, nil, 0) }, nil
 }
 
 // agentSessions is agentEngine with the tools each session may use: a role's
@@ -50,7 +50,7 @@ func agentEngine(cfg *config.GofiConfig, root, mode string, tools []string) (fun
 //
 // A turn of the loop is isolated: it runs on the project alone, with gofi's
 // MCP server only, and its system prompt says no one reads its text.
-func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, loopTurn bool) (func(model string, grant []string) engine.Session, error) {
+func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, loopTurn bool) (func(model string, grant []string, budget float64) engine.Session, error) {
 	h, ok := host.Get(cfg.AI.Host)
 	if !ok {
 		return nil, fmt.Errorf("ai.host %q — %s", cfg.AI.Host, strings.Join(host.IDs(), ", "))
@@ -61,7 +61,7 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, lo
 		if err != nil {
 			return nil, err
 		}
-		return func(model string, grant []string) engine.Session {
+		return func(model string, grant []string, _ float64) engine.Session {
 			sandbox, config := codexTools(grant)
 			return skillTurns{codex.New(codex.Options{Executable: exe, Dir: root, Model: model, Sandbox: sandbox, Config: config})}
 		}, nil
@@ -70,14 +70,14 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, lo
 		if err != nil {
 			return nil, err
 		}
-		return func(model string, grant []string) engine.Session {
+		return func(model string, grant []string, _ float64) engine.Session {
 			return skillTurns{copilot.New(copilot.Options{Executable: exe, Dir: root, Model: model, Deny: copilotDenied(grant)})}
 		}, nil
 	}
 	if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
 		return nil, err
 	}
-	return func(model string, grant []string) engine.Session {
+	return func(model string, grant []string, budget float64) engine.Session {
 		allowed, denied := tools, []string(nil)
 		if grant != nil {
 			allowed, denied = claudeTools(grant)
@@ -86,7 +86,7 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, lo
 		// the engine refuses before the integrity stage would (0002, D12).
 		denied = append(denied, protectedWrites...)
 		o := claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, Model: model,
-			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied}
+			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied, MaxBudgetUSD: budget}
 		if loopTurn {
 			o.SystemPrompt, o.Isolated, o.MCPConfig = loopSystemPrompt, true, host.MCPConfig()
 			if common, settings := loopMemory(root); common != "" {

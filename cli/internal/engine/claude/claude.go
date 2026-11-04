@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -65,6 +66,9 @@ type Options struct {
 	// turns side by side share a cached prefix.
 	Isolated  bool
 	MCPConfig string // JSON or a file, passed as --mcp-config
+	// MaxBudgetUSD is what the session may spend, passed as --max-budget-usd
+	// when positive: the engine stops itself there.
+	MaxBudgetUSD float64
 }
 
 // Session is a conversation held by one long-lived claude process, restarted
@@ -223,6 +227,9 @@ func (s *Session) args() []string {
 	}
 	if m := strings.TrimSpace(s.opts.Model); m != "" {
 		a = append(a, "--model", m)
+	}
+	if s.opts.MaxBudgetUSD > 0 {
+		a = append(a, "--max-budget-usd", strconv.FormatFloat(s.opts.MaxBudgetUSD, 'f', 2, 64))
 	}
 	// After a cancel the process that held the thread is gone; resuming by id
 	// is how the next turn continues it rather than starting another one.

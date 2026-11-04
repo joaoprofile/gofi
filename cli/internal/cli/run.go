@@ -98,6 +98,9 @@ a stage with no command — security and coverage, unless named — is recorded
 as not checked, never as passed.
 
 The policy is loop in .gofi.yaml: budget_usd stops the agents once spent,
+each turn given only what is left (or turn_budget_usd when lower) for the
+engine to stop itself there; turn_timeout (45m when empty) cuts a turn that
+does not end, the run stopped and resumable;
 max_iterations bounds the ways back to work, accept is clean or ressalvas,
 and escalate (on_no_progress, on_first_reject, never) says when a role that
 does not progress runs one tier up. When the run cannot go on — the contract
@@ -141,7 +144,9 @@ gofi run --all --resume b-20261104-101500`,
 // sessions and the person at the gate.
 var runPorts = struct {
 	open func(root string) engine.Session
-	gate loop.Gate
+	// budget, in tests, sees what each turn may spend.
+	budget func(usd float64)
+	gate   loop.Gate
 	// regenerate writes a worktree's derived files; in a test, the running
 	// binary is the test binary and must not be run as gofi.
 	regenerate func(ctx context.Context, dir string) error
@@ -444,6 +449,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 		return "", err
 	}
 	policy := loopPolicy(cfg)
+	if policy.TurnTimeout, err = turnTimeout(cfg); err != nil {
+		return "", err
+	}
 	if err := policy.Check(); err != nil {
 		return "", err
 	}
@@ -1169,9 +1177,14 @@ func sensorCommands(cfg *config.GofiConfig) (map[string]pack.Command, error) {
 // turnSessions opens the session of a role's turn, in work: on the
 // project's host (ai.host), on its tier's model — an internal role has no
 // skill frontmatter to name one —, with the tools its contract grants.
-func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, tier host.Tier, grant []string) engine.Session, error) {
+func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, tier host.Tier, grant []string, budget float64) engine.Session, error) {
 	if runPorts.open != nil {
-		return func(dir string, _ host.Tier, _ []string) engine.Session { return runPorts.open(dir) }, nil
+		return func(dir string, _ host.Tier, _ []string, budget float64) engine.Session {
+			if runPorts.budget != nil {
+				runPorts.budget(budget)
+			}
+			return runPorts.open(dir)
+		}, nil
 	}
 	if mode == "" {
 		mode = "acceptEdits"
@@ -1181,12 +1194,12 @@ func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, t
 		return nil, err
 	}
 	h, _ := host.Get(cfg.AI.Host)
-	return func(_ string, t host.Tier, grant []string) engine.Session {
+	return func(_ string, t host.Tier, grant []string, budget float64) engine.Session {
 		model := ""
 		if h.SkillModel && t != "" {
 			model = h.Model(t, cfg.AI.Tiers)
 		}
-		return session(model, grant)
+		return session(model, grant, budget)
 	}, nil
 }
 
@@ -1195,7 +1208,7 @@ func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, t
 type engineAgent struct {
 	root, run string
 	work      string // where the session runs: the run's worktree, or root
-	open      func(dir string, tier host.Tier, grant []string) engine.Session
+	open      func(dir string, tier host.Tier, grant []string, budget float64) engine.Session
 	out       io.Writer
 	quiet     bool // events mode: the transcript holds the tool calls
 	// transcript, when set, is where the turn is recorded instead of the
@@ -1204,7 +1217,7 @@ type engineAgent struct {
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
-	s := a.open(a.work, t.Tier, t.Tools)
+	s := a.open(a.work, t.Tier, t.Tools, t.BudgetUSD)
 	defer s.Close()
 	id := t.Agent
 	if id == "" {
@@ -1288,7 +1301,24 @@ func loopPolicy(cfg *config.GofiConfig) loop.Policy {
 		return loop.Policy{}
 	}
 	l := cfg.Loop
-	return loop.Policy{MaxIterations: l.MaxIterations, BudgetUSD: l.BudgetUSD, Accept: l.Accept, Escalate: l.Escalate, AuditParallel: l.AuditParallel}
+	return loop.Policy{MaxIterations: l.MaxIterations, BudgetUSD: l.BudgetUSD, Accept: l.Accept, Escalate: l.Escalate, AuditParallel: l.AuditParallel, TurnBudgetUSD: l.TurnBudgetUSD}
+}
+
+// defaultTurnTimeout bounds a turn when loop.turn_timeout does not say: above
+// the 20 minutes a sensor stage may take, so a turn that verifies its work is
+// not cut by the build it waits for.
+const defaultTurnTimeout = 45 * time.Minute
+
+// turnTimeout is loop.turn_timeout, else the default; 0 does not bound.
+func turnTimeout(cfg *config.GofiConfig) (time.Duration, error) {
+	if cfg.Loop == nil || cfg.Loop.TurnTimeout == "" {
+		return defaultTurnTimeout, nil
+	}
+	d, err := time.ParseDuration(cfg.Loop.TurnTimeout)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("loop.turn_timeout %q: a Go duration (45m, 1h), or 0 for no limit", cfg.Loop.TurnTimeout)
+	}
+	return d, nil
 }
 
 // defaultGateTimeout is how long a run waits at its gate when neither the
