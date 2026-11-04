@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -188,7 +190,7 @@ func (c *AuditCase) Judge(v *verdict.Verdict, src string) Score {
 
 func (d Defect) finds(f verdict.Finding, src string) bool {
 	text := fold(f.Rule + " " + f.Message + " " + f.Evidence)
-	said := len(d.Keywords) == 0 || slices.ContainsFunc(d.Keywords, func(k string) bool { return strings.Contains(text, fold(k)) })
+	said := len(d.Keywords) == 0 || slices.ContainsFunc(d.Keywords, func(k string) bool { return saysWord(text, fold(k)) })
 	if !said {
 		return false
 	}
@@ -204,8 +206,9 @@ func (d Defect) finds(f verdict.Finding, src string) bool {
 	}
 	// In its file: a finding with no line, on its lines, naming one of them
 	// — placed on the function, it says "linha 27" —, or naming the
-	// requirement it breaks.
-	if strings.TrimPrefix(f.File, "./") == file && (f.Line == 0 || d.near(f.Line) || d.namedLine(f.Message+" "+f.Evidence) || d.Rule != "" && namesRequirement(f.Rule, d.Rule)) {
+	// requirement it breaks or a scenario of it: there, in the defect's own
+	// file, the scenario is the requirement's, not a missing test.
+	if strings.TrimPrefix(f.File, "./") == file && (f.Line == 0 || d.near(f.Line) || d.namedLine(f.Message+" "+f.Evidence) || d.Rule != "" && namesRequirementOrScenario(f.Rule, d.Rule)) {
 		return true
 	}
 	// One kept on another file finds it by the place it names: "the handler
@@ -224,6 +227,31 @@ func (d Defect) finds(f verdict.Finding, src string) bool {
 var unaccent = strings.NewReplacer("á", "a", "à", "a", "â", "a", "ã", "a", "é", "e", "ê", "e", "í", "i", "ó", "o", "ô", "o", "õ", "o", "ú", "u", "ü", "u", "ç", "c")
 
 func fold(s string) string { return unaccent.Replace(strings.ToLower(s)) }
+
+// saysWord reports whether text holds the keyword at the start of a word —
+// "repositor" says "repositório" —, and, for a keyword that ends in a
+// digit, as the whole number: "500" is not said by "5000".
+func saysWord(text, k string) bool {
+	if k == "" {
+		return false
+	}
+	alnum := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+	last, _ := utf8.DecodeLastRuneInString(k)
+	for i := 0; ; {
+		j := strings.Index(text[i:], k)
+		if j < 0 {
+			return false
+		}
+		at := i + j
+		before, _ := utf8.DecodeLastRuneInString(text[:at])
+		after, _ := utf8.DecodeRuneInString(text[at+len(k):])
+		first, _ := utf8.DecodeRuneInString(k)
+		if (at == 0 || !alnum(before) || !alnum(first)) && (!unicode.IsDigit(last) || at+len(k) == len(text) || !unicode.IsDigit(after)) {
+			return true
+		}
+		i = at + 1
+	}
+}
 
 // rePlace is a place a finding names in its text: file.ext:line.
 var rePlace = regexp.MustCompile(`([\w./-]+\.\w+):(\d+)`)
@@ -249,6 +277,12 @@ func (d Defect) namedLine(text string) bool {
 		}
 	}
 	return false
+}
+
+// namesRequirementOrScenario reports whether a rule names the requirement
+// or one of its scenarios: REQ-01 or REQ-01.2, not REQ-012.
+func namesRequirementOrScenario(rule, req string) bool {
+	return namesRequirement(rule, req) || regexp.MustCompile(`(?i)`+regexp.QuoteMeta(req)+`\.\d+\b`).MatchString(rule)
 }
 
 // namesRequirement reports whether a finding's rule names the requirement

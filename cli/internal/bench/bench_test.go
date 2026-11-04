@@ -232,3 +232,38 @@ func TestAFindingOnTheDefectsFunctionFindsItByTheLineItNames(t *testing.T) {
 		}
 	}
 }
+
+// In the defect's own file, a finding naming a scenario of the defect's
+// requirement finds it; with no file, the scenario is a missing test.
+func TestInItsFileAScenarioIsOfTheRequirement(t *testing.T) {
+	d := Defect{ID: "D3", File: "{src}/s.go", Lines: [2]int{39, 39}, Rule: "REQ-01", Keywords: []string{"_ ="}}
+	in := verdict.Finding{File: "b/s.go", Line: 30, Rule: "ctx/REQ-01.2", Message: "descarta o erro com `_ =`"}
+	if !d.finds(in, "b") {
+		t.Error("in its file, REQ-01.2 is of REQ-01")
+	}
+	in.File = ""
+	if d.finds(in, "b") {
+		t.Error("with no file, REQ-01.2 is a scenario's missing test")
+	}
+	if namesRequirementOrScenario("ctx/REQ-012", "REQ-01") {
+		t.Error("REQ-012 is another requirement")
+	}
+}
+
+// A keyword is said at the start of a word, and a number as a whole one.
+func TestAKeywordIsSaidAsAWord(t *testing.T) {
+	for _, c := range []struct {
+		text, k string
+		want    bool
+	}{
+		{"o handler alcança o repositório", "repositor", true},
+		{"um prerepositorio", "repositor", false},
+		{"responde 500 em vez de 404", "500", true},
+		{"o total 5000", "500", false},
+		{"descarta com `_ =`", "_ =", true},
+	} {
+		if saysWord(fold(c.text), fold(c.k)) != c.want {
+			t.Errorf("%q says %q: %v", c.text, c.k, !c.want)
+		}
+	}
+}
