@@ -22,7 +22,8 @@ Um contexto novo, o pacote `domain/benchestoque/service`, com a função `Saldo`
 
 | Erro | Situação | Requisito |
 |---|---|---|
-| erro de validação registrado em `errors.go` do contexto | entrada inválida | REQ-02 |
+| `ErrBenchestoqueInsuficiente`, `errs.RegisterConflict` (409), em `errors.go` | reserva maior que o estoque | REQ-01 |
+| `ErrBenchestoqueEntradaInvalida`, `errs.RegisterValidation` (400), em `errors.go` | estoque ou reserva negativos | REQ-02 |
 
 ## Mapa de requisitos
 
