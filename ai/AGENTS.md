@@ -1,167 +1,78 @@
 # AGENTS.md — projeto gofi
 
-Instruções do projeto para qualquer agente de código — Claude Code, Codex,
-Copilot, Cursor, Windsurf e os demais que leem `AGENTS.md` —, carregadas antes
-da primeira mensagem. Documenta como o agente lê o conteúdo do projeto e quais
-skills estão disponíveis. Regras de código, padrões de SDK e armadilhas
-conhecidas vivem em arquivos cross-AI sob `.claude/sdk/<lang>/knowledge/` e
-`.claude/expertise/<pack>/` — o agente consome via as skills. O aprendizado do
-time fica em `.claude/knowledge/` e vence os dois.
+Instruções do projeto para qualquer agente de código (Claude Code, Codex,
+Copilot, Cursor…), carregadas antes da primeira mensagem: como ler o projeto,
+quais skills existem e o que só a pessoa decide. O detalhe de cada regra vive
+nos protocolos de `.claude/expertise/harness-protocols/`, lidos quando a
+tarefa pede.
 
 > **Um arquivo só.** Não crie `CLAUDE.md`, `.claude/CLAUDE.md` nem
-> `CLAUDE.local.md` no projeto: o Claude Code deixa de ler este arquivo quando
-> encontra qualquer um deles. Instrução pessoal vai em `~/.claude/CLAUDE.md`,
-> que não interfere.
-
-> **Modelo de duas camadas** (v2.5+): `.claude/` é a camada de decisão da IA
-> — markdown destilado (agents, knowledge, referência de API, boilerplates).
-> `.gofi/gofi-sdk-<lang>/` é a camada de execução do toolchain (código real
-> do SDK, importável pelo módulo do projeto via `go.work`); os agents
-> normalmente NÃO leem daí. Se um agent precisou abrir código real para
-> decidir, é gap de curadoria — registrar em `.claude/knowledge/` e oferecer a
-> correção ao upstream (protocolo de aprendizado).
+> `CLAUDE.local.md` no projeto. Instrução pessoal vai em `~/.claude/CLAUDE.md`.
 
 ## Doutrina das skills (o que entra e o que NÃO entra)
 
-Eixo ortogonal ao modelo de duas camadas acima. Esta é a regra que governa o
-conteúdo de cada skill — enunciada **uma vez aqui**; as "Leis" no topo de cada
-`.claude/skills/<name>/SKILL.md` apenas replicam para auto-contenção.
-
-> **Skill carrega só especialidade transferível.** Cada skill é um especialista
-> **genérico e portável**: leva metodologia e técnica que serviriam, sem mudar
-> uma palavra, a outro projeto com o mesmo SDK. **Nada** de produto/empresa/
-> instituição entra na skill (nomes de entidade, roles, module paths, endpoints,
-> valores de negócio). Trocar de projeto **não** muda a skill.
->
-> **Conhecimento específico mora FORA da skill** — nas linhas marcadas
-> *Específico* no mapa abaixo: `.gofi.yaml`, `specs/`, `.claude/memory/`,
-> `.claude/institutional/`. Padrão técnico genérico vive em `.claude/expertise/`
-> e `.claude/sdk/<lang>/` (e o aprendizado do time, em `.claude/knowledge/`), sempre **domínio-neutro** (placeholders `{contexto}`,
-> `<module>`, `RoleA`, `entity`).
->
-> **Teste de pertencimento:** *serviria, sem mudar uma palavra, a outro projeto
-> com o mesmo SDK? → skill/knowledge. Só vale aqui? → spec/memória/institucional.*
+Uma skill carrega só especialidade **transferível**: método e técnica que
+serviriam, sem mudar uma palavra, a outro projeto com o mesmo SDK. Nada de
+produto, empresa ou instituição (entidades, roles, module paths, endpoints,
+valores de negócio). O específico mora em `.gofi.yaml`, `specs/`,
+`.claude/memory/` e `.claude/institutional/`; o aprendizado do time, em
+`.claude/knowledge/`. **Teste:** serviria a outro projeto? → skill/knowledge.
+Só vale aqui? → spec/memória/institucional.
 
 ## Leis comuns a todas as skills
 
-Valem para toda skill, antes de qualquer passo; cada `SKILL.md` só acrescenta
-as leis que são dela. Numeradas para serem citadas (`Lei comum 3`).
+Valem para toda skill; cada `SKILL.md` só acrescenta as dela (`Lei comum 3`).
 
-1. **Portável; o específico mora fora.** A skill carrega só método e técnica
-   transferível (ver [doutrina](#doutrina-das-skills-o-que-entra-e-o-que-não-entra)).
-   Fato do projeto vai para spec, memória ou institucional — **nunca** para a
-   skill. Institucional é RAG: `INDEX.md` e só os chunks relevantes.
-2. **O índice é o primeiro movimento (LEI absoluta).** Achar é `gofi find`
-   (`--in code` para código); entender quem chama é `gofi show`; como A chega
-   em B é `gofi path`. O gate não é *"isto é símbolo?"* — essa se responde de
-   cabeça e é por ela que a varredura volta —, é *"eu já consultei o índice?"*:
-   uma consulta antes da primeira busca literal, sempre. Alvo que não é nó
-   (`const`/`var`, diretiva em comentário, string) se acha pelo `gofi show` do
-   símbolo concreto que o referencia (o DTO, o service, o tipo). Consulta
-   vazia **não** autoriza varrer: reformule (dois termos, o vizinho concreto);
-   ausência pede `gofi index code --deep` (texto não resolve dispatch por
-   interface); código que você acabou de escrever pede `gofi index code` antes. Só então a busca
-   literal `gofi find --text`/`--regex`, **declarada** ("caí na busca literal
-   porque X"). `grep`/`Glob` puro só sem gofi disponível. Protocolo:
-   `.claude/expertise/harness-protocols/graph-retrieval.md`.
-3. **Fechar é reconstruir o índice (LEI absoluta).** Toda entrega termina na
-   ordem: memória do contexto (gravada com `gofi memory write <contexto>`, o
-   arquivo inteiro pela entrada padrão — `Edit`/`Write` em `.claude/` pedem
-   aprovação que numa fase conduzida ninguém dá) → `gofi index code` (se mexeu em código) →
-   `gofi index docs` (se mexeu em spec/PRD/memória) → `gofi index check`
-   (faceta fora do léxico reprova — barata de corrigir agora, cara três fases
-   depois). O índice de documentos se refaz sozinho na consulta, mas os
-   `INDEX.md` versionados só no `gofi index docs`; o hook de pre-commit só age
-   no commit, e a próxima fase roda antes dele. Índice velho é pior que
-   nenhum: aponta com confiança para o lugar errado.
-4. **Versão de documento conta estado de produção, não edição (LEI).** PRD e
-   spec nascem e ficam em `1.0` até a solução estar em produção; refinar,
-   reescrever, trocar decisão, acrescentar ADR ou corrigir erro não bumpa, nem
-   entra no Histórico. **Teste:** *esta edição vai fazer alguém mudar código
-   que já roda em produção?* Não → não bumpa. `atualizado` muda sempre;
-   `status` diz a fase; reformulação profunda vira documento novo (sufixo
-   `-v2`), em `1.0`. **E sobe uma vez, no fim do fluxo:** mesmo quando a
-   mudança passa no teste, ninguém bumpa no meio — nem quem edita a spec, nem
-   quem implementa. A versão (e a linha do Histórico) sobe quando o fluxo
-   inteiro fecha: documento e código alterados e a auditoria aprovada. Várias
-   edições do mesmo fluxo são uma versão só. Política: `.claude/expertise/harness-protocols/document-versioning.md`.
-5. **Bug fix ou melhoria de comportamento → teste de regressão na mesma
-   entrega (LEI absoluta, para quem escreve código).** O teste reproduz o
-   cenário, falha sem o fix e passa com ele, e nomeia o defeito para ele
-   nunca voltar. Sem ele a entrega não fecha — não se delega ao QA.
-6. **Só se implementa o que está documentado (LEI).** Código, tela ou
-   infraestrutura nascem da spec — ou, antes dela, do PRD. O que não está lá
-   não se implementa por conta própria, por mais óbvio que pareça: vira
-   pergunta à pessoa (ou, numa fase conduzida, pergunta gravada e fase
-   encerrada), e a resposta entra na spec antes do código.
-7. **Documento e memória só recebem o combinado (LEI).** PRD, spec e memória
-   de contexto registram o que foi decidido e confirmado — nada de rascunho de
-   raciocínio, suposição não confirmada, alternativa descartada, TODO, "a
-   definir", trecho de conversa, marca de fase (✅, data, nome de agente) ou
-   proveniência. Dúvida não entra no documento: vira pergunta. O que a pessoa
-   não confirmou fica fora.
+1. **Portável; o específico mora fora.** Fato do projeto vai para spec,
+   memória ou institucional — nunca para a skill.
+2. **Ache pelo índice, leia o que já tem caminho.** O que você não sabe onde
+   está se acha com `gofi find` (`--in code` para código), `gofi show` (quem
+   chama, o que um doc contém) e `gofi path` (como A chega em B) antes de
+   qualquer varredura. Consulta vazia: reformule com o termo técnico; texto
+   exato é `gofi find --text`/`--regex`. O caminho que a mudança, o design ou
+   um achado já dão, leia direto. `--deep` só para afirmar ausência de uso
+   ("ninguém mais chama"). Protocolo: `.claude/expertise/harness-protocols/graph-retrieval.md`.
+3. **Feche o que você mexeu.** Memória do contexto com
+   `gofi memory write <contexto>` (o arquivo inteiro pela entrada padrão);
+   mexeu em código, `gofi index code`; em spec ou PRD, `gofi index check`.
+   Num turno do loop, o loop reindexa depois do turno.
+4. **Versão conta produção, não edição.** PRD e spec ficam em `1.0` até a
+   solução estar em produção; editar não bumpa nem entra no Histórico. A versão
+   sobe uma vez, quando o fluxo fecha (mudança arquivada) — e é o CLI que a
+   sobe. Política: `.claude/expertise/harness-protocols/document-versioning.md`.
+5. **Bug fix ou mudança de comportamento leva teste de regressão** na mesma
+   entrega: reproduz o cenário, falha sem o fix, passa com ele.
+6. **Só se implementa o que está documentado.** O que a spec (ou o PRD) não
+   diz vira pergunta à pessoa — ou, num turno do loop, pergunta gravada no
+   arquivo de decisão e turno encerrado.
+7. **Documento e memória só recebem o combinado.** Nada de rascunho,
+   suposição, alternativa descartada, TODO, "a definir", marca de fase (✅,
+   data, nome de agente) ou proveniência. Dúvida vira pergunta.
 
 ## Skills disponíveis
 
-Os comandos de **entrada** — o que a pessoa chama:
-
 | Comando | Função |
 |---------|--------|
-| `/gofi-pd` | Product Discovery — gera PRD a partir de problema bruto |
-| `/gofi-spec` | Specification Architect — escreve o contrato: mudanças (proposta, deltas, design) e a baseline da spec viva |
-| `/gofi-run` | Delivery Runner — leva uma mudança aprovada ao loop (`gofi run`), acompanha e repassa as perguntas do portão |
-| `/gofi-status` | Índice de Contextos — monta sob demanda o panorama (Implementados/Spec/PRD) lendo o frontmatter dos `contexts/*.md` |
-| `/gofi-migrate` | Corpus Migration — traz specs, PRDs e memória de um formato antigo para o atual (facetas, índice em dois níveis, grafo); orquestra `gofi index migrate` |
+| `/gofi-pd` | Discovery — PRD a partir do problema |
+| `/gofi-spec` | Contrato — escreve a mudança (proposta, deltas, design) |
+| `/gofi-run` | Entrega — leva uma mudança aprovada ao loop e repassa as decisões à pessoa |
+| `/gofi-status` | Onde cada contexto está e o próximo passo |
+| `/gofi-migrate` | Traz specs, PRDs e memória do formato antigo para o atual |
 
-Os **papéis internos** — planejar, implementar por camada, testar, reparar, triar, auditar, documentar — não são slash
-commands: ficam em `.claude/gofi/roles/` e o loop os despacha pelos fatos da
-mudança (`gofi run <mudança> --explain` mostra quem e por quê):
+Os **papéis internos** (planejar, implementar por camada, testar, reparar,
+triar, auditar, documentar) ficam em `.claude/gofi/roles/` e o loop os
+despacha pelos fatos da mudança — `gofi run <mudança> --explain` diz quem e
+por quê.
 
-| Papel | Estágio | Faz |
-|-------|---------|-----|
-| `gofi-spec-review` | contract | revisa a mudança antes da aprovação: ambiguidade, contradição, cenário não testável, lacuna, escopo (`gofi review`) |
-| `gofi-plan` | plan | decompõe a mudança de backend em tarefas por camada (`data`, `domain`, `integration`, `api`) |
-| `gofi-eng-data` | implement | camada `data`: modelo, migrations em par, repositório |
-| `gofi-eng` | implement | camada `domain`: erros, service, application, composition root — sem plano, todas as camadas |
-| `gofi-integrate` | implement | camada `integration`: adapters, SDKs externos, eventos, workers |
-| `gofi-eng-api` | implement | camada `api`: handler, middleware, autorização |
-| `gofi-test` | test | os testes, por cenário, a partir dos deltas — nunca quem escreveu o código |
-| `gofi-ui` | implement | implementa a camada de apresentação (web, mobile) |
-| `gofi-ops` | implement | IaC e pipelines (Terraform, OCI, CI/CD) |
-| `gofi-repair` | repair | corrige o que o build, a análise estática ou o grafo recusaram, só pelos achados — começa no tier light e sobe quando não progride |
-| `gofi-triage` | triage | quando o loop não pode seguir (achado do contrato, ou sem progresso no tier mais alto): classifica a causa-raiz e redige a proposta de emenda em `.gofi/proposals/` |
-| `gofi-deliver` | deliver | aceita a mudança, escreve a mensagem do commit dela (o relatório, `gofi report`, o gofi monta sozinho) |
-| `gofi-learn` | learn | numa execução aceita com retrabalho, propõe ao knowledge a lição que o teria evitado — a pessoa aceita (`gofi learn`) |
-| `gofi-doc` | deliver | doc de contrato para front e QA, quando a mudança tocou a camada `api` |
-| `gofi-qa` | audit | lente geral: checklist do SDK, camadas, knowledge — sozinho, audita tudo |
-| `gofi-qa-conformance` | audit | lente: cada requisito realizado como a mudança e o design dizem |
-| `gofi-qa-tests` | audit | lente: cada cenário provado por um teste que prova; regressão |
-| `gofi-qa-security` | audit | lente: autorização, injeção, segredos (camadas `api`/`integration`) |
-| `gofi-qa-data` | audit | lente: transação, migrations, índices, dinheiro (camada `data`) |
-| `gofi-qa-ui` | audit | lente: acessibilidade e design system (web, mobile) |
+Pipeline: `/gofi-pd → /gofi-spec → a pessoa aprova → /gofi-run`.
 
-As lentes rodam ao mesmo tempo, só lendo, e o gofi junta os veredictos por
-impressão digital — a maior severidade vence; dono divergente fica com o do
-contrato e vai à triagem.
-
-Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-run` — o loop implementa, verifica, audita, corrige e arquiva sozinho. Várias mudanças aprovadas: `gofi run --all [--parallel N]`, na ordem do `depende_de`, retomável com `gofi run --all --resume <lote>`.
-
-**O contrato (decisão 0003, formato 3).** `specs/{contexto}/spec.md` é a
-**verdade viva** de um contexto: só requisitos `### Requisito: REQ-NN` com
-DEVE / NÃO DEVE e cenários `#### Cenário: REQ-NN.n` com DADO / QUANDO /
-ENTÃO — neutra de linguagem. **Ela não se edita**: todo trabalho é uma
-**mudança** dentro do contexto que ela altera, em `specs/{contexto}/changes/{id}/` —
-a que toca vários contextos fica em `specs/changes/{id}/` — (proposta, um delta por contexto, design no
-template do pack), aprovada pela pessoa (`gofi change approve`), implementada e
-aplicada às specs vivas no arquivamento (`gofi change archive`). Contexto novo é
-a mudança que só ADICIONA. Leia um requisito com `gofi show
-specs/{contexto}/spec.md#REQ-NN`; valide qualquer documento do contrato com
-`gofi spec check`. **Aprovar é da pessoa:** quando ela disser na conversa que
-aprova uma mudança ou uma spec, use a ferramenta `approve` do gofi (`ref`: o id da
-mudança, ou o contexto da spec viva) — o host pede a confirmação dela a cada chamada,
-e o selo vale como a aprovação dela. `gofi change approve` e `gofi spec approve`
-são da pessoa, no terminal dela: rodados por um agente, recusam. Nunca aprove por iniciativa própria nem para
-destravar o seu trabalho.
+**O contrato.** `specs/{contexto}/spec.md` é a verdade viva de um contexto:
+requisitos `### Requisito: REQ-NN` (DEVE / NÃO DEVE) e cenários
+`#### Cenário: REQ-NN.n` (DADO / QUANDO / ENTÃO). Ela não se edita: todo
+trabalho é uma **mudança**, criada por `gofi change new <id> --context <ctx>`
+(nunca à mão), aprovada pela pessoa, implementada pelo loop e aplicada à spec
+viva no arquivamento. Contexto ainda no formato 2 (`sdd-*.md`) migra antes
+(`/gofi-migrate`). Valide com `gofi spec check`.
 
 **Decisões da pessoa** — as únicas cinco; nenhum agente as toma por ela:
 
@@ -173,146 +84,76 @@ destravar o seu trabalho.
 | Decidir a emenda | a execução terminou em `impasse` e a triagem escreveu `.gofi/proposals/` | edita a mudança e aprova de novo, ou escreve outra mudança | sim — a mudança só volta a rodar aprovada |
 | Aceitar a lição | uma execução aceita com retrabalho propôs uma lição | `gofi learn accept` / `gofi learn reject` | não |
 
-"Aprovado" é só o selo da pessoa num contrato. O veredicto do QA na memória do
-contexto é `auditado` ou `reprovado`.
-
-Apresentação, infraestrutura e doc de contrato também são papéis do loop:
-`gofi-ui` entra quando a mudança é de `web` ou `mobile`, `gofi-ops` quando é de
-`infra`, e `gofi-doc` quando o grafo diz que ela tocou a camada `api`.
+Aprovar: quando a pessoa disser na conversa que aprova, use a ferramenta
+`approve` do gofi (`ref`: o id da mudança, ou o contexto da spec). Rodados por
+um agente, `gofi change approve` e `gofi spec approve` recusam. Nunca aprove
+por iniciativa própria nem para destravar o seu trabalho. "Aprovado" é só esse
+selo; o veredicto do QA na memória é `auditado` ou `reprovado`.
 
 ## Entrada: planeje antes de começar
 
-Uma tarefa em texto livre — "altere o fluxo de pricing…", "crie um PRD de…" —
-passa primeiro pela entrada do gofi: a ferramenta MCP `intake` (ou
-`gofi intake "<pedido>"` no terminal). Ela diz, a partir do índice e dos
-contratos das skills, o que o pedido quer, o contexto e o que ele já tem, as
-fases na ordem — cada papel no seu nível, com o motivo —, as especialidades a
-ler, o que falta decidir e o pedido montado da primeira fase.
+Tarefa em texto livre passa primeiro pela ferramenta `intake` (ou
+`gofi intake "<pedido>"`): ela diz o contexto, as fases na ordem, o que ler e
+o que falta decidir.
 
-1. **Pergunta em aberto:** resolva pela conversa se ela já disser; se não,
-   pergunte à pessoa com as opções que a entrada deu, e chame de novo com
-   `answers`. Nunca escolha um contexto novo pela pessoa.
-2. **Siga as fases na ordem**, cada uma com o `SKILL.md` do papel
-   (`.claude/skills/<papel>/SKILL.md`), começando pelo pedido montado.
-3. **Pare para revisão** depois de um PRD ou de uma spec: o que vem depois
-   constrói em cima deles.
-4. **Passe direto** quando a pessoa invocar uma skill (`/gofi-spec …`): o pedido
-   já disse o papel.
+1. **Pergunta em aberto:** resolva pela conversa ou pergunte à pessoa com as
+   opções dadas. Nunca escolha um contexto novo pela pessoa.
+2. **Siga as fases na ordem**, cada uma com o `SKILL.md` do papel.
+3. **Pare para revisão** depois de um PRD ou de uma mudança.
+4. **Passe direto** quando a pessoa invocar uma skill (`/gofi-spec …`).
 
 ## Onde os agents leem o conteúdo
 
-Coluna **Natureza** = lado da [doutrina](#doutrina-das-skills-o-que-entra-e-o-que-não-entra):
-*Portável* (genérico, viaja entre projetos do mesmo SDK) vs *Específico* (só
-vale neste projeto — nunca entra em skill).
-
-| Recurso | Caminho no projeto | Natureza |
-|---------|--------------------|----------|
-| Configuração do projeto | `.gofi.yaml` (raiz) | Específico |
-| Skills (slash) | `.claude/skills/<name>/SKILL.md` — pasta por skill, com `name` e `description` no frontmatter; é o único layout que o Claude Code descobre | Portável |
-| Referência de API do SDK por linguagem | `.claude/sdk/<lang>/api/` — **gerada** do código do SDK na versão fixada (`gofi update sdk`); um arquivo por pacote, lista em `api/INDEX.md`. Não edite | Portável (derivado) |
-| Boilerplates por camada | `.claude/sdk/<lang>/boilerplates/*.md` | Portável |
-| Knowledge específico da linguagem | `.claude/sdk/<lang>/knowledge/` — **carregue pelo `knowledge/INDEX.md`**, nunca por glob | Portável |
-| **Manifesto do conhecimento portável (carregue por aqui)** | `.claude/knowledge/INDEX.md` — núcleo ⬤ + sob demanda. Derivado: `gofi index docs` | Portável (derivado) |
-| Especialidades (packs) | `.claude/expertise/<pack>/` — `PACK.md` (contrato: quando se aplica, a quais papéis serve) + seções; `harness-protocols` vale para toda tarefa. Idem: pelo `INDEX.md` | Portável |
-| Aprendizado do time | `.claude/knowledge/shared/` (todos os papéis) e `.claude/knowledge/{agent}/` (um papel) — gravado pelo protocolo de aprendizado; vence `expertise/` e `sdk/` e declara `overrides:` quando corrige regra do gofi. O `gofi update` nunca reescreve | Específico |
-| Conhecimento institucional (negócio específico do produto/empresa) | `.claude/institutional/{project.name}/` — RAG: `INDEX.md` (sempre) + chunks sob demanda. **Espelho pull-only** do repo `sources.institutional` quando configurado (atualizado por `gofi update institutional`, que **substitui a pasta por completo**); **sem repo**, mantido à mão no git do projeto | Específico |
-| Templates do corpus | `.claude/templates/` (`spec`, `proposal`, `delta`, `design`, `tasks`, `prd` — `*-template.md`); design no stack em `.claude/sdk/<lang>/templates/` | Portável |
-| Memória global (visão, serviços, convenções) | `.claude/memory/project.md` | Específico |
-| Estado por-contexto (cabeça: frontmatter + Estado atual consolidado + Histórico de versões) | `.claude/memory/contexts/{contexto}.md` | Específico |
-| Versões antigas transbordadas (só quando o changelog cresce) | `.claude/memory/contexts/{contexto}/history.md` | Específico |
-| Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |
-| Spec viva de um contexto (requisitos + cenários) | `specs/{contexto}/spec.md` (formato 2, até migrar: `sdd-{contexto}.md`) | Específico |
-| Mudanças (o contrato em andamento) | `specs/{contexto}/changes/{id}/` — `proposal.md`, `deltas/{ctx}.md`, `design.md`, `tasks.md`; aplicadas no `archive/` ao lado (`specs/{contexto}/changes/archive/`). A pasta nasce de `gofi change new`, nunca à mão | Específico |
-| PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
-| Índice de retrieval de specs/PRDs (2 níveis) | `specs/INDEX.md` (roteador de contextos) + `specs/{contexto}/INDEX.md` (shard); idem `prd/`. Derivado: `gofi index docs` | Específico (derivado) |
-| **Busca e navegação no corpus** | `gofi find "<pergunta>"` — busca documentos e código de uma vez e devolve doc/§/linhas (`--in` estreita as áreas); `gofi show` descreve um doc, §seção, `ctx:`, `table:` ou símbolo; `gofi index check` aponta os órfãos | Específico (derivado) |
-| Grafo de documentos | `.gofi/index/docs/graph.json` — `declara`/`cita`/`wikilink`/`toca`/`pertence`/`implementa`/`depende`, e requisitos e cenários (`req:`/`cen:`) com `especifica`/`adiciona`/`modifica`/`remove`. Derivado, fora do git: `gofi find`/`gofi show` o reconstroem sozinhos quando falta ou quando algum documento muda | Específico (derivado) |
-| Léxico controlado das facetas | `.claude/lexicon/*.md` — `entidades` (do schema), `operacoes`, `marketplaces`, `sinonimos` (ponte entre a língua da pergunta e a do identificador) | Específico |
-| Protocolo de retrieval (ler os corpora gastando poucos tokens) | `.claude/expertise/harness-protocols/rag-retrieval.md` | Portável |
-| Grafo de código (mapa derivado: quem chama quem, a que contexto pertence) | `.gofi/index/code/` — **um escopo por árvore**: `gofi_graph_index.json` na raiz lista todos (backend em `.`, cada superfície de UI em `{nome}/`, SDK em `sdk/`), e cada escopo tem o seu `gofi_graph_report.md`. Consulta por `gofi find --in code` (achar) e `gofi show` (entender quem chama). Gerado por `gofi index code`, **nunca** editado à mão | Específico (derivado) |
-| Protocolo de consulta ao grafo | `.claude/expertise/harness-protocols/graph-retrieval.md` | Portável |
+| Recurso | Caminho |
+|---------|---------|
+| Configuração | `.gofi.yaml` |
+| Skills / papéis do loop | `.claude/skills/<name>/SKILL.md` / `.claude/gofi/roles/<name>/SKILL.md` |
+| **Conhecimento portável — carregue por aqui** | `.claude/knowledge/INDEX.md`: núcleo ⬤ + só os módulos que a tarefa pede |
+| Aprendizado do time (vence expertise e sdk) | `.claude/knowledge/shared/`, `.claude/knowledge/{papel}/` — pelo mesmo `INDEX.md` |
+| API, boilerplates e knowledge do SDK | `.claude/sdk/<lang>/` — pelo mesmo `INDEX.md`; símbolo por `gofi find --in sdk` |
+| Especialidades | `.claude/expertise/<pack>/` (`harness-protocols` vale para toda tarefa) |
+| Institucional | `.claude/institutional/{project.name}/` — `INDEX.md` e só os chunks relevantes |
+| Templates | `.claude/templates/`; design do stack em `.claude/sdk/<lang>/templates/` |
+| Memória global | `.claude/memory/project.md` |
+| Estado de um contexto | `.claude/memory/contexts/{contexto}.md` — leia o `## Estado atual` |
+| Spec viva | `specs/{contexto}/spec.md` — um requisito: `gofi show specs/{contexto}/spec.md#REQ-NN` |
+| Mudanças | `specs/{contexto}/changes/{id}/` (a de vários contextos, `specs/changes/{id}/`); arquivadas no `archive/` ao lado |
+| PRDs | `prd/{contexto}/prd-{contexto}.md` |
+| Léxico das facetas | `.claude/lexicon/*.md` |
+| Grafo de código | `.gofi/index/code/` — consulte por `gofi find --in code` e `gofi show`, nunca o JSON |
 
 ## Convenção de leitura dos agents
 
-Esqueleto comum. A pré-execução **exata** vive no topo de cada skill (passos
-e arquivos variam por agent); aqui fica o denominador comum:
+A pré-execução exata vive em cada skill; o denominador comum:
 
-1. Ler `.gofi.yaml` para descobrir linguagem-alvo (`project.language`), nome do projeto e demais configurações.
-2. `AGENTS.md` (este arquivo, já carregado) — mapa de paths físicos + doutrina das skills.
-3. Ler `.claude/memory/project.md` para visão global (serviços + convenções). Para o índice de contextos existentes, rodar `/gofi-status`.
-4. Ler `.claude/memory/contexts/{contexto}.md` se já houver — frontmatter (estado) + handoff de fases anteriores.
-5. Ler **`.claude/knowledge/INDEX.md`** — manifesto das camadas portáveis. Carregar o **núcleo ⬤** (curto, universal) e **só os módulos que a tarefa pede**. **Nunca** carregar `expertise/**`, `knowledge/**` nem `sdk/<lang>/knowledge/*.md` por glob: é o maior custo fixo do harness, maior que a spec do contexto.
-6. Ler **`.claude/knowledge/shared/*.md`** e **`.claude/knowledge/{agent}/*.md`** — aprendizado do time (vence expertise e sdk quando divergem).
-7. **Contexto institucional (RAG)** — quando precisar de negócio além da spec, ler `.claude/institutional/{project.name}/INDEX.md` e **só os chunks relevantes**; nunca a pasta inteira.
-8. Para a linguagem-alvo, carregar **pelo mesmo `.claude/knowledge/INDEX.md`** (ele
-   já cobre `sdk/<lang>/`), nunca por glob:
-   - `sdk/<lang>/knowledge/` — regras, naming, estrutura, layers, armadilhas
-   - `sdk/<lang>/api/` — API do SDK, gerada do código (só os pacotes relevantes; símbolo por `gofi find --in sdk`)
-   - `sdk/<lang>/boilerplates/` — esqueletos, antes de implementar (gofi-eng/qa)
-
-> **Procurar documento é `gofi find`, não carregar índice.** O corpus tem camada
-> de consulta, e é o mesmo comando que busca o código: pergunte, não carregue.
-> `gofi find "<pergunta>"` devolve doc, §seção e **faixa de linhas** — leia com
-> `Read(offset, limit)`. Vazio quase sempre é vocabulário, não documento faltando:
-> tente o termo técnico e **registre o par que faltou** em
-> `.claude/lexicon/sinonimos.md`. Os `INDEX.md` servem para **navegar** um
-> contexto, não para **achar** um assunto; texto exato é
-> `gofi find --text "<literal>"` (ou `--regex`, `-i`), fallback declarado.
->
-> `gofi show table:<tabela>` responde *quem documenta* e *quem implementa* de
-> uma vez — a tabela é o único símbolo que existe nos dois mundos.
-> `gofi show <doc>` é a análise de impacto barata **antes** de editar.
->
-> **Specs/PRDs/contextos são RAG — gaste poucos tokens.** Regras de **leitura e criação** em `.claude/expertise/harness-protocols/rag-retrieval.md`.
-> - **Ler:** nunca leia um doc inteiro por reflexo. `gofi find "<pergunta>"` devolve doc, §seção e faixa de linhas — leia com `Read(offset, limit)`.
-> - **Criar/editar:** base nos templates `.claude/templates/` — `formato:` + as facetas (`entidades` do schema, `operacoes`/`marketplaces` do `.claude/lexicon/`) + `keywords` com o que sobrou (teto 12). **Zero proveniência** (sem `**Autor/Versão/Data:**`, sem `## Rastreabilidade`, sem nome de agent/pessoa, sem journal), Histórico de **1 linha**. Ao fechar: `gofi index docs` e `gofi index check` — termo de faceta fora do léxico reprova, e é isso que impede o vocabulário de voltar a ser nuvem de tags.
-
-> **O código também tem índice — o grafo. Procurar código é `gofi find --in code` (achar) e `gofi show` (entender quem chama), não `grep -r`.**
-> Suba a escada de 3 degraus: `gofi_graph_index.json` (que escopos existem, em
-> que pasta, **em que modo**) → o `gofi_graph_report.md` **do escopo** →
-> `gofi show <símbolo>`. Não sabe o nome exato? `gofi find --in code
-> "<termo> <termo>"` busca dentro do grafo; `gofi path A B` mostra como A
-> alcança B. `gofi find --text "<literal>"`/`--regex "<re>"` é **fallback
-> declarado**: linguagem sem extractor, ou alvo que não é símbolo (string, chave
-> de config, SQL, tag, import, mensagem de erro) — cada linha vem sob o símbolo
-> que a contém, mas texto não resolve dispatch por interface. `grep` puro só se o
-> `gofi` não alcançar (árvore fora do projeto). **Nunca** leia `gofi_graph.json`.
-> Isto vale para **código**; navegar spec/PRD por §seção (`gofi show <doc>`
-> lista as seções com a faixa de linhas) é o protocolo RAG de documento e
-> continua valendo.
->
-> **Valide o modo antes de concluir ausência.** O build (`init`,
-> `gofi index code`) segue o modo do `.gofi.yaml` (`graph: deep:`), que **por
-> padrão é `fast`** — e em `fast` chamada ambígua não vira aresta, então
-> ausência de aresta não é prova de ausência de uso. `deep` é sempre pedido explícito: precisa afirmar "isto não quebra nada",
-> "ninguém mais chama", "quem implementa esta interface"? Rode
-> `gofi index code --deep` ou declare a limitação. Os gatilhos estão em
-> *Quando rodar `--deep`* do protocolo do grafo.
->
-> O hook de pre-commit põe o grafo em dia **no commit** — mas as fases e as
-> consultas acontecem antes dele. Quem implementa roda
-> **`gofi index code` ao fechar** (incremental: só as árvores que mudaram), e
-> antes de consultar código que acabou de mudar, para que a fase seguinte leia
-> um mapa atualizado; `gofi index status` diz se o grafo ficou para trás. O
-> índice de documentos não pede nada: a própria consulta o atualiza. Todo
-> pacote de um contexto nasce com **`//gofi:context {contexto}`** — é o elo
-> entre o símbolo e `specs/{contexto}/`.
-> Protocolo em `.claude/expertise/harness-protocols/graph-retrieval.md`.
+1. `.gofi.yaml` — linguagem, nome do projeto, superfícies.
+2. `.claude/memory/project.md` e, do contexto, o `## Estado atual` de
+   `.claude/memory/contexts/{contexto}.md`.
+3. `.claude/knowledge/INDEX.md` — o núcleo ⬤ e só os módulos que a tarefa
+   pede, inclusive os do time e do SDK. **Nunca** por glob.
+4. Documento se acha por `gofi find "<pergunta>"` (doc, §seção e faixa de
+   linhas) e se lê pela faixa; a mudança em que você trabalha, leia inteira.
+5. Ao criar documento: o template de `.claude/templates/`, `formato:`, as
+   facetas do léxico e `keywords`; zero proveniência. Protocolo:
+   `.claude/expertise/harness-protocols/rag-retrieval.md`.
+6. Todo pacote de um contexto nasce com `//gofi:context {contexto}` — o elo
+   entre o código e `specs/{contexto}/`.
 
 ## Persistência de estado
 
-Ao concluir uma fase, cada agent **deve atualizar**:
-- `.claude/memory/contexts/{contexto}.md` — **frontmatter** (`versao`, `status`, `versao_*`, `atualizado`, `keywords`) + reescrita do `## Estado atual` + 1 linha no `## Histórico de versões` (baseline consolidada — **sem** journal datado `gofi-{nome}: {data}`). É o **único** lugar de estado por-contexto.
-- `.claude/memory/project.md` **só** quando nasce um serviço/binário novo (tabela "Serviços").
-- **Nunca** a spec viva nem uma mudança aprovada: ambas são seladas. O que muda o contrato é uma mudança nova (gofi-spec); a versão da spec viva sobe no arquivamento.
+Ao concluir uma fase:
+- `.claude/memory/contexts/{contexto}.md` — frontmatter (`status`,
+  `atualizado`, `keywords`) e reescrita do `## Estado atual`. O
+  `## Histórico de versões` ganha uma linha só quando a versão sobe.
+- `.claude/memory/project.md` só quando nasce um serviço ou binário novo.
+- **Nunca** a spec viva nem uma mudança aprovada: ambas são seladas.
 
-> Estado por-contexto **nunca** vai para `project.md` (evita conflito de git entre devs em contextos diferentes). O índice global é gerado por `/gofi-status`. Protocolo completo em `expertise/harness-protocols/memory.md`.
+Protocolo: `.claude/expertise/harness-protocols/memory.md`.
 
 ## Aprendizado contínuo
 
-Quando o usuário corrigir, ensinar ou validar algo não-óbvio, **todos os
-agents aprendem juntos** — não apenas o que recebeu a correção. Procedimento
-em `.claude/expertise/harness-protocols/learning.md`.
+Quando a pessoa corrigir, ensinar ou validar algo não-óbvio, a lição vale para
+todos os papéis. Procedimento: `.claude/expertise/harness-protocols/learning.md`.
 
 ## Projeto
 
