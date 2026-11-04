@@ -116,7 +116,7 @@ gofi run --all --resume b-20261104-101500`,
 	cmd.Flags().String("context", "", i18n.T("cmd.run.flag.context"))
 	cmd.Flags().String("flow", "delivery", i18n.T("cmd.run.flag.flow"))
 	cmd.Flags().Bool("no-archive", false, i18n.T("cmd.run.flag.no_archive"))
-	cmd.Flags().String("permission-mode", "acceptEdits", "Claude Code permission mode for the agent turns")
+	cmd.Flags().String("permission-mode", "acceptEdits", i18n.T("cmd.run.flag.permission_mode"))
 	cmd.Flags().Bool("events", false, i18n.T("cmd.run.flag.events"))
 	cmd.Flags().String("gate-timeout", "", i18n.T("cmd.run.flag.gate_timeout"))
 	cmd.Flags().Bool("detach", false, i18n.T("cmd.run.flag.detach"))

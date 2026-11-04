@@ -132,6 +132,7 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 | `gofi-triage` | triage | quando o loop não pode seguir (achado do contrato, ou sem progresso no tier mais alto): classifica a causa-raiz e redige a proposta de emenda em `.gofi/proposals/` |
 | `gofi-deliver` | deliver | aceita a mudança, escreve a mensagem do commit dela (o relatório, `gofi report`, o gofi monta sozinho) |
 | `gofi-learn` | learn | numa execução aceita com retrabalho, propõe ao knowledge a lição que o teria evitado — a pessoa aceita (`gofi learn`) |
+| `gofi-doc` | deliver | doc de contrato para front e QA, quando a mudança tocou a camada `api` |
 | `gofi-qa` | audit | lente geral: checklist do SDK, camadas, knowledge — sozinho, audita tudo |
 | `gofi-qa-conformance` | audit | lente: cada requisito realizado como a mudança e o design dizem |
 | `gofi-qa-tests` | audit | lente: cada cenário provado por um teste que prova; regressão |
@@ -142,9 +143,8 @@ mudança (`gofi run <mudança> --explain` mostra quem e por quê):
 As lentes rodam ao mesmo tempo, só lendo, e o gofi junta os veredictos por
 impressão digital — a maior severidade vence; dono divergente fica com o do
 contrato e vai à triagem.
-| `gofi-doc` | deliver | doc de contrato para front e QA a partir dos handlers |
 
-Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-run` — o loop implementa, verifica, audita, corrige e arquiva sozinho.
+Pipeline típico: `/gofi-pd → /gofi-spec → (a pessoa aprova: gofi change approve) → /gofi-run` — o loop implementa, verifica, audita, corrige e arquiva sozinho. Várias mudanças aprovadas: `gofi run --all [--parallel N]`, na ordem do `depende_de`, retomável com `gofi run --all --resume <lote>`.
 
 **O contrato (decisão 0003, formato 3).** `specs/{contexto}/spec.md` é a
 **verdade viva** de um contexto: só requisitos `### Requisito: REQ-NN` com
@@ -156,9 +156,10 @@ aplicada às specs vivas no arquivamento (`gofi change archive`). Contexto novo 
 a mudança que só ADICIONA. Leia um requisito com `gofi show
 specs/{contexto}/spec.md#REQ-NN`; valide qualquer documento do contrato com
 `gofi spec check`. Aprovar nunca é do agente.
-Camada de apresentação: `/gofi-ui` após a spec (e o contrato do `gofi-eng`).
-Plataforma/infra: `/gofi-spec` (infra) → `/gofi-ops`.
-Doc de contrato: abrir o handler no IDE → `/gofi-doc`.
+
+Apresentação, infraestrutura e doc de contrato também são papéis do loop:
+`gofi-ui` entra quando a mudança é de `web` ou `mobile`, `gofi-ops` quando é de
+`infra`, e `gofi-doc` quando o grafo diz que ela tocou a camada `api`.
 
 ## Entrada: planeje antes de começar
 
@@ -176,7 +177,7 @@ ler, o que falta decidir e o pedido montado da primeira fase.
    (`.claude/skills/<papel>/SKILL.md`), começando pelo pedido montado.
 3. **Pare para revisão** depois de um PRD ou de uma spec: o que vem depois
    constrói em cima deles.
-4. **Passe direto** quando a pessoa invocar uma skill (`/gofi-eng …`): o pedido
+4. **Passe direto** quando a pessoa invocar uma skill (`/gofi-spec …`): o pedido
    já disse o papel.
 
 ## Onde os agents leem o conteúdo

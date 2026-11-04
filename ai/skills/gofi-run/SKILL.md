@@ -45,9 +45,13 @@ Próprias do `/gofi-run`:
    pergunte se ela aprova e, com o sim dela, ela mesma roda ou autoriza
    `gofi change approve <mudança>`.
 3. **Antes de rodar.** `gofi run <mudança> --explain`: diga quem vai
-   implementar e auditar e por quê. Em segundo plano a mudança roda numa
+   implementar e auditar e por quê; `gofi impact <símbolo|arquivo>` diz o que
+   depende do que a mudança vai tocar. Em segundo plano a mudança roda numa
    worktree própria e precisa estar commitada — se não estiver, diga isso.
-4. **Rodar.** `gofi run <mudança> --detach` e guarde o id da execução.
+4. **Rodar.** `gofi run <mudança> --detach` e guarde o id da execução. Várias
+   mudanças aprovadas: `gofi run --all [--parallel N]` as entrega na ordem do
+   `depende_de`, dentro de `loop.run_budget_usd`; um lote interrompido ou com
+   mudança não aceita continua com `gofi run --all --resume <lote>`.
 5. **Acompanhar.** `gofi logs -f <run>` (ou `gofi ps`) até a execução terminar;
    para a pessoa acompanhar numa tela, `gofi watch`.
 6. **Portão.** Estado `bloqueada`: `gofi answer <run>` mostra as perguntas sem
@@ -60,7 +64,11 @@ Próprias do `/gofi-run`:
    conflito voltam para a pessoa com o porquê do log — não tente de novo por
    conta própria. Num impasse, apresente a proposta de emenda que a execução
    deixou (`proposal` no `state.json`, em `.gofi/proposals/`): a pergunta, as
-   opções e a recomendação são para a pessoa decidir.
+   opções e a recomendação são para a pessoa decidir. Uma execução aceita com
+   retrabalho pode ter proposto lições ao knowledge: mostre `gofi learn` — a
+   pessoa aceita ou rejeita cada uma (`gofi learn accept|reject <run> <n>`).
+   `gofi trace <mudança>` diz que requisito ficou sem código ou cenário sem
+   teste.
 
 ## O que você NÃO faz
 

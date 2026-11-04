@@ -5,10 +5,12 @@ Chat com os agentes do seu projeto gofi, dentro do VSCode.
 O painel conversa com um **motor de LLM plugável**. Hoje há um: o Claude,
 acionado pela CLI do Claude Code rodando na raiz do workspace. É essa escolha
 que faz do painel um chat *do gofi* e não um chat genérico — o processo herda o
-`.claude/` do projeto, então todas as skills instaladas (`/gofi-pd`,
-`/gofi-spec`, `/gofi-eng`, `/gofi-ui`, `/gofi-ops`, `/gofi-qa`, `/gofi-doc`,
-`/gofi-status`, `/gofi-full`) são comandos que você digita no chat, e o agente
-lê a spec, a memória e o knowledge do projeto sem nenhuma ligação extra.
+`.claude/` do projeto, então os comandos de entrada (`/gofi-pd`, `/gofi-spec`,
+`/gofi-run`, `/gofi-status`, `/gofi-migrate`) são o que você digita no chat, e o
+agente lê a spec, a memória e o knowledge do projeto sem nenhuma ligação extra.
+Implementar, testar, auditar e corrigir é do loop do gofi (`gofi run`): o painel
+entrega a mudança aprovada a ele, mostra a execução ao vivo, faz as perguntas
+do portão e para a entrega quando você pede.
 
 ## Conversas salvas
 
