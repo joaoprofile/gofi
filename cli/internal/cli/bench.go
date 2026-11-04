@@ -148,7 +148,7 @@ func runBench(cmd *cobra.Command, _ []string) error {
 }
 
 func newBenchAuditCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "audit",
 		Short: i18n.T("cmd.bench.audit.short"),
 		Long: `Measure the audit's recall: for each of gofi's audit cases — code already
@@ -158,11 +158,98 @@ each on a copy of the project of its own, with nothing implemented or fixed
 (the audit flow). A finding finds a planted defect when it is in its file,
 within its lines, and says what it is about. The result is the recall of
 each, the defects each missed, the findings beyond the planted ones, the
-turns and the cost — in .gofi/bench/<id>-audit.md and .json.`,
-		Example: `gofi bench audit`,
-		Args:    cobra.NoArgs,
-		RunE:    runBenchAudit,
+turns and the cost — in .gofi/bench/<id>-audit.md and .json, and each
+verdict in .gofi/bench/<id>-audit/.
+
+--judge <id> scores a benchmark's verdicts again, with what the cases say
+now — a defect placed better, a matcher fixed —, running nothing.`,
+		Example: `gofi bench audit
+gofi bench audit --judge b-20261104-082423`,
+		Args: cobra.NoArgs,
+		RunE: runBenchAudit,
 	}
+	cmd.Flags().String("judge", "", "score the verdicts of this benchmark again, running nothing")
+	return cmd
+}
+
+// verdictsDir is where an audit benchmark keeps each case's verdict.
+func verdictsDir(root, id string) string {
+	return filepath.Join(root, filepath.FromSlash(bench.Dir), id+"-audit")
+}
+
+// saveAuditResult writes an audit benchmark's scores and report.
+func saveAuditResult(out io.Writer, root, id string, scores []bench.Score) error {
+	report := bench.AuditReport(id, scores)
+	dir := filepath.Join(root, filepath.FromSlash(bench.Dir))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, _ := json.MarshalIndent(map[string]any{"schema": bench.Schema, "id": id, "scores": scores}, "", "  ")
+	_ = os.WriteFile(filepath.Join(dir, id+"-audit.json"), append(data, '\n'), 0o644)
+	p := filepath.Join(dir, id+"-audit.md")
+	if err := os.WriteFile(p, []byte(report), 0o644); err != nil {
+		return err
+	}
+	fmt.Fprint(out, "\n"+report)
+	rel, _ := filepath.Rel(root, p)
+	fmt.Fprintln(out, "\n  "+i18n.T("bench.saved", filepath.ToSlash(rel)))
+	return nil
+}
+
+// judgeAgain scores the verdicts a benchmark kept with the cases as they
+// are: the cost and turns are those it measured.
+func judgeAgain(out io.Writer, root, src, lang, id string) error {
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(bench.Dir), id+"-audit.json"))
+	if err != nil {
+		return err
+	}
+	var old struct {
+		Scores []bench.Score `json:"scores"`
+	}
+	if err := json.Unmarshal(data, &old); err != nil {
+		return err
+	}
+	cases, err := bench.AuditCases(lang)
+	if err != nil {
+		return err
+	}
+	byName := map[string]*bench.AuditCase{}
+	for _, c := range cases {
+		byName[c.Name] = c
+	}
+	var scores []bench.Score
+	for _, was := range old.Scores {
+		c, ok := byName[was.Case]
+		if !ok {
+			return fmt.Errorf("%s: no audit case %s", id, was.Case)
+		}
+		raw, err := os.ReadFile(filepath.Join(verdictsDir(root, id), was.Case+"-"+was.Mode+".json"))
+		if err != nil {
+			return fmt.Errorf("%s kept no verdict of %s (%s) — only a benchmark run since verdicts are kept can be judged again", id, was.Case, was.Mode)
+		}
+		var v verdict.Verdict
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return err
+		}
+		// The case is written aside: its defects are placed by its code.
+		cc := *c
+		cc.Defects = append([]bench.Defect{}, c.Defects...)
+		tmp, err := os.MkdirTemp("", "gofi-judge-")
+		if err != nil {
+			return err
+		}
+		err = cc.Write(tmp, src)
+		if err == nil {
+			s := cc.Judge(&v, src)
+			s.Mode, s.CostUSD, s.Turns = was.Mode, was.CostUSD, was.Turns
+			scores = append(scores, s)
+		}
+		_ = os.RemoveAll(tmp)
+		if err != nil {
+			return err
+		}
+	}
+	return saveAuditResult(out, root, id, scores)
 }
 
 func runBenchAudit(cmd *cobra.Command, _ []string) error {
@@ -183,6 +270,9 @@ func runBenchAudit(cmd *cobra.Command, _ []string) error {
 		src = cfg.Backend.Path
 	}
 	out := cmd.OutOrStdout()
+	if again, _ := cmd.Flags().GetString("judge"); again != "" {
+		return judgeAgain(out, root, src, lang, again)
+	}
 	ctx := cmd.Context()
 	id := "b-" + time.Now().Format("20060102-150405")
 	fmt.Fprintln(out, i18n.T("bench.audit.started", id, len(cases)))
@@ -208,20 +298,9 @@ func runBenchAudit(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	wg.Wait()
-	report := bench.AuditReport(id, scores)
-	dir := filepath.Join(root, filepath.FromSlash(bench.Dir))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := saveAuditResult(out, root, id, scores); err != nil {
 		return err
 	}
-	data, _ := json.MarshalIndent(map[string]any{"schema": bench.Schema, "id": id, "scores": scores}, "", "  ")
-	_ = os.WriteFile(filepath.Join(dir, id+"-audit.json"), append(data, '\n'), 0o644)
-	p := filepath.Join(dir, id+"-audit.md")
-	if err := os.WriteFile(p, []byte(report), 0o644); err != nil {
-		return err
-	}
-	fmt.Fprint(out, "\n"+report)
-	rel, _ := filepath.Rel(root, p)
-	fmt.Fprintln(out, "\n  "+i18n.T("bench.saved", filepath.ToSlash(rel)))
 	return errors.Join(errs...)
 }
 
@@ -281,6 +360,14 @@ func auditCase(ctx context.Context, root, src, id string, shared *bench.AuditCas
 	v, err := verdict.Read(tree.Dir, ctxName)
 	if err != nil || v == nil {
 		return bench.Score{}, fmt.Errorf("the audit wrote no verdict of %s: %v", ctxName, errors.Join(err, runErr))
+	}
+	// Kept, the verdict is scored again — gofi bench audit --judge — when a
+	// case or the matcher changes, with no audit run again.
+	if raw, err := json.MarshalIndent(v, "", "  "); err == nil {
+		dir := verdictsDir(root, id)
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			_ = os.WriteFile(filepath.Join(dir, c.Name+"-"+mode+".json"), append(raw, '\n'), 0o644)
+		}
 	}
 	s := c.Judge(v, src)
 	s.Mode = mode

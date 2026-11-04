@@ -6,7 +6,8 @@ defects:
     file: "{src}/domain/benchconta/service/benchconta_service.go"
     at: "s.repo.Ajustar(ctx, origem, -valor)"
     span: 4
-    keywords: ["transa", "atômic", "atomic", "tx", "begin", "rollback"]
+    rule: REQ-01
+    keywords: ["transa", "atômic", "atomic", "begin", "rollback"]
   - id: D2
     what: SQL montado por concatenação com a entrada (injeção)
     file: "{src}/domain/benchconta/repository/benchconta_repository.go"
@@ -16,12 +17,14 @@ defects:
     what: o erro do crédito é ignorado
     file: "{src}/domain/benchconta/service/benchconta_service.go"
     at: "_ = s.repo.Ajustar(ctx, destino, valor)"
+    rule: REQ-01
     keywords: ["ignor", "descart", "_ =", "engol"]
   - id: D4
     what: saldo lido e debitado sem bloqueio — duas transferências ao mesmo tempo passam do saldo
     file: "{src}/domain/benchconta/service/benchconta_service.go"
     at: "saldo, err := s.repo.Saldo(ctx, origem)"
     span: 9
+    rule: REQ-01
     keywords: ["concorr", "race", "corrida", "for update", "lock", "bloque", "simultâne", "ao mesmo tempo"]
   - id: D5
     what: nenhum cenário tem teste

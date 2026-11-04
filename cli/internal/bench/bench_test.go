@@ -2,6 +2,7 @@ package bench
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -143,5 +144,55 @@ func TestAnAuditCaseIsJudgedByWhereAndWhat(t *testing.T) {
 	s := c.Judge(v, "backend")
 	if strings.Join(s.Found, ",") != "D1,D5" || strings.Join(s.Missed, ",") != "D2,D3,D4" || s.Extra != 1 {
 		t.Errorf("score %+v", s)
+	}
+}
+
+// A finding kept on another file finds a defect by the place it names, and
+// one with no file by the requirement it breaks — never by a scenario of it,
+// whose missing test is a defect of its own.
+func TestAFindingFindsADefectByThePlaceItNamesOrItsRequirement(t *testing.T) {
+	cases, _ := AuditCases("go")
+	byName := map[string]*AuditCase{}
+	for _, c := range cases {
+		byName[c.Name] = c
+	}
+	judge := func(name string, fs ...verdict.Finding) Score {
+		c := *byName[name]
+		c.Defects = append([]Defect{}, c.Defects...)
+		root := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(root, "backend"), 0o755)
+		_ = os.WriteFile(filepath.Join(root, "backend", "go.mod"), []byte("module example.com/bench\n\ngo 1.22\n"), 0o644)
+		if err := c.Write(root, "backend"); err != nil {
+			t.Fatal(err)
+		}
+		return c.Judge(&verdict.Verdict{Findings: fs}, "backend")
+	}
+	data, _ := os.ReadFile(filepath.Join("suites", "go", "audit", "pedido", "code", "domain", "benchpedido", "handler", "benchpedido_handler.go.tmpl"))
+	line := 0
+	for n, l := range strings.Split(string(data), "\n") {
+		if strings.Contains(l, "http.StatusInternalServerError") {
+			line = n + 1
+		}
+	}
+	s := judge("pedido",
+		verdict.Finding{Severity: "major", Rule: "layers.md §Erros", File: "backend/domain/benchpedido/service/benchpedido_service.go", Line: 12,
+			Message: fmt.Sprintf("qualquer err vira 500 fixo (benchpedido_handler.go:%d) em vez do 404", line)},
+		verdict.Finding{Severity: "major", Rule: "benchpedido/REQ-03.2", Message: "Cenário REQ-03.2 (pedido inexistente responde 404) sem teste"},
+	)
+	if strings.Join(s.Found, ",") != "D3" || s.Extra != 1 {
+		t.Errorf("pedido %+v", s)
+	}
+	s = judge("transferencia", verdict.Finding{Severity: "blocker", Rule: "benchconta/REQ-01",
+		Message: "debita e credita em duas chamadas soltas, sem transação nem bloqueio — duas transferências concorrentes leem o mesmo saldo"})
+	if strings.Join(s.Found, ",") != "D1,D4" || s.Extra != 0 {
+		t.Errorf("transferencia %+v", s)
+	}
+}
+
+func TestARequirementIsNotOneOfItsScenarios(t *testing.T) {
+	for rule, want := range map[string]bool{"ctx/REQ-01": true, "REQ-01 e REQ-01.2": true, "ctx/REQ-01.2": false, "REQ-012": false, "req-01": true} {
+		if namesRequirement(rule, "REQ-01") != want {
+			t.Errorf("%q names REQ-01: %v", rule, !want)
+		}
 	}
 }

@@ -685,3 +685,24 @@ func envOr(key, def string) string {
 	}
 	return def
 }
+
+// A benchmark's kept verdicts are scored again with the cases as they are
+// now: the cost and the turns stay the ones it measured.
+func TestAnAuditBenchmarkIsJudgedAgainFromItsVerdicts(t *testing.T) {
+	root := t.TempDir()
+	id := "b-1"
+	dir := filepath.Join(root, ".gofi", "bench")
+	writeFile(t, filepath.Join(dir, id+"-audit.json"), `{"schema":"x","id":"b-1","scores":[{"case":"transferencia","mode":"single","found":[],"missed":["D1","D2","D3","D4","D5"],"extra":1,"cost_usd":1.5,"turns":1}]}`)
+	writeFile(t, filepath.Join(dir, id+"-audit", "transferencia-single.json"),
+		`{"findings":[{"severity":"blocker","rule":"benchconta/REQ-01","message":"sem transação nem bloqueio: duas transferências concorrentes"}]}`)
+	var out bytes.Buffer
+	if err := judgeAgain(&out, root, "backend", "go", id); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "| transferencia | single | 40% | D1 D4 | D2 D3 D5 | 0 | 1 | 1.50 |") {
+		t.Errorf("report:\n%s", out.String())
+	}
+	if err := judgeAgain(&out, root, "backend", "go", "b-nada"); err == nil {
+		t.Error("a benchmark not kept was judged")
+	}
+}
