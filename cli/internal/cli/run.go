@@ -435,6 +435,9 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 			return "", fmt.Errorf("%s: %s — gofi flow check %s", f.Source, p.Message, o.Flow)
 		}
 	}
+	if err := checkAgentsSkew(root); err != nil {
+		return "", err
+	}
 	agentsCallThisGofi()
 	wait, err := gateTimeout(cfg, o.GateTimeout)
 	if err != nil {

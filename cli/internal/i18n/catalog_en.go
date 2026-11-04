@@ -111,6 +111,8 @@ var catalogEN = map[string]string{
 	"run.gc.removed":               "%s: worktree and empty branch removed",
 	"run.gc.done":                  "%d of %d worktrees given back",
 	"run.retired.empty":            "nothing was written: worktree and branch %s removed",
+	"skew.installed":               "the skills of this project come from gofi %s and this binary is %s: the two name different folders and commands — run gofi update with this binary (a development build installs its own skills with GOFI_AGENTS_LOCAL_DIR=<gofi repo> gofi update), or install the gofi the skills are from; %s=1 goes on anyway",
+	"skew.source":                  "the source resolves to gofi %s and this binary is %s: skills of another commit write where this binary does not read — install the gofi of that commit first, or point sources.agents at this binary's (a development build: GOFI_AGENTS_LOCAL_DIR=<gofi repo>); %s=1 installs anyway",
 	"run.land.done":                "%s landed on %s (fast-forward)",
 	"run.land.conflict":            "%s conflicts with %s: the branch is kept as it is — rebase it by hand in %s",
 	"run.land.waiting":             "%s waits to land: %s",

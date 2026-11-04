@@ -27,6 +27,12 @@ func newUpdateCmd() *cobra.Command {
   gofi update institutional   the business base, from the org repo
   gofi update audit           report what drifted; change nothing
 
+The skills are installed from the commit this binary was built from, never
+another: a binary and skills of different commits name different folders and
+commands. A release pins its own tag; a development build installs its own
+skills with GOFI_AGENTS_LOCAL_DIR=<gofi repo>. GOFI_ALLOW_SKEW=1 installs or
+runs them apart on purpose.
+
 Without a target, every target of the gofi zone runs — skills, agents,
 expertise, templates, and sdk and ds when the project has them — planned
 together and confirmed once. The project zone is never written: .gofi.yaml,

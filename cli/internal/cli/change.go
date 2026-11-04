@@ -61,6 +61,9 @@ gofi change new remover-desconto-manual --context pedidos --no-design`,
 			if err != nil {
 				return err
 			}
+			if err := checkAgentsSkew(root); err != nil {
+				return err
+			}
 			contexts, _ := cmd.Flags().GetStringArray("context")
 			noDesign, _ := cmd.Flags().GetBool("no-design")
 			written, err := contract.Create(root, contract.NewChange{

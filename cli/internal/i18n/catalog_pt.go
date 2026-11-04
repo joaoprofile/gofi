@@ -110,6 +110,8 @@ var catalogPT = map[string]string{
 	"run.gc.removed":               "%s: worktree e branch vazia removidas",
 	"run.gc.done":                  "%d de %d worktrees devolvidas",
 	"run.retired.empty":            "nada foi escrito: worktree e branch %s removidas",
+	"skew.installed":               "as skills deste projeto são do gofi %s e este binário é %s: os dois nomeiam pastas e comandos diferentes — rode gofi update com este binário (uma build de desenvolvimento instala as próprias skills com GOFI_AGENTS_LOCAL_DIR=<repo do gofi> gofi update), ou instale o gofi de que as skills são; %s=1 segue assim mesmo",
+	"skew.source":                  "a fonte resolve para o gofi %s e este binário é %s: skills de outro commit escrevem onde este binário não lê — instale antes o gofi desse commit, ou aponte sources.agents para o deste binário (build de desenvolvimento: GOFI_AGENTS_LOCAL_DIR=<repo do gofi>); %s=1 instala assim mesmo",
 	"run.land.done":                "%s integrada em %s (fast-forward)",
 	"run.land.conflict":            "%s conflita com %s: a branch fica como está — faça o rebase à mão em %s",
 	"run.land.waiting":             "%s espera para integrar: %s",

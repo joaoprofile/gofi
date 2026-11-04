@@ -18,7 +18,9 @@ const installedFileName = "installed.yaml"
 // SDK entries let `gofi update` and `gofi init` skip re-extracting the SDK
 // when the live checkout already matches the resolved ref.
 type installedRecord struct {
-	Agents        string            `yaml:"agents,omitempty"`
+	Agents string `yaml:"agents,omitempty"`
+	// CLI is the commit of the binary that installed the agents.
+	CLI           string            `yaml:"cli,omitempty"`
 	Institutional string            `yaml:"institutional,omitempty"`
 	SDK           map[string]string `yaml:"sdk,omitempty"`
 }
@@ -55,6 +57,7 @@ func readInstalledSha(projectRoot string) string {
 func writeInstalledSha(projectRoot, agentsSha string) error {
 	rec := loadInstalled(projectRoot)
 	rec.Agents = agentsSha
+	rec.CLI = binaryCommit()
 	return saveInstalled(projectRoot, rec)
 }
 

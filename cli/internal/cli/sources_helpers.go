@@ -43,6 +43,11 @@ func fetchSource(projectRoot, ref string) (string, sources.Ref, error) {
 	if err != nil {
 		return "", sources.Ref{}, err
 	}
+	if r.Owner+"/"+r.Repo == strings.TrimPrefix(config.AgentsRepo, "github.com/") {
+		if err := checkSourceSkew(resolved.Ref); err != nil {
+			return "", sources.Ref{}, err
+		}
+	}
 	dir, err := client.FetchTarball(resolved)
 	if err != nil {
 		return "", sources.Ref{}, err
