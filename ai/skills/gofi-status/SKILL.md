@@ -48,7 +48,7 @@ Cada arquivo abre com:
 ---
 contexto: {nome}
 servicos: [{servico}, ...]
-status: prd | spec | em_implementacao | implementado | aprovado | reprovado
+status: adotado | prd | spec | em_implementacao | implementado | aprovado | reprovado
 versao_prd: "{X.Y}" | n/a
 versao_spec: "{X.Y}" | n/a
 prd: {path} | n/a
@@ -64,52 +64,41 @@ Schema completo em `.claude/expertise/harness-protocols/memory.md`.
 
 ## Procedimento
 
-1. **Extraia o frontmatter** de todos os `contexts/*.md` rodando:
+1. **Leia o estado do disco** — sem modelo, sem ler arquivos à mão:
 
 ```bash
-cd .claude/memory/contexts && awk '
-  FNR==1 { infm=0; delete f; done[FILENAME]=0 }
-  /^---[[:space:]]*$/ { infm++; next }
-  infm==1 {
-    k=$0; sub(/:.*/,"",k); gsub(/^[ \t]+|[ \t]+$/,"",k)
-    v=$0; sub(/^[^:]*:[ \t]*/,"",v); gsub(/"/,"",v)
-    f[k]=v
-  }
-  infm==2 && !done[FILENAME] {
-    done[FILENAME]=1
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", \
-      f["status"], f["contexto"], f["servicos"], f["versao_spec"], \
-      f["versao_prd"], f["spec"], f["prd"], f["atualizado"], f["ressalvas"]
-  }
-' *.md | sort
+gofi status --json            # ou: gofi status <contexto> --json
 ```
 
-   Colunas (TSV): `status · contexto · servicos · versao_spec · versao_prd · spec · prd · atualizado · ressalvas`.
+   Cada contexto (`gofi-status/v1`) traz: `memory` (o `status` da memória; vazio
+   sem memória), `prd`, `spec` e `spec_state` (`aprovada`, `vencida`, `proposta`,
+   `com-erros`), `legacy` (spec no formato antigo), `changes` e `sealed`,
+   `sources`/`tests`, `requirements` e `scenarios` (`[total, com código ou teste]`),
+   `next` (o próximo passo) e `suggest` (opcional, como um PRD).
 
-2. **Renderize 4 tabelas markdown**, agrupando por `status`:
+2. **Renderize o panorama**, agrupando por `memory`, em ordem alfabética:
 
-   - **Implementados** — `status ∈ {implementado, aprovado, reprovado}`
-     Colunas: Contexto · Serviços · Versão spec · Status · Spec · Atualizado.
-     Para `aprovado` use ✅ (⚠️ quando `ressalvas` > 0 — ainda reabre o ciclo), `reprovado` ❌, `implementado` ⏳ (aguardando QA).
-   - **Em implementação** — `status = em_implementacao` (omita a seção se vazia).
-   - **Spec gerada (aguardando implementação)** — `status = spec`
-     Colunas: Contexto · Serviços · Versão spec · Spec · Atualizado.
-   - **PRD criado (aguardando spec)** — `status = prd`
-     Colunas: Contexto · Serviços · Versão PRD · PRD · Atualizado.
-   - **Mudanças abertas** — `gofi change list` (id · status · contextos · selada); omita se não houver.
+   | Grupo | `memory` |
+   |---|---|
+   | Sem memória | vazio — código que nenhum contexto adotou |
+   | Adotados | `adotado` |
+   | PRD criado | `prd` |
+   | Spec gerada | `spec` |
+   | Em implementação | `em_implementacao` |
+   | Implementados | `implementado`, `aprovado` (✅; ⚠️ com ressalvas), `reprovado` (❌) |
 
-3. **Checagem de consistência** (reporte como lista de avisos ao final; não bloqueia):
-   - Contexto sem frontmatter ou com campo obrigatório vazio (`status`, `contexto`, `servicos`).
-   - `status ∈ {spec, implementado, aprovado, reprovado}` mas `spec: n/a` **e** o
-     contexto não é declaradamente eng-reverse (sem spec) — sinalizar para checar.
-   - Path em `spec:`/`prd:` que não existe no disco (`test -f`). Quando o `spec:`
-     aponta para um **diretório** em vez de arquivo único (`spec: specs/{contexto}/`),
-     checar com `test -d`.
-   - `atualizado` há mais de ~30 dias num contexto `em_implementacao` (possível trabalho parado).
+   Colunas: Contexto · PRD · Spec (`spec_state`) · Mudanças (abertas/aprovadas) ·
+   Rastreio (requisitos e cenários) · **Próximo passo** (`next`, ou ✓ em dia).
+   Omita o grupo vazio.
 
-4. **Apresente** as tabelas + avisos. Se o usuário pediu um contexto específico
-   (`/gofi-status order`), mostre só a linha + o cabeçalho/histórico recente daquele
-   `contexts/order.md`.
+3. **Avisos de consistência** (lista ao final; não bloqueia):
+   - a memória diz uma fase que o disco desmente: `memory` ∈ {`spec`, `implementado`,
+     `aprovado`} sem `spec`; `adotado` ou `prd` com `spec_state: aprovada`;
+   - `spec_state` `vencida` (editada depois de aprovada) ou `com-erros`;
+   - rastreio incompleto num contexto `aprovado`.
+
+4. **Um contexto pedido** (`/gofi-status pedidos`): a linha dele e o `## Estado atual`
+   do `contexts/pedidos.md`.
 
 ---
 

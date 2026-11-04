@@ -89,6 +89,7 @@ gofi change approve add-rate-limit          # your approval seals it
 # Let the loop deliver it
 gofi run add-rate-limit --detach
 gofi watch                                  # follow it live
+gofi status                                 # every context, and its next step
 gofi report <run>                           # what was delivered, traced and audited
 ```
 
@@ -435,6 +436,7 @@ Embedded in the binary; `gofi init` installs it, `gofi install extensions` updat
 | `gofi scan [path]` · `--json` | Read any repository: code and contexts, documents that read as PRD, spec, decision or API contract, Gherkin scenarios, API contracts, tables — and what is next. Writes nothing |
 | `gofi init` | Create a project or adopt a repository; adopting, it asks which of the contexts the code names to adopt |
 | `gofi context adopt [<ctx>...]` · `--all` | Adopt the contexts the code's folders name: each one's memory, with its code, tables, documents and what is missing |
+| `gofi status [<ctx>...]` · `--json` | Where each context is — memory, PRD, living spec and its approval, open changes, code, trace — and its next step |
 | `gofi config` · `gofi settings` | The project's `.gofi.yaml` · the CLI's own settings |
 | `gofi update [skills\|agents\|expertise\|templates\|sdk\|ds\|institutional\|audit]` | Pull what is gofi's from upstream; `audit` changes nothing |
 | `gofi install [extensions\|mcp\|guard\|hooks]` | Wire gofi into the editor and the agent |
