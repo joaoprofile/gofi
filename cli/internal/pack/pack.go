@@ -50,6 +50,9 @@ type Pack struct {
 	// Skips are what marks a test of the language to be skipped, as text in
 	// its file: a run that adds one is refused (0002, D12).
 	Skips []string `yaml:"skips,omitempty"`
+	// Asserts are what marks an assertion in a test of the language: a run
+	// that leaves a test it found with fewer is refused (0002, D12).
+	Asserts []string `yaml:"asserts,omitempty"`
 	// Layers are what a backend in the language is divided into, by where
 	// their files are; the first whose paths match a file is its layer.
 	Layers []Layer `yaml:"layers,omitempty"`

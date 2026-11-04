@@ -60,3 +60,32 @@ func TestIntegrityRefusesWhatTheRunMayNotChange(t *testing.T) {
 		}
 	}
 }
+
+// A test the run found is not left proving less: an assertion taken out of
+// it, not put back elsewhere, is refused.
+func TestIntegrityRefusesARemovedAssertion(t *testing.T) {
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"} {
+		t.Setenv(k, v)
+	}
+	root := t.TempDir()
+	test := "backend/pedidos/total_test.go"
+	writeFile(t, filepath.Join(root, test), "package pedidos\n\nfunc TestTotal(t *testing.T) {\n\tif Total() != 1 {\n\t\tt.Errorf(\"total\")\n\t}\n\tif Zero() != 0 {\n\t\tt.Errorf(\"zero\")\n\t}\n}\n")
+	gitIn(t, root, "init", "--quiet", "-b", "main")
+	gitIn(t, root, "add", "-A")
+	gitIn(t, root, "commit", "--quiet", "-m", "init")
+	ctx := context.Background()
+	if err := captureIntegrity(ctx, root, "r-1"); err != nil {
+		t.Fatal(err)
+	}
+	lp, _ := pack.Load("go")
+	// Rewording an assertion is no loss.
+	writeFile(t, filepath.Join(root, test), "package pedidos\n\nfunc TestTotal(t *testing.T) {\n\tif Total() != 1 {\n\t\tt.Errorf(\"o total\")\n\t}\n\tif Zero() != 0 {\n\t\tt.Errorf(\"zero\")\n\t}\n}\n")
+	if found, _ := integrity(ctx, root, "r-1", lp); len(found) != 0 {
+		t.Fatalf("a reworded assertion: %+v", found)
+	}
+	writeFile(t, filepath.Join(root, test), "package pedidos\n\nfunc TestTotal(t *testing.T) {\n\tif Total() != 1 {\n\t\tt.Errorf(\"total\")\n\t}\n\t_ = Zero()\n}\n")
+	found, err := integrity(ctx, root, "r-1", lp)
+	if err != nil || len(found) != 1 || found[0].Rule != "integrity: asserção removida" || found[0].Line == 0 {
+		t.Errorf("found %+v, %v", found, err)
+	}
+}

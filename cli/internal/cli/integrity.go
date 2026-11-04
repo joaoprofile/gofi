@@ -197,6 +197,12 @@ func integrity(ctx context.Context, root, run string, lp *pack.Pack) ([]sarifRes
 			out = append(out, sarifResult{Rule: "integrity: teste removido", URI: c.path,
 				Message: "a execução removeu o teste " + c.path + ": um teste que falha se corrige pelo código, não se apaga — restaure-o"})
 		case lp != nil && lp.IsTest(c.path):
+			if c.op == "M" {
+				if at, removed := assertionsRemoved(git, base, c.path, lp.Asserts); removed > 0 {
+					out = append(out, sarifResult{Rule: "integrity: asserção removida", URI: c.path, Line: at,
+						Message: fmt.Sprintf("a execução tirou %d asserções de %s: um teste que prova menos não prova o que provava — restaure-as", removed, c.path)})
+				}
+			}
 			for _, at := range skipsAdded(git, base, root, c.path, c.op, lp.Skips) {
 				out = append(out, sarifResult{Rule: "integrity: teste pulado", URI: c.path, Line: at,
 					Message: "a execução marcou um teste para ser pulado em " + c.path + ": um teste pulado não prova nada — faça-o passar"})
@@ -216,6 +222,47 @@ func protected(p string) bool {
 		return false
 	}
 	return strings.HasPrefix(p, "specs/") || strings.HasPrefix(p, "prd/") || strings.HasPrefix(p, layout.Home()+"/")
+}
+
+// assertionsRemoved is how many assertions an edit took out of a test that
+// existed — removed less added, the lines that hold a marker of the
+// language —, and the line of the new file where the first went.
+func assertionsRemoved(git func(...string) (string, error), base, file string, asserts []string) (int, int) {
+	if len(asserts) == 0 {
+		return 0, 0
+	}
+	diff, err := git("diff", "-U0", base, "--", file)
+	if err != nil {
+		return 0, 0
+	}
+	has := func(ln string) bool {
+		return slices.ContainsFunc(asserts, func(m string) bool { return strings.Contains(ln, m) })
+	}
+	removed, added, at, line := 0, 0, 0, 0
+	sc := bufio.NewScanner(strings.NewReader(diff))
+	for sc.Scan() {
+		ln := sc.Text()
+		switch {
+		case strings.HasPrefix(ln, "@@"):
+			if _, after, ok := strings.Cut(ln, "+"); ok {
+				fmt.Sscanf(after, "%d", &line)
+			}
+		case strings.HasPrefix(ln, "---"), strings.HasPrefix(ln, "+++"):
+		case strings.HasPrefix(ln, "-"):
+			if has(ln) {
+				removed++
+				if at == 0 {
+					at = max(line, 1)
+				}
+			}
+		case strings.HasPrefix(ln, "+"):
+			if has(ln) {
+				added++
+			}
+			line++
+		}
+	}
+	return at, removed - added
 }
 
 // skipsAdded are the lines of a test file where the run added a skip marker
