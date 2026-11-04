@@ -17,6 +17,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/config"
 	"github.com/joaoprofile/gofi/cli/internal/detect"
 	"github.com/joaoprofile/gofi/cli/internal/gitops"
+	"github.com/joaoprofile/gofi/cli/internal/graph/extract/external"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/hsec"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
@@ -366,6 +367,12 @@ func executePipeline(r *wizard.Result) error {
 		steps = append(steps, spinner.Step{Name: i18n.T("init.step.venv", r.SourcePath), Fn: func() error {
 			if err := pythonEnv(filepath.Join(r.Root, r.SourcePath)); err != nil {
 				fmt.Fprintln(os.Stderr, "  "+i18n.T("init.venv_failed", r.SourcePath, err))
+			}
+			// The graph of a Python tree is read by the extractor gofi carries:
+			// installed now, the code graph and its rules are there from the
+			// first run.
+			if _, err := external.Install(context.Background(), external.InstallOptions{ProjectRoot: r.Root, Language: config.LanguagePython}); err != nil {
+				fmt.Fprintln(os.Stderr, "  "+err.Error())
 			}
 			return nil
 		}})

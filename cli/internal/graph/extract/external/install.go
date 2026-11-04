@@ -1,8 +1,10 @@
 package external
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,6 +14,17 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+//go:embed bundled
+var bundled embed.FS
+
+// Bundled is the extractor gofi carries for a language, if it carries one:
+// a program the project runs with what it already has — Python's own parser
+// for Python.
+func Bundled(lang string) ([]byte, bool) {
+	data, err := bundled.ReadFile("bundled/" + BinaryName(lang))
+	return data, err == nil
+}
 
 // MaxExtractorBytes caps what an install will read. An extractor is a compiled
 // binary, not an archive of the world; a stream past this is a mistake or an
@@ -44,13 +57,20 @@ func Install(ctx context.Context, opt InstallOptions) (*Installation, error) {
 	if err != nil {
 		return nil, err
 	}
+	var src io.ReadCloser
 	if strings.TrimSpace(opt.From) == "" {
-		return nil, errors.New("informe a origem do extractor com --from <caminho|url>")
-	}
-
-	src, err := openSource(ctx, opt)
-	if err != nil {
-		return nil, err
+		// gofi carries some extractors itself: with no origin, it installs
+		// its own.
+		data, ok := Bundled(lang)
+		if !ok {
+			return nil, errors.New("informe a origem do extractor com --from <caminho|url>")
+		}
+		src, opt.From = io.NopCloser(bytes.NewReader(data)), "gofi"
+	} else {
+		src, err = openSource(ctx, opt)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer src.Close()
 

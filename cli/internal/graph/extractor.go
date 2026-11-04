@@ -1,8 +1,13 @@
 package graph
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -195,7 +200,41 @@ func (e externalExtractor) Extract(ctx context.Context, root string, opt BuildOp
 	// The native scan counts these as it walks; a decoded graph has nobody to
 	// do it, so they are derived from the nodes the extractor sent.
 	countKinds(run.Graph)
+	fingerprintFiles(run.Graph, root)
 	return &Extraction{Graph: run.Graph, Diagnostics: run.Diagnostics, DiagCount: run.DiagCount}, nil
+}
+
+// fingerprintFiles records the files an extractor's nodes are in, each with
+// its hash and its unit: what a diff tells an edited file by, and what the
+// architecture rules read a package's layer from — whatever produced the
+// graph.
+func fingerprintFiles(g *model.Graph, root string) {
+	for _, n := range g.Nodes {
+		if n.File == "" || n.External {
+			continue
+		}
+		info, seen := g.Files[n.File]
+		if !seen {
+			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(n.File)))
+			if err != nil {
+				continue
+			}
+			sum := sha256.Sum256(data)
+			info = model.FileInfo{Path: n.File, Hash: hex.EncodeToString(sum[:16]), Lines: bytes.Count(data, []byte("\n")) + 1}
+		}
+		// A file's unit is its module's — the module node's ID, as its
+		// symbols name it in theirs —, or the unit its symbols declare.
+		if n.Kind == model.KindPackage {
+			info.Unit = n.ID
+		} else if info.Unit == "" {
+			info.Unit = n.Unit
+		}
+		g.Files[n.File] = info
+	}
+	// The extractor's own count, when it said one, is of what it read.
+	if g.Stats.Files == 0 {
+		g.Stats.Files = len(g.Files)
+	}
 }
 
 // countKinds fills the per-kind counters from the nodes themselves. Kinds with

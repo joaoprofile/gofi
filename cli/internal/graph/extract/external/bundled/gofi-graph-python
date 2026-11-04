@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""gofi-graph-python: the code graph of a Python tree, in gofi's extractor
+protocol (gofi-graph/v1): one JSON record a line on stdout.
+
+Reads the tree with the standard library's ast alone. Emits each module,
+class, function and method with where it is; contains, imports and extends
+edges; and the calls it can resolve — a name imported, defined in the same
+module, or a method of self. A call it cannot resolve is counted, never
+guessed: a wrong edge is worse than a missing one.
+"""
+import ast
+import builtins
+import json
+import os
+import sys
+
+TOOL = "gofi-graph-python 0.1.0"
+BUILTINS = set(dir(builtins))
+SKIP = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".ruff_cache", ".pytest_cache", "dist", "build", ".gofi", ".tox"}
+
+
+def emit(rec):
+    sys.stdout.write(json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def module_name(rel):
+    parts = rel[:-3].split("/")
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def first_line(doc):
+    return (doc or "").strip().split("\n")[0][:200]
+
+
+def vis(name):
+    return "private" if name.startswith("_") and not name.startswith("__") else "public"
+
+
+def main():
+    root, mode = ".", "fast"
+    args = sys.argv[1:]
+    for i, a in enumerate(args):
+        if a == "--root" and i + 1 < len(args):
+            root = args[i + 1]
+        if a == "--mode" and i + 1 < len(args):
+            mode = args[i + 1]
+    root = os.path.abspath(root)
+    files = []
+    for d, dirs, names in os.walk(root):
+        dirs[:] = sorted(x for x in dirs if x not in SKIP and not x.startswith("."))
+        for n in sorted(names):
+            if n.endswith(".py"):
+                files.append(os.path.relpath(os.path.join(d, n), root).replace(os.sep, "/"))
+    emit({"rec": "header", "schema": "gofi-graph/v1", "language": "python", "module": os.path.basename(root), "tool": TOOL, "mode": "fast"})
+
+    modules = {module_name(f): f for f in files}
+    trees, loc, unresolved = {}, 0, 0
+    for f in files:
+        try:
+            src = open(os.path.join(root, f), encoding="utf-8").read()
+            trees[f] = ast.parse(src, filename=f)
+            loc += src.count("\n") + 1
+        except (SyntaxError, UnicodeDecodeError, ValueError) as e:
+            emit({"rec": "diag", "severity": "warn", "msg": f"{f}: not read: {e}"})
+
+    def mod_id(m):
+        return "py:" + m
+
+    def resolve_module(name, current, level):
+        """The project module an import names, or None for one from outside."""
+        if level:
+            base = current.split(".")
+            if not modules.get(current, "").endswith("__init__.py"):
+                base = base[:-1]
+            base = base[: len(base) - (level - 1)] if level > 1 else base
+            name = ".".join([p for p in base + ([name] if name else []) if p])
+        return name if name in modules else None
+
+    edges = []
+    for f, tree in trees.items():
+        m = module_name(f)
+        mid = mod_id(m)
+        emit({"rec": "node", "id": mid, "kind": "module", "name": m, "file": f, "line": 1, "lines": len(open(os.path.join(root, f), encoding="utf-8").read().splitlines()) or 1})
+        # What the module's names refer to: imported modules, imported
+        # symbols, and its own top-level definitions.
+        alias_mod, alias_sym, defined = {}, {}, {}
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                defined[node.name] = f"{mid}.{node.name}"
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    target = resolve_module(a.name, m, 0)
+                    to = mod_id(target) if target else "pkg:" + a.name.split(".")[0]
+                    edges.append({"rec": "edge", "from": mid, "to": to, "rel": "imports", "file": f, "line": node.lineno, "conf": 1})
+                    alias_mod[a.asname or a.name.split(".")[0]] = target
+            elif isinstance(node, ast.ImportFrom):
+                target = resolve_module(node.module or "", m, node.level or 0)
+                if target is None:
+                    edges.append({"rec": "edge", "from": mid, "to": "pkg:" + (node.module or "").split(".")[0], "rel": "imports", "file": f, "line": node.lineno, "conf": 1})
+                    continue
+                # A name that is a module of its own is imported as that
+                # module; the rest import from the one named.
+                symbols = False
+                for a in node.names:
+                    sub = target + "." + a.name
+                    if sub in modules:
+                        alias_mod[a.asname or a.name] = sub
+                        edges.append({"rec": "edge", "from": mid, "to": mod_id(sub), "rel": "imports", "file": f, "line": node.lineno, "conf": 1})
+                    else:
+                        symbols = True
+                        alias_sym[a.asname or a.name] = f"{mod_id(target)}.{a.name}"
+                if symbols:
+                    edges.append({"rec": "edge", "from": mid, "to": mod_id(target), "rel": "imports", "file": f, "line": node.lineno, "conf": 1})
+
+        def resolve_call(func, cls):
+            if isinstance(func, ast.Name):
+                return alias_sym.get(func.id) or defined.get(func.id)
+            if isinstance(func, ast.Attribute):
+                v = func.value
+                if isinstance(v, ast.Name) and v.id == "self" and cls:
+                    return f"{mid}.{cls}.{func.attr}"
+                if isinstance(v, ast.Name) and alias_mod.get(v.id):
+                    return f"{mod_id(alias_mod[v.id])}.{func.attr}"
+            return None
+
+        def visit_body(owner_id, body, cls):
+            nonlocal unresolved
+            for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+                if isinstance(node, ast.Call):
+                    to = resolve_call(node.func, cls)
+                    if to:
+                        edges.append({"rec": "edge", "from": owner_id, "to": to, "rel": "calls", "file": f, "line": node.lineno, "conf": 0.9})
+                    elif not (isinstance(node.func, ast.Name) and node.func.id in BUILTINS):
+                        unresolved += 1
+
+        def func_node(fn, owner=None):
+            fid = f"{mid}.{owner}.{fn.name}" if owner else f"{mid}.{fn.name}"
+            args = ", ".join(a.arg for a in fn.args.args)
+            emit({"rec": "node", "id": fid, "kind": "method" if owner else "func", "name": fn.name, "unit": mid, "owner": owner or "",
+                  "file": f, "line": fn.lineno, "lines": (fn.end_lineno or fn.lineno) - fn.lineno + 1, "vis": vis(fn.name),
+                  "sig": f"def {fn.name}({args})", "doc": first_line(ast.get_docstring(fn))})
+            edges.append({"rec": "edge", "from": mid, "to": fid, "rel": "contains", "file": f, "line": fn.lineno, "conf": 1})
+            visit_body(fid, fn.body, owner)
+
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                func_node(node)
+            elif isinstance(node, ast.ClassDef):
+                cid = f"{mid}.{node.name}"
+                bases = [ast.unparse(b) for b in node.bases]
+                emit({"rec": "node", "id": cid, "kind": "class", "name": node.name, "unit": mid, "file": f, "line": node.lineno,
+                      "lines": (node.end_lineno or node.lineno) - node.lineno + 1, "vis": vis(node.name),
+                      "sig": f"class {node.name}" + (f"({', '.join(bases)})" if bases else ""), "doc": first_line(ast.get_docstring(node))})
+                edges.append({"rec": "edge", "from": mid, "to": cid, "rel": "contains", "file": f, "line": node.lineno, "conf": 1})
+                for b in node.bases:
+                    to = resolve_call(b, None)
+                    if to:
+                        edges.append({"rec": "edge", "from": cid, "to": to, "rel": "extends", "file": f, "line": node.lineno, "conf": 0.9})
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        func_node(item, node.name)
+    for e in edges:
+        emit(e)
+    emit({"rec": "summary", "files": len(trees), "loc": loc, "unresolved": unresolved, "ambiguous": 0})
+
+
+if __name__ == "__main__":
+    main()
