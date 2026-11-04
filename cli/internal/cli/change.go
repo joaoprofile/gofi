@@ -112,6 +112,7 @@ gofi change list --json`,
 				enc.SetIndent("", "  ")
 				return enc.Encode(changes)
 			}
+			defer printChangeHazards(out, changeHazards(root, changes))
 			if len(changes) == 0 {
 				fmt.Fprintln(out, "  "+i18n.T("change.none"))
 				return nil
