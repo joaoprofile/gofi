@@ -400,6 +400,7 @@ var catalogPT = map[string]string{
 	"init.step.localstack":       "Preparar ops/localstack e .env",
 	"init.step.venv":             "Criar o ambiente Python do backend (.venv em %s)",
 	"init.venv_failed":           "o ambiente Python de %s não foi criado (%v) — rode python3 -m venv .venv && .venv/bin/pip install -e \".[dev]\" na pasta",
+	"init.step.extractor":        "Instalar o extrator do grafo de código (%s)",
 	"init.step.npm":              "Instalar as dependências do backend (npm install em %s)",
 	"init.step.gowork":           "Ligar o SDK ao go.work",
 	"init.step.remote":           "Configurar o remote git",

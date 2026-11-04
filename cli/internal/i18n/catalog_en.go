@@ -401,6 +401,7 @@ var catalogEN = map[string]string{
 	"init.step.localstack":       "Prepare ops/localstack and .env",
 	"init.step.venv":             "Make the backend's Python environment (.venv in %s)",
 	"init.venv_failed":           "the Python environment of %s was not made (%v) — run python3 -m venv .venv && .venv/bin/pip install -e \".[dev]\" in the folder",
+	"init.step.extractor":        "Install the code graph's extractor (%s)",
 	"init.step.npm":              "Install the backend's dependencies (npm install in %s)",
 	"init.step.gowork":           "Wire the SDK into go.work",
 	"init.step.remote":           "Configure the git remote",
