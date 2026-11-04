@@ -43,8 +43,10 @@ Próprias do `/gofi-run`:
    revisão da mudança (ambiguidade, contradição, cenário não testável,
    lacuna). Mostre os achados: a pessoa corrige a mudança e você roda de novo,
    ou ela decide que o achado não procede. Sem achado que bloqueie e sem selo,
-   pergunte se ela aprova e, com o sim dela, ela mesma roda ou autoriza
-   `gofi change approve <mudança>`.
+   pergunte se ela aprova e, com o sim dela, use a ferramenta `approve` do
+   gofi (o host pede a confirmação dela). Sem a ferramenta, ela mesma roda
+   `gofi change approve <mudança>` no terminal dela — o comando recusa quando
+   quem o roda é um agente.
 3. **Antes de rodar.** `gofi run <mudança> --explain`: diga quem vai
    implementar e auditar e por quê; `gofi impact <símbolo|arquivo>` diz o que
    depende do que a mudança vai tocar. Em segundo plano a mudança roda numa

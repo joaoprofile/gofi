@@ -159,7 +159,8 @@ specs/{contexto}/spec.md#REQ-NN`; valide qualquer documento do contrato com
 `gofi spec check`. **Aprovar é da pessoa:** quando ela disser na conversa que
 aprova uma mudança ou uma spec, use a ferramenta `approve` do gofi (`ref`: o id da
 mudança, ou o contexto da spec viva) — o host pede a confirmação dela a cada chamada,
-e o selo vale como a aprovação dela. Nunca aprove por iniciativa própria nem para
+e o selo vale como a aprovação dela. `gofi change approve` e `gofi spec approve`
+são da pessoa, no terminal dela: rodados por um agente, recusam. Nunca aprove por iniciativa própria nem para
 destravar o seu trabalho.
 
 Apresentação, infraestrutura e doc de contrato também são papéis do loop:

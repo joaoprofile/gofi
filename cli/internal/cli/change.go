@@ -215,6 +215,9 @@ delivery; run by hand, it is the step after the delivery is accepted.`,
 // approveDocs checks the documents and, when none has an error, seals them
 // all. It is how a spec and a change are approved alike.
 func approveDocs(cmd *cobra.Command, root string, all, docs []contract.Doc) error {
+	if err := personApproves(cmd.InOrStdin(), cmd.OutOrStdout(), docs); err != nil {
+		return err
+	}
 	return approveDocsTo(cmd.OutOrStdout(), root, all, docs)
 }
 
