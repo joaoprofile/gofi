@@ -149,10 +149,14 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 	_ = os.Remove(file)
 	rel, _ := filepath.Rel(root, file)
 	fmt.Fprintln(out, "  "+i18n.T("review.started", change, rl.Name))
+	dir, err := changeDirOf(root, change)
+	if err != nil {
+		return nil, err
+	}
 	agent := &engineAgent{root: root, work: root, open: open, out: out,
 		transcript: filepath.Join(filepath.Dir(file), change+".ndjson")}
 	res, err := agent.Run(ctx, loop.Turn{Node: "review", Role: rl.Name, Agent: "review-" + change, Iter: 1,
-		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, Prompt: reviewBrief(rl, change, changeDirOf(root, change), filepath.ToSlash(rel))})
+		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, Prompt: reviewBrief(rl, change, dir, filepath.ToSlash(rel))})
 	if err != nil {
 		return nil, err
 	}
@@ -278,9 +282,9 @@ func chatReview(root string, cfg *config.GofiConfig) func(string) ([]string, int
 
 // changeDirOf is the folder of an open change, as a turn is told where to
 // read it.
-func changeDirOf(root, change string) string {
+func changeDirOf(root, change string) (string, error) {
 	if dir, ok := contract.FindChange(root, change); ok {
-		return dir
+		return dir, nil
 	}
-	return "specs/changes/" + change
+	return "", errors.New(i18n.T("change.not_found", change))
 }

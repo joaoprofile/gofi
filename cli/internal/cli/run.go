@@ -948,7 +948,7 @@ func checkpoint(ctx context.Context, root, run, change string, prior *loop.State
 	}
 	// The change's own folder may be edited while the run is not started:
 	// it is the contract the person is writing.
-	cp.Keep = []string{"specs/changes"}
+	cp.Keep = contract.ChangeHomes(root)
 	if dir, ok := contract.FindChange(root, change); ok {
 		cp.Keep = append(cp.Keep, dir)
 	}

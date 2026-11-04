@@ -209,7 +209,7 @@ vale neste projeto — nunca entra em skill).
 | Versões antigas transbordadas (só quando o changelog cresce) | `.claude/memory/contexts/{contexto}/history.md` | Específico |
 | Índice de contextos (gerado sob demanda) | `/gofi-status` (lê o frontmatter dos `contexts/*.md`) | Específico |
 | Spec viva de um contexto (requisitos + cenários) | `specs/{contexto}/spec.md` (formato 2, até migrar: `sdd-{contexto}.md`) | Específico |
-| Mudanças (o contrato em andamento) | `specs/{contexto}/changes/{id}/` — `proposal.md`, `deltas/{ctx}.md`, `design.md`, `tasks.md`; aplicadas em `specs/changes/archive/` | Específico |
+| Mudanças (o contrato em andamento) | `specs/{contexto}/changes/{id}/` — `proposal.md`, `deltas/{ctx}.md`, `design.md`, `tasks.md`; aplicadas no `archive/` ao lado (`specs/{contexto}/changes/archive/`). A pasta nasce de `gofi change new`, nunca à mão | Específico |
 | PRDs do projeto | `prd/{contexto}/prd-{contexto}.md` | Específico |
 | Índice de retrieval de specs/PRDs (2 níveis) | `specs/INDEX.md` (roteador de contextos) + `specs/{contexto}/INDEX.md` (shard); idem `prd/`. Derivado: `gofi index docs` | Específico (derivado) |
 | **Busca e navegação no corpus** | `gofi find "<pergunta>"` — busca documentos e código de uma vez e devolve doc/§/linhas (`--in` estreita as áreas); `gofi show` descreve um doc, §seção, `ctx:`, `table:` ou símbolo; `gofi index check` aponta os órfãos | Específico (derivado) |

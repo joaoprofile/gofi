@@ -52,7 +52,7 @@ antes de qualquer workflow.
      garantir, por requisito: `gofi show specs/{contexto}/spec.md#REQ-NN` lê um
      requisito com os seus cenários; a regra que o código aplica costuma ter
      cenário ali, e o cenário é a melhor fonte para a seção de Armadilhas
-   - o design das mudanças arquivadas (`specs/changes/archive/*/design.md`) —
+   - o design das mudanças arquivadas (`specs/**/changes/archive/*/design.md`) —
      contrato e ADRs de quando o endpoint nasceu ou mudou. Ache pela busca, não
      pelo caminho adivinhado: `gofi find "<endpoint ou entidade>"` devolve o
      documento, a §seção e a faixa de linhas

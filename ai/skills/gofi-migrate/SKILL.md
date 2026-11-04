@@ -169,7 +169,7 @@ no formato 2. A conversão tem duas metades, e só a segunda é sua:
    vira `## Propósito`; cada `RN-NN` vira `REQ-NN` com o mesmo texto, sem as
    notas de implementação (renumerado em ordem quando o contexto tinha várias
    specs — a CLI imprime o mapa); os documentos antigos vão inteiros para
-   `specs/changes/archive/<data>-baseline-{contexto}/`; a memória passa a
+   `specs/{contexto}/changes/archive/<data>-baseline-{contexto}/`; a memória passa a
    apontar a spec viva. Cada requisito sai com um cenário marcado
    `[PRECISA ESCLARECER]`: a regra antiga não tinha critério verificável.
 2. **Os cenários são seus — e da pessoa.** Para cada `REQ-NN` marcado:

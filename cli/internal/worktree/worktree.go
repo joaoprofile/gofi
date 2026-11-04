@@ -177,7 +177,7 @@ func (t *Tree) Discard(ctx context.Context) error {
 func Ready(ctx context.Context, root, change string) error {
 	dir, ok := contract.FindChange(root, change)
 	if !ok {
-		dir = "specs/changes/" + change
+		return fmt.Errorf("change %s: in no changes/ folder of the project — gofi change list", change)
 	}
 	for _, p := range []string{".gofi.yaml", dir} {
 		if out, _ := git(ctx, root, "ls-files", "--", p); out == "" {

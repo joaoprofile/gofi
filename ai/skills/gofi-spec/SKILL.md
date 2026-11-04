@@ -111,9 +111,11 @@ em passagens:
 
 ## Saída e memória
 
-- Escreve a mudança em `specs/<ctx>/changes/<id>/` — `specs/changes/<id>/` se toca
-  vários contextos — (ou a baseline em
-  `specs/{contexto}/spec.md`), frontmatter + `keywords`, zero proveniência.
+- A pasta da mudança nasce de `gofi change new <id> --context <ctx>` (um
+  `--context` por contexto tocado) — nunca crie a pasta nem mova a mudança à
+  mão: o lugar é do CLI, e uma pasta fora do lugar o loop não lê. Escreve nela
+  (ou a baseline em `specs/{contexto}/spec.md`) frontmatter + `keywords`, zero
+  proveniência.
 - Tudo sai `status: proposto`. **Não grave `aprovado`**: aprovar é da pessoa,
   que sela cada documento com um hash. Quando ela disser na conversa que aprova,
   use a ferramenta `approve` do gofi (o id da mudança, ou o contexto na baseline) —

@@ -30,7 +30,7 @@ gofi change list
 gofi change approve adicionar-rate-limit
 gofi change archive adicionar-rate-limit`,
 	}
-	cmd.AddCommand(newChangeNewCmd(), newChangeListCmd(), newChangeApproveCmd(), newChangeArchiveCmd())
+	cmd.AddCommand(newChangeNewCmd(), newChangeListCmd(), newChangeApproveCmd(), newChangeArchiveCmd(), newChangeMigrateCmd())
 	return cmd
 }
 
