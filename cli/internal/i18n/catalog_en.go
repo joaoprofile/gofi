@@ -450,6 +450,8 @@ var catalogEN = map[string]string{
 	"ask.elicit.questions":        "%d open decisions, gathered for /%s:",
 	"ask.elicit.stopped":          "stopped for your answers (the questions are in %s): run again in a terminal, or with --proceed to go on with the recommendations",
 	"chat.plan.next":              "Next, if you want: /%s",
+	"chat.plan.reviewing":         "reviewing the changes of %s before the approval (gofi-spec-review)…",
+	"chat.plan.review_blocking":   "the review found %d points that ask to be corrected.",
 	"chat.plan.review":            "%s written — review it before /%s builds on it. Enter goes on · n stops",
 	"chat.plan.no_brief":          "no plan open",
 	"chat.help.brief":             "the assembled request of the open plan",

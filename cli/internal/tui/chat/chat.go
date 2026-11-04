@@ -60,6 +60,10 @@ type Options struct {
 	// context through a flow, its events as they come and, once they end, the
 	// error the delivery ended with. Nil leaves the plan to stop there.
 	Deliver func(flow, context string) (events <-chan loop.Event, wait func() error)
+	// Review reads a context's open changes before the person approves them
+	// (gofi-spec-review): the lines to show, and how many findings block.
+	// Nil leaves the review stop to the person alone.
+	Review func(context string) (lines []string, blocking int, err error)
 }
 
 // Run holds the conversation until the user leaves.
@@ -199,6 +203,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case intakeDone:
 		return m.onIntake(msg)
+
+	case reviewed:
+		return m.onReviewed(msg)
 
 	case turnEnded:
 		m.running, m.events, m.think = false, nil, false

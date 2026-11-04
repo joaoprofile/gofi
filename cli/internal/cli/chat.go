@@ -87,8 +87,10 @@ func runChat(f chatFlags) error {
 	model := strings.TrimSpace(f.model)
 	var planIntake func(string, map[string]string, bool) (*intake.Result, error)
 	var tierModel func(host.Tier) string
+	var review func(string) ([]string, int, error)
 	if cfg, projectRoot, err := loadProjectConfig(); err == nil {
 		root = projectRoot
+		review = chatReview(projectRoot, cfg)
 		if model == "" {
 			model = cfg.AI.Model
 		}
@@ -131,6 +133,7 @@ func runChat(f chatFlags) error {
 		Intake:    planIntake,
 		TierModel: tierModel,
 		Deliver:   spawnDelivery(root),
+		Review:    review,
 		NewSession: func(resumeID string) engine.Session {
 			if resumeID != "" {
 				resume = resumeID
