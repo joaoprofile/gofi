@@ -54,6 +54,12 @@ var predicates = map[string][]string{
 	// diff.touches(x): the code graph says the change touched layer x —
 	// a symbol added, changed or removed in it since the run started.
 	"diff.touches": Layers,
+	// diff.none: the run has no diff of the code graph — a language with no
+	// extractor, or the graph off —: what the change touched is unknown.
+	"diff.none": nil,
+	// loop.plan(layers): the project asked for the backend to be planned by
+	// layer (loop.plan in .gofi.yaml); without it one role does every layer.
+	"loop.plan": {"layers"},
 }
 
 // Layers are what a plan divides the implementation of a backend change

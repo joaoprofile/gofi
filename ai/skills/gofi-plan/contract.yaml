@@ -15,5 +15,5 @@ tier: standard
 visibility: internal
 stage: plan
 triggers:
-  - all: [change.surface(backend)]
+  - all: [change.surface(backend), loop.plan(layers)]
 tools: [read, write, search, gofi]

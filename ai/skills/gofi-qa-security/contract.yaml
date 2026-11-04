@@ -19,5 +19,5 @@ triggers:
   - all: [sensor.green, diff.touches(integration)]
   - all: [sensor.green, layer(api)]
   - all: [sensor.green, layer(integration)]
-  - all: [sensor.green, change.surface(backend), plan.none]
+  - all: [sensor.green, change.surface(backend), diff.none]
 tools: [read, search, gofi, verify, verdict]

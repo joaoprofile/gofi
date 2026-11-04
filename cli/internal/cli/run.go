@@ -103,7 +103,9 @@ as not checked, never as passed.
 The policy is loop in .gofi.yaml: budget_usd stops the agents once spent,
 each turn given only what is left (or turn_budget_usd when lower) for the
 engine to stop itself there; turn_timeout (45m when empty) cuts a turn that
-does not end, the run stopped and resumable;
+does not end, the run stopped and resumable; plan: layers splits a backend
+change by layer, a role and a turn each (by default one role does every layer
+in one turn);
 max_iterations bounds the ways back to work, accept is clean or ressalvas,
 and escalate (on_no_progress, on_first_reject, never) says when a role that
 does not progress runs one tier up. When the run cannot go on — the contract
@@ -778,6 +780,9 @@ func changeFacts(cfg *config.GofiConfig, root, change string) (role.Facts, error
 		return nil, err
 	}
 	facts := role.Facts{}
+	if cfg.Loop != nil && cfg.Loop.Plan == "layers" {
+		facts["loop.plan(layers)"] = true
+	}
 	for _, s := range surfaces {
 		facts["change.surface("+s+")"] = true
 	}
