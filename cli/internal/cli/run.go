@@ -35,6 +35,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/sensor"
 	"github.com/joaoprofile/gofi/cli/internal/trace"
+	"github.com/joaoprofile/gofi/cli/internal/tui/chat"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
 	"github.com/joaoprofile/gofi/cli/internal/worktree"
 )
@@ -1229,11 +1230,14 @@ func askAtTerminal(out io.Writer, run string) func(context.Context, *intake.Elic
 // gofi run --context <ctx> --flow <flow> --events — and streams its events:
 // how the chat hands what a plan builds to the loop without running it inside
 // its own screen.
-func spawnDelivery(root string) func(flow, ctxName string) (<-chan loop.Event, func() error) {
-	return func(flow, ctxName string) (<-chan loop.Event, func() error) {
+func spawnDelivery(root string) func(flow, ctxName string) chat.Delivery {
+	return func(flow, ctxName string) chat.Delivery {
+		failed := func(err error) chat.Delivery {
+			return chat.Delivery{Events: closedEvents(), Wait: func() error { return err }, Stop: func() {}}
+		}
 		exe, err := os.Executable()
 		if err != nil {
-			return closedEvents(), func() error { return err }
+			return failed(err)
 		}
 		cmd := exec.Command(exe, "run", "--context", ctxName, "--flow", flow, "--events")
 		cmd.Dir = root
@@ -1241,16 +1245,26 @@ func spawnDelivery(root string) func(flow, ctxName string) (<-chan loop.Event, f
 		cmd.Stderr = &stderr
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
-			return closedEvents(), func() error { return err }
+			return failed(err)
 		}
 		if err := cmd.Start(); err != nil {
-			return closedEvents(), func() error { return err }
+			return failed(err)
 		}
-		return loop.Stream(stdout), func() error {
-			if err := cmd.Wait(); err != nil {
-				return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
-			}
-			return nil
+		return chat.Delivery{
+			Events: loop.Stream(stdout),
+			Wait: func() error {
+				if err := cmd.Wait(); err != nil {
+					return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+				}
+				return nil
+			},
+			// As gofi cancel stops it: the run checkpoints and ends
+			// cancelled, to go on with --resume.
+			Stop: func() {
+				if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+					_ = cmd.Process.Kill()
+				}
+			},
 		}
 	}
 }

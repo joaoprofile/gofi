@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -60,14 +61,14 @@ var lastDeliveries []string
 
 // fakeDeliver stands in for gofi run --context: it records the handoff and
 // ends with the outcome given.
-func fakeDeliver(record *[]string, outcome string) func(flow, ctx string) (<-chan loop.Event, func() error) {
-	return func(flow, ctx string) (<-chan loop.Event, func() error) {
+func fakeDeliver(record *[]string, outcome string) func(flow, ctx string) Delivery {
+	return func(flow, ctx string) Delivery {
 		*record = append(*record, flow+" "+ctx)
 		ch := make(chan loop.Event, 3)
-		ch <- loop.Event{Ev: "node.start", Node: "implement"}
-		ch <- loop.Event{Ev: "run.result", Why: outcome}
+		ch <- loop.Event{Ev: "node.start", Node: "implement", Run: "r-1", CostUSD: 0.4}
+		ch <- loop.Event{Ev: "run.result", Node: "r-1", Why: outcome, Run: "r-1", CostUSD: 1.25}
 		close(ch)
-		return ch, func() error { return nil }
+		return Delivery{Events: ch, Wait: func() error { return nil }, Stop: func() {}}
 	}
 }
 
@@ -376,5 +377,53 @@ func TestASpecIsReviewedBeforeTheApproval(t *testing.T) {
 	next, cmd := m.Update(msg)
 	if m = next.(model); m.wait != waitContinue || cmd == nil {
 		t.Errorf("after the review the chat must stop for the person: wait=%q", m.wait)
+	}
+}
+
+// A delivery is stopped from the chat — once, at its next checkpoint —, a
+// gate it opens is asked here and answered into the run, and what each run
+// spent is said.
+func TestADeliveryIsStoppedAndItsGateAnsweredFromTheChat(t *testing.T) {
+	m, _, _ := planModel(t, nil, nil)
+	stops := 0
+	ch := make(chan loop.Event, 4)
+	m.plan = &plan{res: &intake.Result{}, delivery: &delivery{events: ch, wait: func() error { return nil }, stop: func() { stops++ }, spent: map[string]float64{}}}
+
+	run := "r-1"
+	q := loop.Question{Schema: loop.GateSchema, Run: run, Node: "implement", Questions: []intake.ElicitQuest{
+		{ID: "q1", Text: "Paginar?", Options: []string{"sim", "não"}, Recommended: "sim"},
+		{ID: "q2", Text: "Ordem?", Options: []string{"data", "valor"}, Recommended: "data"}}}
+	data, _ := json.Marshal(q)
+	gate := filepath.Join(loop.Dir(m.opts.Root, run), loop.GateFile)
+	_ = os.MkdirAll(filepath.Dir(gate), 0o755)
+	_ = os.WriteFile(gate, data, 0o644)
+
+	next, _ := m.onDeliveryEvent(loop.Event{Ev: "gate.open", Node: "implement", Run: run, CostUSD: 0.7})
+	m = next.(model)
+	if m.wait != waitGate || len(m.plan.asking) != 2 {
+		t.Fatalf("wait %q, asking %d", m.wait, len(m.plan.asking))
+	}
+	next, _ = m.onPlanReply("2", nil)
+	m = next.(model)
+	next, _ = m.onPlanReply("seguir", nil)
+	m = next.(model)
+	raw, err := os.ReadFile(filepath.Join(loop.Dir(m.opts.Root, run), loop.AnswerFile))
+	var got map[string]any
+	_ = json.Unmarshal(raw, &got)
+	answers, _ := got["answers"].(map[string]any)
+	if answers == nil {
+		answers = got
+	}
+	if err != nil || answers["q1"] != "não" || answers["q2"] != "data" || m.wait != waitNone {
+		t.Errorf("answer %s (%v), wait %q", raw, err, m.wait)
+	}
+	if m.plan.delivery.spent[run] != 0.7 {
+		t.Errorf("spent %v", m.plan.delivery.spent)
+	}
+
+	m.stopDelivery()
+	m.stopDelivery()
+	if stops != 1 || m.notice == "" {
+		t.Errorf("stops %d, notice %q", stops, m.notice)
 	}
 }

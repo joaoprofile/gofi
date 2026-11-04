@@ -202,6 +202,9 @@ type Event struct {
 	// CostUSD is what the run had spent when the event happened: what a
 	// batch of runs side by side adds up as they go.
 	CostUSD float64 `json:"cost_usd,omitempty"`
+	// Run is the run the event is of: what a chat following a delivery of
+	// several changes answers a gate of, or stops.
+	Run string `json:"run,omitempty"`
 }
 
 // Runner carries out a flow over one change.
@@ -774,7 +777,7 @@ func (r *Runner) emit(s *State, e Event) {
 	r.seq++
 	e.Seq = r.seq
 	e.T = r.now()
-	e.CostUSD = s.CostUSD
+	e.CostUSD, e.Run = s.CostUSD, s.Run
 	line, _ := json.Marshal(e)
 	p := filepath.Join(Dir(r.Root, s.Run), "events.ndjson")
 	if f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
@@ -856,7 +859,7 @@ func Events(root, run string) ([]Event, error) {
 // what happens to a run past its terminal node — landing — is in the same
 // log gofi logs and gofi watch read.
 func AppendEvent(root, run string, e Event) Event {
-	e.Seq = countEvents(root, run) + 1
+	e.Seq, e.Run = countEvents(root, run)+1, run
 	if e.T.IsZero() {
 		e.T = time.Now().UTC()
 	}
