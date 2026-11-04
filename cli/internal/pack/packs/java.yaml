@@ -7,6 +7,7 @@ language: java
 tests: ["*Test.java", "*IT.java"]
 sources: ["*.java"]
 skips: ["@Disabled", "@Ignore", "assumeTrue("]
+asserts: ["assert", "verify("]
 sensors:
   # Cheapest first: a run stops at the first stage that fails. javac through
   # Maven places an error as [ERROR] file:[line,col].

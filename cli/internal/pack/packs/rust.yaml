@@ -9,6 +9,7 @@ language: rust
 tests: ["*_tests.rs"]
 sources: ["*.rs"]
 skips: ["#[ignore"]
+asserts: ["assert", "should_panic"]
 sensors:
   # Cheapest first: a run stops at the first stage that fails.
   build:  {run: "cd {src} && cargo build --all-targets --quiet --message-format short", format: lines}

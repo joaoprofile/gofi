@@ -75,6 +75,9 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string) (f
 		if grant != nil {
 			allowed, denied = claudeTools(grant)
 		}
+		// The contract is the person's: no turn of the loop writes it, and
+		// the engine refuses before the integrity stage would (0002, D12).
+		denied = append(denied, protectedWrites...)
 		return claude.New(claude.Options{Executable: os.Getenv(EnvEngine), Dir: root, Model: model,
 			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied})
 	}, nil
@@ -91,6 +94,13 @@ var claudeGrants = map[string][]string{
 	"verdict": {guard.MCPPrefix + "verdict_write"},
 	"memory":  {guard.MCPPrefix + "memory_write"},
 	"shell":   {"Bash"},
+}
+
+// protectedWrites are the writes no turn of the loop makes: the contract and
+// the discovery change only by the person.
+var protectedWrites = []string{
+	"Edit(specs/**)", "MultiEdit(specs/**)", "Write(specs/**)",
+	"Edit(prd/**)", "MultiEdit(prd/**)", "Write(prd/**)",
 }
 
 // gated are the tools that change the project or reach past it, refused to
