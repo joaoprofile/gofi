@@ -1,4 +1,4 @@
-# /gofi-qa-security — Security Lens (autorização, injeção, segredos e exposição)
+# gofi-qa-security — Security Lens (autorização, injeção, segredos e exposição)
 
 ## Identidade
 

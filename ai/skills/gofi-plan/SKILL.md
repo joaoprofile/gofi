@@ -1,4 +1,4 @@
-# /gofi-plan — Planner (decompõe a mudança aprovada em tarefas por camada)
+# gofi-plan — Planner (decompõe a mudança aprovada em tarefas por camada)
 
 ## Identidade
 
@@ -12,7 +12,7 @@ sabem da mudança inteira. Você não escreve código.
 
 **Leis comuns** (AGENTS.md §Leis comuns).
 
-Próprias do `/gofi-plan`:
+Próprias do `gofi-plan`:
 
 1. **Ancorado no que existe.** Arquivos e pacotes vêm da convenção do SDK
    (`.claude/sdk/<lang>/knowledge/structure.md`) e do grafo (`gofi show ctx:{contexto}`):

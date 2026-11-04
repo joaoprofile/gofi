@@ -14,7 +14,7 @@ O código faz algo que a spec viva não diz (ou o contrário). A spec viva **nã
    - **o código está certo** → mudança com delta MODIFICADO/ADICIONADO que
      descreve o comportamento real, `design: n/a` se nenhum código muda;
    - **a spec está certa** → é um defeito: mudança sem delta de requisito não
-     existe — registre o achado para o `/gofi-eng` corrigir contra o requisito
+     existe — registre o achado para o `gofi-eng` corrigir contra o requisito
      que já está lá.
 3. `gofi spec check <id>` e entregue para aprovação.
 
@@ -42,7 +42,7 @@ Ativa depois de um `gofi init` sobre uma base de código que já existia: há
 código, mas nenhum `specs/`, nenhum `memory/contexts/` e nenhuma diretiva
 `//gofi:context` — o grafo enxerga as chamadas e não sabe a que contexto cada
 símbolo pertence. Este modo produz **o mapa**; quem escreve a diretiva no código
-é o `/gofi-eng` (nunca esta skill).
+é o `gofi-eng` (nunca esta skill).
 
 1. **Levante os candidatos pelo grafo, não varrendo a árvore.**
    `gofi_graph_index.json` → o `gofi_graph_report.md` **de cada escopo** (o
@@ -66,11 +66,11 @@ símbolo pertence. Este modo produz **o mapa**; quem escreve a diretiva no códi
    negócio. Só siga depois do "ok".
 4. **Emita, por contexto confirmado:** `memory/contexts/{contexto}.md` (com o
    `## Estado atual` declarando **quais pacotes pertencem ao contexto** — é essa
-   lista que o `/gofi-eng` aplica) e, quando o dev pedir, a baseline daquele
+   lista que o `gofi-eng` aplica) e, quando o dev pedir, a baseline daquele
    contexto pelo **Modo 2**. Adotar um repo não exige spec de tudo de uma vez:
    o mapa vale por si, e as baselines vêm por contexto, sob demanda.
 5. **Frontmatter do contexto adotado:** `status: implementado`,
    `versao_spec: n/a` enquanto não houver spec — o código existe e é essa a
    verdade que o índice deve mostrar.
 6. **Regenerar os índices** (`gofi index docs`) e devolver, nos "Próximos
-   passos", que falta o `/gofi-eng` gravar as diretivas.
+   passos", que falta o `gofi-eng` gravar as diretivas.

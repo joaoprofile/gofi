@@ -23,7 +23,7 @@ DDA  =  SDD                  ← o contrato antes do código: spec viva + mudan�
       + Context (MCP Light)  ← acesso a DB/API/infra via SDK + docs, sem MCP server
 ```
 
-**Resultado prático:** quando você roda uma skill (`/gofi-spec`, `/gofi-eng`, …),
+**Resultado prático:** quando você roda uma skill (`/gofi-spec`, `gofi-eng`, …),
 ela lê automaticamente todo esse contexto antes de produzir qualquer output.
 Sem improviso, sem alucinação de convenção, sem repetição de erros já
 corrigidos.
@@ -33,7 +33,7 @@ corrigidos.
 ## Pipeline das Skills
 
 ```
-problema bruto  →  /gofi-pd  →  /gofi-spec  →  aprovação  →  /gofi-eng  →  /gofi-qa  →  arquivamento
+problema bruto  →  /gofi-pd  →  /gofi-spec  →  aprovação  →  gofi-eng  →  gofi-qa  →  arquivamento
                    (PRD)        (mudança)     (a pessoa)     (código)      (auditoria)   (spec viva)
 ```
 
@@ -45,9 +45,9 @@ no template do pack da linguagem. A pessoa aprova (`gofi change approve`), o
 loop implementa e audita por cenário, e `gofi change archive` aplica os deltas
 às specs vivas — sem modelo. Contexto novo é a mudança que só adiciona.
 
-- **Camada de apresentação:** `/gofi-ui` após a spec (e o contrato do `gofi-eng`).
-- **Plataforma / infra:** `/gofi-spec` (spec de infra) → `/gofi-ops`.
-- **Doc de contrato:** abrir o handler no IDE → `/gofi-doc`.
+- **Camada de apresentação:** `gofi-ui` após a spec (e o contrato do `gofi-eng`).
+- **Plataforma / infra:** `/gofi-spec` (spec de infra) → `gofi-ops`.
+- **Doc de contrato:** abrir o handler no IDE → `gofi-doc`.
 - **Panorama do projeto:** `/gofi-status` a qualquer momento.
 
 Cada skill tem responsabilidade única e **não invade** o território da
@@ -82,11 +82,11 @@ Detalhe completo no [`AGENTS.md`](../AGENTS.md) da raiz do projeto.
 |----------------|--------------------------------------------------------------------------------------------|------------------------|
 | `/gofi-pd`     | Product Discovery — transforma problema bruto em PRD navegável                              | não escreve spec       |
 | `/gofi-spec`   | Specification Architect — escreve mudanças (proposta, deltas, design) e a baseline da spec viva (inclui infra) | não escreve código nem aprova |
-| `/gofi-eng`    | Context Engineer — implementa o contexto Go (model → repository → service → handler)        | não decide arquitetura |
-| `/gofi-ui`     | Context UI/UX — implementa a camada de apresentação de uma mudança aprovada                | não toca backend       |
-| `/gofi-ops`    | Platform & Delivery — DevOps (IaC, build, CI/CD) a partir de uma mudança de infra aprovada | não escolhe cloud      |
-| `/gofi-qa`     | Quality Auditor — audita a mudança cenário a cenário, contra o design, o SDK e as regras    | não reescreve código   |
-| `/gofi-doc`    | Documentation Generator — gera doc de contrato a partir dos handlers Go                     | read-only sobre código |
+| `gofi-eng`    | Context Engineer — implementa o contexto Go (model → repository → service → handler)        | não decide arquitetura |
+| `gofi-ui`     | Context UI/UX — implementa a camada de apresentação de uma mudança aprovada                | não toca backend       |
+| `gofi-ops`    | Platform & Delivery — DevOps (IaC, build, CI/CD) a partir de uma mudança de infra aprovada | não escolhe cloud      |
+| `gofi-qa`     | Quality Auditor — audita a mudança cenário a cenário, contra o design, o SDK e as regras    | não reescreve código   |
+| `gofi-doc`    | Documentation Generator — gera doc de contrato a partir dos handlers Go                     | read-only sobre código |
 | `/gofi-status` | Índice de Contextos — monta sob demanda o panorama lendo o frontmatter dos `contexts/*.md` | não edita memória      |
 
 ### [`/gofi-pd`](.claude/skills/gofi-pd/SKILL.md) — Product Discovery
@@ -105,7 +105,7 @@ Escreve o contrato como **mudanças** (decisão 0003).
 - Produz também as mudanças de **infra/plataforma** consumidas pelo `gofi-ops`
 - **Não escreve código e não aprova** — `gofi spec check` em zero erros, e a pessoa aprova
 
-### [`/gofi-eng`](.claude/skills/gofi-eng/SKILL.md) — Context Engineer
+### [`gofi-eng`](.claude/skills/gofi-eng/SKILL.md) — Context Engineer
 
 Implementa uma mudança aprovada, em camadas, na linguagem do `.gofi.yaml`.
 
@@ -115,7 +115,7 @@ Implementa uma mudança aprovada, em camadas, na linguagem do `.gofi.yaml`.
 - Registra arquivos criados e decisões na memória do contexto
 - Atualiza a própria spec (rastreabilidade, histórico, divergências)
 
-### [`/gofi-ui`](.claude/skills/gofi-ui/SKILL.md) — Context UI/UX
+### [`gofi-ui`](.claude/skills/gofi-ui/SKILL.md) — Context UI/UX
 
 Implementa a camada de apresentação (pages, features, components, layouts,
 hooks) a partir da spec aprovada e — quando existir — do contrato do `gofi-eng`.
@@ -125,7 +125,7 @@ hooks) a partir da spec aprovada e — quando existir — do contrato do `gofi-e
   [`expertise/ui-design/ux-principles.md`](.claude/expertise/ui-design/ux-principles.md)
 - Não escreve fora do escopo da spec; pergunta antes de codificar quando falta contexto
 
-### [`/gofi-ops`](.claude/skills/gofi-ops/SKILL.md) — Platform & Delivery
+### [`gofi-ops`](.claude/skills/gofi-ops/SKILL.md) — Platform & Delivery
 
 Engenheiro DevOps: infraestrutura como código, empacotamento de artefato e
 pipelines de CI/CD a partir da **spec de infra aprovada**.
@@ -135,7 +135,7 @@ pipelines de CI/CD a partir da **spec de infra aprovada**.
 - **Não escolhe** cloud, topologia ou sizing por conta própria — vem do `ops:` + spec
 - Toda mudança passa por `plan`/`diff` aprovado **antes** de `apply`/`deploy`
 
-### [`/gofi-qa`](.claude/skills/gofi-qa/SKILL.md) — Quality Auditor
+### [`gofi-qa`](.claude/skills/gofi-qa/SKILL.md) — Quality Auditor
 
 Audita implementação contra spec, SDK e regras absolutas.
 
@@ -144,7 +144,7 @@ Audita implementação contra spec, SDK e regras absolutas.
 - Checa regras absolutas (erros, logging, camadas, mocks, IAM, netx)
 - **Não reescreve código** — reporta e sugere correções específicas
 
-### [`/gofi-doc`](.claude/skills/gofi-doc/SKILL.md) — Documentation Generator
+### [`gofi-doc`](.claude/skills/gofi-doc/SKILL.md) — Documentation Generator
 
 Gera doc de contrato de API derivada do código real, para **dois públicos**:
 engenheiro de frontend (cliente) e QA tester (plano de teste).
@@ -187,7 +187,7 @@ PRD), derivado do frontmatter de cada `contexts/*.md`.
 ```
 
 Onde `<lang>` corresponde a `project.language` em [`.gofi.yaml`](.gofi.yaml).
-Em v1 o SDK cobre **`go`** (backend) e o front (`/gofi-ui`): web pelo DS
+Em v1 o SDK cobre **`go`** (backend) e o front (`gofi-ui`): web pelo DS
 **`gofi-ui`** (`sdk/web/gofi-ui/`) e mobile pelo DS **`gofi-ui-native`**
 (`sdk/mobile/gofi-ui-native/`).
 
@@ -321,9 +321,9 @@ project:
   name: my-service
   language: go        # determina sdk/<lang>/ lido por gofi-eng/qa
 ui:
-  framework: react    # determina o stack de /gofi-ui
+  framework: react    # determina o stack de gofi-ui
 ops:
-  cloud: oci          # determina a stack de /gofi-ops (IaC, CI/CD, registry)
+  cloud: oci          # determina a stack de gofi-ops (IaC, CI/CD, registry)
 sources:
   agents: github.com/org/gofi@main          # base técnica → gofi update
   institutional: github.com/org/base@main   # base de negócio → gofi update institutional (opcional)
@@ -331,8 +331,8 @@ sources:
 ```
 
 `project.language` determina os paths de SDK/boilerplates do backend
-(`sdk/go/...`); `ui.framework` direciona o `/gofi-ui`; o bloco `ops:` direciona
-o `/gofi-ops`.
+(`sdk/go/...`); `ui.framework` direciona o `gofi-ui`; o bloco `ops:` direciona
+o `gofi-ops`.
 
 ---
 
@@ -373,17 +373,17 @@ Output típico do pipeline no serviço-alvo (backend):
 
 1. **Descoberta** — `/gofi-pd` transforma problema em PRD em `prd/{contexto}/`
 2. **Especificação** — `/gofi-spec` escreve a mudança em `specs/{contexto}/changes/{id}/`; `gofi spec check {id}`; a pessoa aprova com `gofi change approve {id}`
-3. **Implementação (backend)** — `/gofi-eng` implementa a mudança aprovada
-4. **Apresentação** — `/gofi-ui` implementa a UI da mudança, sobre o contrato do backend
-5. **Plataforma** — `/gofi-ops` provisiona IaC + pipelines de uma mudança de infra
-6. **Auditoria** — `/gofi-qa` valida cenário a cenário, contra o design, o SDK e o knowledge; aprovado limpo, `gofi change archive {id}` aplica a mudança às specs vivas
-7. **Documentação** — `/gofi-doc` gera doc de contrato a partir dos handlers
+3. **Implementação (backend)** — `gofi-eng` implementa a mudança aprovada
+4. **Apresentação** — `gofi-ui` implementa a UI da mudança, sobre o contrato do backend
+5. **Plataforma** — `gofi-ops` provisiona IaC + pipelines de uma mudança de infra
+6. **Auditoria** — `gofi-qa` valida cenário a cenário, contra o design, o SDK e o knowledge; aprovado limpo, `gofi change archive {id}` aplica a mudança às specs vivas
+7. **Documentação** — `gofi-doc` gera doc de contrato a partir dos handlers
 8. **Panorama** — `/gofi-status` mostra o estado de todos os contextos
 9. **Iteração** — correções do usuário alimentam `knowledge/`, pelo protocolo de aprendizado
 
 > Você pode entrar pelo passo 2 se já tiver clareza de produto, ou pelo passo 3
 > se já tiver uma mudança aprovada. Um projeto com specs no formato antigo
-> (`sdd-{contexto}.md`) migra com `gofi spec migrate` (ver `/gofi-migrate`). `/gofi-qa`, `/gofi-doc` e `/gofi-status` rodam
+> (`sdd-{contexto}.md`) migra com `gofi spec migrate` (ver `/gofi-migrate`). `gofi-qa`, `gofi-doc` e `/gofi-status` rodam
 > em qualquer momento sobre contextos existentes.
 
 ---

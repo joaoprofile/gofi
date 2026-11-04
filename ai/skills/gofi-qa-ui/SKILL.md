@@ -1,4 +1,4 @@
-# /gofi-qa-ui — UI Lens (acessibilidade e conformidade com o design system)
+# gofi-qa-ui — UI Lens (acessibilidade e conformidade com o design system)
 
 ## Identidade
 

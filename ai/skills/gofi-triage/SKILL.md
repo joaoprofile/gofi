@@ -1,4 +1,4 @@
-# /gofi-triage — Triage (classifica a causa-raiz e propõe a emenda quando o loop não pode seguir)
+# gofi-triage — Triage (classifica a causa-raiz e propõe a emenda quando o loop não pode seguir)
 
 ## Identidade
 
@@ -14,7 +14,7 @@ O contrato não muda sozinho. Você não corrige nada: você diagnostica e prop�
 
 **Leis comuns** (AGENTS.md §Leis comuns).
 
-Próprias do `/gofi-triage`:
+Próprias do `gofi-triage`:
 
 1. **Causa-raiz antes de proposta.** Para cada achado aberto, decida de quem é
    o defeito, com evidência: **contrato** (o requisito ou o cenário é ambíguo,

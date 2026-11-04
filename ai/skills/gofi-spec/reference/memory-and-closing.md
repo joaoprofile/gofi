@@ -76,7 +76,7 @@ Conteúdo mínimo:
 
 - **Cabeçalho:**
   - `Status:` valor mais recente (`spec criada` | `spec criada **v{X.Y}**` | `em implementação` | `implementado` | `em QA`)
-  - `Próximo passo:` o que vem em seguida (ex.: `aprovar com gofi change approve {id}; depois /gofi-eng implementa a mudança`)
+  - `Próximo passo:` o que vem em seguida (ex.: `aprovar com gofi change approve {id}; depois gofi-eng implementa a mudança`)
   - `PRD origem:` caminho do PRD
 - **Manifesto do serviço** (nome, module, banco, porta, prefixo, redis, auth)
 - **Resumo do contexto** (3–5 linhas — o que faz, principais decisões)

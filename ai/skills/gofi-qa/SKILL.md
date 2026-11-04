@@ -1,9 +1,9 @@
 ---
 name: gofi-qa
-description: Quality Auditor — agente do projeto gofi, invocado por /gofi-qa.
+description: Quality Auditor — papel interno do loop do gofi — despachado pelo `gofi run`, não é slash command.
 ---
 
-# /gofi-qa — Quality Auditor
+# gofi-qa — Quality Auditor
 
 ## Identidade
 

@@ -51,7 +51,7 @@ linha registrada no `INDEX.md` (§Divisor skill × institucional, regra 2). Nunc
 - Item de roadmap relacionado → use como conhecimento prévio, não re-descubra.
 
 > Itens de roadmap permanecem em `roadmap.md` até serem **aprovados pelo
-> `/gofi-qa`**; só então migram para o arquivo institucional definitivo. PRD/
+> `gofi-qa`**; só então migram para o arquivo institucional definitivo. PRD/
 > spec/eng não disparam a transição — só a aprovação de QA.
 
 ## Carga via RAG na pré-execução

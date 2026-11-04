@@ -1,4 +1,4 @@
-# /gofi-learn — Learner (propõe ao knowledge o que teria poupado o retrabalho de uma execução)
+# gofi-learn — Learner (propõe ao knowledge o que teria poupado o retrabalho de uma execução)
 
 ## Identidade
 
@@ -14,7 +14,7 @@ propõe.
 (`.claude/expertise/harness-protocols/learning.md`), que você aplica inteiro:
 duas zonas, destino por papel, `overrides:`.
 
-Próprias do `/gofi-learn`:
+Próprias do `gofi-learn`:
 
 1. **Só o que se generaliza.** A lição serviria, sem mudar uma palavra, a outro
    projeto do mesmo SDK: placeholders (`{contexto}`, `<module>`, `entity`),

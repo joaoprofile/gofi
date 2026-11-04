@@ -290,7 +290,7 @@ entra `--deep` — ver *Quando rodar `--deep`*.
 - **Repositório adotado** (`gofi init` sobre base existente) nasce sem diretiva
   nenhuma: o grafo enxerga as chamadas e o `contexto` vem vazio em tudo. A ponte
   se constrói em duas fases — `/gofi-spec` levanta o mapa pacote→contexto a
-  partir das **comunidades** do relatório e o confirma com o dev; `/gofi-eng`
+  partir das **comunidades** do relatório e o confirma com o dev; `gofi-eng`
   grava as diretivas e reconstrói o grafo. A fronteira de contexto é decisão do
   dev; o grafo só entrega a evidência.
 

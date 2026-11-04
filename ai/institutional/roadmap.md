@@ -14,7 +14,7 @@ atualizado: {{AAAA-MM-DD}}
 > antecipar dependências e evitar redundância.
 >
 > **Transição roadmap → plataforma:** um item permanece nesta lista até ser
-> **aprovado pelo `/gofi-qa`**. Só então mova-o daqui para o lugar correto nos
+> **aprovado pelo `gofi-qa`**. Só então mova-o daqui para o lugar correto nos
 > demais arquivos institucionais (subdomínios em [domain.md](domain.md),
 > integrações em [integrations.md](integrations.md), regras em
 > [business-rules.md](business-rules.md), atores em [actors.md](actors.md) etc.)
@@ -42,6 +42,6 @@ atualizado: {{AAAA-MM-DD}}
 
 ## {{ITEM_ROADMAP_3}}
 
-- **Status:** {{ex.: PRD criado + spec vX + eng implementado (AAAA-MM-DD); aguardando /gofi-qa}}.
+- **Status:** {{ex.: PRD criado + spec vX + eng implementado (AAAA-MM-DD); aguardando gofi-qa}}.
 - **Decisões já consolidadas** (não re-elicitar): {{...}}.
 - **A elicitar nos PRDs derivados:** {{...}}.

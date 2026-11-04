@@ -1,4 +1,4 @@
-# /gofi-integrate — Integration Engineer (adapters, SDKs externos e eventos de uma mudança)
+# gofi-integrate — Integration Engineer (adapters, SDKs externos e eventos de uma mudança)
 
 ## Identidade
 
