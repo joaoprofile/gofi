@@ -211,9 +211,32 @@ func TestTheSensorsComeFromTheLanguagePack(t *testing.T) {
 		got["test"].Format != pack.FormatGoTestJSON || got["static"].Run != "go -C backend vet ./..." {
 		t.Errorf("sensors = %+v", got)
 	}
-	cfg.Loop = &config.Loop{Sensors: map[string]string{"build": "make build"}}
+	cfg.Loop = &config.Loop{Sensors: map[string]config.Sensor{"build": {Run: "make build"}}}
 	if got, _ := sensorCommands(cfg); got["build"].Run != "make build" || got["build"].Format != pack.FormatLines {
 		t.Errorf("loop.sensors did not win: %+v", got)
+	}
+}
+
+// An optional stage (S7) names a tool that writes a report — a security
+// scan in SARIF —, and a format no sensor reads is refused.
+func TestAnOptionalStageNamesItsReport(t *testing.T) {
+	cfg := &config.GofiConfig{Backend: &config.Backend{Language: config.LanguageGo, Path: "backend"},
+		Test: config.DefaultTestSection(config.LanguageGo, "backend")}
+	cfg.Loop = &config.Loop{Sensors: map[string]config.Sensor{
+		"security": {Run: "horusec start -p {src} -o sarif -O out.sarif", Format: pack.FormatSARIF, Report: "out.sarif"}}}
+	got, err := sensorCommands(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := got["security"]; c.Run != "horusec start -p backend -o sarif -O out.sarif" || c.Format != pack.FormatSARIF || c.Report != "out.sarif" {
+		t.Errorf("security = %+v", c)
+	}
+	if _, set := got["coverage"]; set {
+		t.Error("coverage has a command though none was named")
+	}
+	cfg.Loop.Sensors["coverage"] = config.Sensor{Run: "make cover", Format: "cobertura"}
+	if _, err := sensorCommands(cfg); err == nil || !strings.Contains(err.Error(), "loop.sensors.coverage") {
+		t.Errorf("err = %v", err)
 	}
 }
 

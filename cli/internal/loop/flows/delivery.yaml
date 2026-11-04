@@ -20,7 +20,10 @@ nodes:
   # changed, so the audit reads a map that holds it and no agent rebuilds the
   # index by hand, and holds it to the architecture rules; trace, that every
   # requirement has its code and every scenario its test (0002, D10).
-  sense:     {kind: sensor, stages: [build, integrity, static, test, graph, trace]}
+  # security and coverage run what loop.sensors names for them — Horusec,
+  # a linter of secrets, a coverage gate, in SARIF —, and are not checked
+  # when it names nothing (S7).
+  sense:     {kind: sensor, stages: [build, integrity, static, test, graph, trace, security, coverage]}
   # What the build, the static analysis or the graph refused is repaired
   # with the findings alone, before anything reaches the audit.
   repair:    {kind: agent, stage: repair}

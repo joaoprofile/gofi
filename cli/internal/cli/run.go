@@ -1042,8 +1042,15 @@ func sensorCommands(cfg *config.GofiConfig) (map[string]pack.Command, error) {
 		}
 	}
 	if cfg.Loop != nil {
-		for stage, run := range cfg.Loop.Sensors {
-			cmds[stage] = pack.Command{Run: run, Format: pack.FormatLines}
+		for stage, s := range cfg.Loop.Sensors {
+			format := s.Format
+			if format == "" {
+				format = pack.FormatLines
+			}
+			if err := pack.CheckFormat(format); err != nil {
+				return nil, fmt.Errorf("loop.sensors.%s: %w", stage, err)
+			}
+			cmds[stage] = pack.Command{Run: s.Run, Format: format, Report: s.Report}.Expand(cfg.Backend.Path)
 		}
 	}
 	return cmds, nil

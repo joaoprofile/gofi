@@ -36,7 +36,11 @@ const (
 var outcomes = map[string]bool{"accepted": true, "impasse": true, "exhausted": true, "stopped": true}
 
 // Sensor stages, cheapest first. A sensor node runs the ones it lists.
-var stages = map[string]bool{"build": true, "test": true, "static": true, "graph": true, "trace": true, "integrity": true}
+var stages = map[string]bool{"build": true, "test": true, "static": true, "graph": true, "trace": true, "integrity": true,
+	// The optional stages (0002, D6, S7): checked when the project names a
+	// command for them in loop.sensors, not checked — never failed — when
+	// it does not.
+	"security": true, "coverage": true}
 
 // Flow is one declared graph.
 type Flow struct {
