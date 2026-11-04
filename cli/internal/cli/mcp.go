@@ -97,7 +97,7 @@ func newMCPServer(root, language string) *mcp.Server {
 	}, g.find)
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "show", Title: "Show a reference", Annotations: readOnly,
-		Description: `What is it? Describes one reference from the index: a symbol (Bill, service.Bill, sym:...) with where it is, what it calls and what calls it; a document path (outline with line ranges, links in and out); a section (path.md#heading or #L42); a context (ctx:name); a table (table:name). An ambiguous name returns the candidates.`,
+		Description: `What is it? Describes one reference from the index: a symbol (Bill, service.Bill, sym:...) with where it is, what it calls and what calls it; a document path (outline with line ranges, links in and out); a section (path.md#heading or #L42); a context (ctx:name); a table (table:name); a requirement (req:ctx/REQ-NN) with the symbols that implement it and each scenario's tests. An ambiguous name returns the candidates.`,
 	}, g.show)
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "path", Title: "Path between symbols", Annotations: readOnly,
