@@ -6,8 +6,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -25,9 +27,9 @@ type AuditCase struct {
 	lang    string
 }
 
-// Defect is one planted defect: a finding finds it when it is in its file,
-// within its lines, and says what it is about — or, with no file, names its
-// requirement and says it.
+// Defect is one planted defect: a finding finds it when it says what it is
+// about and is in its file, within its lines — or names that place in what
+// it says, or, with no file, names the defect's requirement: Rule.
 type Defect struct {
 	ID    string `yaml:"id" json:"id"`
 	What  string `yaml:"what" json:"what"`
@@ -35,8 +37,10 @@ type Defect struct {
 	Lines [2]int `yaml:"lines,omitempty" json:"lines,omitempty"`
 	// At places the defect by the text of its line, instead of Lines: the
 	// first line of File holding it, and Span lines after it.
-	At       string   `yaml:"at,omitempty" json:"at,omitempty"`
-	Span     int      `yaml:"span,omitempty" json:"span,omitempty"`
+	At   string `yaml:"at,omitempty" json:"at,omitempty"`
+	Span int    `yaml:"span,omitempty" json:"span,omitempty"`
+	// Rule is the requirement the defect breaks — REQ-01 —, or, for a
+	// defect with no file, the prefix of what a finding of it names.
 	Rule     string   `yaml:"rule,omitempty" json:"rule,omitempty"`
 	Keywords []string `yaml:"keywords" json:"keywords"`
 }
@@ -192,11 +196,50 @@ func (d Defect) finds(f verdict.Finding, src string) bool {
 		return d.Rule != "" && strings.Contains(strings.ToUpper(f.Rule+" "+f.Message), strings.ToUpper(d.Rule))
 	}
 	file := strings.ReplaceAll(d.File, "{src}", src)
-	if strings.TrimPrefix(f.File, "./") != file {
-		return false
+	// A finding of the contract, with no file, finds it by the requirement
+	// it breaks — the requirement, not one of its scenarios: "REQ-03.2 has
+	// no test" is another defect.
+	if f.File == "" {
+		return d.Rule != "" && namesRequirement(f.Rule, d.Rule)
 	}
 	// A finding with no line is placed by its file and what it says.
-	return f.Line == 0 || f.Line >= d.Lines[0]-2 && f.Line <= d.Lines[1]+2
+	if strings.TrimPrefix(f.File, "./") == file && (f.Line == 0 || d.near(f.Line)) {
+		return true
+	}
+	// One kept on another file finds it by the place it names: "the handler
+	// answers 500 (x_handler.go:33)".
+	for _, m := range rePlace.FindAllStringSubmatch(f.Message+" "+f.Evidence, -1) {
+		n, _ := strconv.Atoi(m[2])
+		if (m[1] == file || strings.HasSuffix(file, "/"+m[1])) && d.near(n) {
+			return true
+		}
+	}
+	return false
+}
+
+// rePlace is a place a finding names in its text: file.ext:line.
+var rePlace = regexp.MustCompile(`([\w./-]+\.\w+):(\d+)`)
+
+func (d Defect) near(line int) bool {
+	return line >= d.Lines[0]-2 && line <= d.Lines[1]+2
+}
+
+// namesRequirement reports whether a finding's rule names the requirement
+// itself: REQ-01, not REQ-01.2 nor REQ-012.
+func namesRequirement(rule, req string) bool {
+	rule, req = strings.ToUpper(rule), strings.ToUpper(req)
+	for i := strings.Index(rule, req); i >= 0; {
+		rest := rule[i+len(req):]
+		if rest == "" || rest[0] != '.' && (rest[0] < '0' || rest[0] > '9') {
+			return true
+		}
+		j := strings.Index(rest, req)
+		if j < 0 {
+			break
+		}
+		i += len(req) + j
+	}
+	return false
 }
 
 // AuditReport is the comparison, for a person.

@@ -1,17 +1,20 @@
 # The defects planted in this case's code: what an audit that reads it well
-# finds. A finding finds a defect when it is in its file, within its lines —
-# or names its requirement —, and says what it is about.
+# finds. A finding finds a defect when it says what it is about and is in its
+# file, within its lines — or names that place, or, with no file, names its
+# requirement (rule).
 change: bench-auditar-reembolso
 defects:
   - id: D1
     what: a taxa é de 3%, não de 2% (REQ-01)
     file: "{src}/domain/benchreembolso/service/benchreembolso_service.go"
     lines: [22, 22]
+    rule: REQ-01
     keywords: ["3%", "0.03", "0,03", "2%", "taxa"]
   - id: D2
     what: o prazo recusa só depois de 31 dias, não de 30 (REQ-03)
     file: "{src}/domain/benchreembolso/service/benchreembolso_service.go"
     lines: [19, 19]
+    rule: REQ-03
     keywords: ["31", "30", "prazo", "limite"]
   - id: D3
     what: dinheiro calculado em ponto flutuante
