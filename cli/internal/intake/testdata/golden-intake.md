@@ -17,10 +17,13 @@ preço = pricing.
 | I07 | /gofi-eng implemente o cancelamento | — | direto | não |
 | I08 | especifique o catálogo | catalog | gofi-spec | não |
 | I09 | implemente o catálogo | catalog | gofi-spec → gofi-eng → gofi-qa | não |
-| I10 | crie o módulo de programa de fidelidade | novo | gofi-pd → gofi-spec → gofi-eng → gofi-qa | não |
+| I10 | crie o módulo de programa de fidelidade | novo | gofi-pd → gofi-spec → gofi-eng → gofi-qa | sim |
 | I11 | altere as regras | — | gofi-spec → gofi-eng → gofi-qa | sim |
 | I12 | revise o código de pricing | pricing | gofi-qa | não |
 | I13 | crie a tela de cancelamento de pedidos | order | gofi-spec → gofi-ui → gofi-qa | não |
 | I14 | panorama dos contextos | — | gofi-status | não |
 | I15 | provisione o ambiente de pricing | pricing | gofi-ops | não |
 | I16 | corrija o erro no envio de preços | pricing | gofi-spec → gofi-eng → gofi-qa | não |
+| I17 | a intenção é criar uma camada de cache na API de pricing, ao chegar uma notificação validar neste cache se é de um seller que já deu churn e não continuar | pricing | gofi-spec → gofi-eng → gofi-qa | não |
+| I18 | a intenção é criar uma camada de cache na API.. ao chegar uma notificação, validar neste cache se é de um seller que ja deu churn e não continuar | novo | gofi-pd → gofi-spec → gofi-eng → gofi-qa | sim |
+| I19 | valide o código de pricing antes de alterar o envio de preços | pricing | gofi-qa | não |
