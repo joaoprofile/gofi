@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,5 +68,45 @@ func TestTheAgentsRunOnTheProjectsHost(t *testing.T) {
 	cfg.AI.Host = "copilot"
 	if _, err := agentEngine(cfg, dir, "", nil); err == nil || !strings.Contains(err.Error(), "GitHub Copilot") {
 		t.Errorf("a missing copilot: %v", err)
+	}
+}
+
+// A role's grant is what it may do on every host: Codex runs a role that
+// changes nothing read-only, with only its tools of gofi's server; Copilot
+// refuses what the role is not granted.
+func TestARolesGrantHoldsOnCodexAndCopilot(t *testing.T) {
+	audit := []string{"read", "search", "gofi", "verdict"}
+	sandbox, config := codexTools(audit)
+	if sandbox != "read-only" {
+		t.Errorf("audit sandbox = %q", sandbox)
+	}
+	want := `mcp_servers.gofi.enabled_tools=["find", "show", "path", "impact", "index_status", "index", "verdict_write"]`
+	if !slices.Contains(config, want) || !slices.Contains(config, `mcp_servers.gofi.command="gofi"`) {
+		t.Errorf("audit config = %v", config)
+	}
+	if sandbox, _ := codexTools([]string{"read", "edit", "shell", "verify"}); sandbox != "" {
+		t.Errorf("a role that edits runs in %q", sandbox)
+	}
+	if _, config := codexTools([]string{"read"}); !slices.Contains(config, "mcp_servers.gofi.enabled=false") {
+		t.Errorf("no gofi tool granted: %v", config)
+	}
+	if sandbox, config := codexTools(nil); sandbox != "" || slices.ContainsFunc(config, func(c string) bool { return strings.Contains(c, "enabled") }) {
+		t.Errorf("a skill's turn is limited: %q %v", sandbox, config)
+	}
+
+	deny := copilotDenied(audit)
+	for _, d := range []string{"shell", "write", "gofi(verify)", "gofi(memory_write)", "gofi(intake)"} {
+		if !slices.Contains(deny, d) {
+			t.Errorf("audit on Copilot does not refuse %s: %v", d, deny)
+		}
+	}
+	if slices.Contains(deny, "gofi(verdict_write)") || slices.Contains(deny, "gofi(find)") {
+		t.Errorf("audit on Copilot refuses a granted tool: %v", deny)
+	}
+	if d := copilotDenied([]string{"read", "edit"}); !slices.Equal(d, []string{"shell", "gofi"}) {
+		t.Errorf("edit, no gofi: %v", d)
+	}
+	if copilotDenied(nil) != nil {
+		t.Error("a skill's turn refuses tools on Copilot")
 	}
 }

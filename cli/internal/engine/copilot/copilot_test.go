@@ -87,3 +87,11 @@ func TestCancelEndsTheTurn(t *testing.T) {
 		}
 	}
 }
+
+// Every tool is allowed but the denied ones, each its own --deny-tool.
+func TestTheDeniedToolsAreRefused(t *testing.T) {
+	got := strings.Join(dialect{Options{Deny: []string{"shell", "gofi(verify)"}}}.Args("p", ""), " ")
+	if got != "-p p --allow-all-tools --no-ask-user --silent --deny-tool shell --deny-tool gofi(verify)" {
+		t.Errorf("args = %s", got)
+	}
+}

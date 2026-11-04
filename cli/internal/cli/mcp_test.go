@@ -70,7 +70,11 @@ func TestMCPServesTheIndex(t *testing.T) {
 			t.Errorf("%s is a query and must say it is read-only", tool.Name)
 		}
 	}
-	for _, want := range []string{"find", "show", "path", "impact", "intake", "index_status", "index", "verify", "verdict_write", "memory_write"} {
+	// What a role is granted on Codex and Copilot is named from this list.
+	if len(names) != len(gofiServerTools) {
+		t.Errorf("the server serves %v, gofiServerTools names %v", names, gofiServerTools)
+	}
+	for _, want := range gofiServerTools {
 		if !slices.Contains(names, want) {
 			t.Errorf("tool %s missing from %v", want, names)
 		}

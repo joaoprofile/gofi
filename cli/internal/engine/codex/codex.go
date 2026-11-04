@@ -23,6 +23,8 @@ type Options struct {
 	// Sandbox is the policy for the commands the model runs; workspace-write
 	// when empty — edits in the project, nothing outside it.
 	Sandbox string
+	// Config are -c overrides, key=value in TOML: the MCP servers' tools.
+	Config []string
 }
 
 // New opens a session; nothing runs until the first turn.
@@ -42,6 +44,9 @@ func (d dialect) Args(prompt, resume string) []string {
 	args := []string{"exec", "--json", "--sandbox", d.o.Sandbox, "--skip-git-repo-check"}
 	if d.o.Model != "" {
 		args = append(args, "--model", d.o.Model)
+	}
+	for _, c := range d.o.Config {
+		args = append(args, "-c", c)
 	}
 	if resume != "" {
 		args = append(args, "resume", resume)

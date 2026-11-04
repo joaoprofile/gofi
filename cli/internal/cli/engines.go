@@ -55,16 +55,17 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string) (f
 		if err != nil {
 			return nil, err
 		}
-		return func(model string, _ []string) engine.Session {
-			return skillTurns{codex.New(codex.Options{Executable: exe, Dir: root, Model: model})}
+		return func(model string, grant []string) engine.Session {
+			sandbox, config := codexTools(grant)
+			return skillTurns{codex.New(codex.Options{Executable: exe, Dir: root, Model: model, Sandbox: sandbox, Config: config})}
 		}, nil
 	case host.Copilot.ID:
 		exe, err := hostExecutable(h, EnvCopilot, copilot.DefaultExecutable)
 		if err != nil {
 			return nil, err
 		}
-		return func(model string, _ []string) engine.Session {
-			return skillTurns{copilot.New(copilot.Options{Executable: exe, Dir: root, Model: model})}
+		return func(model string, grant []string) engine.Session {
+			return skillTurns{copilot.New(copilot.Options{Executable: exe, Dir: root, Model: model, Deny: copilotDenied(grant)})}
 		}, nil
 	}
 	if err := requireClaudeCode(os.Getenv(EnvEngine)); err != nil {
@@ -83,17 +84,98 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string) (f
 	}, nil
 }
 
-// claudeGrants are Claude Code's tools for each tool a contract grants.
+// claudeGrants are Claude Code's own tools for each tool a contract grants;
+// gofi's are in gofiGrants.
 var claudeGrants = map[string][]string{
-	"read":    {"Read"},
-	"edit":    {"Edit", "MultiEdit", "NotebookEdit"},
-	"write":   {"Write"},
-	"search":  {"Glob", "Grep"},
-	"gofi":    {guard.MCPPrefix + "find", guard.MCPPrefix + "show", guard.MCPPrefix + "path", guard.MCPPrefix + "impact", guard.MCPPrefix + "index_status", guard.MCPPrefix + "index"},
-	"verify":  {guard.MCPPrefix + "verify"},
-	"verdict": {guard.MCPPrefix + "verdict_write"},
-	"memory":  {guard.MCPPrefix + "memory_write"},
-	"shell":   {"Bash"},
+	"read":   {"Read"},
+	"edit":   {"Edit", "MultiEdit", "NotebookEdit"},
+	"write":  {"Write"},
+	"search": {"Glob", "Grep"},
+	"shell":  {"Bash"},
+}
+
+// gofiGrants are the tools of gofi's MCP server, by their name on it, for
+// each tool a contract grants: the same on every host.
+var gofiGrants = map[string][]string{
+	"gofi":    {"find", "show", "path", "impact", "index_status", "index"},
+	"verify":  {"verify"},
+	"verdict": {"verdict_write"},
+	"memory":  {"memory_write"},
+}
+
+// gofiServerTools are every tool gofi's MCP server serves.
+var gofiServerTools = []string{"find", "show", "path", "impact", "intake", "index_status", "index", "verify", "verdict_write", "memory_write"}
+
+// grantedGofi are the server's tools a grant names, in the server's order.
+func grantedGofi(grant []string) []string {
+	var named []string
+	for _, g := range grant {
+		named = append(named, gofiGrants[g]...)
+	}
+	var out []string
+	for _, t := range gofiServerTools {
+		if slices.Contains(named, t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// changes reports whether a grant lets the role change the project.
+func changes(grant []string) bool {
+	return slices.Contains(grant, "edit") || slices.Contains(grant, "write") || slices.Contains(grant, "shell")
+}
+
+// codexTools turns a contract's grant into Codex's sandbox and the -c
+// overrides of gofi's server. Codex edits through its shell, so it has no
+// tool to refuse one by one: a role that changes nothing runs read-only.
+// The server is given whole — Codex reads the project's config only for a
+// trusted project — with the tools the role is granted, approved: a headless
+// exec cancels a call it would ask about (openai/codex#24135). A nil grant —
+// a skill's turn — keeps the sandbox and every tool.
+func codexTools(grant []string) (sandbox string, config []string) {
+	server := "mcp_servers." + host.ServerName
+	config = []string{server + `.command="gofi"`, server + `.args=["mcp"]`, server + `.default_tools_approval_mode="approve"`}
+	if grant == nil {
+		return "", config
+	}
+	if !changes(grant) {
+		sandbox = "read-only"
+	}
+	tools := grantedGofi(grant)
+	if len(tools) == 0 {
+		return sandbox, append(config, server+".enabled=false")
+	}
+	return sandbox, append(config, server+`.enabled_tools=["`+strings.Join(tools, `", "`)+`"]`)
+}
+
+// copilotDenied turns a contract's grant into what Copilot refuses: a deny
+// wins over the --allow-all-tools a headless run needs. Copilot's write is
+// every edit, so edit and write are granted together; reading and searching
+// it never asks about. Its write(path) matches a file's name, not a folder,
+// so the contract is not refused here: the integrity stage refuses an edit
+// of it (0002, D12). A nil grant — a skill's turn — refuses nothing.
+func copilotDenied(grant []string) []string {
+	if grant == nil {
+		return nil
+	}
+	var deny []string
+	if !slices.Contains(grant, "shell") {
+		deny = append(deny, "shell")
+	}
+	if !slices.Contains(grant, "edit") && !slices.Contains(grant, "write") {
+		deny = append(deny, "write")
+	}
+	granted := grantedGofi(grant)
+	if len(granted) == 0 {
+		return append(deny, host.ServerName)
+	}
+	for _, t := range gofiServerTools {
+		if !slices.Contains(granted, t) {
+			deny = append(deny, host.ServerName+"("+t+")")
+		}
+	}
+	return deny
 }
 
 // protectedWrites are the writes no turn of the loop makes: the contract and
@@ -114,6 +196,9 @@ var gated = []string{"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "No
 func claudeTools(grant []string) (allowed, denied []string) {
 	for _, g := range grant {
 		allowed = append(allowed, claudeGrants[g]...)
+		for _, t := range gofiGrants[g] {
+			allowed = append(allowed, guard.MCPPrefix+t)
+		}
 	}
 	for _, t := range gated {
 		if !slices.Contains(allowed, t) {
