@@ -20,6 +20,9 @@ type Options struct {
 	Executable string // DefaultExecutable when empty
 	Dir        string // the project root the engine runs in
 	Model      string // passed as --model when set
+	// Deny are the tools refused, as --deny-tool patterns (shell, write,
+	// Server(tool)): a deny wins over --allow-all-tools.
+	Deny []string
 }
 
 // New opens a session; nothing runs until the first turn.
@@ -32,11 +35,14 @@ func New(o Options) *oneshot.Session {
 
 type dialect struct{ o Options }
 
-// Args run the prompt headless: every tool allowed, as the CLI requires
-// without a person to approve, never pausing to ask, only the response on
-// stdout.
+// Args run the prompt headless: every tool allowed but those denied, as the
+// CLI requires without a person to approve, never pausing to ask, only the
+// response on stdout.
 func (d dialect) Args(prompt, _ string) []string {
 	args := []string{"-p", prompt, "--allow-all-tools", "--no-ask-user", "--silent"}
+	for _, t := range d.o.Deny {
+		args = append(args, "--deny-tool", t)
+	}
 	if d.o.Model != "" {
 		args = append(args, "--model", d.o.Model)
 	}

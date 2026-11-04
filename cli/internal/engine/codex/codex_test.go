@@ -98,3 +98,11 @@ func TestAMissingCodexSaysHowToInstallIt(t *testing.T) {
 		t.Errorf("events %+v", evs)
 	}
 }
+
+// The overrides go to codex as -c, before the prompt and a resume.
+func TestTheOverridesAreGivenAsConfig(t *testing.T) {
+	got := strings.Join(dialect{Options{Sandbox: "read-only", Config: []string{"a=1", "b=2"}}}.Args("p", "id"), " ")
+	if got != "exec --json --sandbox read-only --skip-git-repo-check -c a=1 -c b=2 resume id p" {
+		t.Errorf("args = %s", got)
+	}
+}
