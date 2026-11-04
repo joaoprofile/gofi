@@ -2,8 +2,11 @@
 
 const {
 	runIntakeKept, phaseTurn, nextStep, deliveryFlow, deliverable, deliverContext,
-	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract,
+	readElicitation, clearElicitation, elicitQuestions, withDecisions, sealContract, readGate, answerGate,
 } = require('./intake.js');
+
+/** The decisions a delivery's gate waits on, asked as an elicitation's are. */
+const GATE = '__gate';
 const { RunRecord } = require('./runs.js');
 
 /**
@@ -195,7 +198,13 @@ const conduct = {
 		this.running = true;
 		this.setRunning(true);
 		this.post({ type: 'notice', text: `Entrega: o loop executa as mudanças seladas de ${context} (fluxo ${flow}).` });
+		// What each run spent, as its events say; the gate being answered.
+		const delivery = { control: {}, spent: {}, total() { return Object.values(this.spent).reduce((a, b) => a + b, 0); } };
+		this.delivery = delivery;
 		const done = await this.deliveryRunner(this.gofiPath(), this.projectRoot, flow, context, (e) => {
+			if (e.run && typeof e.cost_usd === 'number' && e.cost_usd > (delivery.spent[e.run] || 0)) {
+				delivery.spent[e.run] = e.cost_usd;
+			}
 			if (e.ev === 'node.start') {
 				this.post({ type: 'notice', text: `● ${e.node}` });
 			} else if (e.ev === 'edge') {
@@ -203,7 +212,28 @@ const conduct = {
 			} else if (e.ev === 'node.failed') {
 				this.post({ type: 'notice', text: `${e.node}: ${e.why}` });
 			} else if (e.ev === 'gate.open') {
-				this.post({ type: 'notice', text: 'A entrega espera uma decisão que a mudança não cobre.', hint: `responda num terminal — ${e.why}` });
+				// Asked here as cards, answered into the run's gate — any
+				// terminal could answer it too, with gofi answer.
+				const gate = e.run && plan.asking.length === 0 ? this.gateReader(this.projectRoot, e.run) : null;
+				if (gate) {
+					plan.decisions[GATE] = { e: gate, answers: {}, run: e.run };
+					plan.asking = elicitQuestions(gate);
+					plan.askingFor = GATE;
+					this.post({ type: 'notice', text: `A execução ${e.run} espera ${gate.questions.length === 1 ? 'uma decisão' : `${gate.questions.length} decisões`} que a mudança não cobre.` });
+					this.askNextDecision();
+				} else {
+					this.post({ type: 'notice', text: 'A entrega espera uma decisão que a mudança não cobre.', hint: `responda num terminal — ${e.why}` });
+				}
+			} else if (e.ev === 'gate.answered') {
+				this.post({ type: 'notice', text: 'Decisão respondida: a execução segue.' });
+			} else if (e.ev === 'run.cancelled') {
+				this.post({ type: 'notice', text: `Execução parada em ${e.node}: continua com gofi run --resume ${e.run || ''}`.trim() });
+			} else if (e.ev === 'land.conflict') {
+				this.post({ type: 'notice', text: `Conflito ao integrar: ${e.why}`, hint: 'a branch ficou para você' });
+			} else if (e.ev === 'dispatch' || e.ev === 'skip' || e.ev === 'plan') {
+				this.post({ type: 'notice', text: `${e.ev} ${[e.to, e.why].filter(Boolean).join(' — ')}` });
+			} else if (e.ev === 'run.result') {
+				this.post({ type: 'notice', text: `${e.node}: ${e.why || 'sem resultado'} · US$ ${(delivery.spent[e.node] || 0).toFixed(2)}` });
 			} else if (e.ev === 'escalate') {
 				this.post({ type: 'notice', text: `${e.to} sobe de tier: ${e.why}` });
 			} else if (e.ev === 'proposal') {
@@ -219,9 +249,10 @@ const conduct = {
 			} else if (e.ev === 'work.kept') {
 				this.post({ type: 'notice', text: `O trabalho não aceito ficou na branch ${e.to}; a árvore voltou ao início.` });
 			}
-		});
+		}, delivery.control);
+		this.delivery = null;
 		if (plan.run) {
-			plan.run.phase({ role: 'gofi run', tier: '', why: flow, tier_why: '', seconds: 0, cost_usd: 0, ok: done.ok && done.outcome === 'accepted' });
+			plan.run.phase({ role: 'gofi run', tier: '', why: flow, tier_why: '', seconds: 0, cost_usd: delivery.total(), ok: done.ok && done.outcome === 'accepted' });
 		}
 		plan.verdict = done.outcome;
 		if (!done.ok || done.outcome !== 'accepted') {
@@ -316,6 +347,10 @@ const conduct = {
 	askNextDecision() {
 		const plan = this.plan;
 		if (plan.asking.length === 0) {
+			if (plan.askingFor === GATE) {
+				this.answerGateDecisions();
+				return;
+			}
 			this.conductNext();
 			return;
 		}
@@ -324,6 +359,31 @@ const conduct = {
 			type: 'planDecision', role: plan.askingFor, question: plan.asking[0],
 			index: d.e.questions.length - plan.asking.length, total: d.e.questions.length,
 		});
+	},
+
+	/**
+	 * Writes what was answered of a delivery's gate into the run: what was
+	 * left out takes its recommendation. The delivery goes on by itself.
+	 */
+	async answerGateDecisions() {
+		const plan = this.plan;
+		const d = plan.decisions[GATE];
+		delete plan.decisions[GATE];
+		plan.askingFor = '';
+		const res = await this.gateAnswerer(this.gofiPath(), this.projectRoot, d.run, d.answers);
+		if (!res.ok) {
+			this.post({ type: 'notice', text: `A resposta não foi gravada: ${res.output}`, hint: `gofi answer ${d.run}` });
+		}
+	},
+
+	/** Stops the delivery under way at its next checkpoint; it goes on with gofi run --resume. */
+	stopDelivery() {
+		const d = this.delivery;
+		if (d && d.control.stop && !d.stopping) {
+			d.stopping = true;
+			d.control.stop();
+			this.post({ type: 'notice', text: 'Parando a entrega no próximo checkpoint — gofi run --resume continua.' });
+		}
 	},
 
 	/** Ends the plan, closing its record and giving the chat its own session back. */
@@ -350,6 +410,7 @@ const conduct = {
 	},
 
 	endPlan(message) {
+		this.stopDelivery();
 		const plan = this.plan;
 		if (plan && plan.run) {
 			plan.run.finish(plan.outcome || 'stopped', plan.verdict);
@@ -438,6 +499,8 @@ function installConduct(ChatClass) {
 	ChatClass.prototype.intakeRunner = runIntakeKept;
 	ChatClass.prototype.sealRunner = sealContract;
 	ChatClass.prototype.deliveryRunner = deliverContext;
+	ChatClass.prototype.gateReader = readGate;
+	ChatClass.prototype.gateAnswerer = answerGate;
 }
 
 module.exports = { installConduct };

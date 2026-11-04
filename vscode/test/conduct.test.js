@@ -412,4 +412,43 @@ test('o arquivo em foco continua enquanto está aberto e vai como referência na
 	vscode.window.activeTextEditor = undefined;
 });
 
+test('a entrega para pelo painel, pergunta o portão em cartões e diz o que cada execução gastou', async () => {
+	const { chat, posted } = makeChat([threePhases()]);
+	let release;
+	const finished = new Promise((resolve) => { release = resolve; });
+	let stops = 0;
+	const answered = [];
+	chat.gateReader = (root, run) => (run === 'r-1' ? { questions: [
+		{ id: 'q1', text: 'Paginar?', options: ['sim', 'não'], recommended: 'sim', why: 'padrão' },
+		{ id: 'q2', text: 'Ordem?', options: ['data', 'valor'], recommended: 'data' }], derived: [] } : null);
+	chat.gateAnswerer = async (gofi, root, run, answers) => { answered.push({ run, answers }); return { ok: true, output: '' }; };
+	chat.deliveryRunner = async (gofi, root, flow, context, onEvent, control) => {
+		control.stop = () => { stops++; };
+		onEvent({ ev: 'node.start', node: 'implement', run: 'r-1', cost_usd: 0.5 });
+		onEvent({ ev: 'gate.open', node: 'implement', run: 'r-1', why: 'gofi answer r-1', cost_usd: 0.8 });
+		await finished;
+		onEvent({ ev: 'run.result', node: 'r-1', why: 'accepted', run: 'r-1', cost_usd: 1.5 });
+		return { ok: true, outcome: 'accepted', output: '' };
+	};
+	await chat.send('altere o pricing');
+	await tick();
+	done(chat);
+	chat.onWebviewMessage({ type: 'planContinue' });
+	await tick();
+	await tick();
+	const card = posted.find((m) => m.type === 'planDecision');
+	assert.ok(card && card.question.id === 'q1', 'o portão vira cartão');
+	chat.onWebviewMessage({ type: 'planElicitAnswer', id: 'q1', value: 'não' });
+	chat.onWebviewMessage({ type: 'planElicitProceed' });
+	await tick();
+	assert.deepStrictEqual(answered, [{ run: 'r-1', answers: { q1: 'não' } }], 'o que ficou de fora segue a recomendação, como gofi answer');
+	chat.stop();
+	chat.stop();
+	assert.strictEqual(stops, 1, 'parar para a entrega uma vez, no próximo checkpoint');
+	release();
+	await tick();
+	await tick();
+	assert.ok(posted.some((m) => m.type === 'notice' && /r-1: accepted · US\$ 1\.50/.test(m.text)), 'o custo da execução aparece');
+});
+
 run();

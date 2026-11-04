@@ -1650,6 +1650,12 @@ class Chat {
 		// the honest read of that intent. If the user wanted to keep some, they
 		// can retype it.
 		this.pending.length = 0;
+		// A delivery is the loop's, in a process of its own: it stops at its
+		// next checkpoint, not mid-node.
+		if (this.delivery) {
+			this.stopDelivery();
+			return;
+		}
 		if (this.session && this.running) {
 			this.session.cancel();
 		}

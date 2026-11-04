@@ -60,32 +60,86 @@ function readRun(root, run) {
 	const flow = readJSON(path.join(dir, 'flow.json'));
 	const state = readJSON(path.join(dir, 'state.json'));
 	const trace = readJSON(path.join(dir, 'trace.json'));
-	const visits = {};
-	const taken = {};
-	let text = '';
+	const { visits, taken } = readEvents(path.join(dir, 'events.ndjson'));
+	const report = fs.existsSync(path.join(dir, 'report.md'));
+	return { run, flow, state, trace, visits, taken, report };
+}
+
+/** What each events file was read up to, and what it counted so far. */
+const tails = new Map();
+
+/**
+ * Counts a run's node visits and edges taken, reading only what was added
+ * to its events since the last read: a run's events only grow. A file that
+ * shrank — another run under the same name — is read again from the start.
+ *
+ * @param {string} file
+ */
+function readEvents(file) {
+	let t = tails.get(file);
+	let size = 0;
 	try {
-		text = fs.readFileSync(path.join(dir, 'events.ndjson'), 'utf8');
+		size = fs.statSync(file).size;
 	} catch {
 		// A run that wrote no event yet is drawn as its flow alone.
+		tails.delete(file);
+		return { visits: {}, taken: {} };
 	}
-	for (const line of text.split('\n')) {
-		if (!line.trim()) {
-			continue;
-		}
-		let e;
+	if (!t || size < t.offset) {
+		t = { offset: 0, rest: '', visits: {}, taken: {} };
+		tails.set(file, t);
+	}
+	if (size > t.offset) {
+		const fd = fs.openSync(file, 'r');
 		try {
-			e = JSON.parse(line);
-		} catch {
-			continue;
-		}
-		if (e.ev === 'node.start') {
-			visits[e.node] = (visits[e.node] || 0) + 1;
-		} else if (e.ev === 'edge' && e.to) {
-			const key = `${e.node}>${e.to}`;
-			taken[key] = (taken[key] || 0) + 1;
+			const buf = Buffer.alloc(size - t.offset);
+			fs.readSync(fd, buf, 0, buf.length, t.offset);
+			t.offset = size;
+			const text = t.rest + buf.toString('utf8');
+			const lines = text.split('\n');
+			// A line still being written waits for the next read; one that
+			// is whole already — an object, the last line of the file — is
+			// counted now: a part of an object never parses.
+			t.rest = lines.pop();
+			for (const line of lines) {
+				count(t, line);
+			}
+			if (t.rest.trim() && isJSON(t.rest)) {
+				count(t, t.rest);
+				t.rest = '';
+			}
+		} finally {
+			fs.closeSync(fd);
 		}
 	}
-	return { run, flow, state, trace, visits, taken };
+	return { visits: { ...t.visits }, taken: { ...t.taken } };
+}
+
+function isJSON(text) {
+	try {
+		JSON.parse(text);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function count(t, line) {
+	if (!line.trim()) {
+		return;
+	}
+	let e;
+	try {
+		e = JSON.parse(line);
+	} catch {
+		return;
+	}
+	if (e.ev === 'node.start') {
+		t.visits[e.node] = (t.visits[e.node] || 0) + 1;
+	} else if (e.ev === 'edge' && e.to) {
+		const key = `${e.node}>${e.to}`;
+		t.taken[key] = (t.taken[key] || 0) + 1;
+	}
 }
 
 /**
@@ -242,7 +296,63 @@ function runMarkup(model, css) {
 	const graph = model.flow ? flowSVG(model) : '<p class="muted">Esta execução não gravou o fluxo (gofi anterior ao flow.json).</p>';
 	return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><link rel="stylesheet" href="${css}"></head>`
 		+ `<body id="runView">${head}<section><h2>Fluxo</h2><div class="flow">${graph}</div></section>`
+		+ detailsHTML(model)
 		+ `<section><h2>Rastreio</h2>${matrixHTML(model.trace)}</section></body></html>`;
+}
+
+const MAX_SHOWN = 20;
+
+/**
+ * What the run knows beyond its flow: the sensors — a stage not checked
+ * is not a stage that passed —, the audit, the amendment it proposed, where
+ * its work went, and its report.
+ *
+ * @param {ReturnType<typeof readRun>} model
+ */
+function detailsHTML(model) {
+	const s = model.state || {};
+	const out = [];
+	const sensor = s.sensor || {};
+	const notes = String(sensor.output || '').split('\n').filter((l) => /não verificado|verde na mesma árvore/.test(l));
+	if ((sensor.failed || []).length > 0 || notes.length > 0) {
+		let h = '<section><h2>Sensores</h2>';
+		if ((sensor.failed || []).length > 0) {
+			h += `<p class="bad">Falhou em ${esc(sensor.failed.join(', '))}.</p>`;
+			const fs_ = sensor.findings || [];
+			if (fs_.length > 0) {
+				h += '<ul class="findings">' + fs_.slice(0, MAX_SHOWN).map((f) => `<li><code>${esc(f.file || f.rule || '')}${f.line ? `:${f.line}` : ''}</code> ${esc(f.message || '')}</li>`).join('') + '</ul>';
+				if (fs_.length > MAX_SHOWN) {
+					h += `<p class="muted">… +${fs_.length - MAX_SHOWN}</p>`;
+				}
+			}
+		}
+		for (const n of notes) {
+			h += `<p class="${/não verificado/.test(n) ? 'warn' : 'muted'}">${esc(n)}</p>`;
+		}
+		out.push(h + '</section>');
+	}
+	const open = s.open || [];
+	if (s.verdict || open.length > 0 || (s.notes || []).length > 0) {
+		let h = `<section><h2>Auditoria</h2><p>Veredicto: <b>${esc(s.verdict || '—')}</b>${(s.lenses || []).length ? ` · lentes ${esc(s.lenses.join(', '))}` : ''}</p>`;
+		const list = [...open, ...(s.notes || [])];
+		if (list.length > 0) {
+			h += '<ul class="findings">' + list.slice(0, MAX_SHOWN).map((f) => `<li><span class="sev ${esc(f.severity)}">${esc(f.severity)}</span> <code>${esc(f.rule || '')}</code> ${esc(f.message || '')}</li>`).join('') + '</ul>';
+		}
+		if ((s.ambiguous || []).length > 0) {
+			h += `<p class="warn">As lentes divergiram sobre o dono de ${esc(s.ambiguous.join(', '))}.</p>`;
+		}
+		out.push(h + '</section>');
+	}
+	if (s.proposal) {
+		out.push(`<section><h2>Proposta de emenda</h2><p>A execução parou para você decidir: <code>${esc(s.proposal)}</code></p></section>`);
+	}
+	if (s.branch || s.landing || s.worktree) {
+		out.push(`<section><h2>Integração</h2><p>${s.branch ? `branch <code>${esc(s.branch)}</code>` : ''}${s.landing ? ` · ${esc(s.landing)}` : ''}</p></section>`);
+	}
+	if (model.report) {
+		out.push(`<section><h2>Relatório</h2><p><code>gofi report ${esc(model.run)}</code> — em <code>.gofi/runs/${esc(model.run)}/report.md</code></p></section>`);
+	}
+	return out.join('');
 }
 
 module.exports = { listRuns, readRun, layout, flowSVG, matrixHTML, runMarkup, RUNS };

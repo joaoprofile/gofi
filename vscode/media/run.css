@@ -18,3 +18,10 @@
 #runView table.matrix th, #runView table.matrix td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border, #8884); vertical-align: top; }
 #runView tr.scenario td:nth-child(2) { padding-left: 24px; }
 #runView tr.gap td:last-child { color: var(--vscode-errorForeground, #e55); font-weight: 600; }
+#runView .bad { color: var(--vscode-errorForeground, #e55); font-weight: 600; }
+#runView .warn { color: var(--vscode-editorWarning-foreground, #c90); }
+#runView ul.findings { margin: 4px 0; padding-left: 18px; }
+#runView ul.findings li { margin: 2px 0; }
+#runView .sev { font-size: 0.85em; padding: 0 4px; border-radius: 3px; border: 1px solid var(--vscode-panel-border, #888); }
+#runView .sev.blocker { color: var(--vscode-errorForeground, #e55); }
+#runView .sev.major { color: var(--vscode-editorWarning-foreground, #c90); }

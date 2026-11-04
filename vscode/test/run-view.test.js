@@ -37,7 +37,9 @@ const flow = {
 	],
 };
 fs.writeFileSync(path.join(dir, 'flow.json'), JSON.stringify(flow));
-fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ run: 'r-1', mudanca: 'criar-pedidos', contexto: 'pedidos', node: 'audit', cost_usd: 1.5 }));
+fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ run: 'r-1', mudanca: 'criar-pedidos', contexto: 'pedidos', node: 'audit', cost_usd: 1.5,
+	sensor: { failed: ['build'], findings: [{ file: 'backend/x.go', line: 3, message: 'undefined: Total' }], output: 'security: não verificado — sem comando no pack nem em loop.sensors\nbuild: go build' },
+	verdict: 'rejected', open: [{ severity: 'major', rule: 'pedidos/REQ-01', message: 'sem dono' }], proposal: '.gofi/proposals/pedidos-1.md', branch: 'gofi/criar-pedidos' }));
 fs.writeFileSync(path.join(dir, 'events.ndjson'), [
 	{ ev: 'node.start', node: 'implement' }, { ev: 'edge', node: 'implement', to: 'sense' },
 	{ ev: 'node.start', node: 'sense' }, { ev: 'edge', node: 'sense', to: 'implement' },
@@ -68,6 +70,15 @@ assert.ok(/class="edge taken back"/.test(html), 'the rework taken is drawn as a 
 assert.ok(html.includes('1 de 2 com resposta no código'), 'the matrix counts its gaps');
 assert.ok(html.includes('class="scenario gap"'), 'a scenario with no test is marked');
 assert.ok(!html.includes('<script'), 'the page runs no script');
+assert.ok(html.includes('Falhou em build') && html.includes('backend/x.go:3'), 'what the sensors found is shown');
+assert.ok(html.includes('class="warn">security: não verificado'), 'a stage not checked is not shown as passed');
+assert.ok(html.includes('Veredicto: <b>rejected</b>') && html.includes('pedidos/REQ-01'), 'the verdict and what is open are shown');
+assert.ok(html.includes('.gofi/proposals/pedidos-1.md') && html.includes('gofi/criar-pedidos'), 'the amendment and the branch are shown');
+
+// Only what was added is read: a new event moves the counts on.
+fs.appendFileSync(path.join(dir, 'events.ndjson'), '\n' + JSON.stringify({ ev: 'node.start', node: 'policy' }) + '\n');
+assert.strictEqual(readRun(root, 'r-1').visits.policy, 1);
+assert.strictEqual(readRun(root, 'r-1').visits.implement, 2, 'nothing is counted twice');
 
 fs.rmSync(root, { recursive: true, force: true });
 console.log('run-view: ok');
