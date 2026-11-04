@@ -188,7 +188,7 @@ func (g *gofiMCP) verify(ctx context.Context, _ *mcp.CallToolRequest, a verifyAr
 			cmds["graph"] = graphSensor(a.Change, a.Run)
 		}
 	}
-	res := sensor.Runner{Root: g.root, Commands: cmds}.Run(ctx, stages)
+	res := sensor.Runner{Root: g.root, Commands: cmds, Cache: true}.Run(ctx, stages)
 	var b strings.Builder
 	if len(res.Failed) == 0 {
 		fmt.Fprintf(&b, "ok: %s", strings.Join(stages, ", "))

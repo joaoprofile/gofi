@@ -22,8 +22,9 @@ nodes:
   # requirement has its code and every scenario its test (0002, D10).
   # security and coverage run what loop.sensors names for them — Horusec,
   # a linter of secrets, a coverage gate, in SARIF —, and are not checked
-  # when it names nothing (S7).
-  sense:     {kind: sensor, stages: [build, integrity, static, test, graph, trace, security, coverage]}
+  # when it names nothing (S7). integrity runs first: it compiles nothing,
+  # and a test removed fails the run before a build is paid for.
+  sense:     {kind: sensor, stages: [integrity, build, static, test, graph, trace, security, coverage]}
   # What the build, the static analysis or the graph refused is repaired
   # with the findings alone, before anything reaches the audit.
   repair:    {kind: agent, stage: repair}

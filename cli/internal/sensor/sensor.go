@@ -9,6 +9,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,19 +44,48 @@ type Runner struct {
 	Commands map[string]pack.Command
 	// Env is added to the commands' environment.
 	Env []string
+	// Cache remembers the build, static and test that passed, by the tree
+	// they passed on: the same command on the same tree is not run again —
+	// the sense after a turn that ended on a green verify.
+	Cache bool
 }
+
+// cacheable are the stages worth remembering: the ones that compile and
+// run the project. The others are gofi's own, and quick.
+var cacheable = map[string]bool{"build": true, "static": true, "test": true}
 
 // Run runs the stages in order and stops at the first that fails.
 func (r Runner) Run(ctx context.Context, stages []string) loop.SensorResult {
 	var res loop.SensorResult
 	var notes []string
+	tree, passed := "", map[string]string{}
+	if r.Cache {
+		tree = r.treeKey(ctx)
+		passed = r.loadPassed()
+	}
 	for _, stage := range stages {
 		c, ok := r.Commands[stage]
 		if !ok || strings.TrimSpace(c.Run) == "" {
 			notes = append(notes, stage+": não verificado — sem comando no pack nem em loop.sensors")
 			continue
 		}
+		key := ""
+		if tree != "" && cacheable[stage] {
+			key = hashOf(c.Run, c.Format, c.Report, tree)
+			if passed[stage] == key {
+				notes = append(notes, stage+": verde na mesma árvore — não rodou de novo")
+				continue
+			}
+		}
 		findings, output, failed := r.stage(ctx, stage, c)
+		if key != "" {
+			if failed {
+				delete(passed, stage)
+			} else {
+				passed[stage] = key
+			}
+			r.savePassed(passed)
+		}
 		if failed {
 			res.Failed = []string{stage}
 			res.Findings = findings
@@ -477,4 +509,76 @@ func tail(s string, max int) string {
 		return s
 	}
 	return "…\n" + s[len(s)-max:]
+}
+
+// passedFile is where the stages that passed are remembered, in the tree
+// they ran on.
+func (r Runner) passedFile() string {
+	return filepath.Join(r.Root, ".gofi", "cache", "sensors.json")
+}
+
+func (r Runner) loadPassed() map[string]string {
+	m := map[string]string{}
+	if b, err := os.ReadFile(r.passedFile()); err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	return m
+}
+
+func (r Runner) savePassed(m map[string]string) {
+	b, _ := json.Marshal(m)
+	if err := os.MkdirAll(filepath.Dir(r.passedFile()), 0o755); err == nil {
+		_ = os.WriteFile(r.passedFile(), b, 0o644)
+	}
+}
+
+// treeKey is the tree as git sees it — the commit, what changed since, and
+// the files git does not track yet —, so any edit anywhere is a new key. The
+// reports the stages write and gofi's own folder are not of the tree.
+// Empty outside git: then nothing is remembered.
+func (r Runner) treeKey(ctx context.Context) string {
+	git := func(args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", r.Root}, args...)...)
+		return cmd.Output()
+	}
+	head, err := git("rev-parse", "HEAD")
+	if err != nil {
+		return ""
+	}
+	diff, err := git("diff", "HEAD", "--binary")
+	if err != nil {
+		return ""
+	}
+	untracked, err := git("ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return ""
+	}
+	var reports []string
+	for _, c := range r.Commands {
+		reports = append(reports, r.reports(c)...)
+	}
+	h := sha256.New()
+	h.Write(head)
+	h.Write(diff)
+	for _, f := range strings.Split(string(untracked), "\x00") {
+		if f == "" || strings.HasPrefix(f, ".gofi/") {
+			continue
+		}
+		abs := filepath.Join(r.Root, filepath.FromSlash(f))
+		if slices.Contains(reports, abs) {
+			continue
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00", f, len(data))
+		h.Write(data)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func hashOf(parts ...string) string {
+	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(h[:])
 }

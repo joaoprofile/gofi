@@ -3,6 +3,7 @@ package sensor
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -212,5 +213,47 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out
 	if len(got) != 2 || got[0].File != "backend/src/desconto/service_tests.rs" || got[0].Line != 12 || !strings.Contains(got[0].Message, "right: 9501") ||
 		!strings.Contains(got[1].Message, "ignorado") {
 		t.Errorf("findings %+v", got)
+	}
+}
+
+// A stage that passed is not run again on the same tree; any edit — a file
+// git does not track yet too — runs it again, a failure is never
+// remembered, and the report a stage writes is not of the tree.
+func TestAGreenStageIsNotRunAgainOnTheSameTree(t *testing.T) {
+	root := t.TempDir()
+	counter := filepath.Join(t.TempDir(), "runs")
+	git := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	_ = os.WriteFile(filepath.Join(root, "a.go"), []byte("a"), 0o644)
+	git("add", "-A")
+	git("commit", "-q", "-m", "x")
+	runs := func() int { b, _ := os.ReadFile(counter); return strings.Count(string(b), ".") }
+	r := Runner{Root: root, Cache: true, Commands: map[string]pack.Command{
+		"build": {Run: "printf . >> " + counter + " && printf '<x/>' > out.xml", Format: pack.FormatExit, Report: "out.xml"},
+	}}
+	for i := 0; i < 2; i++ {
+		if res := r.Run(context.Background(), []string{"build"}); len(res.Failed) > 0 {
+			t.Fatalf("failed: %+v", res)
+		}
+	}
+	if runs() != 1 {
+		t.Fatalf("runs on the same tree: %d", runs())
+	}
+	_ = os.WriteFile(filepath.Join(root, "novo.go"), []byte("b"), 0o644)
+	r.Run(context.Background(), []string{"build"})
+	if runs() != 2 {
+		t.Fatalf("an untracked file did not run it again: %d", runs())
+	}
+	r.Commands["build"] = pack.Command{Run: "printf . >> " + counter + " && exit 1", Format: pack.FormatExit}
+	r.Run(context.Background(), []string{"build"})
+	r.Run(context.Background(), []string{"build"})
+	if runs() != 4 {
+		t.Fatalf("a failure was remembered: %d", runs())
 	}
 }
