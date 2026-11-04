@@ -62,7 +62,7 @@ func Check(f *Flow, roles []role.Role) []Problem {
 			}
 			for _, s := range n.Stages {
 				if !stages[s] {
-					errf("%s: stage %q — build, test, static, graph, trace or integrity", name, s)
+					errf("%s: stage %q — build, test, static, graph, trace, integrity, security or coverage", name, s)
 				}
 			}
 		case KindTerminal:

@@ -184,7 +184,7 @@ type Loop struct {
 	// that checks it, run from the project root. A stage with no command is
 	// recorded as not checked — never as passed. test defaults to the test
 	// section's default task.
-	Sensors map[string]string `yaml:"sensors,omitempty"`
+	Sensors map[string]Sensor `yaml:"sensors,omitempty"`
 	// GateTimeout is how long a run waits for a decision to be answered
 	// (gofi answer) before it ends in impasse: a Go duration, 30m when
 	// empty, 0 not to wait.
@@ -215,6 +215,34 @@ type Loop struct {
 	// RunBudgetUSD is what gofi run --all may spend on all its changes
 	// together; 0: no budget beyond each run's.
 	RunBudgetUSD float64 `yaml:"run_budget_usd,omitempty"`
+}
+
+// Sensor is how a stage is checked: a command whose file:line output is
+// read — written as a string —, or {run, format, report} for a tool that
+// writes a report — SARIF, JUnit — to a file.
+type Sensor struct {
+	Run    string `yaml:"run"`
+	Format string `yaml:"format,omitempty"`
+	Report string `yaml:"report,omitempty"`
+}
+
+// UnmarshalYAML reads a stage written as its command alone.
+func (s *Sensor) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		s.Run = n.Value
+		return nil
+	}
+	type plain Sensor
+	return n.Decode((*plain)(s))
+}
+
+// MarshalYAML writes a stage that is only a command as that command.
+func (s Sensor) MarshalYAML() (interface{}, error) {
+	if s.Format == "" && s.Report == "" {
+		return s.Run, nil
+	}
+	type plain Sensor
+	return plain(s), nil
 }
 
 // NamedSurface pairs a UI surface with the name it answers to.

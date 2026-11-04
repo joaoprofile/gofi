@@ -32,6 +32,14 @@ const (
 
 var formats = []string{FormatLines, FormatGoTestJSON, FormatSARIF, FormatJUnit, FormatCargoTest, FormatExit}
 
+// CheckFormat refuses a format no sensor reads.
+func CheckFormat(f string) error {
+	if !slices.Contains(formats, f) {
+		return fmt.Errorf("format %q (expected %s)", f, strings.Join(formats, ", "))
+	}
+	return nil
+}
+
 //go:embed packs/*.yaml
 var builtin embed.FS
 

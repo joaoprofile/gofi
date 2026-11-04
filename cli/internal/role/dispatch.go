@@ -35,7 +35,7 @@ type Trigger struct {
 var predicates = map[string][]string{
 	"change.surface": {"backend", "web", "mobile", "infra"},
 	"sensor.green":   nil,
-	"sensor.failed":  {"build", "test", "static", "graph", "trace", "integrity"},
+	"sensor.failed":  {"build", "test", "static", "graph", "trace", "integrity", "security", "coverage"},
 	"verdict":        {"clean", "caveats", "rejected"},
 	"owner":          {"eng", "spec", "pd"},
 	// stuck: the work does not progress and no tier is left to raise.
