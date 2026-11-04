@@ -547,11 +547,7 @@ ai/          what gofi installs into a project: AGENTS.md, skills and roles, exp
              templates, SDK docs, institutional seed
 cli/         the Go CLI: loop, sensors, graph, packs, engines, MCP server, chat
 vscode/      the GOFI AI extension, embedded into the CLI
-docs/        architecture decisions and release notes
 ```
-
-Design decisions: [0002 — the agentic loop over graphs](docs/decisions/0002-loop-agentico-com-grafos.md),
-[0003 — living specs and changes](docs/decisions/0003-sdd-v2.md).
 
 ## Build from source
 
