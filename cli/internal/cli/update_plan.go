@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
@@ -47,6 +48,15 @@ func runTarget(cfg *config.GofiConfig, t *targetPlan, autoConfirm bool) error {
 		}
 	}
 	if ok {
+		// The guard keeps every search on the graph: a project that never
+		// ran gofi install guard gets it with the rest of the gofi zone.
+		if h, found := host.Get(cfg.AI.Host); found && h.Guard {
+			if changed, err := installAgentSettings(cfg.Project.Root, cfg.AI); err != nil {
+				return fmt.Errorf("guard: %w", err)
+			} else if changed {
+				fmt.Printf("guard: %s (%s)\n", cfg.AI.GuardMode(), claudeSettingsFile)
+			}
+		}
 		noteDrift(cfg)
 	}
 	return nil

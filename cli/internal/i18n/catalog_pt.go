@@ -573,7 +573,7 @@ var catalogPT = map[string]string{
 	"guard.not_installed":            "  o hook falta em %s — rode `gofi install guard`",
 	"guard.set":                      "guarda: %s — gravado em %s e %s",
 	"guard.warn":                     "gofi guard: \"%s\" varre a árvore antes de perguntar ao índice. Pergunte primeiro: mcp__gofi__find (ou `gofi find \"<pergunta>\"`) diz onde está e que linhas ler; `gofi show <símbolo>` dá quem chama; `gofi find --text \"<literal>\"` acha texto exato com o símbolo que o contém. Busca crua só para o que o índice não responde.",
-	"guard.deny":                     "Bloqueado pela guarda do projeto (ai.guard: enforce): \"%s\" varre a árvore antes de perguntar ao índice. Pergunte primeiro — mcp__gofi__find ou `gofi find \"<pergunta>\"`; `gofi show <símbolo>` para quem chama; `gofi find --text \"<literal>\"` para texto exato — e busque só o que ele não respondeu.",
+	"guard.deny":                     "Bloqueado pela guarda do projeto (ai.guard: enforce): \"%s\" varre a árvore, e toda busca neste projeto passa pelo grafo. Use mcp__gofi__find (ou `gofi find \"<pergunta>\"`) para achar símbolo ou documento; mcp__gofi__find com text ou regex (ou `gofi find --text \"<literal>\"`) para texto exato, cada linha sob o símbolo que a contém; `gofi show <símbolo>` para quem chama; `gofi path A B` para como A chega em B.",
 	"init.step.mcp":                  "Registrar o servidor MCP e a guarda do gofi",
 	"cmd.mcp.short":                  "Serve o índice a um agente de IA via MCP",
 	"cmd.install.short":              "Instala a extensão do editor, o MCP, a guarda e os hooks git",

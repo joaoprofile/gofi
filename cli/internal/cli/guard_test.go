@@ -74,27 +74,30 @@ func TestHookGuardAgainstAProject(t *testing.T) {
 	ev := func(event, tool, input string) string {
 		return `{"session_id":"abc","hook_event_name":"` + event + `","tool_name":"` + tool + `","tool_input":` + input + `,"cwd":"` + filepath.ToSlash(root) + `"}`
 	}
-	run(ev("UserPromptSubmit", "", "{}"))
-	if out := run(ev("PreToolUse", "Grep", `{"pattern":"Bill"}`)); !strings.Contains(out, "additionalContext") {
-		t.Fatalf("warn mode said nothing about a grep before any query: %q", out)
-	}
-
-	path := filepath.Join(root, config.FileName)
-	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.AI.Guard = config.GuardEnforce
-	if err := config.Save(path, cfg); err != nil {
-		t.Fatal(err)
-	}
+	// A project that never set ai.guard is in enforce: every search goes
+	// through the graph, and a query does not open the tree to a grep.
 	run(ev("UserPromptSubmit", "", "{}"))
 	if out := run(ev("PreToolUse", "Grep", `{"pattern":"Bill"}`)); !strings.Contains(out, `"deny"`) {
 		t.Fatalf("enforce did not refuse: %q", out)
 	}
 	run(ev("PreToolUse", "mcp__gofi__find", `{"query":"bill"}`))
-	if out := run(ev("PreToolUse", "Grep", `{"pattern":"Bill"}`)); out != "" {
-		t.Errorf("a grep after a query was refused: %q", out)
+	if out := run(ev("PreToolUse", "Grep", `{"pattern":"Bill"}`)); !strings.Contains(out, `"deny"`) {
+		t.Errorf("a grep after a query passed: %q", out)
+	}
+
+	// warn, asked for, reminds once and lets the search through.
+	path := filepath.Join(root, config.FileName)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.AI.Guard = config.GuardWarn
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	run(ev("UserPromptSubmit", "", "{}"))
+	if out := run(ev("PreToolUse", "Grep", `{"pattern":"Bill"}`)); !strings.Contains(out, "additionalContext") {
+		t.Fatalf("warn mode said nothing about a grep before any query: %q", out)
 	}
 	if out := run("not json"); out != "" {
 		t.Errorf("bad input must pass silently: %q", out)

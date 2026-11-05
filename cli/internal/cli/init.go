@@ -341,7 +341,7 @@ func executePipeline(r *wizard.Result) error {
 			if !h.Guard {
 				return nil
 			}
-			_, err := installAgentSettings(r.Root, config.AI{Guard: config.GuardWarn})
+			_, err := installAgentSettings(r.Root, config.AI{})
 			return err
 		}},
 	)
