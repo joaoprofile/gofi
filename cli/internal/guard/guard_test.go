@@ -98,9 +98,20 @@ func TestDecideFollowsTheQuestion(t *testing.T) {
 	if d == nil || d["permissionDecision"] != "deny" || d["permissionDecisionReason"] != "deny Grep Bill" {
 		t.Fatalf("enforce after a new prompt: got %v", d)
 	}
+	// A query does not open the tree to a sweep: in enforce, Grep stays
+	// refused — find with text is the search. A whole-file read is the step
+	// after a query, and passes once the index was asked.
 	Decide(pre("Bash", map[string]any{"command": "gofi show Bill"}), root, config.GuardEnforce, store, msg)
-	if d := Decide(grep, root, config.GuardEnforce, store, msg); d != nil {
-		t.Errorf("a search after a query was refused: %s", d)
+	if d := decision(t, Decide(grep, root, config.GuardEnforce, store, msg)); d == nil || d["permissionDecision"] != "deny" {
+		t.Errorf("a sweep after a query passed in enforce: %v", d)
+	}
+	big := filepath.Join(root, "big.go")
+	if err := os.WriteFile(big, []byte(strings.Repeat("x\n", SmallFile+10)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	read := pre("Read", map[string]any{"file_path": big})
+	if d := Decide(read, root, config.GuardEnforce, store, msg); d != nil {
+		t.Errorf("reading a file the index found was refused: %s", d)
 	}
 }
 

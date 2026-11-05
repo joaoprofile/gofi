@@ -90,7 +90,7 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	// A role with a grant has no shell: it is told what to use instead, so a
 	// turn is not spent on commands that are refused.
 	if len(rl.Contract.Tools) > 0 && !slices.Contains(rl.Contract.Tools, "shell") {
-		fmt.Fprintf(&b, "Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi — com run %s e change %s ela confere também o grafo e a rastreabilidade —; para achar e entender código e documentos, `find`, `show` e `path`; para saber o que depende de um símbolo ou arquivo, `impact`. O índice, o loop atualiza depois do seu turno.\n\n", s.Run, s.Change)
+		fmt.Fprintf(&b, "Você não tem shell neste turno. Para compilar, analisar e testar use a ferramenta `verify` do gofi — com run %s e change %s ela confere também o grafo e a rastreabilidade —; para achar e entender código e documentos, `find`, `show` e `path` — texto exato (uma string, uma chave de config, um SQL) é `find` com `text` ou `regex`, que devolve cada linha sob o símbolo que a contém; `Grep` e `Glob` não existem neste turno —; para saber o que depende de um símbolo ou arquivo, `impact`. O índice, o loop atualiza depois do seu turno.\n\n", s.Run, s.Change)
 	}
 	switch {
 	case slices.Contains(s.Lenses, rl.Name):

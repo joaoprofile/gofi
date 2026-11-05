@@ -483,7 +483,9 @@ type AI struct {
 	Tiers map[string]string `yaml:"tiers,omitempty"`
 	// Guard is what happens when an agent searches the tree — Grep, Glob, a
 	// whole-file Read — before asking the index: warn tells it to ask first,
-	// enforce blocks the call, off leaves it alone. Empty means warn.
+	// enforce refuses Grep, Glob and a shell grep always — find with text or
+	// regex is the search — and a whole-file read before a query; off leaves
+	// it alone. Empty means enforce.
 	Guard string `yaml:"guard,omitempty"`
 }
 
@@ -500,7 +502,7 @@ var GuardModes = []string{GuardWarn, GuardEnforce, GuardOff}
 // GuardMode is the effective ai.guard: warn unless the project chose otherwise.
 func (a AI) GuardMode() string {
 	if a.Guard == "" {
-		return GuardWarn
+		return GuardEnforce
 	}
 	return a.Guard
 }

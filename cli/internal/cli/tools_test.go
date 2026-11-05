@@ -9,22 +9,30 @@ import (
 
 // A role gets exactly the tools its contract grants: on Claude Code the
 // gated ones outside the grant are refused, so no role runs a shell and the
-// audit edits nothing (0002, D15).
+// audit edits nothing (0002, D15). Searching is the graph's: search grants
+// gofi's find, show and path, and Grep and Glob are refused to every role —
+// a turn that swept the tree read what the index already knew.
 func TestARoleGetsExactlyItsTools(t *testing.T) {
 	allowed, denied := claudeTools([]string{"read", "search", "gofi", "verify", "verdict", "memory"})
-	for _, want := range []string{"Read", "Grep", "mcp__gofi__verify", "mcp__gofi__verdict_write"} {
+	for _, want := range []string{"Read", "mcp__gofi__find", "mcp__gofi__show", "mcp__gofi__path", "mcp__gofi__verify", "mcp__gofi__verdict_write"} {
 		if !slices.Contains(allowed, want) {
 			t.Errorf("the audit lacks %s: %v", want, allowed)
 		}
 	}
-	for _, want := range []string{"Bash", "Edit", "Write"} {
+	if slices.Contains(allowed, "Grep") || slices.Contains(allowed, "Glob") {
+		t.Errorf("a role may sweep the tree: %v", allowed)
+	}
+	if n := len(slices.Compact(slices.Sorted(slices.Values(allowed)))); n != len(allowed) {
+		t.Errorf("a tool is granted twice: %v", allowed)
+	}
+	for _, want := range []string{"Bash", "Edit", "Write", "Grep", "Glob"} {
 		if !slices.Contains(denied, want) {
 			t.Errorf("the audit may %s: refused %v", want, denied)
 		}
 	}
 	_, denied = claudeTools([]string{"read", "edit", "write", "search", "gofi", "verify"})
-	if !slices.Equal(denied, []string{"Bash", "BashOutput", "KillShell", "Task", "Agent", "WebFetch", "WebSearch"}) {
-		t.Errorf("the implementation is refused %v, want the shell, the subagents and the web", denied)
+	if !slices.Equal(denied, []string{"Bash", "BashOutput", "KillShell", "Task", "Agent", "WebFetch", "WebSearch", "Grep", "Glob"}) {
+		t.Errorf("the implementation is refused %v, want the shell, the subagents, the web and the raw search", denied)
 	}
 }
 

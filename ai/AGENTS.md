@@ -25,13 +25,16 @@ Valem para toda skill; cada `SKILL.md` só acrescenta as dela (`Lei comum 3`).
 
 1. **Portável; o específico mora fora.** Fato do projeto vai para spec,
    memória ou institucional — nunca para a skill.
-2. **Ache pelo índice, leia o que já tem caminho.** O que você não sabe onde
-   está se acha com `gofi find` (`--in code` para código), `gofi show` (quem
-   chama, o que um doc contém) e `gofi path` (como A chega em B) antes de
-   qualquer varredura. Consulta vazia: reformule com o termo técnico; texto
-   exato é `gofi find --text`/`--regex`. O caminho que a mudança, o design ou
-   um achado já dão, leia direto. `--deep` só para afirmar ausência de uso
-   ("ninguém mais chama"). Protocolo: `.claude/expertise/harness-protocols/graph-retrieval.md`.
+2. **Toda busca passa pelo grafo.** Achar símbolo ou documento é `gofi find`
+   (`--in code` para código); quem chama, `gofi show`; como A chega em B,
+   `gofi path`; o que depende de algo, `gofi impact`. Texto exato — string,
+   chave de config, SQL, mensagem de erro — é `gofi find --text`/`--regex`, que
+   devolve cada linha sob o símbolo que a contém. `Grep`, `Glob` e `grep`/`rg`
+   não varrem o projeto: no loop eles não existem, e na sessão o guard
+   (`ai.guard: enforce`, o padrão) os recusa. Consulta vazia: reformule com o
+   termo técnico. O arquivo que o grafo, a mudança ou um achado apontou, leia
+   direto. `--deep` só para afirmar ausência de uso. Protocolo:
+   `.claude/expertise/harness-protocols/graph-retrieval.md`.
 3. **Feche o que você mexeu.** Memória do contexto com
    `gofi memory write <contexto>` (o arquivo inteiro pela entrada padrão);
    mexeu em código, `gofi index code`; em spec ou PRD, `gofi index check`.

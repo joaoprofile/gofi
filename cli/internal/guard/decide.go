@@ -2,6 +2,7 @@ package guard
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/config"
 )
@@ -25,7 +26,12 @@ func Decide(in Input, root, mode string, store Store, msg func(search string, de
 		}
 	case Search:
 		st := store.Load(in.SessionID)
-		if st.Asked {
+		// In enforce the tree is never swept: Grep, Glob and a shell grep are
+		// refused whatever was asked before — find with text or regex is the
+		// search, each line under its symbol. Reading a whole file stays the
+		// step after a query: the index found it, the agent reads it.
+		sweep := !strings.HasPrefix(search, "Read ")
+		if st.Asked && !(sweep && mode == config.GuardEnforce) {
 			return nil
 		}
 		if mode == config.GuardEnforce {

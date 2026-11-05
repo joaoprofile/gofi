@@ -107,17 +107,20 @@ const loopSystemPrompt = "You are one turn of gofi's delivery loop, not a conver
 // claudeGrants are Claude Code's own tools for each tool a contract grants;
 // gofi's are in gofiGrants.
 var claudeGrants = map[string][]string{
-	"read":   {"Read"},
-	"edit":   {"Edit", "MultiEdit", "NotebookEdit"},
-	"write":  {"Write"},
-	"search": {"Glob", "Grep"},
-	"shell":  {"Bash"},
+	"read":  {"Read"},
+	"edit":  {"Edit", "MultiEdit", "NotebookEdit"},
+	"write": {"Write"},
+	"shell": {"Bash"},
 }
 
 // gofiGrants are the tools of gofi's MCP server, by their name on it, for
 // each tool a contract grants: the same on every host.
 var gofiGrants = map[string][]string{
-	"gofi":    {"find", "show", "path", "impact", "index_status", "index"},
+	"gofi": {"find", "show", "path", "impact", "index_status", "index"},
+	// A role searches through the graph, never the raw tree: find ranks
+	// symbols and documents, and with text or regex finds exact text, each
+	// line under the symbol or section that holds it.
+	"search":  {"find", "show", "path"},
 	"verify":  {"verify"},
 	"verdict": {"verdict_write"},
 	"memory":  {"memory_write"},
@@ -211,15 +214,21 @@ var protectedWrites = []string{
 // a role whose contract does not grant them — and the subagents: a turn is
 // one session, and work handed to a subagent in the background is lost when
 // the turn ends.
-var gated = []string{"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "NotebookEdit", "Write", "Task", "Agent", "WebFetch", "WebSearch"}
+var gated = []string{"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "NotebookEdit", "Write", "Task", "Agent", "WebFetch", "WebSearch", "Grep", "Glob"}
 
 // claudeTools turns a contract's grant into Claude Code's allowed tools and
 // the gated ones it refuses.
 func claudeTools(grant []string) (allowed, denied []string) {
 	for _, g := range grant {
-		allowed = append(allowed, claudeGrants[g]...)
+		for _, t := range claudeGrants[g] {
+			if !slices.Contains(allowed, t) {
+				allowed = append(allowed, t)
+			}
+		}
 		for _, t := range gofiGrants[g] {
-			allowed = append(allowed, guard.MCPPrefix+t)
+			if !slices.Contains(allowed, guard.MCPPrefix+t) {
+				allowed = append(allowed, guard.MCPPrefix+t)
+			}
 		}
 	}
 	for _, t := range gated {

@@ -26,8 +26,11 @@ A Claude Code hook watches each question. A raw search — Grep, Glob, reading a
 whole file of more than 120 lines, grep or rg in the shell — made before any
 gofi query (find, show or path) is:
 
+  enforce  the default: Grep, Glob and a shell grep are refused always —
+           every search goes through the graph, exact text by gofi find
+           --text —, and a whole-file read is refused until the index was
+           asked
   warn     let through, with a reminder the agent reads (once per question)
-  enforce  refused, with the reason and the query to make instead
   off      left alone
 
 A read with a line range, a small file and a path outside the project always

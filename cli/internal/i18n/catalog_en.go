@@ -574,7 +574,7 @@ var catalogEN = map[string]string{
 	"guard.not_installed":            "  the hook is missing from %s — run `gofi install guard`",
 	"guard.set":                      "guard: %s — written to %s and %s",
 	"guard.warn":                     "gofi guard: \"%s\" searches the tree before asking the index. Ask first: mcp__gofi__find (or `gofi find \"<question>\"`) says where it is and which lines to read; `gofi show <symbol>` gives its callers; `gofi find --text \"<literal>\"` finds exact text with the symbol that holds it. Use raw search only for what the index cannot answer.",
-	"guard.deny":                     "Blocked by the project guard (ai.guard: enforce): \"%s\" searches the tree before asking the index. Ask it first — mcp__gofi__find or `gofi find \"<question>\"`; `gofi show <symbol>` for callers; `gofi find --text \"<literal>\"` for exact text — then search only what it could not answer.",
+	"guard.deny":                     "Blocked by the project guard (ai.guard: enforce): \"%s\" sweeps the tree, and every search in this project goes through the graph. Use mcp__gofi__find (or `gofi find \"<question>\"`) for a symbol or a document; mcp__gofi__find with text or regex (or `gofi find --text \"<literal>\"`) for exact text, each line under the symbol that holds it; `gofi show <symbol>` for callers; `gofi path A B` for how A reaches B.",
 	"init.step.mcp":                  "Register the gofi MCP server and guard",
 	"cmd.mcp.short":                  "Serve the index to an AI agent over MCP",
 	"cmd.install.short":              "Install the editor extension, MCP, guard and git hooks",
