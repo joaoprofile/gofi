@@ -86,7 +86,7 @@ func Classify(in Input, root string) (Kind, string) {
 		return Search, in.Tool + " " + pattern
 	case "Read":
 		p := str(in.ToolInput, "file_path")
-		if p == "" || in.ToolInput["offset"] != nil || in.ToolInput["limit"] != nil || !inside(root, in.Cwd, p) {
+		if p == "" || in.ToolInput["offset"] != nil || in.ToolInput["limit"] != nil || !inside(root, in.Cwd, p) || harness(root, in.Cwd, p) {
 			return Other, ""
 		}
 		if lines(resolve(in.Cwd, p)) < SmallFile {
@@ -137,6 +137,22 @@ func inside(root, cwd, p string) bool {
 	}
 	rel, err := filepath.Rel(root, resolve(cwd, p))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// HarnessDir is the project's harness: the skills, roles, knowledge and
+// memory the agents are told to read by path. Reading one whole is following
+// an instruction, not searching the tree.
+const HarnessDir = ".claude"
+
+// harness reports whether p, resolved against cwd, is in root's harness. A
+// role's skill is 126 lines: refused as a search, the first call of a fresh
+// turn was a round trip spent on the guard.
+func harness(root, cwd, p string) bool {
+	if root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, resolve(cwd, p))
+	return err == nil && strings.HasPrefix(filepath.ToSlash(rel), HarnessDir+"/")
 }
 
 // lines counts a file's lines, or returns 0 when it cannot be read: a file
