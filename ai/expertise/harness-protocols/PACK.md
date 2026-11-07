@@ -9,7 +9,7 @@ serves: [pd, spec, eng, ui, ops, qa, doc]
 
 # Protocolos do harness
 
-Valem para toda tarefa, de qualquer papel: são o contrato de como o agente lê e escreve no projeto.
+Valem para toda tarefa, de qualquer papel: são o contrato de como o agente lê e escreve no projeto. Abra só a seção que a tarefa pede — as leis que os resumem já estão no `AGENTS.md`.
 
 | Seção | Quando |
 |---|---|
