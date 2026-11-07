@@ -40,7 +40,7 @@ Antes de qualquer recurso:
    conteúdo tool/cloud-specific **se existir**:
    - os módulos de `sdk/<iac>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar — regras, estrutura de módulos,
      naming, state, armadilhas da ferramenta de IaC
-   - `.claude/sdk/<iac>/boilerplates/*.md` — esqueletos de módulo/root/pipeline
+   - de `.claude/sdk/<iac>/boilerplates/`, só o esqueleto (módulo/root/pipeline) que você vai escrever
    - Se o conteúdo não existir ainda, é **gap de curadoria**: gere com base
      nas regras universais de `iac-principles.md` e registre o aprendizado (ver `.claude/expertise/harness-protocols/learning.md`)
      para popular `.claude/sdk/<iac>/`.

@@ -29,7 +29,7 @@ Segue a convenção de leitura do AGENTS.md, com estes pontos próprios (detalhe
 2. `AGENTS.md` (já carregado) e `.claude/memory/project.md` — inventário de serviços/binários a empacotar.
 3. Spec de infra por busca (`gofi find "<tópico de infra>"` ou `gofi show ctx:infra`). Sem spec → **pare** e ofereça `/gofi-spec`.
 4. `.claude/knowledge/INDEX.md` (núcleo ⬤ + módulos da tarefa, incl. `expertise/diagramming/conventions.md`) e `.claude/knowledge/ops/*.md` se existir.
-5. `sdk/<iac>/knowledge/` e `.claude/sdk/<iac>/boilerplates/*.md` se existirem; ausência é gap de curadoria.
+5. `sdk/<iac>/knowledge/` pelo `.claude/knowledge/INDEX.md` e, de `.claude/sdk/<iac>/boilerplates/`, só o que você vai escrever, se existirem; ausência é gap de curadoria.
 6. Mapear o build/deploy vigente do repo (base que **coexiste**) e perguntar pelo legado em migração.
 7. Confirmar ambiguidades com o dev **antes** de provisionar.
 
