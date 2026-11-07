@@ -89,7 +89,40 @@ func Archive(root string, all []Doc, id, date string) (Archived, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return res, err
 	}
+	if IsGenesis(from) {
+		return res, archiveGenesis(root, from, dest, c)
+	}
 	return res, os.Rename(filepath.Join(root, filepath.FromSlash(from)), dest)
+}
+
+// archiveGenesis moves a genesis out of its context's folder, file by file —
+// the folder stays, the living spec now in it: the proposal, the deltas, the
+// design and the tasks the plan derived.
+func archiveGenesis(root, from, dest string, c changeDocs) error {
+	dir := filepath.Join(root, filepath.FromSlash(from))
+	var names []string
+	for _, d := range append(append([]Doc{*c.proposal}, c.deltas...), designDocs(c)...) {
+		rel, err := filepath.Rel(dir, filepath.Join(root, filepath.FromSlash(d.Path)))
+		if err != nil {
+			return err
+		}
+		names = append(names, rel)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "tasks.md")); err == nil {
+		names = append(names, "tasks.md")
+	}
+	for _, n := range names {
+		to := filepath.Join(dest, n)
+		if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(filepath.Join(dir, n), to); err != nil {
+			return err
+		}
+	}
+	// deltas/ goes when nothing but what was archived was in it.
+	_ = os.Remove(filepath.Join(dir, "deltas"))
+	return nil
 }
 
 func designDocs(c changeDocs) []Doc {

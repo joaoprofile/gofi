@@ -66,7 +66,7 @@ placeholders e exemplos genéricos (`{contexto}`, `<module>`, `RoleA`,
 
 | Tipo | Lugar |
 |------|-------|
-| Requisitos, regras de negócio, cenários, ciclo de vida | uma mudança em `specs/{contexto}/changes/{id}/` — nunca a spec viva `specs/{contexto}/spec.md` à mão |
+| Requisitos, regras de negócio, cenários, ciclo de vida | uma mudança (`gofi change new`; `specs/{contexto}/changes/{id}/`, ou `specs/{contexto}/` na gênese) — nunca a spec viva `specs/{contexto}/spec.md` à mão |
 | Negócio da empresa além da spec | `institutional/{projeto}/` |
 | Fato global do projeto (serviços/binários, convenções) | `memory/project.md` |
 | Estado por-contexto (status, versão, fase, decisões da fase, gotchas) | `memory/contexts/{contexto}.md` — índice via `/gofi-status` |

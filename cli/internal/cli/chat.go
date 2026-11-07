@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -87,7 +88,7 @@ func runChat(f chatFlags) error {
 	model := strings.TrimSpace(f.model)
 	var planIntake func(string, map[string]string, bool) (*intake.Result, error)
 	var tierModel func(host.Tier) string
-	var review func(string) ([]string, int, error)
+	var review func(context.Context, string, func(string)) ([]string, int, error)
 	if cfg, projectRoot, err := loadProjectConfig(); err == nil {
 		root = projectRoot
 		review = chatReview(projectRoot, cfg)

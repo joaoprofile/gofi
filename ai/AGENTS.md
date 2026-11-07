@@ -69,7 +69,7 @@ viva no arquivamento. Contexto ainda no formato 2 (`sdd-*.md`) migra antes
 
 | Decisão | Quando | Como | Trava? |
 |---|---|---|---|
-| Revisar | antes de aprovar | achados de `gofi review <mudança>`: corrige ou diz que não procede | não |
+| Revisar | antes de aprovar | achados de `gofi review <mudança>` — rodado em primeiro plano, que a revisão leva minutos e a pessoa acompanha o progresso: corrige ou diz que não procede | não |
 | Aprovar | contrato pronto | ferramenta `approve`, ou `gofi change approve` / `gofi spec approve` no terminal dela; editar depois desfaz o selo | sim |
 | Responder o portão | a execução parou numa decisão não coberta | `gofi answer` (ou os cartões do painel) | sim |
 | Decidir a emenda | `impasse` com proposta em `.gofi/proposals/` | edita a mudança e aprova de novo, ou escreve outra | sim |
@@ -104,7 +104,7 @@ ela); pare para revisão depois de um PRD ou de uma mudança. Skill invocada
 | Memória global | `.claude/memory/project.md` |
 | Estado de um contexto | `.claude/memory/contexts/{contexto}.md` — leia o `## Estado atual` |
 | Spec viva | `specs/{contexto}/spec.md` — um requisito: `gofi show specs/{contexto}/spec.md#REQ-NN` |
-| Mudanças | `specs/{contexto}/changes/{id}/` (a de vários contextos, `specs/changes/{id}/`); arquivadas no `archive/` ao lado |
+| Mudanças | `specs/{contexto}/changes/{id}/` (a de vários contextos, `specs/changes/{id}/`; a primeira de um contexto sem spec, a **gênese**, em `specs/{contexto}/` com o id do contexto); arquivadas em `changes/archive/`. `gofi change list` mostra a pasta de cada uma |
 | PRDs | `prd/{contexto}/prd-{contexto}.md` |
 | Léxico das facetas | `.claude/lexicon/*.md` |
 | Grafo de código | `.gofi/index/code/` — consulte por `gofi find --in code` e `gofi show`, nunca o JSON |

@@ -10,7 +10,7 @@ recurso por handler/agregado, ou doc separada por endpoint).
 |----------|---------|
 | PRD | `prd/{contexto}/prd-{contexto}.md` |
 | Spec viva | `specs/{contexto}/spec.md` (requisitos `REQ-NN`; formato 2: `sdd-{contexto}.md`) |
-| Mudança | `specs/{contexto}/changes/{id}/` (proposta, deltas, design) |
+| Mudança | `specs/{contexto}/changes/{id}/`, ou `specs/{contexto}/` na gênese (proposta, deltas, design) |
 | **Doc (esta skill)** | `docs/{contexto}/doc-{tipo}-{recurso}.md` |
 
 Regras de nomenclatura:

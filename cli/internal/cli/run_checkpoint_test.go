@@ -55,6 +55,12 @@ func (scriptedSession) Close() error { return nil }
 // checkpointProject is a project in git on main with everything committed
 // but an approved change, as gofi change approve leaves it.
 func checkpointProject(t *testing.T, verdictJSON string) (string, func(...string) (string, error)) {
+	return checkpointProjectAt(t, verdictJSON, "specs/changes/criar-pedidos", "criar-pedidos")
+}
+
+// checkpointProjectAt is checkpointProject with the change in rel, named id:
+// specs/pedidos and pedidos for a genesis.
+func checkpointProjectAt(t *testing.T, verdictJSON, rel, id string) (string, func(...string) (string, error)) {
 	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"} {
 		t.Setenv(k, v)
 	}
@@ -73,7 +79,7 @@ func checkpointProject(t *testing.T, verdictJSON string) (string, func(...string
 	gitIn(t, root, "add", "-A")
 	gitIn(t, root, "commit", "--quiet", "-m", "init")
 
-	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
+	dir := filepath.Join(root, filepath.FromSlash(rel))
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
 	writeFile(t, filepath.Join(dir, "design.md"), minimalDesign("pedidos"))
 	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# D\n\n## Propósito\n\nPedidos.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO total zero\n- QUANDO fecha\n- ENTÃO recusa\n")
@@ -89,10 +95,46 @@ func checkpointProject(t *testing.T, verdictJSON string) (string, func(...string
 		err := c.Execute()
 		return out.String(), err
 	}
-	if out, err := run("approve", "criar-pedidos"); err != nil {
+	if out, err := run("approve", id); err != nil {
 		t.Fatalf("approve: %v\n%s", err, out)
 	}
 	return root, run
+}
+
+// A genesis runs as any change: accepted, its code, the spec now in the
+// context's folder and the change in the context's archive are one commit,
+// and nothing of the change is left beside the spec — in the tree and in a
+// worktree.
+func TestAnAcceptedGenesisIsOneCommit(t *testing.T) {
+	for _, wt := range []bool{false, true} {
+		t.Run(map[bool]string{false: "tree", true: "worktree"}[wt], func(t *testing.T) {
+			root, run := checkpointProjectAt(t, `{"result":"aprovado"}`, "specs/pedidos", "pedidos")
+			args := []string{"pedidos"}
+			if wt {
+				gitIn(t, root, "add", "-A")
+				gitIn(t, root, "commit", "--quiet", "-m", "genesis")
+				args = append(args, "--worktree")
+			}
+			out, err := run(args...)
+			if err != nil {
+				t.Fatalf("run: %v\n%s", err, out)
+			}
+			files := gitIn(t, root, "show", "--name-only", "--format=", "HEAD")
+			for _, want := range []string{"backend/pedidos/total.go", "specs/pedidos/spec.md", "specs/pedidos/changes/archive/", "-pedidos/proposal.md", "-pedidos/deltas/pedidos.md"} {
+				if !strings.Contains(files, want) {
+					t.Errorf("the commit lacks %s:\n%s\n%s", want, files, out)
+				}
+			}
+			for _, gone := range []string{"proposal.md", "design.md", "deltas/pedidos.md"} {
+				if _, err := os.Stat(filepath.Join(root, "specs", "pedidos", filepath.FromSlash(gone))); err == nil {
+					t.Errorf("specs/pedidos/%s was left beside the spec", gone)
+				}
+			}
+			if s := gitIn(t, root, "status", "--porcelain"); s != "" {
+				t.Errorf("the tree is not clean after the run:\n%s", s)
+			}
+		})
+	}
 }
 
 // Accepted, the change is committed with the message the delivery wrote.

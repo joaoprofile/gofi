@@ -50,7 +50,7 @@ Segue a convenção de leitura do AGENTS.md, com estes pontos próprios (detalhe
 
 - **Output:** arquivos criados sob `{ops.path}/`, resumo do plan (add/change/destroy + stateful afetado), coexistência com o legado, decisões, próximos passos. Template → `reference/output-memory.md` §Output esperado.
 - **Memória:** `.claude/memory/contexts/{contexto-infra}.md` — refresh do `## Estado atual`, 1 linha no `## Histórico de versões`, frontmatter `status`/`atualizado`. `project.md` só se nasceu serviço/binário novo.
-- **Contrato:** a mudança aprovada de infra (`specs/{contexto}/changes/{id}/` — deltas do contexto `infra`/`platform` e design) é lida, nunca editada; a topologia real e o estado da migração vão para o `## Estado atual` da memória.
+- **Contrato:** a mudança aprovada de infra (a pasta que `gofi change list` mostra — deltas do contexto `infra`/`platform` e design) é lida, nunca editada; a topologia real e o estado da migração vão para o `## Estado atual` da memória.
 - **Aprendizado:** correção ou padrão novo → `.claude/expertise/harness-protocols/learning.md`.
 
 ## Referências

@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -358,7 +359,7 @@ func TestAQuestionGoesWithItsPointers(t *testing.T) {
 func TestASpecIsReviewedBeforeTheApproval(t *testing.T) {
 	m, _, _ := planModel(t, []*intake.Result{threePhases()}, nil)
 	var asked []string
-	m.opts.Review = func(ctx string) ([]string, int, error) {
+	m.opts.Review = func(_ context.Context, ctx string, _ func(string)) ([]string, int, error) {
 		asked = append(asked, ctx)
 		return []string{"[major] ambiguidade — deltas/pricing.md#REQ-01.2"}, 1, nil
 	}
@@ -379,6 +380,39 @@ func TestASpecIsReviewedBeforeTheApproval(t *testing.T) {
 	next, cmd := m.Update(msg)
 	if m = next.(model); m.wait != waitContinue || cmd == nil {
 		t.Errorf("after the review the chat must stop for the person: wait=%q", m.wait)
+	}
+}
+
+// What the review does while it reads is shown as it comes, before the
+// review itself: a review of minutes is seen working.
+func TestTheReviewShowsItsProgressBeforeItsFindings(t *testing.T) {
+	m, _, _ := planModel(t, []*intake.Result{threePhases()}, nil)
+	m.opts.Review = func(_ context.Context, _ string, progress func(string)) ([]string, int, error) {
+		progress("revisando a (gofi-spec-review)…")
+		progress("· Read")
+		return nil, 0, nil
+	}
+	m = ask(t, m, "altere o fluxo de pricing")
+	var last tea.Cmd
+	for i := 0; m.running && i < 50; i++ {
+		next, c := m.Update(waitEvent(m.events)())
+		m, last = next.(model), c
+	}
+	var seen []string
+	msg := findMsg(last, func(msg tea.Msg) bool { _, ok := msg.(reviewProgress); return ok })
+	for i := 0; i < 5 && msg != nil; i++ {
+		p, ok := msg.(reviewProgress)
+		if !ok {
+			break
+		}
+		seen = append(seen, p.line)
+		msg = readReview(p.ch)()
+	}
+	if strings.Join(seen, "|") != "revisando a (gofi-spec-review)…|· Read" {
+		t.Errorf("progress = %q", seen)
+	}
+	if _, ok := msg.(reviewed); !ok {
+		t.Errorf("after the progress came %T, not the review", msg)
 	}
 }
 

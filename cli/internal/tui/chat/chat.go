@@ -12,6 +12,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -62,8 +63,10 @@ type Options struct {
 	Deliver func(flow, context string) Delivery
 	// Review reads a context's open changes before the person approves them
 	// (gofi-spec-review): the lines to show, and how many findings block.
-	// Nil leaves the review stop to the person alone.
-	Review func(context string) (lines []string, blocking int, err error)
+	// What it does meanwhile goes to progress, a line at a time, so a review
+	// of minutes is seen working. Nil leaves the review stop to the person
+	// alone.
+	Review func(ctx context.Context, contextName string, progress func(line string)) (lines []string, blocking int, err error)
 }
 
 // Run holds the conversation until the user leaves.
@@ -206,6 +209,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case reviewed:
 		return m.onReviewed(msg)
+	case reviewProgress:
+		return m, tea.Sequence(tea.Println(m.look.nested([]string{msg.line}, m.look.dim)), readReview(msg.ch))
 
 	case turnEnded:
 		m.running, m.events, m.think = false, nil, false

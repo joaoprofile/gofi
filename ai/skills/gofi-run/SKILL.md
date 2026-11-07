@@ -44,7 +44,9 @@ Próprias do `/gofi-run`:
    escrevê-la com a pessoa — a mudança é dela, as decisões também.
 2. **Contrato pronto.** `gofi review <mudança>` faz o `gofi spec check` e a
    revisão da mudança (ambiguidade, contradição, cenário não testável,
-   lacuna). Mostre os achados: a pessoa corrige a mudança e você roda de novo,
+   lacuna). Rode em primeiro plano — nunca em segundo: a revisão leva
+   minutos, diz o que está fazendo enquanto lê e é cortada pelo
+   `loop.turn_timeout`; em segundo plano a pessoa não vê nada. Mostre os achados: a pessoa corrige a mudança e você roda de novo,
    ou ela decide que o achado não procede. Sem achado que bloqueie e sem selo,
    pergunte se ela aprova e, com o sim dela, use a ferramenta `approve` do
    gofi (o host pede a confirmação dela). Sem a ferramenta, ela mesma roda

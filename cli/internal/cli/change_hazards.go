@@ -61,7 +61,7 @@ func changeHazards(root string, changes []contract.Change) []changeHazard {
 	}
 	for _, c := range changes {
 		dir, ok := contract.FindChange(root, c.ID)
-		if !ok || len(c.Contexts) != 1 {
+		if !ok || len(c.Contexts) != 1 || contract.IsGenesis(dir) {
 			continue
 		}
 		if want := contract.NewChangeDir(c.ID, c.Contexts); dir != want {

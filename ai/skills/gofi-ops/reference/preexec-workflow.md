@@ -22,7 +22,7 @@ Antes de qualquer recurso:
    (o que precisa ser empacotado e deployado) + convenções. Índice de
    contextos via `/gofi-status`.
 4. Ler a **mudança aprovada de infra/plataforma** (decisão 0003): os deltas
-   do contexto de infra em `specs/{contexto}/changes/{id}/` (o que a plataforma deve
+   do contexto de infra na pasta da mudança, que `gofi change list` mostra (o que a plataforma deve
    garantir) e o `design.md` (o como). Ache por busca, não por glob de caminho:
    `gofi change list`, `gofi find "<tópico de infra>"` ou `gofi show ctx:infra` —
    o nome do contexto de infra varia por projeto, e adivinhar o caminho falha em

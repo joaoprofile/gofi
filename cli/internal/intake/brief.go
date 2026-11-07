@@ -10,7 +10,7 @@ import (
 // doneWhen is the done criterion of each artifact, with the context's name.
 var doneWhen = map[string]string{
 	"prd":       "PRD em prd/%[1]s/prd-%[1]s.md, com frontmatter e keywords, pronto para a spec",
-	"spec":      "mudança em specs/%[1]s/changes/<id>/ para %[1]s — proposta, um delta por contexto, design — passando em `gofi spec check <id>`",
+	"spec":      "mudança para %[1]s criada por `gofi change new <id> --context %[1]s` — em specs/%[1]s/ quando %[1]s ainda não tem spec (a gênese, cujo id é %[1]s), senão em specs/%[1]s/changes/<id>/ —, com proposta, um delta por contexto e design, passando em `gofi spec check` com o id que o comando disse",
 	"code":      "código de %[1]s implementado conforme a spec, com testes passando, e auditado",
 	"ui":        "telas de %[1]s implementadas conforme a spec e o design system, e auditadas",
 	"infra":     "IaC e pipeline de %[1]s aplicáveis conforme a spec de infra",

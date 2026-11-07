@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -54,7 +55,8 @@ gofi review --context pontos`,
 				if len(args) > 0 {
 					return errors.New(i18n.T("review.which"))
 				}
-				lines, blocking, err := chatReview(root, cfg)(ctxName)
+				out := cmd.OutOrStdout()
+				lines, blocking, err := chatReview(root, cfg)(cmd.Context(), ctxName, func(line string) { fmt.Fprintln(out, "  "+line) })
 				if len(lines) > 0 {
 					fmt.Fprintln(cmd.OutOrStdout(), strings.Join(lines, "\n"))
 				}
@@ -153,12 +155,29 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 	if err != nil {
 		return nil, err
 	}
-	agent := &engineAgent{root: root, work: root, open: open, out: out,
-		transcript: filepath.Join(filepath.Dir(file), change+".ndjson")}
-	res, err := agent.Run(ctx, loop.Turn{Node: "review", Role: rl.Name, Agent: "review-" + change, Iter: 1,
-		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, Prompt: reviewBrief(rl, change, dir, filepath.ToSlash(rel))})
+	// The review is a turn like a run's: bounded by loop.turn_timeout and
+	// loop.turn_budget_usd, so a reviewer that loses itself ends, and says so.
+	limit, err := turnTimeout(cfg)
 	if err != nil {
 		return nil, err
+	}
+	tctx, cancel := ctx, context.CancelFunc(func() {})
+	if limit > 0 {
+		tctx, cancel = context.WithTimeout(ctx, limit)
+	}
+	defer cancel()
+	transcript := filepath.Join(filepath.Dir(file), change+".ndjson")
+	agent := &engineAgent{root: root, work: root, open: open, out: out,
+		transcript: transcript, heartbeat: reviewHeartbeat}
+	res, err := agent.Run(tctx, loop.Turn{Node: "review", Role: rl.Name, Agent: "review-" + change, Iter: 1,
+		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, BudgetUSD: loopPolicy(cfg).TurnBudgetUSD,
+		Prompt: reviewBrief(rl, change, dir, filepath.ToSlash(rel))})
+	trel, _ := filepath.Rel(root, transcript)
+	if err != nil {
+		if errors.Is(tctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return nil, errors.New(i18n.T("review.timeout", rl.Name, limit, filepath.ToSlash(trel)))
+		}
+		return nil, fmt.Errorf("%w — %s", err, i18n.T("review.transcript", filepath.ToSlash(trel)))
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -172,9 +191,13 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 	if err := review.Save(root, r); err != nil {
 		return nil, err
 	}
-	fmt.Fprintln(out, "  "+i18n.T("review.cost", res.CostUSD))
+	fmt.Fprintln(out, "  "+i18n.T("review.cost", res.CostUSD, time.Duration(res.Seconds*float64(time.Second)).Round(time.Second)))
 	return r, nil
 }
+
+// reviewHeartbeat is how long a review goes without an event before it says
+// it is still reading.
+var reviewHeartbeat = 20 * time.Second
 
 // reviewBrief is the reviewer's turn: the change, not yet approved, and the
 // one file the turn writes.
@@ -251,23 +274,27 @@ func contractGate(cmd *cobra.Command, root string, cfg *config.GofiConfig, chang
 }
 
 // chatReview is the chat's review stop on a spec: every open change of the
-// context not approved as it is, checked and reviewed — the lines to show,
-// and how many findings block.
-func chatReview(root string, cfg *config.GofiConfig) func(string) ([]string, int, error) {
-	return func(ctxName string) ([]string, int, error) {
+// context not approved as it is, checked and reviewed — the findings to show,
+// and how many block. What the review does while it reads goes to progress,
+// line by line, as it happens: a review takes minutes, and the person sees
+// it working rather than a stop that may be a hang.
+func chatReview(root string, cfg *config.GofiConfig) func(context.Context, string, func(string)) ([]string, int, error) {
+	return func(ctx context.Context, ctxName string, progress func(string)) ([]string, int, error) {
 		all, err := contract.Docs(root)
 		if err != nil {
 			return nil, 0, err
 		}
+		live := &lineWriter{emit: progress}
 		var out bytes.Buffer
 		blocking := 0
 		for _, c := range contract.Changes(all) {
 			if c.Sealed || !slices.Contains(c.Contexts, ctxName) {
 				continue
 			}
-			r, err := reviewChange(context.Background(), &out, root, cfg, c.ID, false)
+			r, err := reviewChange(ctx, live, root, cfg, c.ID, false)
+			live.Flush()
 			if err != nil {
-				return strings.Split(strings.TrimSpace(out.String()), "\n"), 0, err
+				return nil, 0, err
 			}
 			printReview(&out, r)
 			blocking += len(r.Blocking())
@@ -287,4 +314,32 @@ func changeDirOf(root, change string) (string, error) {
 		return dir, nil
 	}
 	return "", errors.New(i18n.T("change.not_found", change))
+}
+
+// lineWriter hands each complete line written to it to emit.
+type lineWriter struct {
+	emit func(string)
+	buf  []byte
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		if line := strings.TrimSpace(string(w.buf[:i])); line != "" && w.emit != nil {
+			w.emit(line)
+		}
+		w.buf = w.buf[i+1:]
+	}
+}
+
+// Flush hands on what is left without a line end.
+func (w *lineWriter) Flush() {
+	if line := strings.TrimSpace(string(w.buf)); line != "" && w.emit != nil {
+		w.emit(line)
+	}
+	w.buf = nil
 }

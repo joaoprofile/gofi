@@ -42,11 +42,11 @@ func TestCreateWritesTheChangeFromTheTemplates(t *testing.T) {
 	}
 
 	// The same id again, open or archived, is refused; so is a bad id.
-	if _, err := Create(root, NewChange{ID: "adicionar-rate-limit", Contexts: []string{"pedidos"}}); err == nil {
+	if _, err := Create(root, NewChange{ID: "adicionar-rate-limit", Contexts: []string{"pedidos"}, NoGenesis: true}); err == nil {
 		t.Error("an open change was created twice")
 	}
 	write(t, root, "specs/changes/archive/2026-10-01-criar-pedidos/proposal.md", "x")
-	if _, err := Create(root, NewChange{ID: "criar-pedidos", Contexts: []string{"pedidos"}}); err == nil || !strings.Contains(err.Error(), "arquivada") {
+	if _, err := Create(root, NewChange{ID: "criar-pedidos", Contexts: []string{"pedidos"}, NoGenesis: true}); err == nil || !strings.Contains(err.Error(), "arquivada") {
 		t.Errorf("an archived id was reused: %v", err)
 	}
 	for _, bad := range []NewChange{{ID: "Rate_Limit", Contexts: []string{"pedidos"}}, {ID: "x"}, {ID: "x", Contexts: []string{"a", "a"}}} {
@@ -59,7 +59,7 @@ func TestCreateWritesTheChangeFromTheTemplates(t *testing.T) {
 func TestCreateWithoutADesign(t *testing.T) {
 	root := project(t)
 	changeTemplates(t, root)
-	written, err := Create(root, NewChange{ID: "remover-desconto", Contexts: []string{"pedidos"}, Language: "rust", NoDesign: true})
+	written, err := Create(root, NewChange{ID: "remover-desconto", Contexts: []string{"pedidos"}, Language: "rust", NoDesign: true, NoGenesis: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestCreateWithoutADesign(t *testing.T) {
 		t.Errorf("written = %v", written)
 	}
 	// A language with no pack template takes the neutral one.
-	if _, err := Create(root, NewChange{ID: "criar-estoque", Contexts: []string{"estoque"}, Language: "rust"}); err != nil {
+	if _, err := Create(root, NewChange{ID: "criar-estoque", Contexts: []string{"estoque"}, Language: "rust", NoGenesis: true}); err != nil {
 		t.Fatal(err)
 	}
 	if d := read(t, root, "specs/estoque/changes/criar-estoque/design.md"); !strings.Contains(d, "# Design neutro") {
