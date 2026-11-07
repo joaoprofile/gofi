@@ -60,7 +60,7 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 		elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, "elicit-"+id+".json"))
 		a := &AgentState{ID: id, Node: name, Role: rl.Name, Tier: tier, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 		_ = saveAgent(r.Root, s.Run, a)
-		jobs[i] = &job{a: a, turn: Turn{Node: name, Role: rl.Name, Agent: id, Iter: s.Iter, Prompt: withChange(r.Brief(rl, s, elicit), r.work(), s), ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, len(roles))}}
+		jobs[i] = &job{a: a, turn: Turn{Node: name, Role: rl.Name, Agent: id, Iter: s.Iter, Prompt: withChange(r.Brief(rl, s, elicit), r.work(), s, rl), ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, len(roles))}}
 	}
 	limit := r.Policy.AuditParallel
 	if limit <= 0 || limit > len(jobs) {

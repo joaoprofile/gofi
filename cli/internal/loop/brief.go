@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/intake"
-	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
@@ -23,13 +22,18 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	if !rl.Contract.Internal() {
 		fmt.Fprintf(&b, "/%s ", rl.Name)
 	}
+	// The first paragraph is the same words for every turn of the run, and the
+	// change goes after it (withChange): the iteration comes in the second, or
+	// every turn after the first would write the change to the cache again
+	// instead of reading it.
 	if dir := s.ChangeDir; dir != "" {
-		fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — a proposta, os deltas e o design em `%s/`. Iteração %d da execução %s.\n\n",
-			s.Change, s.Context, dir, s.Iter, s.Run)
+		fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — a proposta, os deltas e o design em `%s/`.\n\n",
+			s.Change, s.Context, dir)
 	} else {
-		fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list` diz a pasta dela. Iteração %d da execução %s.\n\n",
-			s.Change, s.Context, s.Iter, s.Run)
+		fmt.Fprintf(&b, "Trabalhe na mudança aprovada `%s` do contexto %s — `gofi change list` diz a pasta dela.\n\n",
+			s.Change, s.Context)
 	}
+	fmt.Fprintf(&b, "Iteração %d da execução %s.\n\n", s.Iter, s.Run)
 	// What failed and what is open is for the roles that change the code:
 	// the others — an audit, the delivery, the lesson — have nothing to fix;
 	// the triage, what is open.
@@ -49,6 +53,12 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 			fmt.Fprintf(&b, "- [%s] %s — %s (`%s`)\n", f.Severity, f.Rule, f.Message, f.Fingerprint)
 		}
 		b.WriteString("\n")
+	}
+	// A turn that goes back to work is a fresh session: without the map of
+	// what the run already wrote, it spends its first calls finding it again.
+	rework := s.Sensor != nil && len(s.Sensor.Failed) > 0 || len(s.Open) > 0
+	if fixes && rework && s.Diff != nil && len(s.Diff.Touched) > 0 {
+		b.WriteString(scope(s.Diff, "**O que a execução já escreveu**, pelo grafo de código — parta daqui, sem redescobrir o código:"))
 	}
 	switch {
 	case rl.Contract.Stage == "plan":
@@ -99,9 +109,9 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 	case rl.Contract.Stage == "audit":
 		fmt.Fprintf(&b, "Grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
 	}
-	if rl.Contract.Internal() {
-		fmt.Fprintf(&b, "\nSiga o papel descrito em %s.\n", layout.RoleSkill(rl.Name, true))
-	}
+	// An internal role's skill is not named here: withChange carries it
+	// inline, after the change, where it is the same words on every turn of
+	// the role.
 	return b.String()
 }
 
