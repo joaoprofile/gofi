@@ -1,7 +1,7 @@
 ---
 name: dynamic-filter
 description: Filtro dinâmico em Go — allowlist sqln.FilterMapping, BuildQuery, NewPageRequestFilter, tenant como argumento, envelope sqln.Filters
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [dynamic-filter, FilterMapping, BuildQuery, FindWithFilter, NewPageRequestFilter, ErrInvalidFilter, Filters, tenant]
 ---
 

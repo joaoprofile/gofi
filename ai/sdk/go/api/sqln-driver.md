@@ -1,6 +1,6 @@
 # sqln/driver
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -108,6 +108,13 @@ const LikeEscapeClause = " ESCAPE '" + LikeEscapeChar + "'"
 LikeEscapeClause follows a LIKE whose pattern was escaped with EscapeLike.
 
 ```go
+const Overlaps = "&&"
+```
+
+Overlaps tests whether an array column shares at least one element with a
+list. Only dialects with array columns (ArrayDialect) render it.
+
+```go
 const Search = "SEARCH"
 ```
 
@@ -193,6 +200,10 @@ SortDirection normalizes d; anything that is not a valid direction falls back to
 type ArrayDialect interface {
 	// ArrayMembership renders field IN / NOT IN for an array placeholder.
 	ArrayMembership(field, param string, negate bool) string
+
+	// ArrayOverlap renders field && param: the array column shares an element
+	// with the array placeholder.
+	ArrayOverlap(field, param string) string
 }
 ```
 

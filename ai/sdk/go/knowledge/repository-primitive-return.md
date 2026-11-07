@@ -1,7 +1,7 @@
 ---
 name: repository-primitive-return
 description: Consulta de presença/valor primitivo devolve (*T, error) direto do UniqueResult do sqln
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [repository, primitive, exists, UniqueResult, FindFromCriteria, presence]
 ---
 

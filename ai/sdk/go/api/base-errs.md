@@ -1,6 +1,6 @@
 # base/errs
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/errs"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/base/errs"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -79,10 +79,22 @@ func RegisterNotFound(code, message string) AppError
 func RegisterOperation(code, message string) AppError
 ```
 
+### errs.RegisterTooManyRequests
+
+```go
+func RegisterTooManyRequests(code, message string) AppError
+```
+
 ### errs.RegisterUnauthorized
 
 ```go
 func RegisterUnauthorized(code, message string) AppError
+```
+
+### errs.RegisterUnprocessable
+
+```go
+func RegisterUnprocessable(code, message string) AppError
 ```
 
 ### errs.RegisterValidation
@@ -165,10 +177,22 @@ func (e AppError) IsNotFound() bool
 func (e AppError) IsOperation() bool
 ```
 
+### AppError.IsTooManyRequests
+
+```go
+func (e AppError) IsTooManyRequests() bool
+```
+
 ### AppError.IsUnauthorized
 
 ```go
 func (e AppError) IsUnauthorized() bool
+```
+
+### AppError.IsUnprocessable
+
+```go
+func (e AppError) IsUnprocessable() bool
 ```
 
 ### AppError.IsValidation
@@ -233,6 +257,12 @@ const (
 	KindExternalError ErrorKind = "EXTERNAL_ERROR"
 	KindUnauthorized  ErrorKind = "UNAUTHORIZED"
 	KindForbidden     ErrorKind = "FORBIDDEN"
+	// KindUnprocessable is a request that is well formed but that the service refuses on its
+	// merits (an external check rejected it): HTTP 422, unlike KindValidation (400, the shape is wrong).
+	KindUnprocessable ErrorKind = "UNPROCESSABLE"
+	// KindTooManyRequests is a request refused because the caller exceeded a rate or attempt limit:
+	// HTTP 429.
+	KindTooManyRequests ErrorKind = "TOO_MANY_REQUESTS"
 )
 ```
 

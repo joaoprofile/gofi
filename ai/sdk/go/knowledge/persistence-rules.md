@@ -1,7 +1,7 @@
 ---
 name: persistence-rules
 description: Regras de persistência em Go/sqln — repository, escrita, transação, IDs, listagem, conflito UNIQUE, cache
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [repository, sqln, statement, transaction, aggregate, uuidv7, pagination, unique, cache, persistence]
 ---
 

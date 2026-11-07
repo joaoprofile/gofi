@@ -1,7 +1,7 @@
 ---
 name: database-connection
 description: Conexão SQL do sqln — componente database, DATABASE_*, registro de driver por import, réplica de leitura, IAM (rdsauth)
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [sqln, connection, database, DATABASE_DRIVER, driver, postgres, replica, rdsauth, pool]
 ---
 

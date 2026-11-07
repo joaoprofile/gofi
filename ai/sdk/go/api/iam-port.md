@@ -1,6 +1,6 @@
 # iam/port
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/port"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/iam/port"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -231,6 +231,13 @@ type SelectTenantInput struct {
 	// flow; required unless SecurityConfig.InsecureSkipTenantTicket is set.
 	Ticket string
 
+	// AuthTime, when set, is the original login time the new session counts its absolute lifetime
+	// from (SecurityConfig.SessionMaxLifetime): pass the AuthTime of the session being replaced when
+	// switching tenant, so a switch does not restart the clock. Zero starts it now. A time in the
+	// future is treated as now, so a caller can shorten a session this way, never lengthen it; a
+	// time already past the absolute lifetime fails with ErrSessionExpired.
+	AuthTime time.Time
+
 	// Audit and security context.
 	IPAddress string
 	UserAgent string
@@ -297,6 +304,11 @@ type TenantPort interface {
 	// AssertAccess validates whether the user may access the given tenant and module.
 	// Called in SelectTenant and by TenantMiddleware on every request.
 	// Token claims must never be the sole source of truth for access decisions.
+	//
+	// Deny with core.ErrTenantAccessDenied (or an error wrapping it). Any other error means the
+	// check itself failed (a database down): access is still refused, but SelectTenant and
+	// RefreshToken return that error instead of ErrTenantAccessDenied, so callers can tell an
+	// outage from a user losing access.
 	AssertAccess(ctx context.Context, userID, tenantID, module string) error
 }
 ```

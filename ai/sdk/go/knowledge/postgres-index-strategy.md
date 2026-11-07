@@ -1,7 +1,7 @@
 ---
 name: postgres-index-strategy
 description: Índices PostgreSQL por perfil de acesso da tabela e por tipo de filtro que o sqln gera; fillfactor e autovacuum
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [postgres, index, btree, gin, pg_trgm, fillfactor, autovacuum, ILIKE, ANY]
 ---
 

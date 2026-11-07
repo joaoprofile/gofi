@@ -1,6 +1,6 @@
 # gofi/component/grpcserver
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/grpcserver"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/grpcserver"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 

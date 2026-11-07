@@ -1,7 +1,7 @@
 ---
 name: full-text-search
 description: Busca full-text no sqln (PostgreSQL e MySQL) — fts.MustIndex, migration gerada, criteria.Match/ByRelevance, SEARCH no filtro dinâmico, sugestão "você quis dizer", destaque seguro, política de conferência
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [full-text, fts, MustIndex, Spec, Match, ByRelevance, SelectRelevance, SelectHighlight, Highlight, Suggest, RefreshLexicon, tsvector, FULLTEXT, ErrIndexMissing, ErrEmptySearch, DATABASE_FULLTEXT_POLICY, busca]
 ---
 

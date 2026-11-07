@@ -1,6 +1,6 @@
 # iam/provider/oidc
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/oidc"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/oidc"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -10,7 +10,7 @@ Supports PKCE (RFC 7636 S256), id_token validation via JWKS, and automatic disco
 ## Variáveis
 
 ```go
-var ErrInsecureEndpoint = errors.New("iam/oidc: endpoint must use https")
+var ErrInsecureEndpoint = jwks.ErrInsecureEndpoint
 ```
 
 ErrInsecureEndpoint is returned for a token or JWKS endpoint that is not

@@ -1,7 +1,7 @@
 ---
 name: http-server
 description: Servidor HTTP netx/httpx pelo componente httpserver — RouterHandler, rotas públicas/privadas, ordem Use → UseAuth → Handlers, middlewares já embutidos, WSConfig e limites por rota
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [httpx, netx, httpserver, RouterHandler, PublicRoutes, PrivateRoutes, UseAuth, Use, Handlers, WSConfig, CrossOriginProtection, Health, Timeouts, Cors, MaxBodyBytes, middleware]
 ---
 

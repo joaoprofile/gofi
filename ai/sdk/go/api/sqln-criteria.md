@@ -1,6 +1,6 @@
 # sqln/criteria
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/criteria"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/criteria"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -355,6 +355,17 @@ func Or() Predicate
 ```
 
 Or inserts an OR connector between adjacent predicates.
+
+### criteria.Overlaps
+
+```go
+func Overlaps(field string, values any) Predicate
+```
+
+Overlaps produces field && values for an array column: true when the column
+shares at least one element with values, which must be a typed slice
+([]int64, []string…). An empty list matches nothing. Dialects without array
+columns fail Build with ErrInvalidValue.
 
 ### Predicate.Raw
 

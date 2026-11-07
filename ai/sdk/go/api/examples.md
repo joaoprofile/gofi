@@ -1,4 +1,4 @@
-# Exemplos executáveis do SDK — SDK gofi/v0.2.6 (3df9d20)
+# Exemplos executáveis do SDK — SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do SDK — não edite. Programas completos, compilados e testados na CI do SDK:
 > leia o código no checkout, na versão que o projeto fixou.

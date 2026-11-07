@@ -1,6 +1,6 @@
 # iam/provider/redis
 
-`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/redis"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/iam/provider/redis"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 

@@ -1,6 +1,6 @@
 # gofi/component/httpserver
 
-`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/gofi/component/httpserver"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -25,6 +25,7 @@ ConfigFromEnv builds the httpx.WSConfig fields set by the environment:
   - HTTP_TRUSTED_PROXIES                  → TrustedProxies (CSV of CIDRs, or "private")
   - HTTP_MAX_CONCURRENT                   → StressControl.DefaultMaxConcurrent
   - HTTP_ALLOWED_ORIGINS (ALLOWED_ORIGINS as fallback) → AllowedOrigins (CSV)
+  - HTTP_ALLOWED_HEADERS                  → AllowedHeaders (CSV, added to the defaults)
 
 HTTP_RATE_LIMIT_FAIL_CLOSED needs a rate limiter backend, which only code
 can provide, so it is applied by New to the WSConfig.RateLimiter given there.
