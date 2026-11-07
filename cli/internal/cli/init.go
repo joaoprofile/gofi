@@ -637,6 +637,7 @@ func buildConfig(r *wizard.Result) *config.GofiConfig {
 		Mobile:   mobile,
 		Ops:      config.DefaultOps(),
 		Graph:    config.DefaultGraph(),
+		Loop:     config.DefaultLoop(),
 		AI:       config.AI{Host: r.AIHost, Model: r.AIModel, Models: []string{r.AIModel}},
 		Sources:  src,
 		Test:     config.DefaultTestSection(testLang, testPath),

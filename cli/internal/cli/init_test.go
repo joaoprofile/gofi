@@ -806,3 +806,26 @@ func TestExecutePipeline_AxumBackend(t *testing.T) {
 		t.Error("go.work written for a Rust backend")
 	}
 }
+
+// A run had no budget and only the flow's limits unless the team wrote them:
+// a change that did not converge spent until every rework edge was used. A
+// new project's .gofi.yaml is written bounded, and the bounds load back.
+func TestBuildConfig_NewProjectRunsAreBounded(t *testing.T) {
+	cfg := buildConfig(&wizard.Result{
+		AIHost: config.AIHostClaudeVSCode, AIModel: config.DefaultModel,
+		Name: "acme", Root: t.TempDir(), Environments: []string{wizard.EnvBack},
+		Language: config.LanguageGo, SourcePath: "backend", Module: "example.com/acme",
+		AgentsRef: config.DefaultAgentsRef,
+	})
+	path := filepath.Join(t.TempDir(), config.FileName)
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Loop == nil || got.Loop.BudgetUSD != config.DefaultLoopBudgetUSD || got.Loop.MaxIterations != config.DefaultLoopMaxIterations {
+		t.Errorf("a new project's runs must start bounded, got loop %+v", got.Loop)
+	}
+}
