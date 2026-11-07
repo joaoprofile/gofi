@@ -338,7 +338,7 @@ const conduct = {
 				// The reviewer reads the change before the person approves it,
 				// as gofi chat does: what it found comes first, then the stop.
 				this.post({ type: 'notice', text: `Revisando as mudanças de ${context} antes da aprovação…` });
-				this.reviewRunner(this.gofiPath(), this.projectRoot, context).then((r) => {
+				this.reviewRunner(this.gofiPath(), this.projectRoot, context, (line) => this.post({ type: 'notice', text: line })).then((r) => {
 					if (r.output) {
 						this.post({ type: 'notice', text: r.ok ? 'Revisão da mudança:' : 'A revisão achou bloqueios — corrija, ou aprove como está se o achado não procede:', hint: r.output });
 					}

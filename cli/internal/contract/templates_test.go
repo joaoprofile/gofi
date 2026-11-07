@@ -73,9 +73,24 @@ func fillIn(text string, drop ...string) string {
 
 // The skeleton gofi change new writes from the real templates is never
 // approvable as it is — and once a writer fills it in, it is.
+// Both ways a first change is born: the genesis, in the context's own
+// folder, and one in changes/<id>/.
 func TestTheRealTemplatesAndTheCheckAgree(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		noGenesis bool
+		id, dir   string
+	}{
+		{"genesis", false, "pedidos", "specs/pedidos"},
+		{"changes folder", true, "criar-pedidos", "specs/pedidos/changes/criar-pedidos"},
+	} {
+		t.Run(tc.name, func(t *testing.T) { realTemplatesAgree(t, tc.noGenesis, tc.id, tc.dir) })
+	}
+}
+
+func realTemplatesAgree(t *testing.T, noGenesis bool, id, dir string) {
 	root := realTemplates(t)
-	written, err := Create(root, NewChange{ID: "criar-pedidos", Contexts: []string{"pedidos"}, Language: "go", Date: "2026-11-01"})
+	written, err := Create(root, NewChange{ID: "criar-pedidos", Contexts: []string{"pedidos"}, Language: "go", Date: "2026-11-01", NoGenesis: noGenesis})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +108,7 @@ func TestTheRealTemplatesAndTheCheckAgree(t *testing.T) {
 			t.Errorf("%s is not read as a contract document", p)
 		}
 	}
-	if d := read(t, root, "specs/pedidos/changes/criar-pedidos/design.md"); !strings.Contains(d, "gofi-sdk-go") {
+	if d := read(t, root, dir+"/design.md"); !strings.Contains(d, "gofi-sdk-go") {
 		t.Error("the change took the neutral design, not the go pack's")
 	}
 
@@ -123,7 +138,7 @@ func TestTheRealTemplatesAndTheCheckAgree(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := Archive(root, corpus(t, root), "criar-pedidos", "2026-11-01"); err != nil {
+	if _, err := Archive(root, corpus(t, root), id, "2026-11-01"); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
 	living, ok := Living(corpus(t, root), "pedidos")
@@ -132,6 +147,21 @@ func TestTheRealTemplatesAndTheCheckAgree(t *testing.T) {
 	}
 	if got := Check(root, corpus(t, root), living, placeholders); Errors(got) > 0 {
 		t.Errorf("living spec:\n%s", messages(got))
+	}
+	// The change went to the context's archive, the spec in its place.
+	if living.Path != "specs/pedidos/spec.md" {
+		t.Errorf("living spec at %s", living.Path)
+	}
+	for _, name := range []string{"proposal.md", "design.md", "deltas/pedidos.md"} {
+		if _, err := os.Stat(filepath.Join(root, "specs/pedidos/changes/archive/2026-11-01-"+id, name)); err != nil {
+			t.Errorf("archive lacks %s: %v", name, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, dir, name)); err == nil {
+			t.Errorf("%s/%s was left behind", dir, name)
+		}
+	}
+	if left := Changes(corpus(t, root)); len(left) != 0 {
+		t.Errorf("open changes after the archive: %+v", left)
 	}
 }
 

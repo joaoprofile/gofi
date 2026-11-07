@@ -374,18 +374,57 @@ function sealContract(gofiPath, root, context) {
 /**
  * Reviews every change of a context not approved yet — `gofi review
  * --context` —: what the person reads before approving the spec. ok is
- * false when the review found blockers.
+ * false when the review found blockers. Each line the review prints goes to
+ * onLine as it comes: a review takes minutes, and a panel silent for that
+ * long reads as a hung one.
  *
  * @param {string} gofiPath
  * @param {string} root
  * @param {string} context
+ * @param {(line: string) => void} [onLine]
  * @returns {Promise<{ok: boolean, output: string}>}
  */
-function reviewContext(gofiPath, root, context) {
+function reviewContext(gofiPath, root, context, onLine) {
 	return new Promise((resolve) => {
-		execFile(gofiPath || 'gofi', ['review', '--context', context], { cwd: root, timeout: REVIEW_TIMEOUT_MS }, (err, stdout, stderr) => {
-			resolve({ ok: !err, output: `${stdout || ''}${stderr || ''}`.trim() });
-		});
+		let child;
+		try {
+			child = spawn(gofiPath || 'gofi', ['review', '--context', context], { cwd: root });
+		} catch (err) {
+			resolve({ ok: false, output: String(err && err.message || err) });
+			return;
+		}
+		let output = '';
+		let pending = '';
+		let timedOut = false;
+		const take = (chunk) => {
+			const text = chunk.toString();
+			output += text;
+			pending += text;
+			const lines = pending.split('\n');
+			pending = lines.pop();
+			for (const line of lines) {
+				if (line.trim() && onLine) {
+					onLine(line.trim());
+				}
+			}
+		};
+		child.stdout.on('data', take);
+		child.stderr.on('data', take);
+		const timer = setTimeout(() => {
+			timedOut = true;
+			child.kill();
+		}, REVIEW_TIMEOUT_MS);
+		const end = (ok, extra) => {
+			clearTimeout(timer);
+			if (pending.trim() && onLine) {
+				onLine(pending.trim());
+			}
+			pending = '';
+			resolve({ ok, output: [output.trim(), extra].filter(Boolean).join('\n') });
+		};
+		child.on('error', (err) => end(false, String(err && err.message || err)));
+		child.on('close', (code) => end(code === 0 && !timedOut,
+			timedOut ? `a revisão passou de ${REVIEW_TIMEOUT_MS / 60000} min e foi interrompida — o que o revisor fez está em .gofi/reviews/` : ''));
 	});
 }
 

@@ -99,6 +99,9 @@ func Docs(root string) ([]Doc, error) {
 			Context: value(fm, "contexto"), Front: fm, Body: body, Offset: bodyLine(string(raw), body),
 		}
 		doc.Change = changeOf(doc.Path)
+		if doc.Change == "" {
+			doc.Change = genesisOf(doc.Path, kind, doc.Format)
+		}
 		doc.Contexts = fm.List("contextos")
 		if doc.Context != "" && !contains(doc.Contexts, doc.Context) {
 			doc.Contexts = append([]string{doc.Context}, doc.Contexts...)

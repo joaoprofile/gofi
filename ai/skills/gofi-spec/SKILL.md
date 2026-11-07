@@ -19,8 +19,11 @@ O modelo do corpus (decisão 0003): `specs/<ctx>/spec.md` é a **verdade viva**
 de um contexto — só requisitos e cenários, neutra de linguagem — e muda **só**
 pelo arquivamento de uma mudança. Todo trabalho é uma mudança, **dentro do
 contexto que ela altera**: `specs/<ctx>/changes/<id>/` — só a que toca vários
-contextos fica em `specs/changes/<id>/`. Crie a pasta com `gofi change new <id>
---context <ctx>`, que a põe no lugar certo; contexto novo é a mudança que só ADICIONA.
+contextos fica em `specs/changes/<id>/`. Contexto novo é a mudança que só
+ADICIONA, a **gênese**: nasce direto em `specs/<ctx>/` (proposta, `deltas/`,
+design), sem `changes/<id>/`, e o id dela é o nome do contexto. Crie a pasta com
+`gofi change new <id> --context <ctx>`, que a põe no lugar certo e diz o id —
+é esse id que vai no `gofi spec check`, no `gofi review` e na aprovação.
 
 ---
 
@@ -66,7 +69,7 @@ Segue a *Convenção de leitura dos agents* do AGENTS.md; o detalhe →
 
 | Modo | Quando | Escreve |
 |---|---|---|
-| **Mudança** (padrão) | contexto novo, ou alterar um que existe | `gofi change new <id> --context <ctx>...` → proposta, `deltas/<ctx>.md`, `design.md` |
+| **Mudança** (padrão) | contexto novo (a gênese, em `specs/<ctx>/`), ou alterar um que existe | `gofi change new <id> --context <ctx>...` → proposta, `deltas/<ctx>.md`, `design.md` |
 | **Baseline** | contexto que já roda e não tem spec viva | `specs/{contexto}/spec.md` a partir do código e do grafo → `reference/reverse-engineering.md` |
 | **Mapa** | repositório adotado, sem nenhum contexto | a tabela de contextos candidatos → `reference/reverse-engineering.md` §Modo 3 |
 
@@ -103,7 +106,9 @@ em passagens:
 5. **Escrever** — `gofi change new <id> --context <ctx>...` e preencher
    proposta, deltas e design → `reference/change-writing.md`.
 6. **Verificar** — `gofi spec check <id>` com **zero erros**; aviso lido e
-   decidido.
+   decidido. A revisão (`gofi review <id>`) roda em **primeiro plano**, nunca em
+   segundo: leva minutos, diz o que está lendo e é cortada pelo
+   `loop.turn_timeout` — em segundo plano a pessoa não vê nada.
 7. **Fechar** — memória do contexto → `gofi index docs` → `gofi index check`
    (Lei comum 3) → `reference/memory-and-closing.md` §Checklist.
 
@@ -113,7 +118,9 @@ em passagens:
 
 - A pasta da mudança nasce de `gofi change new <id> --context <ctx>` (um
   `--context` por contexto tocado) — nunca crie a pasta nem mova a mudança à
-  mão: o lugar é do CLI, e uma pasta fora do lugar o loop não lê. Escreve nela
+  mão: o lugar é do CLI, e uma pasta fora do lugar o loop não lê. Num contexto
+  sem spec ela é a gênese, em `specs/<ctx>/`, com o id `<ctx>`: use o id que o
+  comando imprimiu. Escreve nela
   (ou a baseline em `specs/{contexto}/spec.md`) frontmatter + `keywords`, zero
   proveniência.
 - Tudo sai `status: proposto`. **Não grave `aprovado`**: aprovar é da pessoa,
@@ -130,7 +137,7 @@ em passagens:
 
 ```
 ### Mudança
-- specs/{contexto}/changes/{id}/ — proposta, deltas/{ctx}.md, design.md
+- {pasta que gofi change new imprimiu} — proposta, deltas/{ctx}.md, design.md
 - gofi spec check {id}: 0 erros
 
 ### Requisitos

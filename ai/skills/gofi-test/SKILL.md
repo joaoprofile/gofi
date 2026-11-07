@@ -38,7 +38,7 @@ Próprias do `gofi-test`:
 
 ## Workflow
 
-1. Os cenários dos deltas (`specs/{contexto}/changes/<id>/deltas/`) — e, num retorno, os
+1. Os cenários dos deltas (`deltas/` da pasta da mudança (o turno diz qual; `gofi change list` mostra)) — e, num retorno, os
    achados do turno sobre os testes.
 2. As assinaturas que os cenários exercitam, pelo grafo.
 3. Escreva os testes, na convenção da linguagem (`.claude/sdk/<lang>/knowledge/`

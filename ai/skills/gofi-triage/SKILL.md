@@ -33,7 +33,7 @@ Próprias do `gofi-triage`:
 
 1. Leia os achados do turno (da auditoria e dos sensores) e o motivo do
    impasse.
-2. Leia a mudança: `gofi show specs/{contexto}/changes/<id>/proposal.md` e só os
+2. Leia a mudança: `gofi show <pasta da mudança>/proposal.md` (o turno diz qual; `gofi change list` mostra) e só os
    requisitos que os achados citam (`gofi find "<REQ>"`, `gofi show` da §).
 3. Abra o código citado só onde o achado aponta; `verify` quando precisar
    reproduzir uma falha de sensor.

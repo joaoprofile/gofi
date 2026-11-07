@@ -1215,6 +1215,10 @@ type engineAgent struct {
 	// transcript, when set, is where the turn is recorded instead of the
 	// run's agents folder: a turn outside a run.
 	transcript string
+	// heartbeat, when set, says the turn is still going after that long
+	// without an event — a model reading at length calls no tool, and a
+	// silent terminal reads as a hung one.
+	heartbeat time.Duration
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
@@ -1247,7 +1251,27 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 	var res loop.TurnResult
 	var failure error
 	usage := &loop.Usage{}
-	for e := range events {
+	start, last := time.Now(), time.Now()
+	var beat <-chan time.Time
+	if a.heartbeat > 0 && !a.quiet {
+		ticker := time.NewTicker(a.heartbeat)
+		defer ticker.Stop()
+		beat = ticker.C
+	}
+	for {
+		var e engine.Event
+		select {
+		case now := <-beat:
+			if now.Sub(last) >= a.heartbeat {
+				fmt.Fprintf(a.out, "  · %s\n", i18n.T("turn.still", time.Since(start).Round(time.Second)))
+			}
+			continue
+		case got, ok := <-events:
+			if !ok {
+				return a.finish(res, usage, failure)
+			}
+			e, last = got, time.Now()
+		}
 		switch ev := e.(type) {
 		case engine.Usage:
 			if ev.Total {
@@ -1279,6 +1303,10 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 			record("failure", ev.Message)
 		}
 	}
+}
+
+// finish is the turn's result once its events end.
+func (a *engineAgent) finish(res loop.TurnResult, usage *loop.Usage, failure error) (loop.TurnResult, error) {
 	if *usage != (loop.Usage{}) {
 		res.Usage = usage
 	}

@@ -507,10 +507,13 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 		// what it found. It runs aside — a turn of its own.
 		if done.Produces == "spec" && m.opts.Review != nil && r.Context != nil {
 			review, ctx := m.opts.Review, r.Context.Name
-			return m, tea.Batch(tea.Println(k.nested([]string{i18n.T("chat.plan.reviewing", ctx)}, k.dim)), func() tea.Msg {
-				lines, blocking, err := review(ctx)
-				return reviewed{lines: lines, blocking: blocking, err: err}
-			})
+			ch := make(chan tea.Msg, 64)
+			go func() {
+				defer close(ch)
+				lines, blocking, err := review(context.Background(), ctx, func(line string) { ch <- reviewProgress{line: line, ch: ch} })
+				ch <- reviewed{lines: lines, blocking: blocking, err: err}
+			}()
+			return m, tea.Batch(tea.Println(k.nested([]string{i18n.T("chat.plan.reviewing", ctx)}, k.dim)), readReview(ch))
 		}
 		// An approval point: what the next phases build rests on this document.
 		m.wait = waitContinue
@@ -524,6 +527,25 @@ type reviewed struct {
 	lines    []string
 	blocking int
 	err      error
+}
+
+// reviewProgress is a line of what the review does while it reads; ch is
+// where the next one comes from.
+type reviewProgress struct {
+	line string
+	ch   <-chan tea.Msg
+}
+
+// readReview reads the next message of a review running aside: a line of
+// progress, or the review itself.
+func readReview(ch <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return msg
+	}
 }
 
 // onReviewed shows what the review found and stops for the person: the

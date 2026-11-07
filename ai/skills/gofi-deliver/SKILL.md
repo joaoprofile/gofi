@@ -38,6 +38,6 @@ comportamento não muda.
 
 ## Workflow
 
-1. `gofi show specs/{contexto}/changes/<id>/proposal.md` — `## Por quê` e `## O que muda`.
+1. `gofi show <pasta da mudança>/proposal.md` (o turno diz qual; `gofi change list` mostra) — `## Por quê` e `## O que muda`.
 2. O escopo do turno (o que o grafo diz que mudou) e `git log --oneline -20`.
 3. Grave a mensagem no caminho que o turno indica e encerre.

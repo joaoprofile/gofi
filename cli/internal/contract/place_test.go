@@ -32,7 +32,7 @@ func TestAChangeLivesWithTheContextItChanges(t *testing.T) {
 
 	root := project(t)
 	changeTemplates(t, root)
-	if _, err := Create(root, NewChange{ID: "adicionar-filtro", Contexts: []string{"pedidos"}, Language: "rust", NoDesign: true}); err != nil {
+	if _, err := Create(root, NewChange{ID: "adicionar-filtro", Contexts: []string{"pedidos"}, Language: "rust", NoDesign: true, NoGenesis: true}); err != nil {
 		t.Fatal(err)
 	}
 	if at, ok := FindChange(root, "adicionar-filtro"); !ok || at != "specs/pedidos/changes/adicionar-filtro" {
@@ -56,7 +56,7 @@ func TestAChangeLivesWithTheContextItChanges(t *testing.T) {
 	}
 	// Archived in the context's archive/, its id stays taken.
 	_ = os.MkdirAll(filepath.Join(root, "specs", "pedidos", "changes", "archive", "2026-01-01-velha"), 0o755)
-	if _, err := Create(root, NewChange{ID: "velha", Contexts: []string{"pedidos"}}); err == nil {
+	if _, err := Create(root, NewChange{ID: "velha", Contexts: []string{"pedidos"}, NoGenesis: true}); err == nil {
 		t.Error("an id archived in a context's folder was taken again")
 	}
 	if got := archiveOf("specs/pedidos/changes/x", "2026-11-04", "x"); got != "specs/pedidos/changes/archive/2026-11-04-x" {

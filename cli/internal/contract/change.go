@@ -35,13 +35,40 @@ type NewChange struct {
 	// NoDesign creates the change without a design, declaring design: n/a —
 	// for a change that touches no code.
 	NoDesign bool
-	Date     string // YYYY-MM-DD, for the templates' atualizado
+	// NoGenesis keeps the first change of a context in changes/<id>/, as any
+	// other, instead of the context's own folder.
+	NoGenesis bool
+	Date      string // YYYY-MM-DD, for the templates' atualizado
+}
+
+// Placed is the id and the folder, relative to root, the change is created
+// with: the id asked for in its changes/ folder, or — the first change of a
+// context with no spec — the context's name and folder (its genesis).
+func (c NewChange) Placed(root string) (id, dir string) {
+	contexts := append([]string{}, c.Contexts...)
+	sort.Strings(contexts)
+	if !c.NoGenesis && Genesis(root, contexts) {
+		return contexts[0], GenesisDir(contexts[0])
+	}
+	return c.ID, NewChangeDir(c.ID, contexts)
+}
+
+// isContextDir reports whether a name is a context's folder under specs/: a
+// change named so would be taken for that context's genesis.
+func isContextDir(root, name string) bool {
+	if name == ChangesDir {
+		return false
+	}
+	st, err := os.Stat(layout.Specs().Abs(root, name))
+	return err == nil && st.IsDir()
 }
 
 // Create writes the folder of a new change from the project's templates: the
 // proposal, a delta per context and the design — in the context's folder,
 // specs/<context>/changes/<id>/, when it changes one context, and in
-// specs/changes/<id>/ when it changes several. It returns the paths written,
+// specs/changes/<id>/ when it changes several. The first change of a context
+// with no spec is its genesis: written in specs/<context>/ itself, under the
+// context's name, the id asked for kept as its title. It returns the paths written,
 // relative to root. It refuses an id that is not kebab-case or that an open
 // or archived change already has, wherever it lives.
 func Create(root string, c NewChange) ([]string, error) {
@@ -61,16 +88,23 @@ func Create(root string, c NewChange) ([]string, error) {
 			return nil, fmt.Errorf("contexto %s repetido", ctx)
 		}
 	}
-	if at, ok := FindChange(root, c.ID); ok {
-		return nil, fmt.Errorf("a mudança %s já existe em %s", c.ID, at)
+	// A context with no spec yet is born from its genesis, in its own
+	// folder, under its own name; the id asked for is the change's title.
+	id, home := c.Placed(root)
+	title := c.ID
+	if !IsGenesis(home) && isContextDir(root, c.ID) {
+		return nil, fmt.Errorf("%s é o nome de um contexto: escolha outro id para a mudança", c.ID)
 	}
-	dir := filepath.Join(root, filepath.FromSlash(NewChangeDir(c.ID, contexts)))
-	if archived(root, c.ID) {
-		return nil, fmt.Errorf("a mudança %s já foi arquivada: escolha outro id", c.ID)
+	if at, ok := FindChange(root, id); ok {
+		return nil, fmt.Errorf("a mudança %s já existe em %s", id, at)
+	}
+	dir := filepath.Join(root, filepath.FromSlash(home))
+	if archived(root, id) {
+		return nil, fmt.Errorf("a mudança %s já foi arquivada: escolha outro id", id)
 	}
 
 	fill := strings.NewReplacer(
-		"{mudanca}", c.ID,
+		"{mudanca}", title,
 		"{contextos}", strings.Join(contexts, ", "),
 		"{YYYY-MM-DD}", c.Date,
 	)

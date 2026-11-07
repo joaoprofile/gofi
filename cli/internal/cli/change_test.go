@@ -23,31 +23,49 @@ func runChange(t *testing.T, root string, args ...string) (string, error) {
 
 // The life of a change up to its approval: created from the templates,
 // refused while it is a skeleton, sealed once written, broken by an edit.
+//
+// Both ways a first change is born: the genesis, in the context's own folder
+// and named as the context, and one in changes/<id>/ (--no-genesis).
 func TestChangeNewCheckApprove(t *testing.T) {
+	for _, tc := range []struct {
+		name, flag, id, rel string
+	}{
+		{"genesis", "", "pedidos", "specs/pedidos"},
+		{"changes folder", "--no-genesis", "criar-pedidos", "specs/pedidos/changes/criar-pedidos"},
+	} {
+		t.Run(tc.name, func(t *testing.T) { changeLife(t, tc.flag, tc.id, tc.rel) })
+	}
+}
+
+func changeLife(t *testing.T, flag, id, rel string) {
 	root := configuredProject(t)
 	tmpl := filepath.Join(root, ".claude", "templates")
 	writeFile(t, filepath.Join(tmpl, "proposal-template.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [{contextos}]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [{Termo}]\n---\n# Mudança — {mudanca}\n\n## Por quê\n\n## O que muda\n")
 	writeFile(t, filepath.Join(tmpl, "delta-template.md"), "---\ntipo: delta\nformato: 3\ncontexto: {contexto}\nversao: \"1.0\"\nstatus: proposto\nkeywords: [{Termo}]\n---\n# Delta — {contexto}\n\n## ADICIONADO\n\n### Requisito: REQ-01 — {Título}\n")
 	writeFile(t, filepath.Join(tmpl, "design-template.md"), "---\ntipo: design\nformato: 3\ncontexto: {contexto}\nversao: \"1.0\"\nstatus: proposto\nkeywords: [{Termo}]\n---\n# Design\n\n## Abordagem\n\n## Mapa de requisitos\n")
 
-	out, err := runChange(t, root, "new", "criar-pedidos", "--context", "pedidos")
-	if err != nil || !strings.Contains(out, "specs/pedidos/changes/criar-pedidos/proposal.md") {
+	args := []string{"new", "criar-pedidos", "--context", "pedidos"}
+	if flag != "" {
+		args = append(args, flag)
+	}
+	out, err := runChange(t, root, args...)
+	if err != nil || !strings.Contains(out, rel+"/proposal.md") || !strings.Contains(out, "gofi spec check "+id) {
 		t.Fatalf("new: err=%v\n%s", err, out)
 	}
 
 	// The skeleton is not approvable: placeholders, a requirement with no scenario.
-	out, err = runChange(t, root, "approve", "criar-pedidos")
+	out, err = runChange(t, root, "approve", id)
 	var exit *ExitCodeError
 	if !errors.As(err, &exit) || exit.Code != 1 || !strings.Contains(out, "placeholder do template {Título}") {
 		t.Fatalf("approve of a skeleton: err=%v\n%s", err, out)
 	}
 
-	dir := filepath.Join(root, "specs", "pedidos", "changes", "criar-pedidos")
+	dir := filepath.Join(root, filepath.FromSlash(rel))
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Mudança — criar-pedidos\n\n## Por quê\n\nNão há pedidos.\n\n## O que muda\n\nREQ-01 novo.\n")
 	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Delta — pedidos\n\n## Propósito\n\nPedidos do cliente.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Total zero\n- DADO um carrinho vazio\n- QUANDO o cliente fecha\n- ENTÃO recebe recusa\n")
 	writeFile(t, filepath.Join(dir, "design.md"), "---\ntipo: design\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# Design\n\n## Abordagem\n\nUm serviço.\n\n## Mapa de requisitos\n\n| REQ-01 | Service.Create |\n")
 
-	if out, err := runChange(t, root, "approve", "criar-pedidos"); err != nil || strings.Count(out, "sha256:") != 3 {
+	if out, err := runChange(t, root, "approve", id); err != nil || strings.Count(out, "sha256:") != 3 {
 		t.Fatalf("approve: err=%v\n%s", err, out)
 	}
 	if out, _ := runChange(t, root, "list", "--json"); !strings.Contains(out, `"selada": true`) || !strings.Contains(out, `"status": "aprovado"`) {
@@ -55,7 +73,7 @@ func TestChangeNewCheckApprove(t *testing.T) {
 	}
 	sealed, _ := os.ReadFile(filepath.Join(dir, "design.md"))
 	writeFile(t, filepath.Join(dir, "design.md"), strings.Replace(string(sealed), "Um serviço.", "Dois serviços.", 1))
-	if out, _ := runChange(t, root, "list"); !strings.Contains(out, "approval broken in specs/pedidos/changes/criar-pedidos/design.md") {
+	if out, _ := runChange(t, root, "list"); !strings.Contains(out, "approval broken in "+rel+"/design.md") {
 		t.Errorf("list after an edit:\n%s", out)
 	}
 	if _, err := runChange(t, root, "approve", "sumida"); err == nil {
@@ -63,17 +81,24 @@ func TestChangeNewCheckApprove(t *testing.T) {
 	}
 
 	// Edited after its approval, it is not archived; approved again, it is.
-	if _, err := runChange(t, root, "archive", "criar-pedidos"); err == nil {
+	if _, err := runChange(t, root, "archive", id); err == nil {
 		t.Fatal("an edited change was archived")
 	}
-	if _, err := runChange(t, root, "approve", "criar-pedidos"); err != nil {
+	if _, err := runChange(t, root, "approve", id); err != nil {
 		t.Fatal(err)
 	}
-	out, err = runChange(t, root, "archive", "criar-pedidos")
+	out, err = runChange(t, root, "archive", id)
 	if err != nil || !strings.Contains(out, "specs/pedidos/spec.md") || !strings.Contains(out, "specs/pedidos/changes/archive/") {
 		t.Fatalf("archive: err=%v\n%s", err, out)
 	}
 	if out, err := runSpec(t, root, "check", "pedidos"); err != nil {
 		t.Errorf("the living spec an archive wrote does not pass the check: %v\n%s", err, out)
+	}
+	// Nothing of the change is left open, nor where it was.
+	if out, _ := runChange(t, root, "list"); strings.Contains(out, id+"  ") {
+		t.Errorf("still open after the archive:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "proposal.md")); err == nil {
+		t.Error("the proposal was left in " + rel)
 	}
 }

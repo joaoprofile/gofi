@@ -21,7 +21,8 @@ func newChangeCmd() *cobra.Command {
 		Long: `Changes are how the contract moves (decision 0003): a folder under
 specs/<context>/changes/<id>/ — or specs/changes/<id>/ when it touches several
 contexts — with a proposal, a delta per context it touches and the
-design of how. A new context is a change that only adds; an existing one is
+design of how. A new context is a change that only adds, written in the
+context's own folder (its genesis, named as the context); an existing one is
 altered by a change, never by editing its living spec. Approved, the change is
 what the loop implements; accepted, it is archived and its deltas become the
 living specs.`,
@@ -50,6 +51,13 @@ cancelar-pedido-enviado. It must be new — no open or archived change has it.
 --no-design declares design: n/a in the proposal and writes no design, for a
 change that touches no code.
 
+The first change of a context that has no spec yet is its genesis: it is
+written in the context's own folder — specs/<ctx>/proposal.md, deltas/<ctx>.md,
+design.md —, with no changes/<id>/ around it, and its id is the context's name
+(the id given is its title). Archived, the spec takes its place and the change
+goes to specs/<ctx>/changes/archive/. --no-genesis keeps it in
+specs/<ctx>/changes/<id>/ as any other change.
+
 The folder is a skeleton: the proposal, deltas and design are then written,
 checked (gofi spec check <id>) and approved (gofi change approve <id>).`,
 		Example: `gofi change new criar-pedidos --context pedidos
@@ -73,10 +81,13 @@ gofi change new remover-desconto-manual --context pedidos --no-design`,
 					}
 				}
 			}
-			written, err := contract.Create(root, contract.NewChange{
+			noGenesis, _ := cmd.Flags().GetBool("no-genesis")
+			nc := contract.NewChange{
 				ID: args[0], Contexts: contexts, Language: backendLanguage(cfg),
-				NoDesign: noDesign, Date: time.Now().Format("2006-01-02"),
-			})
+				NoDesign: noDesign, NoGenesis: noGenesis, Date: time.Now().Format("2006-01-02"),
+			}
+			id, dir := nc.Placed(root)
+			written, err := contract.Create(root, nc)
 			if err != nil {
 				return err
 			}
@@ -84,12 +95,16 @@ gofi change new remover-desconto-manual --context pedidos --no-design`,
 			for _, p := range written {
 				fmt.Fprintln(out, "  "+i18n.T("change.new.wrote", p))
 			}
-			fmt.Fprintln(out, "\n  "+i18n.T("change.new.next", args[0]))
+			if contract.IsGenesis(dir) {
+				fmt.Fprintln(out, "\n  "+i18n.T("change.new.genesis", contexts[0], dir, id))
+			}
+			fmt.Fprintln(out, "\n  "+i18n.T("change.new.next", id))
 			return nil
 		},
 	}
 	cmd.Flags().StringArray("context", nil, i18n.T("cmd.change.flag.context"))
 	cmd.Flags().Bool("no-design", false, i18n.T("cmd.change.flag.no_design"))
+	cmd.Flags().Bool("no-genesis", false, i18n.T("cmd.change.flag.no_genesis"))
 	return cmd
 }
 
@@ -97,8 +112,8 @@ func newChangeListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: i18n.T("cmd.change.list.short"),
-		Long: `The open changes: their status, the contexts they touch, and whether they are
-sealed — every document approved as it is now. A change edited after its
+		Long: `The open changes: their status, the contexts they touch, whether they are
+sealed — every document approved as it is now — and their folder. A change edited after its
 approval lists the documents whose approval no longer holds.`,
 		Example: `gofi change list
 gofi change list --json`,
@@ -132,7 +147,11 @@ gofi change list --json`,
 				case len(c.Stale) > 0:
 					seal = i18n.T("change.stale", strings.Join(c.Stale, ", "))
 				}
-				fmt.Fprintf(out, "  %s  %s · %s · %s\n", c.ID, c.Status, strings.Join(c.Contexts, ", "), seal)
+				line := fmt.Sprintf("  %s  %s · %s · %s", c.ID, c.Status, strings.Join(c.Contexts, ", "), seal)
+				if dir, ok := contract.FindChange(root, c.ID); ok {
+					line += " · " + dir + "/"
+				}
+				fmt.Fprintln(out, line)
 			}
 			return nil
 		},
