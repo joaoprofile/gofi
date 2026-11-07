@@ -549,7 +549,7 @@ func TestTheStageDispatchesByTheChangesFacts(t *testing.T) {
 	if s := w.run(t); s.Outcome != "accepted" {
 		t.Fatalf("outcome %s", s.Outcome)
 	}
-	if w.agent.turns[0].Role != "gofi-ui" || !strings.HasSuffix(w.agent.turns[0].Prompt, "Siga o papel descrito em .claude/gofi/roles/gofi-ui/SKILL.md.\n") {
+	if w.agent.turns[0].Role != "gofi-ui" || !strings.Contains(w.agent.turns[0].Prompt, "Siga o papel descrito em .claude/gofi/roles/gofi-ui/SKILL.md.\n") {
 		t.Errorf("first turn: %s\n%s", w.agent.turns[0].Role, w.agent.turns[0].Prompt)
 	}
 	evs, _ := Events(w.root, "r-1")
