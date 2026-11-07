@@ -24,6 +24,11 @@ func TestClassify(t *testing.T) {
 	if err := os.WriteFile(small, []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	skill := filepath.Join(root, ".claude", "gofi", "roles", "gofi-eng", "SKILL.md")
+	_ = os.MkdirAll(filepath.Dir(skill), 0o755)
+	if err := os.WriteFile(skill, []byte(strings.Repeat("x\n", SmallFile+5)), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
 		name string
 		in   Input
@@ -45,6 +50,8 @@ func TestClassify(t *testing.T) {
 		{"whole big file", pre("Read", map[string]any{"file_path": big}), Search},
 		{"ranged read", pre("Read", map[string]any{"file_path": big, "offset": 10, "limit": 20}), Other},
 		{"small file", pre("Read", map[string]any{"file_path": small}), Other},
+		{"whole harness file", pre("Read", map[string]any{"file_path": skill}), Other},
+		{"whole harness file, relative", Input{Event: EventPreTool, Tool: "Read", Cwd: root, ToolInput: map[string]any{"file_path": ".claude/gofi/roles/gofi-eng/SKILL.md"}}, Other},
 		{"read outside", pre("Read", map[string]any{"file_path": "/etc/hosts"}), Other},
 		{"edit", pre("Edit", map[string]any{"file_path": big}), Other},
 	} {
