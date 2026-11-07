@@ -1,4 +1,4 @@
-# Referência de API do SDK — SDK gofi/v0.2.6 (3df9d20)
+# Referência de API do SDK — SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 > Procure um símbolo com `gofi find --in sdk "<nome>"` ou abra o pacote com `gofi show`.
@@ -45,6 +45,7 @@
 | `github.com/joaoprofile/gofi-sdk-go/iam/port` | `iam-port.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/iam/provider/bcrypt` | `iam-provider-bcrypt.md` | Package bcrypt provides password hashing utilities for use in UserPort implementations. |
 | `github.com/joaoprofile/gofi-sdk-go/iam/provider/google` | `iam-provider-google.md` | Package google implements IDPAuthPort for Google OAuth2/OIDC. |
+| `github.com/joaoprofile/gofi-sdk-go/iam/provider/jwks` | `iam-provider-jwks.md` | Package jwks verifies JWTs signed by a third party that publishes its public keys as a JWKS: tokens a customer's system issues to its own users, for example. |
 | `github.com/joaoprofile/gofi-sdk-go/iam/provider/jwt` | `iam-provider-jwt.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/iam/provider/memory` | `iam-provider-memory.md` | Package memory implements port.SessionPort in memory. |
 | `github.com/joaoprofile/gofi-sdk-go/iam/provider/microsoft` | `iam-provider-microsoft.md` | Package microsoft implements IDPAuthPort for Microsoft Identity Platform (Entra ID). |
@@ -68,7 +69,7 @@
 | `github.com/joaoprofile/gofi-sdk-go/netx` | `netx.md` | Package netx holds what the HTTP and gRPC transports share: the hardened server TLS (TLSConfig, ServerTLSConfig) and the request ID carried in the context (RequestIDKey, GetRequestID). |
 | `github.com/joaoprofile/gofi-sdk-go/netx/awssign` | `netx-awssign.md` | Package awssign signs httpx client requests with AWS Signature V4 (API Gateway IAM auth, OpenSearch, Lambda URLs, ...). |
 | `github.com/joaoprofile/gofi-sdk-go/netx/grpcx` | `netx-grpcx.md` | Package grpcx serves and calls gRPC services with the same defaults as the httpx HTTP server: hardened TLS with certificate reload and optional mTLS, request IDs, panic recovery, error-only logging, OpenTelemetry, graceful shutdown with readiness draining and the standard gRPC health service. |
-| `github.com/joaoprofile/gofi-sdk-go/netx/httpx` | `netx-httpx.md` | Package httpx serves and calls HTTP APIs: a chi-based server with hardened TLS (netx.TLSConfig), request IDs, error-only logging, CORS, cross-origin protection, rate limiting, health endpoints, OpenTelemetry and graceful shutdown, and a client with retries, request signing and safe response parsing. |
+| `github.com/joaoprofile/gofi-sdk-go/netx/httpx` | `netx-httpx.md` | Package httpx serves and calls HTTP APIs: a chi-based server with hardened TLS (netx.TLSConfig), request IDs, error-only logging, CORS, cross-origin protection, rate limiting, health endpoints, OpenTelemetry and graceful shutdown, a client with retries, request signing and safe response parsing, and NewSafeClient for URLs configured by third parties (SSRF defense). |
 | `github.com/joaoprofile/gofi-sdk-go/obs` | `obs.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/obs/logging` | `obs-logging.md` |  |
 | `github.com/joaoprofile/gofi-sdk-go/obs/metrics` | `obs-metrics.md` | Package metrics is the OpenTelemetry metric API used by gofi and by applications: it records through the global MeterProvider and links no exporter or gRPC code. |

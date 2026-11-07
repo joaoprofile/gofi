@@ -1,7 +1,7 @@
 ---
 name: logging
 description: Logging com obs/logging — o que o Build já configura, níveis (Info só início/fim de fluxo), FromContext para correlação com trace, Fatal só no main e armadilhas de logger derivado cedo
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [logging, slog, obs/logging, LOG_LEVEL, Info, Debug, Warn, Error, Fatal, FromContext, trace_id, níveis, loop]
 ---
 

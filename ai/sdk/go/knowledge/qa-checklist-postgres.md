@@ -1,7 +1,7 @@
 ---
 name: qa-checklist-postgres
 description: Itens de auditoria Go + PostgreSQL do gofi-qa no SDK v0.2.4 — repository aggregate, escrita e transação no sqln, driver postgres, índices e valores monetários
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [qa, auditoria, postgres, sqln, transacao, statement, aggregate, indices, pgbouncer, dinheiro]
 ---
 

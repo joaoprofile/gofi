@@ -1,6 +1,6 @@
 # sqln/driver/postgres
 
-`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/sqln/driver/postgres"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -96,6 +96,14 @@ func (PostgresDialect) ArrayMembership(field, param string, negate bool) string
 
 ArrayMembership binds IN lists as one array: the SQL text is the same for
 any list length. <> ALL keeps NOT IN's NULL semantics.
+
+### PostgresDialect.ArrayOverlap
+
+```go
+func (PostgresDialect) ArrayOverlap(field, param string) string
+```
+
+ArrayOverlap is the && operator: it is served by a GIN index on the column.
 
 ### PostgresDialect.BuildCount
 

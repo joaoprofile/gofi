@@ -1,7 +1,7 @@
 ---
 name: messaging-msq
 description: Mensageria com gofi/msq — provider por import, producer, consumer, retry/DLQ, key e consumer group, componente messaging, msq/worker e testes
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [msq, messaging, kafka, rabbitmq, sqs, nats, redis, oci-queue, producer, consumer, dead-letter, retry, consumer-group, partition-key, msqtest, worker]
 ---
 

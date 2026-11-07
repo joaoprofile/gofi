@@ -2,7 +2,7 @@
 name: cache-layer
 description: Cache fica no repository, nunca no service — WithCache por query, Get/Set para DTO composto, invalidação por Del do nome
 type: feedback
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [cache, redis, WithCache, NewCache, invalidation, Del, repository, CACHE_URI]
 ---
 

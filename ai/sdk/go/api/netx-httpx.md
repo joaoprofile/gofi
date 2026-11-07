@@ -1,14 +1,15 @@
 # netx/httpx
 
-`import "github.com/joaoprofile/gofi-sdk-go/netx/httpx"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/netx/httpx"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
 Package httpx serves and calls HTTP APIs: a chi-based server with hardened
 TLS (netx.TLSConfig), request IDs, error-only logging, CORS, cross-origin
 protection, rate limiting, health endpoints, OpenTelemetry and graceful
-shutdown, and a client with retries, request signing and safe response
-parsing.
+shutdown, a client with retries, request signing and safe response
+parsing, and NewSafeClient for URLs configured by third parties (SSRF
+defense).
 
 gofi services declare the server with the gofi/component/httpserver
 component.
@@ -33,6 +34,15 @@ const (
 ```
 
 Client limits applied when the matching field is <= 0.
+
+```go
+const (
+	DefaultSafeClientTimeout      = 10 * time.Second
+	DefaultSafeClientMaxRedirects = 3
+)
+```
+
+Safe client limits applied when the matching SafeClientConfig field is zero.
 
 ```go
 const (
@@ -156,6 +166,20 @@ var (
 Causes wrapped by RequestError, for errors.Is.
 
 ```go
+var ErrDestinationBlocked = errors.New("httpx: destination address blocked")
+```
+
+ErrDestinationBlocked is returned when the address a request would connect
+to is not public: loopback, private, link-local (cloud metadata included),
+CGNAT, multicast, documentation or reserved ranges.
+
+```go
+var ErrInsecureScheme = errors.New("httpx: only https is allowed")
+```
+
+ErrInsecureScheme is returned for a request (or redirect) that is not https.
+
+```go
 var ErrRedirectBlocked = errors.New("httpx: redirect to a different origin blocked")
 ```
 
@@ -187,6 +211,15 @@ func BlockUnsafeMethods(next http.Handler) http.Handler
 
 BlockUnsafeMethods rejects TRACE (information disclosure) and CONNECT
 (proxy tunnel abuse) before they reach application handlers.
+
+### httpx.ClientIP
+
+```go
+func ClientIP(r *http.Request) string
+```
+
+ClientIP returns the IP resolved by ClientIPMiddleware (the TCP peer without
+it) as a string, or RemoteAddr when it is unparsable.
 
 ### httpx.DefaultCORSAllowedHeaders
 
@@ -292,6 +325,18 @@ func LogServerError(r *http.Request, err error)
 
 LogServerError logs an application error at Error level with trace context.
 
+### httpx.NewSafeClient
+
+```go
+func NewSafeClient(cfg SafeClientConfig) *http.Client
+```
+
+NewSafeClient returns an http.Client for URLs configured by someone else
+(webhooks, customer APIs, JWKS): https only, no proxy, every connection
+checked after DNS resolution — so a hostname that resolves, or later
+re-resolves, to an internal address is refused — same-origin redirects
+only, and a capped response body. It is the defense against SSRF.
+
 ### httpx.ParseRequestBody
 
 ```go
@@ -315,6 +360,16 @@ PrivateNetworks returns the private, loopback, link-local and CGNAT ranges
 in-cluster ingresses and cloud load balancers reach the pod from. Trusting
 them lets any internal peer spoof X-Forwarded-For, so opt in only when every
 such peer is a proxy.
+
+### httpx.RateLimitSubject
+
+```go
+func RateLimitSubject(r *http.Request) string
+```
+
+RateLimitSubject is the client identity used as a rate-limit bucket: the IPv4
+address, or the /64 of an IPv6 address, since one host usually owns a whole
+/64 and could otherwise rotate addresses to dodge the limit.
 
 ### httpx.ReadBody
 
@@ -950,6 +1005,18 @@ func (rb *RouteBuilder) Cors(config *CorsConfig) *RouteBuilder
 Cors gives the route its own CORS policy, replacing the global one;
 AddHandlers panics when it is invalid (see CorsConfig.Validate).
 
+### RouteBuilder.RequestTimeout
+
+```go
+func (rb *RouteBuilder) RequestTimeout(d time.Duration) *RouteBuilder
+```
+
+RequestTimeout overrides WSConfig.RequestTimeout for this route alone: the
+deadline of the request context passed to the handler. A route that streams
+a long answer or calls slow upstreams raises it without relaxing every other
+route. When it outgrows the server-wide WriteTimeout, the route's write
+deadline is extended to keep the same margin. Zero keeps the server value.
+
 ### RouteBuilder.Timeouts
 
 ```go
@@ -961,9 +1028,7 @@ alone, so a service can accept a long upload without relaxing ReadTimeout
 for every other route. Either argument may be zero to keep the server-wide
 value for that direction.
 
-Only the connection deadlines can be extended this way. WSConfig.RequestTimeout
-is a context deadline: downstream code can shorten it, never lengthen it, so a
-route that needs a long handler budget still requires a matching server-wide
+The handler budget (the request context deadline) is set apart, with
 RequestTimeout.
 
 ### RouteBuilder.To
@@ -991,6 +1056,34 @@ type RouterHandler interface {
 	Handlers() []*Route
 }
 ```
+
+## httpx.SafeClientConfig
+
+```go
+type SafeClientConfig struct {
+	// Timeout bounds each request, redirects and body read included.
+	// Default: DefaultSafeClientTimeout.
+	Timeout time.Duration
+
+	// MaxResponseBytes caps a response body; reading past it fails with
+	// ErrResponseTooLarge. Default: DefaultMaxResponseBytes.
+	MaxResponseBytes int64
+
+	// MaxRedirects caps same-origin redirects; a redirect to another origin is
+	// always blocked (ErrRedirectBlocked). Default: DefaultSafeClientMaxRedirects;
+	// a negative value disables redirects.
+	MaxRedirects int
+
+	// AllowedNetworks are exceptions to the blocked ranges, for a known
+	// internal gateway or for tests. Leave empty for third-party URLs.
+	AllowedNetworks []netip.Prefix
+
+	// RootCAs replaces the system pool, for a private CA or for tests.
+	RootCAs *x509.CertPool
+}
+```
+
+SafeClientConfig configures NewSafeClient.
 
 ## httpx.SecurityHeadersConfig
 
@@ -1050,6 +1143,11 @@ type WSConfig struct {
 	// otherwise DefaultCORSConfig. Ignored when CORS is set.
 	AllowedOrigins []string
 
+	// AllowedHeaders adds request headers to the global CORS policy's
+	// DefaultCORSAllowedHeaders, e.g. a vendor trace header. Ignored when
+	// CORS is set.
+	AllowedHeaders []string
+
 	// CORS replaces the global CORS policy, e.g. AnyOrigin without credentials.
 	CORS *CorsConfig
 
@@ -1090,7 +1188,8 @@ type WSConfig struct {
 	IdleTimeout time.Duration
 
 	// RequestTimeout bounds the per-request context passed to handlers. A
-	// value <= 0 falls back to DefaultRequestTimeout.
+	// value <= 0 falls back to DefaultRequestTimeout. A route can override it
+	// with RouteBuilder.RequestTimeout.
 	RequestTimeout time.Duration
 
 	// ShutdownTimeout bounds graceful shutdown. A value <= 0 falls back to
@@ -1116,6 +1215,8 @@ type WSConfig struct {
 	// route rejects cross-origin unsafe requests (http.CrossOriginProtection,
 	// by Sec-Fetch-Site/Origin) except from the origins its CORS policy
 	// allows; same-origin requests and clients sending neither header pass.
+	// A route whose own policy allows AnyOrigin (never with credentials) is
+	// not checked.
 	DisableCrossOriginProtection bool
 
 	// HSTS configures Strict-Transport-Security; it is only sent over TLS or

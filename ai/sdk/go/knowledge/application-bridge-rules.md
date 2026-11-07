@@ -1,7 +1,7 @@
 ---
 name: application-bridge-rules
 description: Regras de application vs domain service e bridge/factory/adapter em Go — layout, dependências, NotSupported, adapter HTTP sobre netx/httpx, httptest, cache da factory
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [application, domain-service, bridge, factory, adapter, integration, httpx, httptest, NotSupported, decorator, rate-limit]
 ---
 

@@ -1,6 +1,6 @@
 # base/environment
 
-`import "github.com/joaoprofile/gofi-sdk-go/base/environment"` · SDK gofi/v0.2.6 (3df9d20)
+`import "github.com/joaoprofile/gofi-sdk-go/base/environment"` · SDK gofi/v0.2.18 (c5413b9)
 
 > Gerado do código-fonte do SDK — não edite. Regenere com `gofi update sdk`.
 
@@ -321,6 +321,9 @@ type Environment struct {
 	HTTPRateLimitFailClosed bool   `env:"HTTP_RATE_LIMIT_FAIL_CLOSED"`
 	// HTTPAllowedOrigins is a CSV of CORS origins; ALLOWED_ORIGINS is the fallback.
 	HTTPAllowedOrigins string `env:"HTTP_ALLOWED_ORIGINS"`
+	// HTTPAllowedHeaders is a CSV of request headers added to the default
+	// CORS allowed headers.
+	HTTPAllowedHeaders string `env:"HTTP_ALLOWED_HEADERS"`
 	// HTTPRequireTLS makes a plaintext HTTP server a refusal in prod and stage
 	// instead of a warning.
 	HTTPRequireTLS bool `env:"HTTP_REQUIRE_TLS"`

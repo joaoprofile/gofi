@@ -1,7 +1,7 @@
 ---
 name: migrations
 description: Migrations com sqln/migrate — DATABASE_MIGRATION, pasta .migrations, embed, drivers suportados
-sdk: v0.2.6
+sdk: v0.2.18
 keywords: [sqln, migrate, migrations, DATABASE_MIGRATION, golang-migrate, embed, schema]
 ---
 
