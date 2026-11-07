@@ -15,4 +15,4 @@ Para `project.language`:
 - Ler **regras absolutas**: `.claude/sdk/<lang>/knowledge/absolute-rules.md`
 - Ler os módulos de `sdk/<lang>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar para padrões consolidados (cache, value-objects, repository-primitive-return, etc.)
 - Ler a API dos pacotes do SDK que o contexto utiliza: `.claude/sdk/<lang>/api/INDEX.md` → só os arquivos desses pacotes (ou `gofi find --in sdk "<símbolo>"`)
-- Ler `.claude/sdk/<lang>/boilerplates/*.md` — referência de código correto
+- Ler, de `.claude/sdk/<lang>/boilerplates/`, só os das camadas que a mudança tocou — referência de código correto

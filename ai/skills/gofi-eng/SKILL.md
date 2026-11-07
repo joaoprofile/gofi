@@ -55,7 +55,7 @@ Antes de qualquer linha de código (detalhe de cada passo →
 2. A mudança — `gofi change list` para o id; os deltas (`specs/{contexto}/changes/{id}/deltas/{ctx}.md`), o design e o `tasks.md` quando houver. Requisito vivo citado: `gofi show specs/{ctx}/spec.md#REQ-NN`. Contexto inteiro: `gofi show ctx:{contexto}`. Nunca a spec inteira.
 3. Código: `gofi find --in code` / `gofi show` pelo grafo; busca literal só declarada.
 4. `.claude/knowledge/INDEX.md` (núcleo ⬤ + módulos da tarefa, inclui `expertise/diagramming/conventions.md`) e `.claude/knowledge/eng/*.md`.
-5. `sdk/<lang>/`: `knowledge/{absolute-rules,structure,layers,naming}.md` + armadilhas pelo INDEX, `api/INDEX.md` + só os pacotes pertinentes (ou `gofi find --in sdk "<símbolo>"`), `boilerplates/*.md`.
+5. `sdk/<lang>/`: `knowledge/{absolute-rules,structure,layers,naming}.md` + armadilhas pelo INDEX, `api/INDEX.md` + só os pacotes pertinentes (ou `gofi find --in sdk "<símbolo>"`), e de `boilerplates/` só o da camada que você vai escrever — nunca por glob.
 6. Confirmar ambiguidades com o dev **antes** de escrever código.
 7. Refactor/migração/reescrita: **perguntar onde está o legado** e lê-lo antes de gerar.
 8. Editando contexto já implementado: **análise de impacto** nos consumidores pelo grafo em modo `deep`.

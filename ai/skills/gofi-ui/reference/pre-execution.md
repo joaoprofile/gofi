@@ -60,7 +60,7 @@ Antes de qualquer linha de código:
    - Ler as **regras de código + estrutura** da superfície:
      `.claude/sdk/<surface>/knowledge/absolute-rules.md` e `structure.md`
      (framework-specific), e usar os esqueletos em
-     `.claude/sdk/<surface>/boilerplates/*.md` **antes** de implementar. **Importe do
+     `.claude/sdk/<surface>/boilerplates/` — só o do que você vai escrever — **antes** de implementar. **Importe do
      que o DS expõe (lib npm OU componentes do repo, conforme o manifesto) — não o recrie.**
    - **Se o contexto pertence a uma área/app com DS próprio**
      (app-specific — ex.: um back-office/admin distinto do front principal):
