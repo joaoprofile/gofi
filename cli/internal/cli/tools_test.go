@@ -90,3 +90,14 @@ func TestAModelCanBeChosenForOneRole(t *testing.T) {
 		}
 	}
 }
+
+// A role that only reads keeps its cache 5 minutes; one that writes is left
+// to the engine, for a turn that can go quiet for longer.
+func TestOnlyAReadingRoleShortensItsCache(t *testing.T) {
+	if got := turnCacheTTL([]string{"read", "search", "gofi", "verdict"}); got != "5m" {
+		t.Errorf("an auditor: %q", got)
+	}
+	if got := turnCacheTTL([]string{"read", "edit", "write"}); got != "" {
+		t.Errorf("an implementer: %q", got)
+	}
+}

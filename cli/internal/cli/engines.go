@@ -91,6 +91,7 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, lo
 			o.SystemPrompt, o.Isolated, o.MCPConfig = loopSystemPrompt, true, host.MCPConfig()
 			if grant != nil {
 				o.Tools = claudeBuiltins(grant)
+				o.CacheTTL = turnCacheTTL(grant)
 				o.DisallowedTools = append(o.DisallowedTools, ungrantedGofi(grant)...)
 			}
 			if common, settings := loopMemory(root); common != "" {
@@ -132,6 +133,16 @@ var gofiGrants = map[string][]string{
 
 // gofiServerTools are every tool gofi's MCP server serves.
 var gofiServerTools = []string{"find", "show", "path", "impact", "intake", "index_status", "index", "verify", "verdict_write", "approve", "memory_write"}
+
+// turnCacheTTL is 5 minutes for a role that only reads — an audit lens takes
+// under two, and paying for an hour of cache buys nothing; the engine decides
+// for the roles that write, whose turns can go quiet for longer.
+func turnCacheTTL(grant []string) string {
+	if slices.ContainsFunc(grant, func(g string) bool { return g == "edit" || g == "write" || g == "shell" }) {
+		return ""
+	}
+	return "5m"
+}
 
 // claudeBuiltins are Claude Code's own tools a grant names — never nil, so a
 // role with none has none: every other one is left out of the turn, and costs

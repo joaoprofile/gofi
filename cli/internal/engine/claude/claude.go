@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -66,6 +67,10 @@ type Options struct {
 	// turns side by side share a cached prefix.
 	Isolated  bool
 	MCPConfig string // JSON or a file, passed as --mcp-config
+	// CacheTTL is how long the session's prompt cache lives, "5m" or "1h";
+	// empty leaves it to the engine. A write kept 5 minutes costs 1.25 times
+	// the input price, one kept an hour twice.
+	CacheTTL string
 	// Tools, when not nil, are the engine's own tools the session has at all,
 	// passed as --tools. AllowedTools only spares a prompt: a tool left out
 	// here is not even described to the model, which is what a turn pays for.
@@ -247,10 +252,19 @@ func (s *Session) args() []string {
 	return append(append(append(a, "--disallowed-tools"), interactiveTools...), s.opts.DisallowedTools...)
 }
 
+// env is the engine's environment; nil, the process's own.
+func (s *Session) env() []string {
+	if s.opts.CacheTTL == "" {
+		return nil
+	}
+	return append(os.Environ(), "CLAUDE_CODE_PROMPT_CACHE_TTL="+s.opts.CacheTTL)
+}
+
 // start spawns the engine. Called with s.mu held.
 func (s *Session) start() (*process, error) {
 	cmd := exec.Command(s.opts.Executable, s.args()...)
 	cmd.Dir = s.opts.Dir
+	cmd.Env = s.env()
 	ownGroup(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

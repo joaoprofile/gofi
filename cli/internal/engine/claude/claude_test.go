@@ -361,3 +361,12 @@ func TestToolsArePassedOnlyWhenNarrowed(t *testing.T) {
 		t.Errorf("an empty list must pass no tools: %v", a)
 	}
 }
+
+func TestACacheLifetimeReachesTheEngine(t *testing.T) {
+	if e := (&Session{}).env(); e != nil {
+		t.Errorf("no lifetime asked, env = %d entries", len(e))
+	}
+	if e := (&Session{opts: Options{CacheTTL: "5m"}}).env(); !slices.Contains(e, "CLAUDE_CODE_PROMPT_CACHE_TTL=5m") {
+		t.Errorf("env lacks the lifetime")
+	}
+}
