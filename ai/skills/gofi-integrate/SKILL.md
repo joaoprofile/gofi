@@ -22,4 +22,4 @@ Próprias deste papel:
 
 ## Referências
 
-`gofi show .claude/gofi/roles/gofi-eng/reference/workflow-steps.md` §Integração (os passos com todo o detalhe) e `rules-core.md` (regras universais). Por tema da linguagem, `.claude/sdk/<lang>/knowledge/` pelo `.claude/knowledge/INDEX.md`: `application-bridge-rules.md`, `events-scheduling-rules.md`, `bridge-factory-adapter-pattern.md`, `worker-bootstrap.md`.
+`gofi show .claude/gofi/roles/gofi-eng/reference/workflow-steps.md` §Integração (os passos com todo o detalhe) e `rules-core.md` (regras universais). Comece pelo resumo `.claude/sdk/<lang>/knowledge/layer-<camada>.md` de cada camada que escrever, quando existir. Por tema da linguagem, `.claude/sdk/<lang>/knowledge/` pelo `.claude/knowledge/INDEX.md`: `application-bridge-rules.md`, `events-scheduling-rules.md`, `bridge-factory-adapter-pattern.md`, `worker-bootstrap.md`.

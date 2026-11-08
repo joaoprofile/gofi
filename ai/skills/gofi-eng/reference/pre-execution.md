@@ -13,7 +13,7 @@ Antes de qualquer linha de código:
 6. Ler **knowledge cross-agent**: `.claude/knowledge/INDEX.md` (núcleo ⬤ + só os módulos que a tarefa pede) (inclui `expertise/diagramming/conventions.md` — qualquer diagrama de fluxo em ADR/comentário deve ser PlantUML)
 7. Ler **knowledge per-agent**: `.claude/knowledge/eng/*.md` (user-treinado)
 8. Para `project.language` (a partir do `.gofi.yaml`):
-   - Ler **regras absolutas** e **estrutura**: `.claude/sdk/<lang>/knowledge/{absolute-rules,structure,layers,naming}.md`
+   - Ler **regras absolutas** e **estrutura**: `.claude/sdk/<lang>/knowledge/absolute-rules.md` e o resumo `knowledge/layer-<camada>.md` de cada camada a escrever, quando existir (ele diz quando abrir o detalhe); sem resumo, `knowledge/{structure,layers,naming}.md`
    - Ler armadilhas relevantes: os módulos de `sdk/<lang>/knowledge/` que o `.claude/knowledge/INDEX.md` indicar (inclui
      `lookup-endpoints.md` se o contexto declarar campos `search-multiple`
      no `{Ctx}FilterMapping` — define `FilterType`/`SearchType`/`Content` no

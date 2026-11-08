@@ -23,4 +23,4 @@ Próprias deste papel:
 
 ## Referências
 
-`gofi show .claude/gofi/roles/gofi-eng/reference/workflow-steps.md` §Dados (os passos com todo o detalhe) e `rules-core.md` (regras universais). Por tema da linguagem, `.claude/sdk/<lang>/knowledge/` pelo `.claude/knowledge/INDEX.md`: `persistence-rules.md`, `migrations.md`, `postgres-index-strategy.md`, `value-objects.md`.
+`gofi show .claude/gofi/roles/gofi-eng/reference/workflow-steps.md` §Dados (os passos com todo o detalhe) e `rules-core.md` (regras universais). Comece pelo resumo `.claude/sdk/<lang>/knowledge/layer-<camada>.md` de cada camada que escrever, quando existir. Por tema da linguagem, `.claude/sdk/<lang>/knowledge/` pelo `.claude/knowledge/INDEX.md`: `persistence-rules.md`, `migrations.md`, `postgres-index-strategy.md`, `value-objects.md`.
