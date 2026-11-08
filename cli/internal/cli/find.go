@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -47,7 +49,7 @@ gofi find --text "ErrNotFound"
 gofi find --regex -i "order_(item|line)s?" --in code`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSearch(cmd, strings.Join(args, " "))
+			return runSearch(cmd, args)
 		},
 	}
 	cmd.Flags().IntP("limit", "n", 5, i18n.T("cmd.find.flag.limit"))
@@ -59,9 +61,39 @@ gofi find --regex -i "order_(item|line)s?" --in code`,
 	return cmd
 }
 
+// projectPath reads an argument as a file or folder of the project: what a
+// text search takes as where to look, as grep does.
+func projectPath(arg string) (string, bool) {
+	root, err := findProjectRoot()
+	if err != nil {
+		return "", false
+	}
+	abs, err := filepath.Abs(arg)
+	if err != nil {
+		return "", false
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return "", false
+	}
+	real, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(real, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
+
 // runSearch answers a question from documents and code together, through the
 // retrieval core every surface shares.
-func runSearch(cmd *cobra.Command, question string) error {
+func runSearch(cmd *cobra.Command, args []string) error {
+	question := strings.Join(args, " ")
 	limit, _ := cmd.Flags().GetInt("limit")
 	areas, _ := cmd.Flags().GetStringSlice("in")
 	asJSON, _ := cmd.Flags().GetBool("json")
@@ -83,7 +115,13 @@ func runSearch(cmd *cobra.Command, question string) error {
 			limit = textLimit
 		}
 		ignoreCase, _ := cmd.Flags().GetBool("ignore-case")
-		res, err := engine.Text(retrieval.TextQuery{Pattern: question, Regex: regex, IgnoreCase: ignoreCase, Areas: areas, Limit: limit})
+		within := ""
+		if n := len(args); n > 1 {
+			if p, ok := projectPath(args[n-1]); ok {
+				question, within = strings.Join(args[:n-1], " "), p
+			}
+		}
+		res, err := engine.Text(retrieval.TextQuery{Path: within, Pattern: question, Regex: regex, IgnoreCase: ignoreCase, Areas: areas, Limit: limit})
 		if err != nil {
 			return err
 		}

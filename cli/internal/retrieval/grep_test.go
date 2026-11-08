@@ -91,3 +91,16 @@ func TestTextRejectsAnEmptyPattern(t *testing.T) {
 		t.Error("an empty pattern matched every line")
 	}
 }
+
+// A text search can be held to a file or a folder.
+func TestTextCanBeHeldToAPath(t *testing.T) {
+	e := open(t, textFixture(t))
+	for _, within := range []string{"domain/order/service/order_service.go", "domain/order"} {
+		if res, err := e.Text(TextQuery{Pattern: "ErrOrderCancelled", Path: within}); err != nil || res.Total != 1 {
+			t.Errorf("within %s: %+v, %v", within, res, err)
+		}
+	}
+	if _, err := e.Text(TextQuery{Pattern: "ErrOrderCancelled", Path: "no/such/place"}); err == nil {
+		t.Error("a path outside what is searched must say so, not answer nothing")
+	}
+}

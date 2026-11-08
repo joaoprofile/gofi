@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -26,6 +27,7 @@ type TextQuery struct {
 	IgnoreCase bool
 	Areas      []string // none means every area
 	Limit      int      // matches returned; the rest are only counted
+	Path       string   // a file or folder, relative to the project; none means all
 }
 
 // TextMatch is one line that matched, and the unit it sits in — the symbol or
@@ -84,9 +86,12 @@ func (e *Engine) Text(q TextQuery) (*TextResult, error) {
 	}
 	var files []string
 	for _, f := range e.searchableFiles() {
-		if len(allowed) == 0 || allowed[areaOfFile(f)] {
+		if (len(allowed) == 0 || allowed[areaOfFile(f)]) && (q.Path == "" || f == q.Path || strings.HasPrefix(f, q.Path+"/")) {
 			files = append(files, f)
 		}
+	}
+	if q.Path != "" && len(files) == 0 {
+		return nil, fmt.Errorf("%s is not among the files a text search reads (tracked, not ignored, not binary)", q.Path)
 	}
 
 	perFile := make([][]TextMatch, len(files))

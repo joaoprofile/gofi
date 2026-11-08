@@ -80,3 +80,14 @@ func TestIndexCheckFailsOnABrokenPack(t *testing.T) {
 		t.Errorf("err=%v output:\n%s", err, out.String())
 	}
 }
+
+// A path after the text is where to look, as in grep — not more of the text.
+func TestFindTextTakesAPath(t *testing.T) {
+	root := configuredProject(t)
+	writeFile(t, filepath.Join(root, "src", "app", "errors.go"), "package app\n\nvar ErrGone = \"pedido removido\"\n")
+	writeFile(t, filepath.Join(root, "src", "app", "other.go"), "package app\n\nvar X = \"pedido removido\"\n")
+	out := runFind(t, root, "--text", "pedido removido", filepath.Join(root, "src", "app", "errors.go"))
+	if !strings.Contains(out, "errors.go") || strings.Contains(out, "other.go") {
+		t.Errorf("output:\n%s", out)
+	}
+}
