@@ -47,13 +47,34 @@ run that did not get there, assembled from its state, without the trace.`,
 				return err
 			}
 			agents, _ := loop.Agents(root, s.Run)
-			_, err = fmt.Fprint(cmd.OutOrStdout(), deliveryReport(s, agents, nil))
+			_, err = fmt.Fprint(cmd.OutOrStdout(), deliveryReport(s, agents, nil, findingsSection(root, s)))
 			return err
 		},
 	}
 }
 
 // writeReport keeps the delivery report of a run in its folder.
+// findingsSection is every finding the run's audits made, once each, with how
+// it ended. A run older than the record has none to show.
+func findingsSection(root string, s *loop.State) string {
+	all := loop.ReadFindings(root, s.Run)
+	if len(all) == 0 {
+		return ""
+	}
+	last := map[string]int{}
+	for i, f := range all {
+		last[f.Fingerprint] = i
+	}
+	var b strings.Builder
+	b.WriteString("\n### Achados das auditorias\n\n")
+	for i, f := range all {
+		if last[f.Fingerprint] == i {
+			fmt.Fprintf(&b, "- [%s] %s — %s (%s; iteração %d)\n", f.Severity, f.Rule, f.Message, loop.Situation(s, f), f.Iter)
+		}
+	}
+	return b.String()
+}
+
 func writeReport(root string, s *loop.State, rows []trace.Row) (string, error) {
 	agents, _ := loop.Agents(root, s.Run)
 	// The matrix, as the panel draws it: what the report's table is made of.
@@ -63,7 +84,7 @@ func writeReport(root string, s *loop.State, rows []trace.Row) (string, error) {
 		}
 	}
 	p := filepath.Join(loop.Dir(root, s.Run), ReportFile)
-	return p, os.WriteFile(p, []byte(deliveryReport(s, agents, rows)), 0o644)
+	return p, os.WriteFile(p, []byte(deliveryReport(s, agents, rows, findingsSection(root, s))), 0o644)
 }
 
 // lastAudit are the roles of the run's last audit.
@@ -86,7 +107,7 @@ func lastAudit(agents []loop.AgentState) []string {
 // deliveryReport is what a run delivered, for the person who reviews it:
 // nothing in it is a model's word — the state, the trace, the graph's
 // diff, the agents' records.
-func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) string {
+func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row, findings string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Entrega — %s (%s)\n\n", s.Change, s.Context)
 	b.WriteString("| | |\n|---|---|\n")
@@ -174,6 +195,7 @@ func deliveryReport(s *loop.State, agents []loop.AgentState, rows []trace.Row) s
 	} else {
 		b.WriteString(" Nenhum em aberto.\n")
 	}
+	b.WriteString(findings)
 
 	if len(s.Notes) > 0 {
 		b.WriteString("\n## Ressalvas do contrato\n\nA auditoria achou no contrato o que não impede esta entrega — o código cumpre o que ele diz — e cabe numa próxima mudança:\n\n")

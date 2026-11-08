@@ -86,3 +86,19 @@ func TestWithoutAnAuditBeforeEveryLensRuns(t *testing.T) {
 		t.Errorf("no graph: run %s", names(run))
 	}
 }
+
+// What each audit found stays in the run, though the next audit rewrites the
+// context's verdict, and says how it ended.
+func TestTheFindingsOfEachAuditStayInTheRun(t *testing.T) {
+	w := lensWorld(t)
+	w.agent.steps["audit/gofi-qa"] = []step{lensAudit(w.root, "aprovado"), lensAudit(w.root, "aprovado")}
+	w.agent.steps["audit/gofi-qa-security"] = []step{lensAudit(w.root, "reprovado", "blocker:eng:pedidos/REQ-01:backend/pedidos/handler.go"), lensAudit(w.root, "aprovado")}
+	s := w.run(t)
+	found := ReadFindings(w.root, "r-1")
+	if len(found) != 1 || found[0].Rule != "pedidos/REQ-01" {
+		t.Fatalf("recorded %+v", found)
+	}
+	if got := Situation(s, found[0]); got != "resolvido" {
+		t.Errorf("situation %q", got)
+	}
+}

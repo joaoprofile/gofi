@@ -635,6 +635,7 @@ var weight = map[string]int{"blocker": 8, "major": 4, "minor": 1}
 // the verdict's category, the open findings, their weight against the
 // iteration before, and the findings resolved earlier that are open again.
 func (r *Runner) judge(s *State, v *verdict.Verdict) {
+	r.keepFindings(s, v)
 	var open []Finding
 	s.Notes = nil
 	score := 0

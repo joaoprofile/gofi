@@ -20,7 +20,7 @@ func TestTheReportSaysWhatEachRoleSpent(t *testing.T) {
 		{Role: "gofi-qa", CostUSD: 0.4, Seconds: 90, Usage: &loop.Usage{Input: 500, CacheRead: 30000, Output: 2000, Tools: 12}},
 		{Role: "gofi-eng", CostUSD: 0.6, Seconds: 60, Usage: &loop.Usage{Input: 200, CacheRead: 20000, Output: 1000, Tools: 9}},
 	}
-	got := deliveryReport(&loop.State{Change: "c", Context: "x", Run: "r-1", Outcome: "accepted", CostUSD: 2.5}, agents, nil)
+	got := deliveryReport(&loop.State{Change: "c", Context: "x", Run: "r-1", Outcome: "accepted", CostUSD: 2.5}, agents, nil, "")
 	for _, want := range []string{
 		"| Uso | 171.700 tokens de entrada (170.000 do cache) · 11.000 de saída · 61 chamadas de ferramenta · 7m30s de agentes |",
 		"| gofi-eng | 2 | 49 | 141.200 | 9.000 | 2.10 | 6m0s |",
