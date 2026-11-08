@@ -717,6 +717,8 @@ var catalogPT = map[string]string{
 	"review.nobody":                  "nenhum papel revisa a mudança — gofi update instala o gofi-spec-review",
 	"review.started":                 "revisando %s (%s)…",
 	"review.tokens":                  "tokens: %d entrada · %d saída · %d cache lido · %d cache gravado",
+	"run.land.base_moved":            "a base avançou %d commit(s) em %s desde o início da execução; arquivos tocados pelos dois lados: %s",
+	"run.land.no_overlap":            "nenhum",
 	"review.cost":                    "revisão: US$ %.2f em %s",
 	"review.timeout":                 "%s não terminou a revisão em %s e foi cortado (loop.turn_timeout no .gofi.yaml) — o que ele fez está em %s",
 	"review.transcript":              "o que o revisor fez está em %s",

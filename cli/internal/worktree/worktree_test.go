@@ -400,3 +400,75 @@ func TestAWorktreeLinksTheDependenciesItIsGiven(t *testing.T) {
 		t.Errorf("the link must not dirty the worktree:\n%s", s)
 	}
 }
+
+func derivedProject(t *testing.T) (context.Context, string, *Tree) {
+	t.Helper()
+	ctx := context.Background()
+	root := project(t)
+	write(t, filepath.Join(root, "graph.txt"), "v0\n")
+	run(t, root, "add", "-A")
+	run(t, root, "commit", "--quiet", "-m", "graph")
+	tr, err := Prepare(ctx, root, "r-1", "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr.Derived = func(p string) bool { return p == "graph.txt" }
+	tr.Regenerate = func(context.Context, string) error { return nil }
+	return ctx, root, tr
+}
+
+// A real conflict beside a derived one names only what the person must solve.
+func TestAConflictNamesOnlyTheFilesThatAreThePersons(t *testing.T) {
+	ctx, root, tr := derivedProject(t)
+	write(t, filepath.Join(tr.Dir, "graph.txt"), "run\n")
+	write(t, filepath.Join(tr.Dir, "app.txt"), "run\n")
+	_ = tr.Commit(ctx, "a")
+	write(t, filepath.Join(root, "graph.txt"), "base\n")
+	write(t, filepath.Join(root, "app.txt"), "base\n")
+	run(t, root, "commit", "--quiet", "-am", "base")
+	err := tr.Land(ctx)
+	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "app.txt") {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(err.Error(), "graph.txt") || strings.Contains(err.Error(), "hint:") {
+		t.Errorf("the message carries more than the person's files: %v", err)
+	}
+}
+
+// Running the index dirties derived files only: they do not hold the landing,
+// while the person's own edit still does.
+func TestADerivedFileDoesNotHoldTheLanding(t *testing.T) {
+	ctx, root, tr := derivedProject(t)
+	write(t, filepath.Join(tr.Dir, "new.txt"), "x\n")
+	_ = tr.Commit(ctx, "a")
+	write(t, filepath.Join(root, "graph.txt"), "reindexed\n")
+	write(t, filepath.Join(root, "app.txt"), "editing\n")
+	if err := tr.Land(ctx); !errors.Is(err, ErrDirty) {
+		t.Fatalf("the person's edit must hold it: %v", err)
+	}
+	run(t, root, "checkout", "--", "app.txt")
+	if err := tr.Land(ctx); err != nil {
+		t.Fatalf("only a derived file was dirty: %v", err)
+	}
+	if !Integrated(ctx, root, tr.Base, tr.Branch) {
+		t.Error("the branch did not land")
+	}
+}
+
+// A base that moved says how far and what both sides touched.
+func TestAMovedBaseSaysWhatMayConflict(t *testing.T) {
+	ctx, root, tr := derivedProject(t)
+	if n, _ := tr.BaseMoved(ctx); n != 0 {
+		t.Errorf("nothing moved, commits = %d", n)
+	}
+	write(t, filepath.Join(tr.Dir, "app.txt"), "run\n")
+	write(t, filepath.Join(tr.Dir, "graph.txt"), "run\n")
+	_ = tr.Commit(ctx, "a")
+	write(t, filepath.Join(root, "app.txt"), "base\n")
+	write(t, filepath.Join(root, "graph.txt"), "base\n")
+	run(t, root, "commit", "--quiet", "-am", "base")
+	n, overlap := tr.BaseMoved(ctx)
+	if n != 1 || strings.Join(overlap, ",") != "app.txt" {
+		t.Errorf("commits %d, overlap %v", n, overlap)
+	}
+}

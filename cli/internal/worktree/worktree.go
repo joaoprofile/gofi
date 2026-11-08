@@ -18,6 +18,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/joaoprofile/gofi/cli/internal/contract"
@@ -284,8 +285,8 @@ func (t *Tree) Land(ctx context.Context) error {
 	if head, _ := git(ctx, t.Root, "symbolic-ref", "--quiet", "--short", "HEAD"); head != t.Base {
 		return ErrMoved
 	}
-	if out, _ := git(ctx, t.Root, "status", "--porcelain", "--untracked-files=no"); out != "" {
-		return ErrDirty
+	if err := t.cleanBase(ctx); err != nil {
+		return err
 	}
 	if err := t.rebase(ctx); err != nil {
 		_, _ = git(ctx, t.Dir, "rebase", "--abort")
@@ -295,6 +296,60 @@ func (t *Tree) Land(ctx context.Context) error {
 		return fmt.Errorf("%w: %v", ErrRaced, err)
 	}
 	return nil
+}
+
+// cleanBase refuses a base with the person's work in its tree. Derived files
+// are nobody's work — running the index rewrites them — so they go back to
+// the commit, and the landing regenerates them if it must.
+func (t *Tree) cleanBase(ctx context.Context) error {
+	if out, _ := git(ctx, t.Root, "status", "--porcelain", "--untracked-files=no"); out == "" {
+		return nil
+	}
+	if t.Derived == nil {
+		return ErrDirty
+	}
+	out, err := git(ctx, t.Root, "diff", "--name-only", "HEAD")
+	files := strings.Fields(out)
+	if err != nil || len(files) == 0 || slices.ContainsFunc(files, func(p string) bool { return !t.Derived(p) }) {
+		return ErrDirty
+	}
+	if _, err := git(ctx, t.Root, append([]string{"checkout", "HEAD", "--"}, files...)...); err != nil {
+		return fmt.Errorf("restore derived files: %w", err)
+	}
+	return nil
+}
+
+// BaseMoved says how many commits entered the base since the run branched,
+// and the files both sides changed, derived ones aside: what may conflict.
+func (t *Tree) BaseMoved(ctx context.Context) (commits int, overlap []string) {
+	mb, err := git(ctx, t.Root, "merge-base", t.Base, t.Branch)
+	if err != nil {
+		return 0, nil
+	}
+	n, err := git(ctx, t.Root, "rev-list", "--count", mb+".."+t.Base)
+	if err != nil {
+		return 0, nil
+	}
+	commits, _ = strconv.Atoi(strings.TrimSpace(n))
+	if commits == 0 {
+		return 0, nil
+	}
+	base, _ := git(ctx, t.Root, "diff", "--name-only", mb, t.Base)
+	mine, _ := git(ctx, t.Root, "diff", "--name-only", mb, t.Branch)
+	changed := strings.Fields(mine)
+	for _, p := range strings.Fields(base) {
+		if slices.Contains(changed, p) && (t.Derived == nil || !t.Derived(p)) {
+			overlap = append(overlap, p)
+		}
+	}
+	return commits, overlap
+}
+
+// Integrated reports whether the base holds the branch: what a landing done
+// by hand leaves.
+func Integrated(ctx context.Context, root, base, branch string) bool {
+	_, err := git(ctx, root, "merge-base", "--is-ancestor", branch, base)
+	return err == nil
 }
 
 // rebase replays the branch on the base. Each commit that stops on
@@ -311,10 +366,14 @@ func (t *Tree) rebase(ctx context.Context) error {
 		if len(conflicted) == 0 || t.Derived == nil || t.Regenerate == nil {
 			return err
 		}
+		var real []string
 		for _, p := range conflicted {
 			if !t.Derived(p) {
-				return fmt.Errorf("%s: %w", p, err)
+				real = append(real, p)
 			}
+		}
+		if len(real) > 0 {
+			return errors.New(strings.Join(real, ", "))
 		}
 		// In a rebase, "ours" is the base the commit is replayed on: its
 		// version is taken, and a derived file the base does not have is

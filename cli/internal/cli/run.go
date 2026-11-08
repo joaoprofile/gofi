@@ -871,6 +871,17 @@ func landRun(ctx context.Context, out io.Writer, root string, s *loop.State, tre
 			}
 		}
 	}
+	if n, overlap := tree.BaseMoved(ctx); n > 0 {
+		both := i18n.T("run.land.no_overlap")
+		if len(overlap) > 0 {
+			both = strings.Join(overlap, ", ")
+		}
+		why := i18n.T("run.land.base_moved", n, tree.Base, both)
+		say("land.base_moved", why)
+		if !events {
+			fmt.Fprintln(out, "  "+why)
+		}
+	}
 	deadline := time.Now().Add(wait)
 	for {
 		var why string

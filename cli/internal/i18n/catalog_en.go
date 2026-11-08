@@ -718,6 +718,8 @@ var catalogEN = map[string]string{
 	"review.nobody":                  "no role reviews the change — gofi update installs gofi-spec-review",
 	"review.started":                 "reviewing %s (%s)…",
 	"review.tokens":                  "tokens: %d input · %d output · %d cache read · %d cache written",
+	"run.land.base_moved":            "the base moved %d commit(s) on %s since the run began; files both sides touched: %s",
+	"run.land.no_overlap":            "none",
 	"review.cost":                    "review: US$ %.2f in %s",
 	"review.timeout":                 "%s did not finish the review within %s and was cut (loop.turn_timeout in .gofi.yaml) — what it did is in %s",
 	"review.transcript":              "what the reviewer did is in %s",
