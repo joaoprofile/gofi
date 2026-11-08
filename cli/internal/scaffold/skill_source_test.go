@@ -22,6 +22,19 @@ func folderSkillsFS() fstest.MapFS {
 	}
 }
 
+// The panel beside the chat ships inside /gofi-run: Claude Code loads a skill
+// folder holding a plugin manifest, so installing the skill installs it.
+func TestTheRunSkillCarriesItsPanel(t *testing.T) {
+	root := t.TempDir()
+	if _, err := InstallSkillsContent(os.DirFS("../../.."), ".", root, InstallNew); err != nil {
+		t.Fatalf("InstallSkillsContent: %v", err)
+	}
+	dir := ".claude/skills/gofi-run/"
+	mustExist(t, root, dir+"SKILL.md", dir+"hooks/hooks.json", dir+"types/index.d.ts")
+	mustContain(t, filepath.Join(root, dir+".claude-plugin/plugin.json"), `"name": "gofi-run"`)
+	mustContain(t, filepath.Join(root, dir+"hooks/register.tsx"), "--frame")
+}
+
 func TestInstallSkillsContent_FolderLayout(t *testing.T) {
 	root := t.TempDir()
 	if _, err := InstallSkillsContent(folderSkillsFS(), ".", root, InstallNew); err != nil {

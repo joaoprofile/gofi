@@ -14,7 +14,7 @@ comando que a responde.
 ```
 pedido → /gofi-spec escreve a mudança → gofi review (check + revisão)
       → a pessoa aprova (gofi change approve) → gofi run <mudança> --detach
-      → acompanha → responde portões → gofi report → entregue
+      → a pessoa acompanha no painel → responde portões → gofi report → entregue
 ```
 
 ## Leis
@@ -35,10 +35,14 @@ Próprias do `/gofi-run`:
    `gofi answer` — nunca escolha você.
 4. **O estado é o disco.** `gofi ps`, `gofi logs <run>` e
    `.gofi/runs/<run>/` dizem onde a execução está; não suponha.
+5. **Esperar não é trabalho seu.** Cada vez que você olha uma execução em
+   andamento, a conversa inteira é relida e paga. Iniciada a execução, encerre
+   o turno; quem acompanha é a pessoa, numa tela que não usa modelo.
 
 ## Workflow
 
-1. **Qual mudança.** Do argumento (`/gofi-run <mudança>`) ou de
+1. **Qual mudança.** Do argumento (`/gofi-run <mudança>` ou
+   `/gofi-run <contexto>`, que entrega as mudanças aprovadas do contexto) ou de
    `gofi change list`. Um pedido em texto, sem mudança que o cubra: siga o
    `/gofi-spec` (o `/gofi-pd` antes, quando o contexto não tem PRD) para
    escrevê-la com a pessoa — a mudança é dela, as decisões também.
@@ -59,13 +63,20 @@ Próprias do `/gofi-run`:
 4. **Rodar.** `gofi run <mudança> --detach` e guarde o id da execução. Várias
    mudanças aprovadas: `gofi run --all [--parallel N]` as entrega na ordem do
    `depende_de`, dentro de `loop.run_budget_usd`; um lote interrompido ou com
-   mudança não aceita continua com `gofi run --all --resume <lote>`.
-5. **Acompanhar.** `gofi logs -f <run>` (ou `gofi ps`) até a execução terminar;
-   para a pessoa acompanhar numa tela, `gofi watch`.
-6. **Portão.** Estado `bloqueada`: `gofi answer <run>` mostra as perguntas sem
+   mudança não aceita continua com `gofi run --all --resume <lote>`. Um
+   contexto inteiro: `gofi run --context <contexto>`. `--all` e `--context` não
+   têm `--detach`: inicie-os como processo em segundo plano do seu ambiente,
+   nunca em primeiro plano.
+5. **Passar o acompanhamento.** Diga à pessoa o que iniciou e onde acompanhar —
+   o painel gofi ao lado da conversa (abre sozinho) ou `gofi watch` no terminal, que só leem o
+   disco e não gastam token — e **encerre o turno**. Não fique seguindo com
+   `gofi logs -f` nem repetindo `gofi ps`. Avise que, quando a execução parar
+   numa pergunta ou terminar, é só chamar você.
+6. **Quando a pessoa chamar.** `gofi ps` diz onde a execução está. Estado
+   `bloqueada`: `gofi answer <run>` mostra as perguntas sem
    terminal — leve-as à pessoa e grave a resposta com
    `gofi answer <run> --set id=valor`.
-7. **Fim.** Diga o resultado (`accepted`, `impasse`, `exhausted`), a
+7. **Fim.** Terminada a execução, quando a pessoa chamar, diga o resultado (`accepted`, `impasse`, `exhausted`), a
    integração (`integrada`, `conflito`, `aguardando`) e o custo; o
    `gofi report <run>` tem o rastreio de cada requisito, o que mudou e a
    auditoria — é o que a pessoa revisa. Impasse e
