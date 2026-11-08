@@ -2,6 +2,7 @@ package cli
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/joaoprofile/gofi/cli/internal/role"
@@ -52,5 +53,26 @@ func TestNoShippedRoleGetsAShell(t *testing.T) {
 		if slices.Contains(r.Contract.Tools, "shell") {
 			t.Errorf("%s is granted a shell", r.Name)
 		}
+	}
+}
+
+// A loop turn is told only of what its role uses: a tool outside the grant
+// costs tokens to describe on every step, and is refused besides.
+func TestALoopTurnIsToldOnlyOfItsTools(t *testing.T) {
+	grant := []string{"read", "search", "gofi", "verify", "verdict"}
+	if got := strings.Join(claudeBuiltins(grant), ","); got != "Read" {
+		t.Errorf("an auditor's own tools = %q", got)
+	}
+	if got := claudeBuiltins([]string{"gofi"}); got == nil || len(got) != 0 {
+		t.Errorf("a role granted none of the engine's has none, got %v", got)
+	}
+	denied := strings.Join(ungrantedGofi(grant), ",")
+	for _, want := range []string{"approve", "intake", "memory_write"} {
+		if !strings.Contains(denied, want) {
+			t.Errorf("%s should be refused to an auditor: %s", want, denied)
+		}
+	}
+	if strings.Contains(denied, "verdict_write") {
+		t.Errorf("a tool the grant names was refused: %s", denied)
 	}
 }

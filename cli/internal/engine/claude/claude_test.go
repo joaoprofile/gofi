@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -343,5 +344,20 @@ func TestABudgetIsPassedAsMaxBudgetUSD(t *testing.T) {
 	}
 	if a := strings.Join((&Session{}).args(), " "); strings.Contains(a, "--max-budget-usd") {
 		t.Errorf("args without a budget = %s", a)
+	}
+}
+
+// Tools narrows what the session has at all; left nil, the engine's defaults
+// stand, and an empty list is no tools rather than all of them.
+func TestToolsArePassedOnlyWhenNarrowed(t *testing.T) {
+	if a := strings.Join((&Session{opts: Options{Tools: []string{"Read", "Edit"}}}).args(), " "); !strings.Contains(a, "--tools Read,Edit") {
+		t.Errorf("args = %s", a)
+	}
+	if a := (&Session{}).args(); slices.Contains(a, "--tools") {
+		t.Errorf("args without a narrowing = %v", a)
+	}
+	a := (&Session{opts: Options{Tools: []string{}}}).args()
+	if i := slices.Index(a, "--tools"); i < 0 || a[i+1] != "" {
+		t.Errorf("an empty list must pass no tools: %v", a)
 	}
 }

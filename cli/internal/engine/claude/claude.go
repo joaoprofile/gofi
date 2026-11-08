@@ -66,6 +66,10 @@ type Options struct {
 	// turns side by side share a cached prefix.
 	Isolated  bool
 	MCPConfig string // JSON or a file, passed as --mcp-config
+	// Tools, when not nil, are the engine's own tools the session has at all,
+	// passed as --tools. AllowedTools only spares a prompt: a tool left out
+	// here is not even described to the model, which is what a turn pays for.
+	Tools []string
 	// MaxBudgetUSD is what the session may spend, passed as --max-budget-usd
 	// when positive: the engine stops itself there.
 	MaxBudgetUSD float64
@@ -218,6 +222,9 @@ func (s *Session) args() []string {
 	}
 	if mode := strings.TrimSpace(s.opts.PermissionMode); mode != "" && mode != "default" {
 		a = append(a, "--permission-mode", mode)
+	}
+	if s.opts.Tools != nil {
+		a = append(a, "--tools", strings.Join(s.opts.Tools, ","))
 	}
 	if len(s.opts.AllowedTools) > 0 {
 		a = append(a, "--allowedTools", strings.Join(s.opts.AllowedTools, ","))

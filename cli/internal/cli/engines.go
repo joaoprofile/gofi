@@ -89,6 +89,10 @@ func agentSessions(cfg *config.GofiConfig, root, mode string, tools []string, lo
 			PermissionMode: mode, AllowedTools: allowed, DisallowedTools: denied, MaxBudgetUSD: budget}
 		if loopTurn {
 			o.SystemPrompt, o.Isolated, o.MCPConfig = loopSystemPrompt, true, host.MCPConfig()
+			if grant != nil {
+				o.Tools = claudeBuiltins(grant)
+				o.DisallowedTools = append(o.DisallowedTools, ungrantedGofi(grant)...)
+			}
 			if common, settings := loopMemory(root); common != "" {
 				o.SystemPrompt += "\n\n" + common
 				o.Settings = settings
@@ -128,6 +132,34 @@ var gofiGrants = map[string][]string{
 
 // gofiServerTools are every tool gofi's MCP server serves.
 var gofiServerTools = []string{"find", "show", "path", "impact", "intake", "index_status", "index", "verify", "verdict_write", "approve", "memory_write"}
+
+// claudeBuiltins are Claude Code's own tools a grant names — never nil, so a
+// role with none has none: every other one is left out of the turn, and costs
+// no tokens to describe.
+func claudeBuiltins(grant []string) []string {
+	out := []string{}
+	for _, g := range grant {
+		for _, t := range claudeGrants[g] {
+			if !slices.Contains(out, t) {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
+// ungrantedGofi are the host's names of the server's tools a grant does not
+// name, refused so the turn is not told about them.
+func ungrantedGofi(grant []string) []string {
+	named := grantedGofi(grant)
+	var out []string
+	for _, t := range gofiServerTools {
+		if !slices.Contains(named, t) {
+			out = append(out, guard.MCPPrefix+t)
+		}
+	}
+	return out
+}
 
 // grantedGofi are the server's tools a grant names, in the server's order.
 func grantedGofi(grant []string) []string {
