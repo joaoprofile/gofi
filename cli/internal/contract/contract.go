@@ -36,9 +36,9 @@ var contractKinds = map[string]bool{KindSpec: true, KindChange: true, KindDelta:
 // until gofi-migrate converts it.
 const FormatSplit = 3
 
-// ChangesDir is the folder changes live in — specs/<context>/changes/ for a
-// change of one context, specs/changes/ for one of several (place.go): one
-// folder per change, and archive/ for the ones applied.
+// ChangesDir is the folder changes live in — specs/<context>/changes/, of the
+// context that owns the change (place.go): one folder per change, and
+// archive/ for the ones applied.
 const ChangesDir = "changes"
 
 // Doc is one document of the contract.
@@ -52,7 +52,7 @@ type Doc struct {
 	Context  string
 	Contexts []string
 	// Change is the change the document is part of, read from its folder —
-	// specs/changes/<id>/ — never from the frontmatter, so the two cannot
+	// specs/<context>/changes/<id>/ — never from the frontmatter, so the two cannot
 	// disagree. Empty for a living spec.
 	Change string
 	Front  docs.Frontmatter

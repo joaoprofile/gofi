@@ -104,7 +104,7 @@ ela); pare para revisão depois de um PRD ou de uma mudança. Skill invocada
 | Memória global | `.claude/memory/project.md` |
 | Estado de um contexto | `.claude/memory/contexts/{contexto}.md` — leia o `## Estado atual` |
 | Spec viva | `specs/{contexto}/spec.md` — um requisito: `gofi show specs/{contexto}/spec.md#REQ-NN` |
-| Mudanças | `specs/{contexto}/changes/{id}/` (a de vários contextos, `specs/changes/{id}/`; a primeira de um contexto sem spec, a **gênese**, em `specs/{contexto}/` com o id do contexto); arquivadas em `changes/archive/`. `gofi change list` mostra a pasta de cada uma |
+| Mudanças | `specs/{contexto}/changes/{id}/` (a de vários contextos, na pasta do primeiro; a primeira de um contexto sem spec, a **gênese**, em `specs/{contexto}/` com o id do contexto); arquivadas em `changes/archive/`. `gofi change list` mostra a pasta de cada uma |
 | PRDs | `prd/{contexto}/prd-{contexto}.md` |
 | Léxico das facetas | `.claude/lexicon/*.md` |
 | Grafo de código | `.gofi/index/code/` — consulte por `gofi find --in code` e `gofi show`, nunca o JSON |

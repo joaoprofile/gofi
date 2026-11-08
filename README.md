@@ -133,9 +133,9 @@ The installer verifies the SHA-256 against `checksums.txt`. Defaults:
 
 1. **The contract.** `specs/<context>/spec.md` is the living truth of a context —
    requirements (`REQ-NN`) and scenarios (`REQ-NN.n`), no technology. Work is a
-   **change** in `specs/<context>/changes/<id>/` (`specs/changes/<id>/` when it touches
-   several contexts; a new context's first change, its genesis, right in
-   `specs/<context>/`): a proposal, a delta per context and a design.
+   **change** in `specs/<context>/changes/<id>/` (the first context's folder when it
+   touches several; a new context's first change, its genesis, right in
+   `specs/<context>/`, even when it also changes others): a proposal, a delta per context and a design.
 2. **Review and approval.** `gofi review` runs `gofi spec check` (no model) and a
    reviewer that looks for ambiguity, contradiction, untestable scenarios and gaps.
    Approval seals each document with its hash; editing it afterwards breaks the seal.

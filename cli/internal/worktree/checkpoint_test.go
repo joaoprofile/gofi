@@ -17,9 +17,9 @@ func TestACheckpointSeesWhatTheRunWouldMix(t *testing.T) {
 	if !ok || c.Branch != "main" {
 		t.Fatalf("checkpoint = %+v, %v", c, ok)
 	}
-	c.Keep = []string{"specs/changes/c"}
+	c.Keep = []string{"specs/pedidos/changes/c"}
 	c.Derived = func(p string) bool { return strings.HasPrefix(p, "index/") }
-	write(t, filepath.Join(root, "specs/changes/c/proposal.md"), "c\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/c/proposal.md"), "c\n")
 	write(t, filepath.Join(root, "index/code.json"), "{}\n")
 	if d, err := c.Dirty(ctx); err != nil || len(d) != 0 {
 		t.Fatalf("dirty = %v, %v", d, err)
@@ -42,19 +42,19 @@ func TestAnAcceptedChangeIsOneCommit(t *testing.T) {
 	ctx := context.Background()
 	root := project(t)
 	c, _ := OpenCheckpoint(ctx, root)
-	c.Keep = []string{"specs/changes"}
+	c.Keep = []string{"specs/pedidos/changes"}
 	write(t, filepath.Join(root, "app.txt"), "v2\n")
 	write(t, filepath.Join(root, "new.txt"), "n\n")
-	_ = os.RemoveAll(filepath.Join(root, "specs/changes/a"))
-	write(t, filepath.Join(root, "specs/changes/archive/2026-11-02-a/proposal.md"), "a\n")
-	write(t, filepath.Join(root, "specs/changes/d/proposal.md"), "d\n")
-	if err := c.Commit(ctx, "feat(x): a", "specs/changes/a", "specs/changes/archive/2026-11-02-a", "specs/changes/never-committed"); err != nil {
+	_ = os.RemoveAll(filepath.Join(root, "specs/pedidos/changes/a"))
+	write(t, filepath.Join(root, "specs/pedidos/changes/archive/2026-11-02-a/proposal.md"), "a\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/d/proposal.md"), "d\n")
+	if err := c.Commit(ctx, "feat(x): a", "specs/pedidos/changes/a", "specs/pedidos/changes/archive/2026-11-02-a", "specs/pedidos/changes/never-committed"); err != nil {
 		t.Fatal(err)
 	}
 	if got := run(t, root, "log", "-1", "--format=%s"); got != "feat(x): a" {
 		t.Errorf("head = %q", got)
 	}
-	if s := run(t, root, "status", "--porcelain"); s != "?? specs/changes/d/" {
+	if s := run(t, root, "status", "--porcelain"); s != "?? specs/pedidos/changes/d/" {
 		t.Errorf("after the commit the tree holds %q, want only the other change", s)
 	}
 }
@@ -65,8 +65,8 @@ func TestAWorkNotAcceptedIsKeptOnABranchAndTheTreeRestored(t *testing.T) {
 	ctx := context.Background()
 	root := project(t)
 	c, _ := OpenCheckpoint(ctx, root)
-	c.Keep = []string{"specs/changes/c"}
-	write(t, filepath.Join(root, "specs/changes/c/proposal.md"), "c\n")
+	c.Keep = []string{"specs/pedidos/changes/c"}
+	write(t, filepath.Join(root, "specs/pedidos/changes/c/proposal.md"), "c\n")
 	write(t, filepath.Join(root, "app.txt"), "half\n")
 	write(t, filepath.Join(root, "pkg/new.go"), "package pkg\n")
 	write(t, filepath.Join(root, ".gofi/runs/r-1/state.json"), "{}\n")
@@ -80,7 +80,7 @@ func TestAWorkNotAcceptedIsKeptOnABranchAndTheTreeRestored(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "pkg/new.go")); err == nil {
 		t.Error("the run's new file is still in the tree")
 	}
-	for _, p := range []string{"specs/changes/c/proposal.md", ".gofi/runs/r-1/state.json"} {
+	for _, p := range []string{"specs/pedidos/changes/c/proposal.md", ".gofi/runs/r-1/state.json"} {
 		if _, err := os.Stat(filepath.Join(root, p)); err != nil {
 			t.Errorf("%s was removed", p)
 		}

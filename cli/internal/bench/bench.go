@@ -20,6 +20,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/joaoprofile/gofi/cli/internal/docs"
+
 	"github.com/joaoprofile/gofi/cli/internal/learn"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
 )
@@ -60,11 +62,30 @@ func Load(language string) (*Suite, bool, error) {
 	return &s, true, nil
 }
 
-// Write puts the suite's changes in a project's specs/changes/.
+// changeHome is where a suite's change goes in a project: the folder of the
+// first context its proposal names, as gofi change new puts it.
+func changeHome(root, src, id string) (string, error) {
+	data, err := suites.ReadFile(path.Join(src, "proposal.md"))
+	if err != nil {
+		return "", err
+	}
+	fm, _ := docs.Parse(string(data))
+	contexts := fm.List("contextos")
+	if len(contexts) == 0 {
+		return "", fmt.Errorf("%s: a proposta não diz os contextos", src)
+	}
+	return filepath.Join(root, "specs", contexts[0], "changes", id), nil
+}
+
+// Write puts the suite's changes in a project, each in its context's folder.
 func (s *Suite) Write(root string) error {
 	for _, c := range s.Changes {
 		src := path.Join("suites", s.Language, c.ID)
-		err := fs.WalkDir(suites, src, func(p string, d fs.DirEntry, err error) error {
+		home, err := changeHome(root, src, c.ID)
+		if err != nil {
+			return err
+		}
+		err = fs.WalkDir(suites, src, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
 			}
@@ -72,7 +93,7 @@ func (s *Suite) Write(root string) error {
 			if err != nil {
 				return err
 			}
-			dst := filepath.Join(root, "specs", "changes", c.ID, filepath.FromSlash(strings.TrimPrefix(p, src+"/")))
+			dst := filepath.Join(home, filepath.FromSlash(strings.TrimPrefix(p, src+"/")))
 			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 				return err
 			}

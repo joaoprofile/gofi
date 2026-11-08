@@ -9,17 +9,20 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/layout"
 )
 
-// Where a change lives. A change of one context lives in that context's
-// folder, beside the living spec it changes — specs/<context>/changes/<id>/
-// —, so everything about a context is in one place. A change of several
-// contexts has no one owner: it lives in specs/changes/<id>/. Each changes/
-// folder keeps the changes applied in its archive/.
+// Where a change lives. Every change lives in a context's folder, beside the
+// living spec it changes — specs/<context>/changes/<id>/ —, so everything
+// about a context is in one place. One that touches several contexts lives in
+// the first one's, its owner, with a deltas/<other>.md for each of the others.
+// Each changes/ folder keeps the changes applied in its archive/.
 //
 // The first change of a context that has no spec yet — its genesis — lives in
 // the context's folder itself: specs/<context>/proposal.md, deltas/, design.md,
 // with no changes/<id>/ around it, since there is nothing yet to keep it
-// apart from. Its id is the context's name, so the folder still says which
-// change a document is part of. Archived, the spec takes its place and the
+// apart from. A genesis may carry deltas of other contexts too — a new
+// context that adds a requirement to one that exists —: it is still the new
+// context's, in its folder, with a deltas/<other>.md beside its own. Its id
+// is the context's name, so the folder still says which change a document is
+// part of. Archived, the spec takes its place and the
 // change goes to specs/<context>/changes/archive/<date>-<context>/, where the
 // later changes of the context are kept too.
 const ArchiveDir = "archive"
@@ -27,19 +30,10 @@ const ArchiveDir = "archive"
 // ProposalFile is the proposal of a change, in the change's folder.
 const ProposalFile = "proposal.md"
 
-// ChangeHome is the folder a new change of these contexts is born in,
-// relative to the root.
-func ChangeHome(contexts []string) string {
-	if len(contexts) == 1 {
-		return layout.Specs().Path(contexts[0], ChangesDir)
-	}
-	return layout.Specs().Path(ChangesDir)
-}
-
 // NewChangeDir is the folder of a new change that is not a genesis, relative
-// to the root.
+// to the root: in the changes/ of its first context, its owner.
 func NewChangeDir(id string, contexts []string) string {
-	return ChangeHome(contexts) + "/" + id
+	return layout.Specs().Path(contexts[0], ChangesDir, id)
 }
 
 // GenesisDir is the folder of a context's genesis change, relative to the
@@ -53,11 +47,12 @@ func IsGenesis(dir string) bool {
 	return ok && rest != "" && rest != ChangesDir && !strings.Contains(rest, "/")
 }
 
-// Genesis reports whether a new change of these contexts is a genesis: it
-// changes one context, that context has no spec of any format, and no genesis
-// is open in it already.
+// Genesis reports whether a new change of these contexts is a genesis: the
+// first context — the one the change is born for — has no spec of any format
+// and no genesis open in it already. The others, if any, are contexts the
+// genesis also changes; the order matters, so contexts is as the person gave it.
 func Genesis(root string, contexts []string) bool {
-	if len(contexts) != 1 {
+	if len(contexts) == 0 {
 		return false
 	}
 	dir := filepath.Join(root, filepath.FromSlash(GenesisDir(contexts[0])))
@@ -87,7 +82,7 @@ func isSpecFile(p string) bool {
 }
 
 // FindChange is the folder of an open change, relative to the root, in
-// either home — or, for a genesis, the context's own folder.
+// any context's changes/ — or, for a genesis, the context's own folder.
 func FindChange(root, id string) (string, bool) {
 	for _, home := range changeHomes(root) {
 		rel := home + "/" + id
@@ -114,12 +109,12 @@ func isChangeFile(p string) bool {
 	return value(fm, "tipo") == KindChange
 }
 
-// ChangeHomes are every changes/ folder of the project: the shared one and
-// each context's, relative to the root.
+// ChangeHomes are every changes/ folder of the project, one per context that
+// has any, relative to the root.
 func ChangeHomes(root string) []string { return changeHomes(root) }
 
 func changeHomes(root string) []string {
-	homes := []string{layout.Specs().Path(ChangesDir)}
+	var homes []string
 	entries, _ := os.ReadDir(layout.Specs().Abs(root))
 	for _, e := range entries {
 		if e.IsDir() && e.Name() != ChangesDir {
@@ -141,8 +136,8 @@ func archiveOf(changeDir, date, id string) string {
 	return filepath.ToSlash(filepath.Join(filepath.Dir(filepath.FromSlash(changeDir)), ArchiveDir, date+"-"+id))
 }
 
-// changeOf is the change a document sits in — specs/changes/<id>/… or
-// specs/<context>/changes/<id>/… —, or "". A genesis is read from the
+// changeOf is the change a document sits in — specs/<context>/changes/<id>/…
+// —, or "". A genesis is read from the
 // document's kind as well (genesisOf): its folder is also the living spec's.
 func changeOf(rel string) string {
 	prefix := layout.Specs().Path() + "/"
@@ -151,10 +146,7 @@ func changeOf(rel string) string {
 		return ""
 	}
 	segs := strings.Split(rest, "/")
-	switch {
-	case len(segs) >= 3 && segs[0] == ChangesDir && segs[1] != ArchiveDir:
-		return segs[1]
-	case len(segs) >= 4 && segs[0] != ChangesDir && segs[1] == ChangesDir && segs[2] != ArchiveDir:
+	if len(segs) >= 4 && segs[0] != ChangesDir && segs[1] == ChangesDir && segs[2] != ArchiveDir {
 		return segs[2]
 	}
 	return ""

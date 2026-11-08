@@ -90,7 +90,7 @@ O sistema DEVE x.
 func TestChangeRules(t *testing.T) {
 	root := project(t)
 	write(t, root, "specs/pedidos/spec.md", doc3("spec")+"# Spec\n\n## Propósito\n\nx\n\n## Requisitos\n\n"+goodReq)
-	dir := "specs/changes/rate-limit/"
+	dir := "specs/pedidos/changes/rate-limit/"
 	write(t, root, dir+"proposal.md", strings.Replace(doc3("mudanca"), "contexto: pedidos", "contextos: [pedidos, estoque]\ndepende_de: [criar-clientes, sumida]", 1)+
 		"# Mudança\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n")
 	write(t, root, dir+"deltas/pedidos.md", doc3("delta")+`# Delta
@@ -131,9 +131,9 @@ O sistema DEVE y.
 	write(t, root, dir+"deltas/frete.md", strings.Replace(doc3("delta"), "contexto: pedidos", "contexto: frete", 1)+"# Delta\n\n## MODIFICADO\n\n### Requisito: REQ-01 — x\nO sistema DEVE x.\n\n#### Cenário: REQ-01.1 — x\n- DADO a\n- QUANDO b\n- ENTÃO c\n")
 	write(t, root, dir+"design.md", doc3("design")+"# Design\n\n## Abordagem\n\nUsa REQ-88.\n\n## Mapa de requisitos\n\n| REQ-01 | x |\n")
 	// Another open change adding REQ-07 to pedidos: archiving both would collide.
-	write(t, root, "specs/changes/outra/proposal.md", doc3("mudanca")+"# Outra\n\n## Por quê\n\n## O que muda\n")
-	write(t, root, "specs/changes/outra/deltas/pedidos.md", doc3("delta")+"# Delta\n\n## ADICIONADO\n\n### Requisito: REQ-07 — Outro\nO sistema DEVE z.\n\n#### Cenário: REQ-07.1 — z\n- DADO a\n- QUANDO b\n- ENTÃO c\n")
-	write(t, root, "specs/changes/archive/2026-10-01-criar-clientes/proposal.md", doc3("mudanca"))
+	write(t, root, "specs/pedidos/changes/outra/proposal.md", doc3("mudanca")+"# Outra\n\n## Por quê\n\n## O que muda\n")
+	write(t, root, "specs/pedidos/changes/outra/deltas/pedidos.md", doc3("delta")+"# Delta\n\n## ADICIONADO\n\n### Requisito: REQ-07 — Outro\nO sistema DEVE z.\n\n#### Cenário: REQ-07.1 — z\n- DADO a\n- QUANDO b\n- ENTÃO c\n")
+	write(t, root, "specs/pedidos/changes/archive/2026-10-01-criar-clientes/proposal.md", doc3("mudanca"))
 
 	mustHave(t, findingsOf(t, root, dir+"proposal.md"),
 		"error estoque está em contextos, mas a mudança não tem deltas/estoque.md",
@@ -160,7 +160,7 @@ O sistema DEVE y.
 
 func TestAChangeThatTouchesCodeNeedsADesign(t *testing.T) {
 	root := project(t)
-	dir := "specs/changes/criar-pedidos/"
+	dir := "specs/pedidos/changes/criar-pedidos/"
 	write(t, root, dir+"proposal.md", doc3("mudanca")+"# M\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n")
 	write(t, root, dir+"deltas/pedidos.md", doc3("delta")+"# D\n\n## ADICIONADO\n\n"+goodReq)
 	mustHave(t, findingsOf(t, root, dir+"proposal.md"), "não tem design.md")
@@ -174,11 +174,11 @@ func TestAChangeThatTouchesCodeNeedsADesign(t *testing.T) {
 func TestChangesThatDependOnEachOther(t *testing.T) {
 	root := project(t)
 	for _, c := range [][2]string{{"a", "b"}, {"b", "a"}} {
-		write(t, root, "specs/changes/"+c[0]+"/proposal.md",
+		write(t, root, "specs/pedidos/changes/"+c[0]+"/proposal.md",
 			strings.Replace(doc3("mudanca"), "keywords:", "depende_de: ["+c[1]+"]\ndesign: n/a\nkeywords:", 1)+"# M\n\n## Por quê\n\n## O que muda\n")
-		write(t, root, "specs/changes/"+c[0]+"/deltas/pedidos.md", doc3("delta")+"# D\n\n## ADICIONADO\n\n"+strings.ReplaceAll(goodReq, "REQ-01", "REQ-0"+map[string]string{"a": "5", "b": "6"}[c[0]]))
+		write(t, root, "specs/pedidos/changes/"+c[0]+"/deltas/pedidos.md", doc3("delta")+"# D\n\n## ADICIONADO\n\n"+strings.ReplaceAll(goodReq, "REQ-01", "REQ-0"+map[string]string{"a": "5", "b": "6"}[c[0]]))
 	}
-	mustHave(t, findingsOf(t, root, "specs/changes/a/proposal.md"), "ciclo de dependência: a → b → a")
+	mustHave(t, findingsOf(t, root, "specs/pedidos/changes/a/proposal.md"), "ciclo de dependência: a → b → a")
 }
 
 // A living spec changes only through an archived change; a broken seal on
@@ -199,9 +199,9 @@ func TestALivingSpecEditedByHand(t *testing.T) {
 // REQ-01 in the design is ambiguous, ctx/REQ-01 is not.
 func TestARepeatedIDIsQualifiedInTheDesign(t *testing.T) {
 	root := archiveFixture(t, false)
-	deltaPedidos := read(t, root, "specs/changes/adicionar-rate-limit/deltas/pedidos.md")
-	write(t, root, "specs/changes/adicionar-rate-limit/deltas/pedidos.md", strings.Replace(deltaPedidos, "## REMOVIDO", "## MODIFICADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO zero\n- QUANDO fecha\n- ENTÃO recusa\n\n## REMOVIDO", 1))
-	design := "specs/changes/adicionar-rate-limit/design.md"
+	deltaPedidos := read(t, root, "specs/pedidos/changes/adicionar-rate-limit/deltas/pedidos.md")
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/deltas/pedidos.md", strings.Replace(deltaPedidos, "## REMOVIDO", "## MODIFICADO\n\n### Requisito: REQ-01 — Total positivo\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO zero\n- QUANDO fecha\n- ENTÃO recusa\n\n## REMOVIDO", 1))
+	design := "specs/pedidos/changes/adicionar-rate-limit/design.md"
 	write(t, root, design, strings.Replace(designRateLimit, "| estoque/REQ-01 | Estoque.Baixa |", "| REQ-01 | Os dois |", 1))
 	mustHave(t, findingsOf(t, root, design),
 		"estoque/REQ-01 não está no ## Mapa de requisitos — REQ-01 existe em mais de um contexto da mudança",

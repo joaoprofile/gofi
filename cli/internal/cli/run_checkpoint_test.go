@@ -55,7 +55,7 @@ func (scriptedSession) Close() error { return nil }
 // checkpointProject is a project in git on main with everything committed
 // but an approved change, as gofi change approve leaves it.
 func checkpointProject(t *testing.T, verdictJSON string) (string, func(...string) (string, error)) {
-	return checkpointProjectAt(t, verdictJSON, "specs/changes/criar-pedidos", "criar-pedidos")
+	return checkpointProjectAt(t, verdictJSON, "specs/pedidos/changes/criar-pedidos", "criar-pedidos")
 }
 
 // checkpointProjectAt is checkpointProject with the change in rel, named id:
@@ -165,7 +165,7 @@ func TestAnAcceptedRunInTheTreeIsOneCommit(t *testing.T) {
 		t.Errorf("head = %q\n%s", got, out)
 	}
 	files := gitIn(t, root, "show", "--name-only", "--format=", "HEAD")
-	for _, want := range []string{"backend/pedidos/total.go", "specs/pedidos/spec.md", "specs/changes/archive/"} {
+	for _, want := range []string{"backend/pedidos/total.go", "specs/pedidos/spec.md", "specs/pedidos/changes/archive/"} {
 		if !strings.Contains(files, want) {
 			t.Errorf("the commit lacks %s:\n%s", want, files)
 		}
@@ -190,7 +190,7 @@ func TestARunNotAcceptedInTheTreeKeepsItsWorkApart(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "backend", "pedidos", "total.go")); err == nil {
 		t.Error("the work not accepted is still in the tree")
 	}
-	if _, err := os.Stat(filepath.Join(root, "specs", "changes", "criar-pedidos", "proposal.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "specs", "pedidos", "changes", "criar-pedidos", "proposal.md")); err != nil {
 		t.Error("the approved change left the tree")
 	}
 	if got := gitIn(t, root, "show", "--name-only", "--format=", "gofi/criar-pedidos"); !strings.Contains(got, "backend/pedidos/total.go") {

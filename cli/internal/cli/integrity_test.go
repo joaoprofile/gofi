@@ -27,7 +27,7 @@ func TestIntegrityRefusesWhatTheRunMayNotChange(t *testing.T) {
 	gitIn(t, root, "init", "--quiet", "-b", "main")
 	gitIn(t, root, "add", "-A")
 	gitIn(t, root, "commit", "--quiet", "-m", "init")
-	write("specs/changes/criar-pedidos/proposal.md", "# M\n")
+	write("specs/pedidos/changes/criar-pedidos/proposal.md", "# M\n")
 	ctx := context.Background()
 	if err := captureIntegrity(ctx, root, "r-1"); err != nil {
 		t.Fatal(err)

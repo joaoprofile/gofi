@@ -48,12 +48,18 @@ func writeIndexes(root, corpus string, out *[]string) ([]Drift, error) {
 	}
 	signature := signatures(byContext)
 
+	// A document of several contexts — a change's proposal — is in each one's
+	// row of the router, and once in its folder's shard.
 	byDir := map[string][]indexEntry{}
 	dirsOf := map[string][]string{}
+	inShard := map[string]bool{}
 	for ctx, group := range byContext {
 		seen := map[string]bool{}
 		for _, e := range group {
-			byDir[e.dir] = append(byDir[e.dir], e)
+			if !inShard[e.rel] {
+				inShard[e.rel] = true
+				byDir[e.dir] = append(byDir[e.dir], e)
+			}
 			if !seen[e.dir] {
 				seen[e.dir] = true
 				dirsOf[ctx] = append(dirsOf[ctx], e.dir)
@@ -87,9 +93,9 @@ func writeIndexes(root, corpus string, out *[]string) ([]Drift, error) {
 | Contexto | Docs | Do que trata | Onde |
 |---|--:|---|---|
 `)
+	total = len(inShard)
 	for _, ctx := range contexts {
 		group := byContext[ctx]
-		total += len(group)
 		locais := make([]string, 0, len(dirsOf[ctx]))
 		for _, d := range dirsOf[ctx] {
 			locais = append(locais, fmt.Sprintf("`%s/%s`", d, IndexMarkdown))
@@ -127,6 +133,7 @@ func writeIndexes(root, corpus string, out *[]string) ([]Drift, error) {
 
 type indexEntry struct {
 	rel, dir, ctx, sub, version, status          string
+	ctxs                                         []string // every context the document is of
 	entities, operations, keywords, marketplaces []string
 }
 
@@ -134,22 +141,49 @@ func groupByContext(root, corpus string) (map[string][]indexEntry, error) {
 	out := map[string][]indexEntry{}
 	err := walkCorpus(root, corpus, func(path string, fm Frontmatter, _ []string) {
 		rel := relPath(root, path)
-		ctx := fm.Get("contexto")
-		if ctx == "" {
-			ctx = "sem-contexto"
-		}
+		ctxs := contextsOf(fm)
 		sub := fm.Get("submodulo")
 		if sub == "" {
 			sub = "n/a"
 		}
-		out[ctx] = append(out[ctx], indexEntry{
-			rel: rel, dir: filepath.ToSlash(filepath.Dir(rel)), ctx: ctx, sub: sub,
-			version: fm.Get("versao"), status: fm.Get("status"),
-			entities: fm.List("entidades"), operations: fm.List("operacoes"),
-			keywords: fm.List("keywords"), marketplaces: fm.List("marketplaces"),
-		})
+		for _, ctx := range ctxs {
+			out[ctx] = append(out[ctx], indexEntry{
+				rel: rel, dir: filepath.ToSlash(filepath.Dir(rel)), ctx: ctx, ctxs: ctxs, sub: sub,
+				version: fm.Get("versao"), status: fm.Get("status"),
+				entities: fm.List("entidades"), operations: fm.List("operacoes"),
+				keywords: fm.List("keywords"), marketplaces: fm.List("marketplaces"),
+			})
+		}
 	})
 	return out, err
+}
+
+// contextsOf are the contexts a document is filed under: its contexto, or
+// every one of its contextos — a change's proposal lists the contexts it
+// touches —, or sem-contexto.
+func contextsOf(fm Frontmatter) []string {
+	if c := fm.Get("contexto"); c != "" {
+		return []string{c}
+	}
+	var out []string
+	for _, c := range fm.List("contextos") {
+		if c = strings.TrimSpace(c); c != "" && !containsStr(out, c) {
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"sem-contexto"}
+	}
+	return out
+}
+
+func containsStr(xs []string, x string) bool {
+	for _, y := range xs {
+		if y == x {
+			return true
+		}
+	}
+	return false
 }
 
 func renderShard(dir, corpus string, group []indexEntry) (string, Drift) {
@@ -161,7 +195,9 @@ func renderShard(dir, corpus string, group []indexEntry) (string, Drift) {
 	})
 	ctxs := map[string]bool{}
 	for _, e := range group {
-		ctxs[e.ctx] = true
+		for _, c := range e.ctxs {
+			ctxs[c] = true
+		}
 	}
 	nomes := make([]string, 0, len(ctxs))
 	for c := range ctxs {
@@ -205,8 +241,18 @@ func renderShard(dir, corpus string, group []indexEntry) (string, Drift) {
 
 // folderExplained reports whether the folder name is accounted for by the
 // context it serves or by a submodule inside it.
+//
+// A change's folders are not named for a context, and may hold the delta of
+// another: a genesis's deltas/, a context's changes/<id>/ and their archive.
+// Below those, only the top folder names a context.
 func folderExplained(dir, corpus, ctx string, group []indexEntry) bool {
 	base := strings.TrimPrefix(dir, corpus+"/")
+	if segs := strings.Split(base, "/"); len(segs) > 1 {
+		if segs[1] == "changes" || segs[1] == "deltas" {
+			return true
+		}
+		base = segs[0]
+	}
 	if base == ctx {
 		return true
 	}
@@ -417,6 +463,17 @@ func firstProse(content string) string {
 // generatedMark identifies a shard this tool wrote. A hand-written INDEX.md is
 // somebody's file and is never touched.
 const generatedMark = "Derivado — não edite à mão"
+
+// IsGeneratedIndex reports whether a file is an INDEX.md this tool wrote: a
+// folder that holds nothing else may go, the next build writes it again if
+// it is still needed.
+func IsGeneratedIndex(path string) bool {
+	if filepath.Base(path) != IndexMarkdown {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(raw), generatedMark)
+}
 
 // sweepShards deletes indexes left behind by a context that no longer exists.
 //

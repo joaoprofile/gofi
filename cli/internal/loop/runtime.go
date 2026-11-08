@@ -131,9 +131,8 @@ type State struct {
 	Run    string `json:"run"`
 	Flow   string `json:"flow"`
 	Change string `json:"mudanca"`
-	// ChangeDir is the change's folder: in its context's folder, in
-	// specs/changes/ when it changes several, or the context's folder itself
-	// for its genesis.
+	// ChangeDir is the change's folder: under the context that owns it, or
+	// the context's folder itself for its genesis.
 	ChangeDir string `json:"mudanca_dir,omitempty"`
 	Context   string `json:"contexto"`
 	// Node is the next node to run; empty once the run has ended.

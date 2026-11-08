@@ -114,9 +114,9 @@ func TestSharedTablesWithoutADependencyAreAWarning(t *testing.T) {
 func TestChangeOrder(t *testing.T) {
 	root := project(t)
 	for id, deps := range map[string]string{"criar-pedidos": "criar-clientes", "criar-clientes": "", "adicionar-rate-limit": "criar-pedidos, migrar-legado"} {
-		write(t, root, "specs/changes/"+id+"/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [x]\ndepende_de: ["+deps+"]\n---\n# M\n")
+		write(t, root, "specs/x/changes/"+id+"/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [x]\ndepende_de: ["+deps+"]\n---\n# M\n")
 	}
-	write(t, root, "specs/changes/archive/2026-01-01-migrar-legado/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [x]\n---\n")
+	write(t, root, "specs/x/changes/archive/2026-01-01-migrar-legado/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [x]\n---\n")
 	levels, err := ChangeOrder(corpus(t, root))
 	want := [][]string{{"criar-clientes"}, {"criar-pedidos"}, {"adicionar-rate-limit"}}
 	if err != nil || !reflect.DeepEqual(levels, want) {

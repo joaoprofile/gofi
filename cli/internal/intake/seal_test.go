@@ -30,9 +30,9 @@ const sealDelta = "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.
 // change; one that does not pass seals nothing and says why.
 func TestSealContract(t *testing.T) {
 	root := t.TempDir()
-	writeDoc(t, root, "specs/changes/criar-pedidos/proposal.md", sealProposal)
-	writeDoc(t, root, "specs/changes/criar-pedidos/deltas/pedidos.md", sealDelta)
-	writeDoc(t, root, "specs/changes/criar-pedidos/design.md", sealDesign)
+	writeDoc(t, root, "specs/pedidos/changes/criar-pedidos/proposal.md", sealProposal)
+	writeDoc(t, root, "specs/pedidos/changes/criar-pedidos/deltas/pedidos.md", sealDelta)
+	writeDoc(t, root, "specs/pedidos/changes/criar-pedidos/design.md", sealDesign)
 	r := &Result{Context: &Context{Name: "pedidos"}, Plan: []Phase{{Role: "gofi-spec", Produces: "spec"}, {Role: "gofi-eng", Produces: "code"}}}
 
 	if sealed, err := SealContract(root, r, 1); err != nil || sealed != nil {
@@ -52,13 +52,13 @@ func TestSealContract(t *testing.T) {
 		t.Errorf("sealing twice: %v %v", again, err)
 	}
 
-	writeDoc(t, root, "specs/changes/outra/proposal.md", strings.Replace(sealProposal, "## O que muda\n\nx\n", "", 1))
-	writeDoc(t, root, "specs/changes/outra/deltas/pedidos.md", strings.ReplaceAll(sealDelta, "REQ-01", "REQ-02"))
+	writeDoc(t, root, "specs/pedidos/changes/outra/proposal.md", strings.Replace(sealProposal, "## O que muda\n\nx\n", "", 1))
+	writeDoc(t, root, "specs/pedidos/changes/outra/deltas/pedidos.md", strings.ReplaceAll(sealDelta, "REQ-01", "REQ-02"))
 	_, err = SealContract(root, r, 0)
 	if err == nil || !strings.Contains(err.Error(), "falta a seção ## O que muda") {
 		t.Fatalf("err = %v", err)
 	}
-	b, _ := os.ReadFile(filepath.Join(root, "specs/changes/outra/deltas/pedidos.md"))
+	b, _ := os.ReadFile(filepath.Join(root, "specs/pedidos/changes/outra/deltas/pedidos.md"))
 	if strings.Contains(string(b), "aprovacao_sha") {
 		t.Error("a refused contract was partly sealed")
 	}
