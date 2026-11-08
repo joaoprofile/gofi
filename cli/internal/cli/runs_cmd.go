@@ -33,6 +33,7 @@ node, or ended with its outcome.`,
 			if err != nil {
 				return err
 			}
+			settleLandings(context.Background(), root)
 			runs, err := loop.List(root)
 			if err != nil {
 				return err
@@ -259,6 +260,7 @@ gofi watch --frame --width 80 --height 30`,
 			if err != nil {
 				return err
 			}
+			settleLandings(context.Background(), root)
 			if frame, _ := cmd.Flags().GetBool("frame"); frame {
 				w, _ := cmd.Flags().GetInt("width")
 				h, _ := cmd.Flags().GetInt("height")
