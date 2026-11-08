@@ -100,8 +100,8 @@ report (sarif, junit); test defaults to the test section's default task, and
 a stage with no command — security and coverage, unless named — is recorded
 as not checked, never as passed.
 
-The policy is loop in .gofi.yaml: budget_usd stops the agents once spent,
-each turn given only what is left (or turn_budget_usd when lower) for the
+The policy is loop in .gofi.yaml: budget_usd, when set, stops the agents once
+spent, each turn given only what is left (or turn_budget_usd when lower) for the
 engine to stop itself there; turn_timeout (45m when empty) cuts a turn that
 does not end, the run stopped and resumable; plan: layers splits a backend
 change by layer, a role and a turn each (by default one role does every layer

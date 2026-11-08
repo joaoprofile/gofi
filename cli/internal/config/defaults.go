@@ -330,20 +330,19 @@ func DefaultOps() *Ops {
 	}
 }
 
-// DefaultLoopBudgetUSD and DefaultLoopMaxIterations are the bounds a new
-// project's runs start with.
-const (
-	DefaultLoopBudgetUSD     = 5.0
-	DefaultLoopMaxIterations = 3
-)
+// DefaultLoopMaxIterations is how many times a new project's runs go back to
+// work.
+const DefaultLoopMaxIterations = 3
 
 // DefaultLoop returns the loop block a new .gofi.yaml is written with. An
-// absent block means no budget and only the flow's own limits — a run that
-// does not converge then spends until every rework edge is used, dozens of
-// turns. A new project starts bounded, and can see the bounds to change them.
+// absent block means only the flow's own limits — a run that does not
+// converge then goes on until every rework edge is used, dozens of turns — so
+// a new project starts with its iterations bounded. It starts with no budget:
+// a run that spends it stops until a person raises a number, which only asks
+// them to say yes; loop.budget_usd is there for whoever wants the ceiling.
 // It is not backfilled: a project that already runs keeps what it had.
 func DefaultLoop() *Loop {
-	return &Loop{MaxIterations: DefaultLoopMaxIterations, BudgetUSD: DefaultLoopBudgetUSD}
+	return &Loop{MaxIterations: DefaultLoopMaxIterations}
 }
 
 // DefaultGraph returns the graph block written into a .gofi.yaml. The values are

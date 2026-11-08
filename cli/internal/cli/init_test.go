@@ -825,7 +825,7 @@ func TestBuildConfig_NewProjectRunsAreBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Loop == nil || got.Loop.BudgetUSD != config.DefaultLoopBudgetUSD || got.Loop.MaxIterations != config.DefaultLoopMaxIterations {
+	if got.Loop == nil || got.Loop.BudgetUSD != 0 || got.Loop.MaxIterations != config.DefaultLoopMaxIterations {
 		t.Errorf("a new project's runs must start bounded, got loop %+v", got.Loop)
 	}
 }

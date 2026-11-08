@@ -215,7 +215,7 @@ and its default architecture rules:
 
 The policy decides from the sensors and the verdict, never from what a model says:
 accept, go back to work, raise a role one tier, triage, or stop. It is bounded by
-`loop.max_iterations` and `loop.budget_usd`; `loop.accept` chooses between a clean
+`loop.max_iterations` and, when set, `loop.budget_usd`; `loop.accept` chooses between a clean
 verdict and one with caveats; `loop.escalate` says when a role that does not
 progress runs one tier up.
 
@@ -513,7 +513,7 @@ ai:
         deep: claude-opus-5-5
 loop:
     max_iterations: 6            # ways back to work before the run is exhausted
-    budget_usd: 5                # what one run may spend
+    budget_usd: 5                # optional: a ceiling per run; without it, no spending limit
     run_budget_usd: 20           # what a batch may spend, all its runs together
     max_agents: 2                # changes at once in a batch
     accept: clean                # clean | ressalvas
