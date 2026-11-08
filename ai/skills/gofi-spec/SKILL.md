@@ -77,6 +77,18 @@ Segue a *Convenção de leitura dos agents* do AGENTS.md; o detalhe →
 | **Baseline** | contexto que já roda e não tem spec viva | `specs/{contexto}/spec.md` a partir do código e do grafo → `reference/reverse-engineering.md` |
 | **Mapa** | repositório adotado, sem nenhum contexto | a tabela de contextos candidatos → `reference/reverse-engineering.md` §Modo 3 |
 
+**Invocado direto (`/gofi-spec`), a conversa inteira corre no nível deste papel — o
+mais caro —, e cada resposta relê tudo o que veio antes.** Por isso:
+
+- **Antes da primeira pergunta**, diga uma vez, em uma frase, que `gofi chat` faz
+  esta mesma etapa com as perguntas num nível mais barato, e deixe a pessoa
+  escolher. Se ela quiser seguir aqui, siga sem insistir.
+- **Um contexto por sessão.** Terminado um contexto, sugira abrir uma sessão nova
+  para o próximo: o que ficou decidido já está no arquivo que você escreveu.
+- **Avise quando a conversa ficar longa:** passadas umas 10 rodadas de perguntas,
+  grave o que já está decidido no arquivo do papel e sugira continuar numa sessão
+  nova, a partir dele.
+
 Quando o gofi conduz o pedido (`gofi chat`, `gofi ask`, painel), o papel roda
 em passagens:
 
