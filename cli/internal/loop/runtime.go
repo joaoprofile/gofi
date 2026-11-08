@@ -68,6 +68,9 @@ type Turn struct {
 	// ElicitFile is where the agent writes a decision it cannot find, relative
 	// to the project root.
 	ElicitFile string
+	// Raised says the role runs above its own tier, because it did not
+	// progress: a model chosen for the role yields to the tier then.
+	Raised bool
 	// BudgetUSD is what the turn may spend, 0 for no limit: what is left of
 	// the run's budget, or the policy's per-turn limit when lower.
 	BudgetUSD float64
@@ -559,7 +562,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		before = snapshot(r.work(), guard)
 	}
 	tctx, why, cancel := r.Policy.turnContext(ctx, rl.Name)
-	res, err := r.Agent.Run(tctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, 1)})
+	res, err := r.Agent.Run(tctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Raised: s.Raised[rl.Name] > 0, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, 1)})
 	cancel()
 	err = why(err)
 	s.CostUSD += res.CostUSD

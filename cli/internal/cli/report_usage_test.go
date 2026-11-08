@@ -52,7 +52,7 @@ func TestATurnRecordsItsTokensAndToolCalls(t *testing.T) {
 	committedChangeProject(t, "true")
 	var prompts []string
 	runPorts.open = func(dir string) engine.Session { return usageSession{fakeSession{root: dir, prompts: &prompts}} }
-	a := &engineAgent{root: t.TempDir(), run: "r-1", open: func(dir string, _ host.Tier, _ []string, _ float64) engine.Session { return runPorts.open(dir) }, out: &strings.Builder{}, quiet: true}
+	a := &engineAgent{root: t.TempDir(), run: "r-1", open: func(dir, _ string, _ host.Tier, _ []string, _ float64) engine.Session { return runPorts.open(dir) }, out: &strings.Builder{}, quiet: true}
 	res, err := a.Run(context.Background(), loop.Turn{Node: "implement", Role: "gofi-eng", Iter: 1, Prompt: "p"})
 	if err != nil {
 		t.Fatal(err)

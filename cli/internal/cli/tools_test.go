@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joaoprofile/gofi/cli/internal/config"
+	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
@@ -74,5 +76,17 @@ func TestALoopTurnIsToldOnlyOfItsTools(t *testing.T) {
 	}
 	if strings.Contains(denied, "verdict_write") {
 		t.Errorf("a tool the grant names was refused: %s", denied)
+	}
+}
+
+// A model chosen for a role wins over its tier; a role not chosen, or one
+// the loop raised (which opens with no role), keeps the tier's.
+func TestAModelCanBeChosenForOneRole(t *testing.T) {
+	h := host.Host{SkillModel: true, Models: map[host.Tier]string{host.Standard: "sonnet"}}
+	ai := config.AI{Roles: map[string]string{"gofi-qa": "haiku"}}
+	for _, c := range []struct{ role, want string }{{"gofi-qa", "haiku"}, {"gofi-eng", "sonnet"}, {"", "sonnet"}} {
+		if got := turnModel(h, ai, c.role, host.Standard); got != c.want {
+			t.Errorf("role %q: %s, want %s", c.role, got, c.want)
+		}
 	}
 }

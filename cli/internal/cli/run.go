@@ -1178,9 +1178,9 @@ func sensorCommands(cfg *config.GofiConfig) (map[string]pack.Command, error) {
 // turnSessions opens the session of a role's turn, in work: on the
 // project's host (ai.host), on its tier's model — an internal role has no
 // skill frontmatter to name one —, with the tools its contract grants.
-func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, tier host.Tier, grant []string, budget float64) engine.Session, error) {
+func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir, role string, tier host.Tier, grant []string, budget float64) engine.Session, error) {
 	if runPorts.open != nil {
-		return func(dir string, _ host.Tier, _ []string, budget float64) engine.Session {
+		return func(dir, _ string, _ host.Tier, _ []string, budget float64) engine.Session {
 			if runPorts.budget != nil {
 				runPorts.budget(budget)
 			}
@@ -1195,13 +1195,21 @@ func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, t
 		return nil, err
 	}
 	h, _ := host.Get(cfg.AI.Host)
-	return func(_ string, t host.Tier, grant []string, budget float64) engine.Session {
-		model := ""
-		if h.SkillModel && t != "" {
-			model = h.Model(t, cfg.AI.Tiers)
-		}
-		return session(model, grant, budget)
+	return func(_, role string, t host.Tier, grant []string, budget float64) engine.Session {
+		return session(turnModel(h, cfg.AI, role, t), grant, budget)
 	}, nil
+}
+
+// turnModel is the model of a turn: the one the project chose for the role,
+// else the one that serves its tier.
+func turnModel(h host.Host, ai config.AI, role string, t host.Tier) string {
+	if m := strings.TrimSpace(ai.Roles[role]); m != "" {
+		return m
+	}
+	if h.SkillModel && t != "" {
+		return h.Model(t, ai.Tiers)
+	}
+	return ""
 }
 
 // engineAgent runs a role's turn in a fresh engine session and keeps what
@@ -1209,7 +1217,7 @@ func turnSessions(cfg *config.GofiConfig, work, mode string) (func(dir string, t
 type engineAgent struct {
 	root, run string
 	work      string // where the session runs: the run's worktree, or root
-	open      func(dir string, tier host.Tier, grant []string, budget float64) engine.Session
+	open      func(dir, role string, tier host.Tier, grant []string, budget float64) engine.Session
 	out       io.Writer
 	quiet     bool // events mode: the transcript holds the tool calls
 	// transcript, when set, is where the turn is recorded instead of the
@@ -1222,7 +1230,11 @@ type engineAgent struct {
 }
 
 func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, error) {
-	s := a.open(a.work, t.Tier, t.Tools, t.BudgetUSD)
+	chosen := t.Role
+	if t.Raised {
+		chosen = ""
+	}
+	s := a.open(a.work, chosen, t.Tier, t.Tools, t.BudgetUSD)
 	defer s.Close()
 	id := t.Agent
 	if id == "" {

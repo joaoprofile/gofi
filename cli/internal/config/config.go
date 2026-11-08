@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -481,6 +483,10 @@ type AI struct {
 	// standard, deep) on this project's host. Absent keys use the host's
 	// default; a host with no defaults uses the session's model.
 	Tiers map[string]string `yaml:"tiers,omitempty"`
+	// Roles overrides the model of one role of the loop, by its name — to try
+	// an audit on a cheaper model without moving the tier the others share.
+	// A role raised for not progressing goes back to its tier's model.
+	Roles map[string]string `yaml:"roles,omitempty"`
 	// Guard is what happens when an agent searches the tree — Grep, Glob, a
 	// whole-file Read — before asking the index: warn tells it to ask first,
 	// enforce refuses Grep, Glob and a shell grep always — find with text or
@@ -535,6 +541,16 @@ func (a AI) MarshalYAML() (interface{}, error) {
 			}
 		}
 		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: "tiers"}, tiers)
+	}
+	if len(a.Roles) > 0 {
+		roles := &yaml.Node{Kind: yaml.MappingNode}
+		names := slices.Sorted(maps.Keys(a.Roles))
+		for _, r := range names {
+			roles.Content = append(roles.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: r},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: a.Roles[r]})
+		}
+		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: "roles"}, roles)
 	}
 	add("guard", a.GuardMode())
 	node.Content[len(node.Content)-1].LineComment = strings.Join(GuardModes, " | ") + " — gofi guard <mode>"

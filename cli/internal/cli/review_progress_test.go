@@ -42,7 +42,7 @@ func stillLine() string {
 // (events mode) or has no heartbeat says nothing of its own.
 func TestATurnWithoutEventsSaysItIsStillGoing(t *testing.T) {
 	var prompts []string
-	open := func(string, host.Tier, []string, float64) engine.Session {
+	open := func(string, string, host.Tier, []string, float64) engine.Session {
 		return slowSession{fakeSession{prompts: &prompts}, 120 * time.Millisecond}
 	}
 	var out strings.Builder
