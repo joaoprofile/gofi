@@ -235,7 +235,7 @@ func printGate(out io.Writer, q *loop.Question) {
 }
 
 func newWatchCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: i18n.T("cmd.watch.short"),
 		Long: `The runs of this project as a multiplexer shows agents: each run a tab with
@@ -247,13 +247,23 @@ its events; an agent's live transcript.
 Keys: a answers the question a run waits on, c cancels it, r resumes an
 interrupted or stopped run, n starts a sealed change — both in the
 background (gofi run --detach). The screen only reads the disk: closing it
-stops nothing.`,
-		Example: `gofi watch`,
-		Args:    cobra.NoArgs,
+stops nothing.
+
+--frame prints the screen once, in plain text, for a panel beside an editor
+to draw: it reads the disk and spends no token.`,
+		Example: `gofi watch
+gofi watch --frame --width 80 --height 30`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, root, err := loadProjectConfig()
 			if err != nil {
 				return err
+			}
+			if frame, _ := cmd.Flags().GetBool("frame"); frame {
+				w, _ := cmd.Flags().GetInt("width")
+				h, _ := cmd.Flags().GetInt("height")
+				fmt.Fprintln(cmd.OutOrStdout(), watch.Frame(watch.Options{Root: root, Project: cfg.Project.Name}, w, h))
+				return nil
 			}
 			return watch.Run(watch.Options{
 				Root: root, Project: cfg.Project.Name,
@@ -262,6 +272,10 @@ stops nothing.`,
 			})
 		},
 	}
+	cmd.Flags().Bool("frame", false, i18n.T("cmd.watch.flag.frame"))
+	cmd.Flags().Int("width", 100, i18n.T("cmd.watch.flag.width"))
+	cmd.Flags().Int("height", 30, i18n.T("cmd.watch.flag.height"))
+	return cmd
 }
 
 // startable are the sealed changes with no run that is still going.
