@@ -188,10 +188,17 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 		return nil, fmt.Errorf("%s gravou uma revisão que o gofi não lê: %w", rl.Name, err)
 	}
 	r.Change, r.Hash = change, hash
+	r.Cost = &review.Cost{USD: res.CostUSD, Seconds: res.Seconds}
+	if u := res.Usage; u != nil {
+		r.Cost.Input, r.Cost.Output, r.Cost.CacheRead, r.Cost.CacheWrite = u.Input, u.Output, u.CacheRead, u.CacheWrite
+	}
 	if err := review.Save(root, r); err != nil {
 		return nil, err
 	}
 	fmt.Fprintln(out, "  "+i18n.T("review.cost", res.CostUSD, time.Duration(res.Seconds*float64(time.Second)).Round(time.Second)))
+	if res.Usage != nil {
+		fmt.Fprintln(out, "  "+i18n.T("review.tokens", r.Cost.Input, r.Cost.Output, r.Cost.CacheRead, r.Cost.CacheWrite))
+	}
 	return r, nil
 }
 

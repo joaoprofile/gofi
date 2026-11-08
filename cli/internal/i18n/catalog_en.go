@@ -717,6 +717,7 @@ var catalogEN = map[string]string{
 	"review.kept":                    "the review of %s already read the change as it is (gofi review --again to review it again)",
 	"review.nobody":                  "no role reviews the change — gofi update installs gofi-spec-review",
 	"review.started":                 "reviewing %s (%s)…",
+	"review.tokens":                  "tokens: %d input · %d output · %d cache read · %d cache written",
 	"review.cost":                    "review: US$ %.2f in %s",
 	"review.timeout":                 "%s did not finish the review within %s and was cut (loop.turn_timeout in .gofi.yaml) — what it did is in %s",
 	"review.transcript":              "what the reviewer did is in %s",

@@ -39,3 +39,16 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Errorf("loaded %+v, %v", r, err)
 	}
 }
+
+// What a review cost stays with it, gofi's figures and not the reviewer's.
+func TestAReviewKeepsWhatItCost(t *testing.T) {
+	root := t.TempDir()
+	r := &Review{Schema: Schema, Change: "c", Hash: "h", Findings: []Finding{}, Cost: &Cost{USD: 0.42, Seconds: 30, Output: 1200, CacheRead: 90000}}
+	if err := Save(root, r); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(root, "c")
+	if err != nil || got == nil || got.Cost == nil || got.Cost.USD != 0.42 || got.Cost.CacheRead != 90000 {
+		t.Errorf("loaded %+v, err %v", got, err)
+	}
+}

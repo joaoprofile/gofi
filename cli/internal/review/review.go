@@ -36,6 +36,18 @@ type Review struct {
 	Change   string    `json:"change"`
 	Hash     string    `json:"hash"`
 	Findings []Finding `json:"findings"`
+	// Cost is what the review spent, gofi's to write: the engine's figures.
+	Cost *Cost `json:"cost,omitempty"`
+}
+
+// Cost is what one review spent.
+type Cost struct {
+	USD        float64 `json:"usd"`
+	Seconds    float64 `json:"seconds"`
+	Input      int     `json:"input,omitempty"`
+	Output     int     `json:"output,omitempty"`
+	CacheRead  int     `json:"cache_read,omitempty"`
+	CacheWrite int     `json:"cache_write,omitempty"`
 }
 
 // Finding is one thing the change says badly, or does not say.
