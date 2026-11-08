@@ -40,6 +40,10 @@ func lensable(n Node, roles []role.Role) bool {
 // most loop.audit_parallel at a time. Then, in order, their verdicts merge
 // into the context's — by fingerprint, without a model.
 func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, s *State) error {
+	roles, kept := r.affected(name, roles, s)
+	if why, short := r.shortOfLenses(s, len(roles)); short {
+		return errors.New(why)
+	}
 	s.Iter++
 	s.Agent = name
 	s.Lenses = nil
@@ -94,13 +98,13 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 	if len(failed) > 0 {
 		return errors.Join(failed...)
 	}
-	return r.mergeLenses(s, name)
+	return r.mergeLenses(s, name, kept)
 }
 
 // mergeLenses reads the verdict each lens of this iteration wrote and writes
 // the context's, merged. A lens that wrote none stops the run, as an audit
 // that wrote none does.
-func (r *Runner) mergeLenses(s *State, name string) error {
+func (r *Runner) mergeLenses(s *State, name string, kept []string) error {
 	lenses := append([]string{}, s.Lenses...)
 	sort.Strings(lenses)
 	var vs []*verdict.Verdict
@@ -120,6 +124,8 @@ func (r *Runner) mergeLenses(s *State, name string) error {
 		return fmt.Errorf("a lente %s não gravou o veredicto desta execução (verdict_write com lens, run %s, iter %d)", strings.Join(missing, ", "), s.Run, s.Iter)
 	}
 	merged, conflicts := verdict.Merge(s.Context, s.Run, s.Iter, vs)
+	merged.Lenses = append(merged.Lenses, kept...)
+	s.Audited = r.markAudit(vs, kept, s)
 	if err := r.Verdicts.Write(merged); err != nil {
 		return err
 	}

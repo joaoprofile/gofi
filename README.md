@@ -217,7 +217,9 @@ The policy decides from the sensors and the verdict, never from what a model say
 accept, go back to work, raise a role one tier, triage, or stop. It is bounded by
 `loop.max_iterations` and, when set, `loop.budget_usd`; `loop.accept` chooses between a clean
 verdict and one with caveats; `loop.escalate` says when a role that does not
-progress runs one tier up.
+progress runs one tier up. After a rework, an audit in lenses runs again only the
+lenses that had findings and those whose scope the rework touched; each lens
+spared is a `skip` line in `gofi logs`.
 
 ### Audit
 

@@ -1,0 +1,88 @@
+package loop
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/joaoprofile/gofi/cli/internal/role"
+)
+
+// With the budget short of what the lenses need to reach a verdict, none is
+// started: the run stops at the audit, resumable, having spent nothing on it.
+func TestAnAuditTheBudgetCannotFinishStartsNoLens(t *testing.T) {
+	w := lensWorld(t)
+	w.runner.Policy.BudgetUSD = 0.5 // two lenses need 0.70
+	_, err := w.runner.Start(context.Background(), "r-1", "criar-pedidos", "pedidos")
+	if err == nil || !strings.Contains(err.Error(), "orçamento insuficiente") {
+		t.Fatalf("err = %v", err)
+	}
+	for _, turn := range w.agent.turns {
+		if turn.Node == "audit" {
+			t.Errorf("a lens ran: %+v", turn)
+		}
+	}
+}
+
+func lens(name string, scope ...string) role.Role {
+	all := []string{"sensor.green"}
+	for _, l := range scope {
+		all = append(all, "diff.touches("+l+")")
+	}
+	return role.Role{Name: name, Contract: role.Contract{Triggers: []role.Trigger{{All: all}}}}
+}
+
+func names(roles []role.Role) string {
+	var out []string
+	for _, r := range roles {
+		out = append(out, r.Name)
+	}
+	return strings.Join(out, ",")
+}
+
+// One lens of five found something: the other four run again only when what
+// the rework changed is in their scope, and a lens of the whole change only
+// when anything changed.
+func TestOnlyTheLensesTheReworkConcernsRunAgain(t *testing.T) {
+	w := newWorld(t)
+	r := w.runner
+	if err := os.MkdirAll(Dir(w.root, "r-1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"data.go", "api.go"} {
+		if err := os.WriteFile(filepath.Join(w.root, f), []byte("v1"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := &State{Run: "r-1", Diff: &GraphDiff{Touched: []Touch{{File: "data.go", Layer: "data"}, {File: "api.go", Layer: "api"}}}}
+	s.Audited = &AuditMark{Clean: []string{"data", "api", "integ", "whole"}, Files: map[string]string{
+		"data.go": fileHash(filepath.Join(w.root, "data.go")), "api.go": fileHash(filepath.Join(w.root, "api.go"))}}
+	roles := []role.Role{lens("found", "data"), lens("data", "data"), lens("api", "api"), lens("integ", "integration"), lens("whole")}
+
+	if run, kept := r.affected("audit", roles, s); names(run) != "found" || strings.Join(kept, ",") != "data,api,integ,whole" {
+		t.Errorf("nothing changed: run %s, kept %v", names(run), kept)
+	}
+	if err := os.WriteFile(filepath.Join(w.root, "api.go"), []byte("v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if run, kept := r.affected("audit", roles, s); names(run) != "found,api,whole" || strings.Join(kept, ",") != "data,integ" {
+		t.Errorf("the api changed: run %s, kept %v", names(run), kept)
+	}
+	if evs, _ := Events(w.root, "r-1"); !strings.Contains(evs[len(evs)-1].Why, "escopo") {
+		t.Errorf("a lens spared does not say why: %+v", evs[len(evs)-1])
+	}
+}
+
+// The first audit, or one with no graph to judge by, runs every lens.
+func TestWithoutAnAuditBeforeEveryLensRuns(t *testing.T) {
+	w := newWorld(t)
+	roles := []role.Role{lens("a", "data"), lens("b")}
+	if run, _ := w.runner.affected("audit", roles, &State{Run: "r-1", Diff: &GraphDiff{}}); names(run) != "a,b" {
+		t.Errorf("run %s", names(run))
+	}
+	if run, _ := w.runner.affected("audit", roles, &State{Run: "r-1", Audited: &AuditMark{Clean: []string{"a"}}}); names(run) != "a,b" {
+		t.Errorf("no graph: run %s", names(run))
+	}
+}

@@ -164,7 +164,9 @@ type State struct {
 	SensorMark    *int           `json:"sensor_mark,omitempty"`
 	Raised        map[string]int `json:"raised,omitempty"`
 	Worked        []Ran          `json:"worked,omitempty"`
-	Stuck         bool           `json:"stuck,omitempty"`
+	// Audited is what the last audit found clean, for the next to spare.
+	Audited *AuditMark `json:"audited,omitempty"`
+	Stuck   bool       `json:"stuck,omitempty"`
 	// Plan is what the plan stage decomposed the change into; Tested that
 	// the tests were written by the test stage once.
 	Plan   *Plan `json:"plan,omitempty"`
