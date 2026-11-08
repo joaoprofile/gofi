@@ -28,7 +28,9 @@ var (
 
 // NewChange describes a change to create.
 type NewChange struct {
-	ID       string
+	ID string
+	// Contexts are those the change touches, as given: the first owns it —
+	// the change lives in its folder, and a genesis is born for it.
 	Contexts []string
 	// Language picks the design template of the pack; empty takes the neutral one.
 	Language string
@@ -43,14 +45,26 @@ type NewChange struct {
 
 // Placed is the id and the folder, relative to root, the change is created
 // with: the id asked for in its changes/ folder, or — the first change of a
-// context with no spec — the context's name and folder (its genesis).
+// context with no spec, the first one given — the context's name and folder
+// (its genesis), whatever other contexts it also changes.
 func (c NewChange) Placed(root string) (id, dir string) {
-	contexts := append([]string{}, c.Contexts...)
-	sort.Strings(contexts)
-	if !c.NoGenesis && Genesis(root, contexts) {
-		return contexts[0], GenesisDir(contexts[0])
+	if len(c.Contexts) == 0 {
+		return c.ID, ""
 	}
-	return c.ID, NewChangeDir(c.ID, contexts)
+	if !c.NoGenesis && Genesis(root, c.Contexts) {
+		return c.Contexts[0], GenesisDir(c.Contexts[0])
+	}
+	return c.ID, NewChangeDir(c.ID, c.Contexts)
+}
+
+// ordered are the contexts of a change as its documents list them: its owner
+// first, the others sorted.
+func (c NewChange) ordered() []string {
+	contexts := append([]string{}, c.Contexts...)
+	if len(contexts) > 1 {
+		sort.Strings(contexts[1:])
+	}
+	return contexts
 }
 
 // isContextDir reports whether a name is a context's folder under specs/: a
@@ -64,11 +78,11 @@ func isContextDir(root, name string) bool {
 }
 
 // Create writes the folder of a new change from the project's templates: the
-// proposal, a delta per context and the design — in the context's folder,
-// specs/<context>/changes/<id>/, when it changes one context, and in
-// specs/changes/<id>/ when it changes several. The first change of a context
-// with no spec is its genesis: written in specs/<context>/ itself, under the
-// context's name, the id asked for kept as its title. It returns the paths written,
+// proposal, a delta per context and the design — in the folder of the first
+// context given, specs/<context>/changes/<id>/, however many it changes. When
+// that context has no spec the change is its genesis: written
+// in specs/<context>/ itself, under the context's name, the id asked for kept
+// as its title, with a delta for each other context it changes too. It returns the paths written,
 // relative to root. It refuses an id that is not kebab-case or that an open
 // or archived change already has, wherever it lives.
 func Create(root string, c NewChange) ([]string, error) {
@@ -78,19 +92,23 @@ func Create(root string, c NewChange) ([]string, error) {
 	if len(c.Contexts) == 0 {
 		return nil, errors.New("informe ao menos um contexto que a mudança toca")
 	}
-	contexts := append([]string{}, c.Contexts...)
-	sort.Strings(contexts)
-	for i, ctx := range contexts {
+	sorted := append([]string{}, c.Contexts...)
+	sort.Strings(sorted)
+	for i, ctx := range sorted {
 		if !reContextID.MatchString(ctx) {
 			return nil, fmt.Errorf("%q não é um nome de contexto (minúsculas, dígitos, - e _)", ctx)
 		}
-		if i > 0 && contexts[i-1] == ctx {
+		if ctx == ChangesDir {
+			return nil, fmt.Errorf("%q é reservado: não pode ser o nome de um contexto", ctx)
+		}
+		if i > 0 && sorted[i-1] == ctx {
 			return nil, fmt.Errorf("contexto %s repetido", ctx)
 		}
 	}
 	// A context with no spec yet is born from its genesis, in its own
 	// folder, under its own name; the id asked for is the change's title.
 	id, home := c.Placed(root)
+	contexts := c.ordered()
 	title := c.ID
 	if !IsGenesis(home) && isContextDir(root, c.ID) {
 		return nil, fmt.Errorf("%s é o nome de um contexto: escolha outro id para a mudança", c.ID)

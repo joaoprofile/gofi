@@ -69,7 +69,7 @@ func AuditCases(language string) ([]*AuditCase, error) {
 	return out, nil
 }
 
-// Write puts the case in a project: its change in specs/changes/, its code
+// Write puts the case in a project: its change in its context's folder, its code
 // in the backend folder src — {module} in it the module its go.mod names —,
 // and places each defect given by the text of its line.
 func (c *AuditCase) Write(root, src string) error {
@@ -102,7 +102,11 @@ func (c *AuditCase) Write(root, src string) error {
 			return os.WriteFile(dst, data, 0o644)
 		})
 	}
-	if err := copyDir(path.Join(base, "change"), filepath.Join(root, "specs", "changes", c.Change)); err != nil {
+	home, err := changeHome(root, path.Join(base, "change"), c.Change)
+	if err != nil {
+		return err
+	}
+	if err := copyDir(path.Join(base, "change"), home); err != nil {
 		return err
 	}
 	if err := copyDir(path.Join(base, "code"), filepath.Join(root, filepath.FromSlash(src))); err != nil {

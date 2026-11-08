@@ -934,7 +934,7 @@ func TestTheGraphSizesTheTierAndScopesTheAudit(t *testing.T) {
 // traceGap is a finding of the trace stage: the directive it asks for, on a
 // requirement or scenario of pedidos.
 func traceGap(kind, id string) SensorFinding {
-	return SensorFinding{Stage: "trace", Rule: "gofi:" + kind + " pedidos/" + id, File: "specs/changes/criar-pedidos/deltas/pedidos.md", Line: 12, Severity: "blocker",
+	return SensorFinding{Stage: "trace", Rule: "gofi:" + kind + " pedidos/" + id, File: "specs/pedidos/changes/criar-pedidos/deltas/pedidos.md", Line: 12, Severity: "blocker",
 		Message: "sem resposta no código: " + id}
 }
 

@@ -159,7 +159,7 @@ func TestAFixGoesThroughAChange(t *testing.T) {
 		t.Errorf("plan = %v, want %v (context %+v)", roles(r), want, r.Context)
 	}
 
-	dir := "specs/changes/corrigir-cancelamento/"
+	dir := "specs/pedidos/changes/corrigir-cancelamento/"
 	write(t, root, dir+"proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [order]\nversao: \"1.0\"\nstatus: proposto\ndesign: n/a\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nx\n")
 	write(t, root, dir+"deltas/order.md", "---\ntipo: delta\nformato: 3\ncontexto: order\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# D\n\n## Propósito\n\nPedidos.\n\n## ADICIONADO\n\n### Requisito: REQ-09 — Cancelar\nO sistema DEVE x.\n\n#### Cenário: REQ-09.1 — x\n- DADO a\n- QUANDO b\n- ENTÃO c\n")
 	all, _ := contract.Docs(root)

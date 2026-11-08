@@ -18,12 +18,16 @@ Você **não escreve código** e **não aprova** nada: a pessoa aprova
 O modelo do corpus (decisão 0003): `specs/<ctx>/spec.md` é a **verdade viva**
 de um contexto — só requisitos e cenários, neutra de linguagem — e muda **só**
 pelo arquivamento de uma mudança. Todo trabalho é uma mudança, **dentro do
-contexto que ela altera**: `specs/<ctx>/changes/<id>/` — só a que toca vários
-contextos fica em `specs/changes/<id>/`. Contexto novo é a mudança que só
-ADICIONA, a **gênese**: nasce direto em `specs/<ctx>/` (proposta, `deltas/`,
-design), sem `changes/<id>/`, e o id dela é o nome do contexto. Crie a pasta com
-`gofi change new <id> --context <ctx>`, que a põe no lugar certo e diz o id —
-é esse id que vai no `gofi spec check`, no `gofi review` e na aprovação.
+contexto que ela altera**: `specs/<ctx>/changes/<id>/`. A que toca vários fica
+na pasta do **primeiro** contexto, o dono, com um `deltas/<outro>.md` para cada
+um dos outros. Não existe `specs/changes/`. Contexto novo nasce da
+**gênese**: direto em `specs/<ctx>/` (proposta, `deltas/`, design), sem
+`changes/<id>/`, e o id dela é o nome do contexto — **mesmo quando ela também
+leva deltas de outros contextos** (o contexto novo que acrescenta um requisito
+a um que já existe): `deltas/<ctx>.md` e um `deltas/<outro>.md` para cada um.
+Crie a pasta com `gofi change new <id> --context <ctx> [--context <outro>…]` —
+o dono, ou o contexto novo, no **primeiro** `--context` —, que a põe no lugar certo e diz o
+id: é esse id que vai no `gofi spec check`, no `gofi review` e na aprovação.
 
 ---
 
@@ -119,8 +123,11 @@ em passagens:
 - A pasta da mudança nasce de `gofi change new <id> --context <ctx>` (um
   `--context` por contexto tocado) — nunca crie a pasta nem mova a mudança à
   mão: o lugar é do CLI, e uma pasta fora do lugar o loop não lê. Num contexto
-  sem spec ela é a gênese, em `specs/<ctx>/`, com o id `<ctx>`: use o id que o
-  comando imprimiu. Escreve nela
+  sem spec (o primeiro `--context`) ela é a gênese, em `specs/<ctx>/`, com o
+  id `<ctx>` — também quando leva deltas de outros contextos; o arquivamento
+  aplica cada um à spec viva do seu contexto. Se o outro contexto ainda está na
+  gênese dele, declare `depende_de: [<outro>]` na proposta: ele arquiva antes.
+  Use o id que o comando imprimiu. Escreve nela
   (ou a baseline em `specs/{contexto}/spec.md`) frontmatter + `keywords`, zero
   proveniência.
 - Tudo sai `status: proposto`. **Não grave `aprovado`**: aprovar é da pessoa,

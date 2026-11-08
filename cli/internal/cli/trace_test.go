@@ -58,7 +58,7 @@ func runTraceIn(t *testing.T, root string, args ...string) (string, error) {
 // trace stage reads.
 func TestTraceFindsTheScenarioWithNoTest(t *testing.T) {
 	root := configuredProject(t)
-	writeFile(t, filepath.Join(root, "specs/changes/expor-pontos/deltas/pontos.md"), pontosDelta)
+	writeFile(t, filepath.Join(root, "specs/pontos/changes/expor-pontos/deltas/pontos.md"), pontosDelta)
 	writeFile(t, filepath.Join(root, "src/domain/pontos/handler/h.go"), "package handler\n\n// gofi:implements REQ-03\nfunc Get() {}\n")
 	writeFile(t, filepath.Join(root, "src/domain/pontos/handler/h_test.go"), "package handler\n\n// gofi:tests REQ-03.1\nfunc TestGet() {}\n")
 	out, err := runTraceIn(t, root, "expor-pontos", "--report", ".gofi/runs/r-1/trace.sarif")
@@ -70,7 +70,7 @@ func TestTraceFindsTheScenarioWithNoTest(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := sensor.Read("trace", pack.FormatSARIF, report, nil, "")
-	if len(got) != 1 || got[0].Rule != "gofi:tests pontos/REQ-03.2" || got[0].File != "specs/changes/expor-pontos/deltas/pontos.md" || got[0].Line != 25 {
+	if len(got) != 1 || got[0].Rule != "gofi:tests pontos/REQ-03.2" || got[0].File != "specs/pontos/changes/expor-pontos/deltas/pontos.md" || got[0].Line != 25 {
 		t.Errorf("findings %+v", got)
 	}
 	// With its test, the change is traced.

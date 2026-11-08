@@ -21,14 +21,14 @@ func TestChangeListSaysAChangeDeletedWithoutBeingArchived(t *testing.T) {
 	}
 	root := configuredProject(t)
 	t.Chdir(root)
-	writeFile(t, filepath.Join(root, "specs/changes/restringir/proposal.md"), proposalFor("pricing"))
+	writeFile(t, filepath.Join(root, "specs/pricing/changes/restringir/proposal.md"), proposalFor("pricing"))
 	writeFile(t, filepath.Join(root, "specs/pedidos/changes/aplicada/proposal.md"), proposalFor("pedidos"))
 	writeFile(t, filepath.Join(root, "specs/pedidos/changes/sem-commit/proposal.md"), proposalFor("pedidos"))
 	gitIn(t, root, "init", "--quiet", "-b", "main")
 	gitIn(t, root, "add", "-A")
 	gitIn(t, root, "commit", "--quiet", "-m", "changes")
 
-	_ = os.RemoveAll(filepath.Join(root, "specs/changes/restringir"))
+	_ = os.RemoveAll(filepath.Join(root, "specs/pricing/changes/restringir"))
 	writeFile(t, filepath.Join(root, "specs/pedidos/changes/archive/2026-11-04-aplicada/proposal.md"), strings.Replace(proposalFor("pedidos"), "proposto", "arquivado", 1))
 	_ = os.RemoveAll(filepath.Join(root, "specs/pedidos/changes/aplicada"))
 	gitIn(t, root, "add", "-A")
@@ -40,7 +40,7 @@ func TestChangeListSaysAChangeDeletedWithoutBeingArchived(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "restringir") || !strings.Contains(out, "git checkout "+deleter+"^ -- specs/changes/restringir") {
+	if !strings.Contains(out, "restringir") || !strings.Contains(out, "git checkout "+deleter+"^ -- specs/pricing/changes/restringir") {
 		t.Errorf("the change deleted by a commit was not said, with its restore:\n%s", out)
 	}
 	if !strings.Contains(out, "git checkout -- specs/pedidos/changes/sem-commit") {
@@ -51,14 +51,14 @@ func TestChangeListSaysAChangeDeletedWithoutBeingArchived(t *testing.T) {
 	}
 }
 
-// A change written by hand in a folder gofi does not read, and a change of one
-// context left in the shared folder, are said with where they belong.
+// A change written by hand in a folder gofi does not read is said; one in its
+// context's folder, of one context or several, is not.
 func TestChangeListSaysAChangeGofiDoesNotRead(t *testing.T) {
 	root := configuredProject(t)
 	t.Chdir(root)
 	writeFile(t, filepath.Join(root, "specs/pricing/alinhar-tela/proposal.md"), proposalFor("pricing"))
-	writeFile(t, filepath.Join(root, "specs/changes/so-pricing/proposal.md"), proposalFor("pricing"))
-	writeFile(t, filepath.Join(root, "specs/changes/varios/proposal.md"), strings.Replace(proposalFor("pricing"), "[pricing]", "[pricing, market]", 1))
+	writeFile(t, filepath.Join(root, "specs/pricing/changes/so-pricing/proposal.md"), proposalFor("pricing"))
+	writeFile(t, filepath.Join(root, "specs/pricing/changes/varios/proposal.md"), strings.Replace(proposalFor("pricing"), "[pricing]", "[pricing, market]", 1))
 
 	out, err := execCmd(newChangeCmd, "list")
 	if err != nil {
@@ -67,10 +67,9 @@ func TestChangeListSaysAChangeGofiDoesNotRead(t *testing.T) {
 	if !strings.Contains(out, "specs/pricing/alinhar-tela") {
 		t.Errorf("a change in a folder gofi does not read was not said:\n%s", out)
 	}
-	if !strings.Contains(out, "specs/pricing/changes/so-pricing") {
-		t.Errorf("a one-context change in specs/changes/ was not said with its place:\n%s", out)
-	}
-	if strings.Contains(out, "varios está") || strings.Contains(out, "varios is in") {
-		t.Errorf("a change of several contexts belongs in specs/changes/:\n%s", out)
+	for _, id := range []string{"so-pricing", "varios"} {
+		if strings.Contains(out, "! specs/pricing/changes/"+id) {
+			t.Errorf("%s is where it belongs:\n%s", id, out)
+		}
 	}
 }

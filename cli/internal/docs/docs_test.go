@@ -588,6 +588,10 @@ func TestFolderNamedAfterASubmoduleIsNotDrift(t *testing.T) {
 	write("specs/shop/sdd-shop.md", "shop", "n/a")
 	write("specs/shop_cart/sdd-shop-cart.md", "shop", "cart")
 	write("specs/shop_pay/sdd-shop-pay.md", "shop", "pay-checkout")
+	// Inside a context's folder, a genesis's deltas/ and a change's folder are
+	// named for the change, not the context.
+	write("specs/shop/deltas/shop.md", "shop", "n/a")
+	write("specs/shop/changes/adicionar-x/deltas/shop.md", "shop", "n/a")
 	// A folder whose name no submodule explains is a typo.
 	write("specs/shops/sdd-shops.md", "shopping", "n/a")
 

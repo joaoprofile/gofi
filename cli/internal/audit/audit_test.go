@@ -170,10 +170,10 @@ atualizado: 2026-08-03
 func TestAChangeProposalNamesItsContexts(t *testing.T) {
 	root := project(t, map[string]string{
 		".gofi.yaml": currentConfig,
-		"specs/changes/archive/2026-11-02-a/proposal.md": "---\ntipo: mudanca\nformato: 3\ncontextos: [billing]\nversao: \"1.0\"\nstatus: arquivado\nkeywords: [a]\n---\n# M\n",
+		"specs/billing/changes/archive/2026-11-02-a/proposal.md": "---\ntipo: mudanca\nformato: 3\ncontextos: [billing]\nversao: \"1.0\"\nstatus: arquivado\nkeywords: [a]\n---\n# M\n",
 		"specs/INDEX.md": "index\n",
 	})
-	if f, ok := find(Run(root, Options{}), "specs/changes/archive/2026-11-02-a/proposal.md"); ok {
+	if f, ok := find(Run(root, Options{}), "specs/billing/changes/archive/2026-11-02-a/proposal.md"); ok {
 		t.Errorf("a proposal with contextos is reported: %+v", f)
 	}
 }
@@ -186,7 +186,7 @@ func TestFormatTwoSpecIsReported(t *testing.T) {
 	root := project(t, map[string]string{
 		".gofi.yaml":                   currentConfig,
 		"specs/billing/sdd-billing.md": v2,
-		"specs/changes/archive/2026-01-01-baseline-loja/sdd-loja.md": strings.Replace(v2, "billing", "loja", 1),
+		"specs/loja/changes/archive/2026-01-01-baseline-loja/sdd-loja.md": strings.Replace(v2, "billing", "loja", 1),
 		"specs/INDEX.md": "index\n",
 	})
 	findings := Run(root, Options{})
@@ -194,7 +194,7 @@ func TestFormatTwoSpecIsReported(t *testing.T) {
 	if !ok || f.Severity != SeverityInfo || !strings.Contains(f.Hint, "gofi spec migrate billing") {
 		t.Errorf("finding = %+v, %v", f, ok)
 	}
-	if _, ok := find(findings, "specs/changes/archive/2026-01-01-baseline-loja/sdd-loja.md"); ok {
+	if _, ok := find(findings, "specs/loja/changes/archive/2026-01-01-baseline-loja/sdd-loja.md"); ok {
 		t.Error("an archived baseline was reported")
 	}
 }

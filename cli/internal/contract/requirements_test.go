@@ -102,11 +102,11 @@ func changeLayout(t *testing.T) string {
 	t.Helper()
 	root := project(t)
 	write(t, root, "specs/pedidos/spec.md", livingSpec)
-	write(t, root, "specs/changes/adicionar-rate-limit/proposal.md", proposal)
-	write(t, root, "specs/changes/adicionar-rate-limit/deltas/pedidos.md", delta)
-	write(t, root, "specs/changes/adicionar-rate-limit/design.md", "---\ntipo: design\nformato: 3\ncontexto: pedidos\n---\n# Design\n")
-	write(t, root, "specs/changes/adicionar-rate-limit/tasks.md", "---\ntipo: tarefas\nformato: 3\ncontexto: pedidos\n---\n- [ ] 1.1\n")
-	write(t, root, "specs/changes/archive/2026-10-01-criar-pedidos/proposal.md", proposal)
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/proposal.md", proposal)
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/deltas/pedidos.md", delta)
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/design.md", "---\ntipo: design\nformato: 3\ncontexto: pedidos\n---\n# Design\n")
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/tasks.md", "---\ntipo: tarefas\nformato: 3\ncontexto: pedidos\n---\n- [ ] 1.1\n")
+	write(t, root, "specs/pedidos/changes/archive/2026-10-01-criar-pedidos/proposal.md", proposal)
 	return root
 }
 
@@ -117,9 +117,9 @@ func TestDocsReadsLivingSpecsAndOpenChanges(t *testing.T) {
 		got = append(got, d.Kind+" "+d.Path+" change="+d.Change+" ctx="+d.Context+" "+strings.Join(d.Contexts, ","))
 	}
 	want := []string{
-		"mudanca specs/changes/adicionar-rate-limit/proposal.md change=adicionar-rate-limit ctx=pedidos pedidos,envio",
-		"delta specs/changes/adicionar-rate-limit/deltas/pedidos.md change=adicionar-rate-limit ctx=pedidos pedidos",
-		"design specs/changes/adicionar-rate-limit/design.md change=adicionar-rate-limit ctx=pedidos pedidos",
+		"mudanca specs/pedidos/changes/adicionar-rate-limit/proposal.md change=adicionar-rate-limit ctx=pedidos pedidos,envio",
+		"delta specs/pedidos/changes/adicionar-rate-limit/deltas/pedidos.md change=adicionar-rate-limit ctx=pedidos pedidos",
+		"design specs/pedidos/changes/adicionar-rate-limit/design.md change=adicionar-rate-limit ctx=pedidos pedidos",
 		"spec specs/pedidos/spec.md change= ctx=pedidos pedidos",
 	}
 	// Sorted by path: deltas/ comes before design.md.
@@ -184,7 +184,7 @@ func TestRequirementsAreReadByID(t *testing.T) {
 
 func TestDeltaSections(t *testing.T) {
 	root := project(t)
-	write(t, root, "specs/changes/x/deltas/pedidos.md", delta)
+	write(t, root, "specs/pedidos/changes/x/deltas/pedidos.md", delta)
 	sections := DeltaSections(only(t, root))
 	var got []string
 	for _, s := range sections {

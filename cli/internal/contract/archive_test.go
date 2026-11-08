@@ -189,7 +189,7 @@ func archiveFixture(t *testing.T, approve bool) string {
 	t.Helper()
 	root := project(t)
 	write(t, root, "specs/pedidos/spec.md", livingBefore)
-	dir := "specs/changes/adicionar-rate-limit/"
+	dir := "specs/pedidos/changes/adicionar-rate-limit/"
 	write(t, root, dir+"proposal.md", proposalRateLimit)
 	write(t, root, dir+"deltas/pedidos.md", deltaPedidos)
 	write(t, root, dir+"deltas/estoque.md", deltaEstoque)
@@ -215,7 +215,7 @@ func TestArchiveAppliesTheDeltas(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Join(res.Specs, " ") != "specs/estoque/spec.md specs/pedidos/spec.md" ||
-		res.Dir != "specs/changes/archive/2026-11-01-adicionar-rate-limit" {
+		res.Dir != "specs/pedidos/changes/archive/2026-11-01-adicionar-rate-limit" {
 		t.Fatalf("archived = %+v", res)
 	}
 
@@ -248,7 +248,7 @@ func TestArchiveAppliesTheDeltas(t *testing.T) {
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(root, "specs/changes/adicionar-rate-limit")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "specs/pedidos/changes/adicionar-rate-limit")); !os.IsNotExist(err) {
 		t.Error("the change folder is still open")
 	}
 	archived := read(t, root, res.Dir+"/proposal.md")
@@ -292,8 +292,8 @@ func TestArchiveRefusesWhatWasNotApproved(t *testing.T) {
 
 	// Approved, then edited: the seal is broken and the archive refused.
 	root = archiveFixture(t, true)
-	d := read(t, root, "specs/changes/adicionar-rate-limit/design.md")
-	write(t, root, "specs/changes/adicionar-rate-limit/design.md", strings.Replace(d, "Contador por cliente.", "Outro.", 1))
+	d := read(t, root, "specs/pedidos/changes/adicionar-rate-limit/design.md")
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/design.md", strings.Replace(d, "Contador por cliente.", "Outro.", 1))
 	if _, err := Archive(root, corpus(t, root), "adicionar-rate-limit", "2026-11-01"); err == nil {
 		t.Error("an edited change was archived")
 	}

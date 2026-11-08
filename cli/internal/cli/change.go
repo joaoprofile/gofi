@@ -19,10 +19,10 @@ func newChangeCmd() *cobra.Command {
 		Use:   "change",
 		Short: i18n.T("cmd.change.short"),
 		Long: `Changes are how the contract moves (decision 0003): a folder under
-specs/<context>/changes/<id>/ — or specs/changes/<id>/ when it touches several
-contexts — with a proposal, a delta per context it touches and the
-design of how. A new context is a change that only adds, written in the
-context's own folder (its genesis, named as the context); an existing one is
+specs/<context>/changes/<id>/ of the first context it touches — with a
+proposal, a delta per context it touches and the design of how. A new context is born from a change written in the context's
+own folder (its genesis, named as the context), even when it also changes
+other contexts; an existing one is
 altered by a change, never by editing its living spec. Approved, the change is
 what the loop implements; accepted, it is archived and its deltas become the
 living specs.`,
@@ -31,7 +31,7 @@ gofi change list
 gofi change approve adicionar-rate-limit
 gofi change archive adicionar-rate-limit`,
 	}
-	cmd.AddCommand(newChangeNewCmd(), newChangeListCmd(), newChangeApproveCmd(), newChangeArchiveCmd(), newChangeMigrateCmd())
+	cmd.AddCommand(newChangeNewCmd(), newChangeListCmd(), newChangeApproveCmd(), newChangeArchiveCmd())
 	return cmd
 }
 
@@ -39,9 +39,9 @@ func newChangeNewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "new <id> --context <ctx>...",
 		Short: i18n.T("cmd.change.new.short"),
-		Long: `Create the folder of a change from the project's templates — in the
-context's folder, specs/<ctx>/changes/<id>/, when it touches one context, and
-in specs/changes/<id>/ when it touches several: proposal.md, a deltas/<ctx>.md
+		Long: `Create the folder of a change from the project's templates — always in the
+folder of the first --context, specs/<ctx>/changes/<id>/, however many it
+touches: proposal.md, a deltas/<ctx>.md
 for each context, and
 design.md from the design template of the backend language's pack (the neutral
 one when the pack has none).
@@ -51,17 +51,21 @@ cancelar-pedido-enviado. It must be new — no open or archived change has it.
 --no-design declares design: n/a in the proposal and writes no design, for a
 change that touches no code.
 
-The first change of a context that has no spec yet is its genesis: it is
+When the first --context has no spec yet, the change is its genesis: it is
 written in the context's own folder — specs/<ctx>/proposal.md, deltas/<ctx>.md,
 design.md —, with no changes/<id>/ around it, and its id is the context's name
-(the id given is its title). Archived, the spec takes its place and the change
-goes to specs/<ctx>/changes/archive/. --no-genesis keeps it in
-specs/<ctx>/changes/<id>/ as any other change.
+(the id given is its title). Any other --context gets its delta there too,
+deltas/<other>.md: a new context that also changes one that exists is still
+born in its own folder. Archived, the spec takes its place, the other deltas
+are applied to their contexts' living specs, and the change goes to
+specs/<ctx>/changes/archive/. --no-genesis keeps it in specs/<ctx>/changes/<id>/
+as any other change.
 
 The folder is a skeleton: the proposal, deltas and design are then written,
 checked (gofi spec check <id>) and approved (gofi change approve <id>).`,
 		Example: `gofi change new criar-pedidos --context pedidos
 gofi change new adicionar-rate-limit --context pedidos --context clientes
+gofi change new signup --context signup --context user
 gofi change new remover-desconto-manual --context pedidos --no-design`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -97,6 +101,12 @@ gofi change new remover-desconto-manual --context pedidos --no-design`,
 			}
 			if contract.IsGenesis(dir) {
 				fmt.Fprintln(out, "\n  "+i18n.T("change.new.genesis", contexts[0], dir, id))
+				if others := contexts[1:]; len(others) > 0 {
+					fmt.Fprintln(out, "  "+i18n.T("change.new.genesis_others", id, strings.Join(others, ", ")))
+				}
+				if args[0] != id {
+					fmt.Fprintln(out, "  "+i18n.T("change.new.genesis_id", args[0], id))
+				}
 			}
 			fmt.Fprintln(out, "\n  "+i18n.T("change.new.next", id))
 			return nil

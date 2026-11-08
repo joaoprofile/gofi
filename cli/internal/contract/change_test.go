@@ -20,24 +20,24 @@ func changeTemplates(t *testing.T, root string) {
 func TestCreateWritesTheChangeFromTheTemplates(t *testing.T) {
 	root := project(t)
 	changeTemplates(t, root)
-	written, err := Create(root, NewChange{ID: "adicionar-rate-limit", Contexts: []string{"pedidos", "clientes"}, Language: "go", Date: "2026-11-01"})
+	written, err := Create(root, NewChange{ID: "adicionar-rate-limit", Contexts: []string{"pedidos", "clientes"}, Language: "go", NoGenesis: true, Date: "2026-11-01"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "specs/changes/adicionar-rate-limit/deltas/clientes.md specs/changes/adicionar-rate-limit/deltas/pedidos.md specs/changes/adicionar-rate-limit/design.md specs/changes/adicionar-rate-limit/proposal.md"
+	want := "specs/pedidos/changes/adicionar-rate-limit/deltas/clientes.md specs/pedidos/changes/adicionar-rate-limit/deltas/pedidos.md specs/pedidos/changes/adicionar-rate-limit/design.md specs/pedidos/changes/adicionar-rate-limit/proposal.md"
 	if got := strings.Join(written, " "); got != want {
 		t.Errorf("written = %s", got)
 	}
-	proposal := read(t, root, "specs/changes/adicionar-rate-limit/proposal.md")
-	for _, w := range []string{"contextos: [clientes, pedidos]", "atualizado: 2026-11-01", "# Mudança — adicionar-rate-limit"} {
+	proposal := read(t, root, "specs/pedidos/changes/adicionar-rate-limit/proposal.md")
+	for _, w := range []string{"contextos: [pedidos, clientes]", "atualizado: 2026-11-01", "# Mudança — adicionar-rate-limit"} {
 		if !strings.Contains(proposal, w) {
 			t.Errorf("proposal lacks %q:\n%s", w, proposal)
 		}
 	}
-	if d := read(t, root, "specs/changes/adicionar-rate-limit/deltas/pedidos.md"); !strings.Contains(d, "contexto: pedidos") || !strings.Contains(d, "# Delta — pedidos — adicionar-rate-limit") {
+	if d := read(t, root, "specs/pedidos/changes/adicionar-rate-limit/deltas/pedidos.md"); !strings.Contains(d, "contexto: pedidos") || !strings.Contains(d, "# Delta — pedidos — adicionar-rate-limit") {
 		t.Errorf("delta:\n%s", d)
 	}
-	if d := read(t, root, "specs/changes/adicionar-rate-limit/design.md"); !strings.Contains(d, "# Design Go") {
+	if d := read(t, root, "specs/pedidos/changes/adicionar-rate-limit/design.md"); !strings.Contains(d, "# Design Go") {
 		t.Errorf("the pack's design template was not used:\n%s", d)
 	}
 
@@ -45,7 +45,7 @@ func TestCreateWritesTheChangeFromTheTemplates(t *testing.T) {
 	if _, err := Create(root, NewChange{ID: "adicionar-rate-limit", Contexts: []string{"pedidos"}, NoGenesis: true}); err == nil {
 		t.Error("an open change was created twice")
 	}
-	write(t, root, "specs/changes/archive/2026-10-01-criar-pedidos/proposal.md", "x")
+	write(t, root, "specs/pedidos/changes/archive/2026-10-01-criar-pedidos/proposal.md", "x")
 	if _, err := Create(root, NewChange{ID: "criar-pedidos", Contexts: []string{"pedidos"}, NoGenesis: true}); err == nil || !strings.Contains(err.Error(), "arquivada") {
 		t.Errorf("an archived id was reused: %v", err)
 	}
@@ -97,10 +97,10 @@ func TestChangesListsWhereEachStands(t *testing.T) {
 	if len(changes) != 1 || !changes[0].Sealed || changes[0].Status != "aprovado" || strings.Join(changes[0].Contexts, ",") != "pedidos,envio" {
 		t.Fatalf("changes = %+v", changes)
 	}
-	d := read(t, root, "specs/changes/adicionar-rate-limit/design.md")
-	write(t, root, "specs/changes/adicionar-rate-limit/design.md", d+"\nmais uma linha\n")
+	d := read(t, root, "specs/pedidos/changes/adicionar-rate-limit/design.md")
+	write(t, root, "specs/pedidos/changes/adicionar-rate-limit/design.md", d+"\nmais uma linha\n")
 	changes = Changes(corpus(t, root))
-	if changes[0].Sealed || len(changes[0].Stale) != 1 || changes[0].Stale[0] != "specs/changes/adicionar-rate-limit/design.md" {
+	if changes[0].Sealed || len(changes[0].Stale) != 1 || changes[0].Stale[0] != "specs/pedidos/changes/adicionar-rate-limit/design.md" {
 		t.Errorf("after an edit = %+v", changes[0])
 	}
 }

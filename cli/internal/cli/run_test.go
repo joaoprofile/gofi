@@ -109,7 +109,7 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	quietPorts(t)
 	writeFile(t, filepath.Join(root, ".gofi.yaml"), readFile(t, filepath.Join(root, ".gofi.yaml"))+"loop:\n  sensors:\n    test: \"true\"\n")
 
-	dir := filepath.Join(root, "specs", "changes", "criar-pedidos")
+	dir := filepath.Join(root, "specs", "pedidos", "changes", "criar-pedidos")
 	writeFile(t, filepath.Join(dir, "proposal.md"), "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos]\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# M\n\n## Por quê\n\nx\n\n## O que muda\n\nREQ-01.\n")
 	writeFile(t, filepath.Join(dir, "design.md"), minimalDesign("pedidos"))
 	writeFile(t, filepath.Join(dir, "deltas", "pedidos.md"), "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\nkeywords: [pedido]\n---\n# D\n\n## Propósito\n\nPedidos.\n\n## ADICIONADO\n\n### Requisito: REQ-01 — Total\nO sistema DEVE recusar total zero.\n\n#### Cenário: REQ-01.1 — Zero\n- DADO total zero\n- QUANDO fecha\n- ENTÃO recusa\n")
@@ -159,7 +159,7 @@ func TestRunCarriesAnApprovedChangeToTheLivingSpec(t *testing.T) {
 	if len(prompts) != 2 || !isRole(prompts[0], "gofi-eng") || !isRole(prompts[1], "gofi-qa") {
 		t.Errorf("turns: %q", prompts)
 	}
-	if !strings.Contains(out, "accepted") || !strings.Contains(out, "specs/changes/archive/") {
+	if !strings.Contains(out, "accepted") || !strings.Contains(out, "specs/pedidos/changes/archive/") {
 		t.Errorf("output:\n%s", out)
 	}
 	if _, err := os.Stat(filepath.Join(root, "specs", "pedidos", "spec.md")); err != nil {

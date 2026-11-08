@@ -108,8 +108,8 @@ func hasEdge(g *Graph, from, to, kind string) bool {
 // required contexto.
 func TestAChangeNamesItsContextsInContextos(t *testing.T) {
 	root := corpusFixture(t)
-	writeFixture(t, root, "specs/changes/rate-limit/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [churn]\nversao: \"1.0\"\nstatus: proposto\n---\n# M\n")
-	if got := findingsFor(Validate(root), "specs/changes/rate-limit/proposal.md"); len(got) > 0 {
+	writeFixture(t, root, "specs/churn/changes/rate-limit/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [churn]\nversao: \"1.0\"\nstatus: proposto\n---\n# M\n")
+	if got := findingsFor(Validate(root), "specs/churn/changes/rate-limit/proposal.md"); len(got) > 0 {
 		t.Errorf("findings = %+v", got)
 	}
 }
@@ -119,18 +119,18 @@ func TestAChangeNamesItsContextsInContextos(t *testing.T) {
 func TestGraphHoldsRequirementsAndScenarios(t *testing.T) {
 	root := corpusFixture(t)
 	writeFixture(t, root, "specs/pedidos/spec.md", "---\ntipo: spec\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: aprovado\n---\n# Spec\n\n## Requisitos\n\n### Requisito: REQ-04 — Cancelamento\nO sistema DEVE x.\n\n#### Cenário: REQ-04.1 — x\n- DADO a\n- QUANDO b\n- ENTÃO c\n")
-	writeFixture(t, root, "specs/changes/rate/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos, churn]\nversao: \"1.0\"\nstatus: proposto\n---\n# M\n")
-	writeFixture(t, root, "specs/changes/rate/deltas/pedidos.md", "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\n---\n# D\n\n## ADICIONADO\n\n### Requisito: REQ-07 — Limite\nO sistema DEVE y.\n\n## MODIFICADO\n\n### Requisito: REQ-04 — Cancelamento\nO sistema DEVE z.\n")
+	writeFixture(t, root, "specs/pedidos/changes/rate/proposal.md", "---\ntipo: mudanca\nformato: 3\ncontextos: [pedidos, churn]\nversao: \"1.0\"\nstatus: proposto\n---\n# M\n")
+	writeFixture(t, root, "specs/pedidos/changes/rate/deltas/pedidos.md", "---\ntipo: delta\nformato: 3\ncontexto: pedidos\nversao: \"1.0\"\nstatus: proposto\n---\n# D\n\n## ADICIONADO\n\n### Requisito: REQ-07 — Limite\nO sistema DEVE y.\n\n## MODIFICADO\n\n### Requisito: REQ-04 — Cancelamento\nO sistema DEVE z.\n")
 	_, g := build(t, root)
 
-	spec, delta := "specs/pedidos/spec.md", "specs/changes/rate/deltas/pedidos.md"
+	spec, delta := "specs/pedidos/spec.md", "specs/pedidos/changes/rate/deltas/pedidos.md"
 	for _, e := range []Edge{
 		{spec, PrefixReq + "pedidos/REQ-04", EdgeSpecifies},
 		{PrefixReq + "pedidos/REQ-04", PrefixScenario + "pedidos/REQ-04.1", EdgeSpecifies},
 		{delta, PrefixReq + "pedidos/REQ-07", EdgeAdds},
 		{delta, PrefixReq + "pedidos/REQ-04", EdgeModifies},
-		{"specs/changes/rate/proposal.md", PrefixCtx + "pedidos", EdgeBelongs},
-		{"specs/changes/rate/proposal.md", PrefixCtx + "churn", EdgeBelongs},
+		{"specs/pedidos/changes/rate/proposal.md", PrefixCtx + "pedidos", EdgeBelongs},
+		{"specs/pedidos/changes/rate/proposal.md", PrefixCtx + "churn", EdgeBelongs},
 	} {
 		if !hasEdge(g, e[0], e[1], e[2]) {
 			t.Errorf("missing edge %v", e)

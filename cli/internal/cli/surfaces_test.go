@@ -15,7 +15,7 @@ import (
 func TestAChangeTouchesTheSurfacesItDeclares(t *testing.T) {
 	root := t.TempDir()
 	proposal := func(id, extra string) {
-		writeFile(t, filepath.Join(root, "specs", "changes", id, "proposal.md"),
+		writeFile(t, filepath.Join(root, "specs", "loja", "changes", id, "proposal.md"),
 			"---\ntipo: mudanca\nformato: 3\ncontextos: [loja]\nversao: \"1.0\"\nstatus: proposto\n"+extra+"keywords: [x]\n---\n# M\n")
 	}
 	proposal("telas", "superficies: [web]\n")

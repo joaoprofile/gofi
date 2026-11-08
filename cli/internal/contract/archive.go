@@ -43,6 +43,22 @@ func Archive(root string, all []Doc, id, date string) (Archived, error) {
 		}
 	}
 
+	// A delta of a context whose own genesis is still open would found that
+	// context's spec ahead of it: that genesis is archived first, and the
+	// change says so with depende_de.
+	for _, d := range c.deltas {
+		if d.Context == id {
+			continue
+		}
+		if _, living := Living(all, d.Context); living {
+			continue
+		}
+		if at, open := FindChange(root, d.Context); open && IsGenesis(at) {
+			return Archived{}, fmt.Errorf("%s: o contexto %s ainda nasce da gênese %s, aberta em %s — arquive-a antes (e declare %s: [%s] na proposta de %s)",
+				d.Path, d.Context, d.Context, at, FieldDepends, d.Context, id)
+		}
+	}
+
 	type output struct{ path, text string }
 	var outs []output
 	for _, d := range c.deltas {
@@ -120,8 +136,13 @@ func archiveGenesis(root, from, dest string, c changeDocs) error {
 			return err
 		}
 	}
-	// deltas/ goes when nothing but what was archived was in it.
-	_ = os.Remove(filepath.Join(dir, "deltas"))
+	// deltas/ goes when nothing but what was archived was in it — and the
+	// index gofi index docs wrote of it.
+	deltas := filepath.Join(dir, "deltas")
+	if entries, err := os.ReadDir(deltas); err == nil && len(entries) == 1 && docs.IsGeneratedIndex(filepath.Join(deltas, entries[0].Name())) {
+		_ = os.Remove(filepath.Join(deltas, entries[0].Name()))
+	}
+	_ = os.Remove(deltas)
 	return nil
 }
 

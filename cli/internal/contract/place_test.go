@@ -7,20 +7,20 @@ import (
 	"testing"
 )
 
-// A change of one context is born in that context's folder; one of several,
-// in specs/changes/. Either is read, found, archived beside where it lives,
-// and an id is unique across both.
+// A change is born in its first context's folder, however many it touches;
+// a folder in specs/changes/ is no change at all. It is read, found, archived
+// beside where it lives, and an id is unique across the contexts.
 func TestAChangeLivesWithTheContextItChanges(t *testing.T) {
 	if got := NewChangeDir("x", []string{"pedidos"}); got != "specs/pedidos/changes/x" {
 		t.Errorf("one context: %s", got)
 	}
-	if got := NewChangeDir("x", []string{"clientes", "pedidos"}); got != "specs/changes/x" {
+	if got := NewChangeDir("x", []string{"clientes", "pedidos"}); got != "specs/clientes/changes/x" {
 		t.Errorf("several: %s", got)
 	}
 	for rel, want := range map[string]string{
 		"specs/pedidos/changes/x/proposal.md":           "x",
 		"specs/pedidos/changes/x/deltas/pedidos.md":     "x",
-		"specs/changes/y/proposal.md":                   "y",
+		"specs/changes/y/proposal.md":                   "",
 		"specs/pedidos/spec.md":                         "",
 		"specs/pedidos/changes/archive/d-x/proposal.md": "",
 		"specs/changes/archive/d-y/proposal.md":         "",
@@ -51,7 +51,7 @@ func TestAChangeLivesWithTheContextItChanges(t *testing.T) {
 	if !found {
 		t.Error("the change in the context's folder is not read")
 	}
-	if _, err := Create(root, NewChange{ID: "adicionar-filtro", Contexts: []string{"clientes", "pedidos"}}); err == nil || !strings.Contains(err.Error(), "specs/pedidos/changes/adicionar-filtro") {
+	if _, err := Create(root, NewChange{ID: "adicionar-filtro", Contexts: []string{"clientes", "pedidos"}, NoGenesis: true}); err == nil || !strings.Contains(err.Error(), "specs/pedidos/changes/adicionar-filtro") {
 		t.Errorf("an id taken in a context's folder: %v", err)
 	}
 	// Archived in the context's archive/, its id stays taken.

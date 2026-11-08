@@ -43,7 +43,7 @@ func TestTheMatrixLinesUpRequirementsCodeAndTests(t *testing.T) {
 		{ID: "REQ-02", Title: "b", Line: 20, Scenarios: []docs.Scenario{{ID: "REQ-02.1", Line: 22}}},
 		{ID: "REQ-03", Title: "c", Line: 30},
 	}
-	rows := Matrix([]Source{{Context: "pontos", Doc: "specs/changes/x/deltas/pontos.md", Requirements: reqs}}, marks)
+	rows := Matrix([]Source{{Context: "pontos", Doc: "specs/pontos/changes/x/deltas/pontos.md", Requirements: reqs}}, marks)
 	var gaps []string
 	for _, r := range Gaps(rows) {
 		gaps = append(gaps, r.Need()+" "+r.ID)

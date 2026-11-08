@@ -41,8 +41,8 @@ func project(t *testing.T) string {
 	run(t, root, "init", "--quiet", "-b", "main")
 	write(t, filepath.Join(root, ".gitignore"), ".gofi/*\n")
 	write(t, filepath.Join(root, ".gofi.yaml"), "project: {name: loja}\n")
-	write(t, filepath.Join(root, "specs/changes/a/proposal.md"), "a\n")
-	write(t, filepath.Join(root, "specs/changes/b/proposal.md"), "b\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/a/proposal.md"), "a\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/b/proposal.md"), "b\n")
 	write(t, filepath.Join(root, "app.txt"), "v1\n")
 	write(t, filepath.Join(root, ".gofi/gofi-sdk-go/go.work"), "go 1.26\n")
 	run(t, root, "add", "-A")
@@ -171,11 +171,11 @@ func TestLandingWaitsForACleanTreeAndRefusesAConflict(t *testing.T) {
 func TestAChangeNotCommittedIsRefused(t *testing.T) {
 	ctx := context.Background()
 	root := project(t)
-	write(t, filepath.Join(root, "specs/changes/c/proposal.md"), "c\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/c/proposal.md"), "c\n")
 	if _, err := Prepare(ctx, root, "r-1", "c"); !errors.Is(err, ErrNotCommitted) {
 		t.Errorf("uncommitted change: %v", err)
 	}
-	write(t, filepath.Join(root, "specs/changes/a/proposal.md"), "a, edited\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/a/proposal.md"), "a, edited\n")
 	if _, err := Prepare(ctx, root, "r-2", "a"); !errors.Is(err, ErrNotCommitted) {
 		t.Errorf("edited after commit: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestLandedReadsTheArchiveOnTheBase(t *testing.T) {
 	if Landed(ctx, root, "main", "a") {
 		t.Fatal("nothing archived yet")
 	}
-	write(t, filepath.Join(root, "specs/changes/archive/2026-11-02-a/proposal.md"), "a\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/archive/2026-11-02-a/proposal.md"), "a\n")
 	run(t, root, "add", "-A")
 	run(t, root, "commit", "--quiet", "-m", "archive a")
 	if !Landed(ctx, root, "main", "a") || Landed(ctx, root, "main", "b") {
@@ -204,8 +204,8 @@ func TestADerivedFileIsRegeneratedNotAConflict(t *testing.T) {
 	ctx := context.Background()
 	root := project(t)
 	write(t, filepath.Join(root, "graph.txt"), "app.txt\n")
-	write(t, filepath.Join(root, "specs/changes/c/proposal.md"), "c\n")
-	write(t, filepath.Join(root, "specs/changes/d/proposal.md"), "d\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/c/proposal.md"), "c\n")
+	write(t, filepath.Join(root, "specs/pedidos/changes/d/proposal.md"), "d\n")
 	run(t, root, "add", "-A")
 	run(t, root, "commit", "--quiet", "-m", "graph")
 	// regenerate lists the .txt files of the tree, as an index lists the code.

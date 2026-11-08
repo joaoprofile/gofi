@@ -173,12 +173,7 @@ func (f *finder) proposal(all []Doc, root string) {
 	f.requireSections("Por quê", "O que muda")
 	c := docsOf(all, f.doc.Change)
 	if f.doc.Change == "" {
-		f.add(0, true, "proposta fora de uma pasta de mudança: o lugar dela é specs/<contexto>/%s/<id>/ (ou specs/%s/<id>/ quando toca vários contextos; a primeira de um contexto sem spec, specs/<contexto>/proposal.md) — `gofi change new` a cria no lugar", ChangesDir, ChangesDir)
-	}
-	if len(f.doc.Contexts) == 1 && f.doc.Change != "" {
-		if want := NewChangeDir(f.doc.Change, f.doc.Contexts); !strings.HasPrefix(f.doc.Path, want+"/") && strings.HasPrefix(f.doc.Path, layout.Specs().Path(ChangesDir)+"/") {
-			f.add(0, false, "a mudança toca só %s e está em %s/: o lugar dela é %s/ — gofi change migrate a move", f.doc.Contexts[0], layout.Specs().Path(ChangesDir), want)
-		}
+		f.add(0, true, "proposta fora de uma pasta de mudança: o lugar dela é specs/<contexto>/%s/<id>/ (a primeira de um contexto sem spec, specs/<contexto>/proposal.md) — `gofi change new` a cria no lugar", ChangesDir)
 	}
 	named := map[string]bool{}
 	for _, ctx := range f.doc.Contexts {
@@ -234,9 +229,8 @@ func (f *finder) proposal(all []Doc, root string) {
 // archived reports whether a change was applied: archive/<data>-<id>/, in
 // the shared changes/ or in a context's.
 func archived(root, change string) bool {
-	m, _ := filepath.Glob(layout.Specs().Abs(root, ChangesDir, ArchiveDir, "*-"+change))
-	more, _ := filepath.Glob(layout.Specs().Abs(root, "*", ChangesDir, ArchiveDir, "*-"+change))
-	for _, p := range append(m, more...) {
+	m, _ := filepath.Glob(layout.Specs().Abs(root, "*", ChangesDir, ArchiveDir, "*-"+change))
+	for _, p := range m {
 		if st, err := os.Stat(p); err == nil && st.IsDir() {
 			return true
 		}
@@ -262,7 +256,7 @@ func (f *finder) delta(all []Doc) {
 		return
 	}
 	if f.doc.Change == "" {
-		f.add(0, true, "delta fora de uma pasta de mudança: o lugar dele é specs/<contexto>/%s/<id>/deltas/ (ou specs/%s/<id>/deltas/; na primeira mudança de um contexto sem spec, specs/<contexto>/deltas/)", ChangesDir, ChangesDir)
+		f.add(0, true, "delta fora de uma pasta de mudança: o lugar dele é specs/<contexto>/%s/<id>/deltas/ (na primeira mudança de um contexto sem spec, specs/<contexto>/deltas/)", ChangesDir)
 	}
 	if FormatTwo(all, f.doc.Context) {
 		f.add(0, true, "%[1]s ainda está no formato 2 (sdd-*.md): migre com `gofi spec migrate %[1]s` antes de mudar o contexto — a mudança começaria uma spec nova ao lado das antigas", f.doc.Context)

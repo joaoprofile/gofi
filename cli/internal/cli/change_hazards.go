@@ -23,17 +23,15 @@ import (
 // hear before they are lost to it: a change deleted without being archived,
 // one in a folder gofi does not read, one away from its context's folder.
 type changeHazard struct {
-	Kind   string // lost | unseen | misplaced
+	Kind   string // lost | unseen
 	Change string
 	Dir    string // where it is, or was
 	Commit string // lost: the commit that deleted it; "" when not committed yet
-	Target string // misplaced: where it belongs
 }
 
 const (
-	hazardLost      = "lost"
-	hazardUnseen    = "unseen"
-	hazardMisplaced = "misplaced"
+	hazardLost   = "lost"
+	hazardUnseen = "unseen"
 )
 
 // changeHazards reads the open changes, the folders under specs/ and git's
@@ -58,15 +56,6 @@ func changeHazards(root string, changes []contract.Change) []changeHazard {
 			continue
 		}
 		out = append(out, changeHazard{Kind: hazardUnseen, Change: id, Dir: dir})
-	}
-	for _, c := range changes {
-		dir, ok := contract.FindChange(root, c.ID)
-		if !ok || len(c.Contexts) != 1 || contract.IsGenesis(dir) {
-			continue
-		}
-		if want := contract.NewChangeDir(c.ID, c.Contexts); dir != want {
-			out = append(out, changeHazard{Kind: hazardMisplaced, Change: c.ID, Dir: dir, Target: want})
-		}
 	}
 	return out
 }
@@ -187,8 +176,6 @@ func printChangeHazards(out io.Writer, hs []changeHazard) {
 			}
 		case hazardUnseen:
 			fmt.Fprintln(out, "  ! "+i18n.T("change.hazard.unseen", h.Dir))
-		case hazardMisplaced:
-			fmt.Fprintln(out, "  ! "+i18n.T("change.hazard.misplaced", h.Change, h.Dir, h.Target))
 		}
 	}
 }

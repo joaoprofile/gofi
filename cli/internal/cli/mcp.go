@@ -86,10 +86,15 @@ type gofiMCP struct {
 	mu     sync.Mutex
 	engine *retrieval.Engine
 	stamp  string
+	// binary is the gofi executable the server started from, as it was then:
+	// a server outlives an update, and an old one reads the contract by old
+	// rules.
+	exe, binary string
 }
 
 func newMCPServer(root, language string) *mcp.Server {
-	g := &gofiMCP{root: root, language: language}
+	exe, _ := os.Executable()
+	g := &gofiMCP{root: root, language: language, exe: exe, binary: binaryStamp(exe)}
 	s := mcp.NewServer(&mcp.Implementation{Name: host.ServerName, Title: "gofi", Version: Version},
 		&mcp.ServerOptions{Instructions: mcpInstructions})
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: new(false)}
@@ -511,6 +516,9 @@ func (g *gofiMCP) approve(_ context.Context, _ *mcp.CallToolRequest, a approveAr
 		}
 	}
 	if len(docs) == 0 {
+		if g.stale() {
+			return nil, nil, fmt.Errorf("%s was not found, and the gofi binary changed since this MCP server started: it may read the specs by older rules — restart the MCP server (reload the editor window or /mcp) and approve again, or run gofi change approve %s", ref, ref)
+		}
 		return nil, nil, fmt.Errorf("%s is no open change nor a context with a living spec — gofi change list", ref)
 	}
 	var b strings.Builder
@@ -518,4 +526,23 @@ func (g *gofiMCP) approve(_ context.Context, _ *mcp.CallToolRequest, a approveAr
 		return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: strings.TrimSpace(b.String() + "\n" + err.Error())}}}, nil, nil
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.TrimSpace(b.String())}}}, nil, nil
+}
+
+// binaryStamp names an executable as it is on disk now: its path, size and
+// modification time. Empty when it cannot be read.
+func binaryStamp(exe string) string {
+	if exe == "" {
+		return ""
+	}
+	st, err := os.Stat(exe)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%s|%d|%d", exe, st.Size(), st.ModTime().UnixNano())
+}
+
+// stale reports whether the gofi executable was replaced since the server
+// started — an update the running server does not know of.
+func (g *gofiMCP) stale() bool {
+	return g.binary != "" && binaryStamp(g.exe) != g.binary
 }
