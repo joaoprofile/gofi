@@ -280,10 +280,12 @@ func (m model) banner() string {
 		"ctrl+v\t" + i18n.T("chat.banner.image"),
 		"enter\t" + i18n.T("chat.banner.steer"),
 	}}}
+	// In the order they matter: a terminal with room for fewer columns
+	// leaves the last ones out.
 	var recent []string
 	if m.opts.Sessions != nil {
 		for i, s := range m.opts.Sessions() {
-			if i == 3 {
+			if i == 4 {
 				break
 			}
 			recent = append(recent, ago(time.Since(s.Updated))+"\t"+strings.Join(strings.Fields(s.Title), " "))
@@ -291,14 +293,35 @@ func (m model) banner() string {
 	}
 	if len(recent) > 0 {
 		b.Side = append(b.Side, banner.Section{Title: i18n.T("chat.banner.recent"), Lines: recent})
-	} else {
-		b.Side = append(b.Side, banner.Section{Title: i18n.T("chat.banner.free"), Lines: []string{
-			"/find /show\t" + i18n.T("chat.banner.index"),
-			"/runs /watch\t" + i18n.T("chat.banner.runs"),
-			"/cost\t" + i18n.T("chat.banner.cost"),
-		}})
 	}
-	return banner.RenderWidth(b, m.color, m.width)
+	b.Side = append(b.Side, banner.Section{Title: i18n.T("chat.banner.free"), Lines: []string{
+		"/find /show\t" + i18n.T("chat.banner.index"),
+		"/runs /watch\t" + i18n.T("chat.banner.runs"),
+		"/cost /audit\t" + i18n.T("chat.banner.cost"),
+	}})
+
+	// The card takes the terminal's width, as the panel over it and the
+	// prompt under it do; on a terminal wider than it can use, it stands in
+	// the middle.
+	width := max(m.width-1, 20)
+	card := banner.RenderWidth(b, m.color, width)
+	lines := strings.Split(card, "\n")
+	margin := 0
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w > 0 {
+			margin = (width - w) / 2
+			break
+		}
+	}
+	if margin <= 0 {
+		return card
+	}
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = strings.Repeat(" ", margin) + l
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // introduce starts the engine while the person reads the banner and asks it
@@ -340,6 +363,15 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.pinned {
 				m.head = len(m.window)
 			}
+		} else if m.pinned && m.head > 0 && m.head <= len(m.window) {
+			// The banner is still whole on screen: it follows the new
+			// width, like the panel over it and the prompt under it. A
+			// terminal often gets its real size only after the chat is up.
+			under := m.window[m.head:]
+			m.window = nil
+			m.emit(m.banner())
+			m.head = len(m.window)
+			m.window = append(m.window, under...)
 		}
 		// A new size is drawn over the old frame, never after a clear: a
 		// terminal that keeps what is cleared would file every frame away

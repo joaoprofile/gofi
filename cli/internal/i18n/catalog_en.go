@@ -864,7 +864,7 @@ var catalogEN = map[string]string{
 	"chat.banner.free":               "No model called",
 	"chat.banner.index":              "ask the index",
 	"chat.banner.runs":               "who is at work",
-	"chat.banner.cost":               "what the conversation costs",
+	"chat.banner.cost":               "what the conversation costs and read",
 	"chat.help.steer":                "during an answer, send a follow-up: the agent reads it at its next step",
 	"ledger.whole_read":              "%s read whole (~%s tokens). The project's protocol asks for front matter → grep '^## ' → Read of the one section.",
 	"ledger.reread":                  "%s read %d× (~%s tokens in all) — a second read adds no new context.",

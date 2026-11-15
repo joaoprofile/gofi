@@ -863,7 +863,7 @@ var catalogPT = map[string]string{
 	"chat.banner.free":               "Sem chamar modelo",
 	"chat.banner.index":              "perguntam ao índice",
 	"chat.banner.runs":               "quem está trabalhando",
-	"chat.banner.cost":               "o que a conversa custa",
+	"chat.banner.cost":               "o que a conversa custa e leu",
 	"chat.help.steer":                "durante a resposta, envia um complemento: o agente o lê no próximo passo",
 	"ledger.whole_read":              "%s lido inteiro (~%s tokens). O protocolo do projeto pede frontmatter → grep '^## ' → Read só da seção.",
 	"ledger.reread":                  "%s lido %d× (~%s tokens no total) — releituras não somam contexto novo.",

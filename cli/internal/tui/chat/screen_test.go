@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/joaoprofile/gofi/cli/internal/approval"
 	"github.com/joaoprofile/gofi/cli/internal/clipboard"
@@ -729,6 +730,62 @@ func TestTheBannerLeavesWholeAndTheTopRowsStayFree(t *testing.T) {
 	update(tea.WindowSizeMsg{Width: 90, Height: 28})
 	if n := len(strings.Split(m.View(), "\n")); n != 28 {
 		t.Errorf("after a resize the view is the new screen, got %d lines", n)
+	}
+}
+
+// The banner takes the terminal's width while it is on screen: a terminal that
+// gets its real size after the chat is up — an editor laying its panes out —
+// does not leave a narrow card on a wide screen, nor a card cut at the edge.
+// Past what it can use, the card stands in the middle.
+func TestTheBannerFollowsTheTerminalsWidth(t *testing.T) {
+	m, _ := newTestModel(t)
+	update := func(msg tea.Msg) {
+		next, _ := m.Update(msg)
+		m = next.(model)
+	}
+	card := func() (width, margin, lines int) {
+		for _, l := range m.window[:m.head] {
+			if strings.Contains(l, "╭") {
+				margin = len(l) - len(strings.TrimLeft(l, " "))
+				width = ansi.StringWidth(l) - margin
+			}
+		}
+		return width, margin, m.head
+	}
+
+	update(tea.WindowSizeMsg{Width: 80, Height: 40})
+	update(sayMsg{"said under the banner"})
+	if w, margin, _ := card(); w != 79 || margin != 0 {
+		t.Fatalf("at 80 columns the card is the terminal's width: %d wide, %d in", w, margin)
+	}
+
+	update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	w, margin, head := card()
+	if w != 199 || margin != 0 {
+		t.Errorf("the card follows the terminal to 200 columns: %d wide, %d in", w, margin)
+	}
+	if len(m.window) != head+1 || m.window[head] != "said under the banner" {
+		t.Errorf("what was said stays under the banner: window %d, head %d", len(m.window), head)
+	}
+	for _, l := range m.window[:head] {
+		if ansi.StringWidth(l) > 200 {
+			t.Fatalf("no line of the card is wider than the terminal: %q", l)
+		}
+	}
+
+	update(tea.WindowSizeMsg{Width: 400, Height: 40})
+	if w, margin, _ := card(); w >= 399 || margin == 0 || margin != (399-w)/2 {
+		t.Errorf("past what it can use the card stands in the middle: %d wide, %d in", w, margin)
+	}
+
+	// Once it has left for the scrollback, it is the terminal's.
+	for i := 0; m.head > 0 && i < 60; i++ {
+		update(sayMsg{fmt.Sprintf("line %02d", i)})
+	}
+	before := len(m.window)
+	update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if m.head != 0 || len(m.window) != before {
+		t.Errorf("a banner that left is not drawn again: head %d, window %d → %d", m.head, before, len(m.window))
 	}
 }
 
