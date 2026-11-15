@@ -2,6 +2,7 @@ package claude
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -384,5 +385,251 @@ func TestSharedWordsGoToTheSystemPrompt(t *testing.T) {
 	}
 	if (&Session{}).Share(strings.Repeat("x", maxShared)) {
 		t.Error("a text past the argument's limit must be refused")
+	}
+}
+
+// protocolClaude is a stand-in that speaks the control protocol: it says what
+// it offers when asked, holds a turn that says "long" until it is told to
+// stop, and answers every other one.
+func protocolClaude(t *testing.T) (exe, argsFile, stdinFile string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake engine is a shell script")
+	}
+	dir := t.TempDir()
+	argsFile, stdinFile = filepath.Join(dir, "args"), filepath.Join(dir, "stdin")
+	waiting := filepath.Join(dir, "waiting")
+	script := `#!/bin/sh
+echo "$@" >> ` + argsFile + `
+while read line; do
+  echo "$line" >> ` + stdinFile + `
+  case "$line" in
+    *initialize*) echo '{"type":"control_response","response":{"subtype":"success","request_id":"describe","response":{"commands":[{"name":"compact","description":"Free up context","argumentHint":"<instructions>","builtin":true},{"name":"gofi-eng","description":"Builds a context","aliases":["eng"]}]}}}' ;;
+    *interrupt*) echo '{"type":"result","terminal_reason":"aborted_streaming","is_error":true,"duration_ms":5}'
+       if [ -f ` + waiting + ` ]; then
+         echo '{"type":"command_lifecycle","command_uuid":"'"$(cat ` + waiting + `)"'","state":"started"}'
+         sleep 1
+         echo '{"type":"assistant","message":{"content":[{"type":"text","text":"took it after the stop"}]}}'
+         echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":10}'
+       fi ;;
+    *steer-now*) id=$(echo "$line" | sed -n 's/.*"uuid":"\([^"]*\)".*/\1/p')
+       echo '{"type":"command_lifecycle","command_uuid":"'"$id"'","state":"queued"}'
+       echo '{"type":"command_lifecycle","command_uuid":"'"$id"'","state":"started"}'
+       echo '{"type":"assistant","message":{"content":[{"type":"text","text":"took it in the turn"}]}}'
+       echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":10}' ;;
+    *steer-late*) id=$(echo "$line" | sed -n 's/.*"uuid":"\([^"]*\)".*/\1/p')
+       echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":10}'
+       echo '{"type":"command_lifecycle","command_uuid":"'"$id"'","state":"started"}'
+       echo '{"type":"assistant","message":{"content":[{"type":"text","text":"took it as a turn"}]}}'
+       echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":10}' ;;
+    *steer-wait*) echo "$line" | sed -n 's/.*"uuid":"\([^"]*\)".*/\1/p' > ` + waiting + ` ;;
+    *long*) echo '{"type":"system","subtype":"init","session_id":"sess-1","model":"fake"}' ;;
+    *) echo '{"type":"assistant","message":{"content":[{"type":"text","text":"pong"}]}}'
+       echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":10,"total_cost_usd":0.5,"modelUsage":{"big":{"inputTokens":900,"contextWindow":1000000,"costUSD":0.4},"small":{"inputTokens":10,"contextWindow":200000,"costUSD":0.1}}}' ;;
+  esac
+done
+`
+	exe = filepath.Join(dir, "claude")
+	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return exe, argsFile, stdinFile
+}
+
+// With Interrupt, a cancelled turn ends as cancelled and the engine stays:
+// the next turn runs on the same process, with nothing to resume.
+func TestInterruptKeepsTheEngine(t *testing.T) {
+	exe, argsFile, _ := protocolClaude(t)
+	s := New(Options{Executable: exe, Dir: t.TempDir(), Interrupt: true})
+	defer s.Close()
+
+	ch, err := s.Send(context.Background(), engine.Turn{Prompt: "long"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	s.Cancel()
+	ev := collect(t, ch)
+	if d, ok := ev[len(ev)-1].(engine.Done); !ok || !d.Cancelled || d.IsError {
+		t.Fatalf("interrupted turn ended with %#v", ev[len(ev)-1])
+	}
+
+	ch, err = s.Send(context.Background(), engine.Turn{Prompt: "ping"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev = collect(t, ch)
+	d, ok := ev[len(ev)-1].(engine.Done)
+	if !ok || d.Cancelled || d.IsError {
+		t.Fatalf("the turn after an interrupt ended with %#v", ev[len(ev)-1])
+	}
+	if d.ContextWindow != 1000000 {
+		t.Errorf("context window = %d, want the one of the model that read the most", d.ContextWindow)
+	}
+	args, _ := os.ReadFile(argsFile)
+	if n := strings.Count(string(args), "--print"); n != 1 {
+		t.Errorf("engine started %d times, want once: an interrupt must not end it", n)
+	}
+}
+
+// The engine says what it offers before any turn, and no turn is sent to ask.
+func TestDescribeListsCommandsWithoutATurn(t *testing.T) {
+	exe, _, stdinFile := protocolClaude(t)
+	s := New(Options{Executable: exe, Dir: t.TempDir(), StablePrompt: true})
+	defer s.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	meta, ok := s.Describe(ctx)
+	if !ok || len(meta.Commands) != 2 {
+		t.Fatalf("describe = %+v, %v", meta, ok)
+	}
+	if c := meta.Commands[0]; c.Name != "compact" || c.Hint != "<instructions>" || !c.Builtin {
+		t.Errorf("first command = %+v", c)
+	}
+	if c := meta.Commands[1]; c.Builtin || len(c.Aliases) != 1 {
+		t.Errorf("second command = %+v", c)
+	}
+	// Asked again, it answers from what it heard.
+	if meta, ok = s.Describe(ctx); !ok || len(meta.Commands) != 2 {
+		t.Errorf("second describe = %+v, %v", meta, ok)
+	}
+	sent, _ := os.ReadFile(stdinFile)
+	if strings.Count(string(sent), "initialize") != 1 || strings.Contains(string(sent), `"type":"user"`) {
+		t.Errorf("describing must ask the engine once and send no turn:\n%s", sent)
+	}
+	if got := strings.Join(s.args(), " "); !strings.Contains(got, "--exclude-dynamic-system-prompt-sections") || strings.Contains(got, "--setting-sources") {
+		t.Errorf("a stable prompt keeps the person's settings: %s", got)
+	}
+}
+
+// A turn's images go ahead of its text, as the engine reads them.
+func TestImagesGoAheadOfTheText(t *testing.T) {
+	exe, _, stdinFile := protocolClaude(t)
+	s := New(Options{Executable: exe, Dir: t.TempDir()})
+	defer s.Close()
+	ch, err := s.Send(context.Background(), engine.Turn{Prompt: "what is this", Images: []engine.Image{{MediaType: "image/png", Data: []byte("png")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	collect(t, ch)
+	sent, _ := os.ReadFile(stdinFile)
+	var msg struct {
+		Message struct {
+			Content []struct {
+				Type   string `json:"type"`
+				Text   string `json:"text"`
+				Source struct {
+					MediaType string `json:"media_type"`
+					Data      string `json:"data"`
+				} `json:"source"`
+			} `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(sent))), &msg); err != nil {
+		t.Fatalf("%v: %s", err, sent)
+	}
+	c := msg.Message.Content
+	if len(c) != 2 || c[0].Type != "image" || c[0].Source.MediaType != "image/png" || c[0].Source.Data != "cG5n" || c[1].Text != "what is this" {
+		t.Errorf("content = %+v", c)
+	}
+}
+
+// kinds names the events of a turn, in order, for a test to read.
+func kinds(events []engine.Event) string {
+	var out []string
+	for _, e := range events {
+		switch v := e.(type) {
+		case engine.Meta:
+			out = append(out, "meta")
+		case engine.Delivered:
+			out = append(out, "delivered")
+		case engine.Message:
+			out = append(out, "message")
+		case engine.Done:
+			if v.Cancelled {
+				out = append(out, "cancelled")
+			} else {
+				out = append(out, "done")
+			}
+		case engine.Failure:
+			out = append(out, "failure")
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// A message sent during a turn is the engine's to place: handed to the model
+// at its next step, the turn goes on with it and ends once; with no step
+// left, the engine runs it as a turn of its own and this one ends after it.
+func TestAMessageSentDuringATurn(t *testing.T) {
+	exe, argsFile, stdinFile := protocolClaude(t)
+	s := New(Options{Executable: exe, Dir: t.TempDir(), Interrupt: true})
+	defer s.Close()
+
+	if _, ok := s.Steer(engine.Turn{Prompt: "steer-now"}); ok {
+		t.Fatal("with no turn in flight there is nothing to steer")
+	}
+
+	for _, c := range []struct{ text, want string }{
+		{"steer-now", "meta delivered message done"},
+		{"steer-late", "meta done delivered message done"},
+	} {
+		ch, err := s.Send(context.Background(), engine.Turn{Prompt: "long"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(150 * time.Millisecond)
+		id, ok := s.Steer(engine.Turn{Prompt: c.text})
+		if !ok || len(id) != 36 {
+			t.Fatalf("steer(%s) = %q, %v", c.text, id, ok)
+		}
+		ev := collect(t, ch)
+		if got := kinds(ev); got != c.want {
+			t.Errorf("%s: events %q, want %q", c.text, got, c.want)
+		}
+		for _, e := range ev {
+			if d, ok := e.(engine.Delivered); ok && d.ID != id {
+				t.Errorf("delivered %q, want the id Steer gave: %q", d.ID, id)
+			}
+		}
+	}
+	sent, _ := os.ReadFile(stdinFile)
+	if n := strings.Count(string(sent), `"uuid"`); n != 2 {
+		t.Errorf("only the messages sent during a turn carry an id, got %d:\n%s", n, sent)
+	}
+	args, _ := os.ReadFile(argsFile)
+	if n := strings.Count(string(args), "--print"); n != 1 {
+		t.Errorf("engine started %d times, want once", n)
+	}
+}
+
+// Stopping a turn with a message waiting stops that turn only: the engine
+// goes on to the message, and the wait for a stop that did not come must not
+// end the engine under it.
+func TestStoppingATurnLeavesTheMessageThatWaited(t *testing.T) {
+	exe, argsFile, _ := protocolClaude(t)
+	grace := interruptGrace
+	interruptGrace = 200 * time.Millisecond
+	defer func() { interruptGrace = grace }()
+	s := New(Options{Executable: exe, Dir: t.TempDir(), Interrupt: true})
+	defer s.Close()
+
+	ch, err := s.Send(context.Background(), engine.Turn{Prompt: "long"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if _, ok := s.Steer(engine.Turn{Prompt: "steer-wait"}); !ok {
+		t.Fatal("steer refused")
+	}
+	time.Sleep(150 * time.Millisecond)
+	s.Cancel()
+	if got := kinds(collect(t, ch)); got != "meta cancelled delivered message done" {
+		t.Errorf("events %q", got)
+	}
+	args, _ := os.ReadFile(argsFile)
+	if n := strings.Count(string(args), "--print"); n != 1 {
+		t.Errorf("engine started %d times: the message that waited ran on an engine that was ended", n)
 	}
 }

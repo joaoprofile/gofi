@@ -34,6 +34,8 @@ type modelUse struct {
 	CacheWrite int     `json:"cacheCreationInputTokens"`
 	CostUSD    float64 `json:"costUSD"`
 	CostBasis  string  `json:"costBasis"`
+	// ContextWindow is how many tokens the model holds.
+	ContextWindow int `json:"contextWindow"`
 }
 
 // cacheSplit is how the run's cache writes divide between the two lifetimes.

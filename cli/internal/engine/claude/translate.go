@@ -34,12 +34,35 @@ type line struct {
 		Usage   *usage          `json:"usage"`
 	} `json:"message"`
 
-	IsError      bool                `json:"is_error"`
-	Result       string              `json:"result"`
-	TotalCostUSD float64             `json:"total_cost_usd"`
-	DurationMS   float64             `json:"duration_ms"`
-	Usage        *usage              `json:"usage"`
-	ModelUsage   map[string]modelUse `json:"modelUsage"`
+	// ParentToolUseID names the tool call a subagent's message belongs to;
+	// the conversation's own messages have none.
+	ParentToolUseID *string `json:"parent_tool_use_id"`
+
+	// Response is the engine's answer to a control request.
+	Response *struct {
+		Response *struct {
+			Commands []struct {
+				Name         string   `json:"name"`
+				Description  string   `json:"description"`
+				ArgumentHint string   `json:"argumentHint"`
+				Aliases      []string `json:"aliases"`
+				Builtin      bool     `json:"builtin"`
+			} `json:"commands"`
+		} `json:"response"`
+	} `json:"response"`
+
+	// CommandUUID and State are a command_lifecycle line: what became of a
+	// message the engine was sent with an id.
+	CommandUUID string `json:"command_uuid"`
+	State       string `json:"state"`
+
+	TerminalReason string              `json:"terminal_reason"`
+	IsError        bool                `json:"is_error"`
+	Result         string              `json:"result"`
+	TotalCostUSD   float64             `json:"total_cost_usd"`
+	DurationMS     float64             `json:"duration_ms"`
+	Usage          *usage              `json:"usage"`
+	ModelUsage     map[string]modelUse `json:"modelUsage"`
 }
 
 type usage struct {
@@ -75,22 +98,41 @@ func translate(raw []byte) (events []engine.Event, terminal bool) {
 			return []engine.Event{engine.Meta{SessionID: l.SessionID, Model: l.Model, SlashCommands: l.SlashCommands}}, false
 		}
 
+	case "control_response":
+		if l.Response == nil || l.Response.Response == nil || len(l.Response.Response.Commands) == 0 {
+			return nil, false
+		}
+		var meta engine.Meta
+		for _, c := range l.Response.Response.Commands {
+			meta.Commands = append(meta.Commands, engine.Command{
+				Name: c.Name, Description: c.Description, Hint: c.ArgumentHint, Aliases: c.Aliases, Builtin: c.Builtin,
+			})
+		}
+		return []engine.Event{meta}, false
+
+	case "command_lifecycle":
+		// "started" is the model taking a message that waited in the engine.
+		if l.State == "started" && l.CommandUUID != "" {
+			return []engine.Event{engine.Delivered{ID: l.CommandUUID}}, false
+		}
+
 	case "stream_event":
 		if l.Event == nil || l.Event.Type != "content_block_delta" || l.Event.Delta == nil {
 			return nil, false
 		}
+		sub := l.ParentToolUseID != nil
 		switch l.Event.Delta.Type {
 		case "text_delta":
-			return []engine.Event{engine.Delta{Kind: engine.DeltaText, Text: l.Event.Delta.Text}}, false
+			return []engine.Event{engine.Delta{Kind: engine.DeltaText, Text: l.Event.Delta.Text, Sub: sub}}, false
 		case "thinking_delta":
-			return []engine.Event{engine.Delta{Kind: engine.DeltaThinking, Text: l.Event.Delta.Thinking}}, false
+			return []engine.Event{engine.Delta{Kind: engine.DeltaThinking, Text: l.Event.Delta.Thinking, Sub: sub}}, false
 		}
 
 	case "assistant":
 		if l.Message == nil {
 			return nil, false
 		}
-		var msg engine.Message
+		msg := engine.Message{Parent: l.parent()}
 		for _, b := range blocks(l.Message.Content) {
 			switch b.Type {
 			case "text":
@@ -107,7 +149,9 @@ func translate(raw []byte) (events []engine.Event, terminal bool) {
 		}
 		events = append(events, msg)
 		if l.Message.Usage != nil {
-			events = append(events, l.Message.Usage.event(false))
+			u := l.Message.Usage.event(false)
+			u.Sub = l.ParentToolUseID != nil
+			events = append(events, u)
 		}
 		return events, false
 
@@ -117,7 +161,7 @@ func translate(raw []byte) (events []engine.Event, terminal bool) {
 		}
 		for _, b := range blocks(l.Message.Content) {
 			if b.Type == "tool_result" {
-				events = append(events, engine.ToolResult{ToolUseID: b.ToolUseID, IsError: b.IsError, Text: textOf(b.Content)})
+				events = append(events, engine.ToolResult{ToolUseID: b.ToolUseID, IsError: b.IsError, Text: textOf(b.Content), Parent: l.parent()})
 			}
 		}
 		return events, false
@@ -131,16 +175,41 @@ func translate(raw []byte) (events []engine.Event, terminal bool) {
 			split = l.Usage.Split
 		}
 		done := engine.Done{
-			IsError:  l.IsError,
-			CostUSD:  runCost(l.TotalCostUSD, l.ModelUsage, split),
-			Duration: time.Duration(l.DurationMS * float64(time.Millisecond)),
+			IsError:       l.IsError,
+			Cancelled:     strings.HasPrefix(l.TerminalReason, "aborted"),
+			CostUSD:       runCost(l.TotalCostUSD, l.ModelUsage, split),
+			Duration:      time.Duration(l.DurationMS * float64(time.Millisecond)),
+			ContextWindow: contextWindow(l.ModelUsage),
 		}
-		if l.IsError {
+		if done.Cancelled {
+			done.IsError = false
+		}
+		if done.IsError {
 			done.Err = firstNonEmpty(l.Result, l.Subtype, "the run failed")
 		}
 		return append(events, done), true
 	}
 	return nil, false
+}
+
+// contextWindow is the window of the model that read the most: the one
+// holding the conversation, where a subagent ran on a smaller one.
+func contextWindow(byModel map[string]modelUse) int {
+	window, most := 0, -1
+	for _, u := range byModel {
+		if read := u.Input + u.CacheRead + u.CacheWrite; read > most {
+			window, most = u.ContextWindow, read
+		}
+	}
+	return window
+}
+
+// parent is the tool call that started the subagent a line is from.
+func (l *line) parent() string {
+	if l.ParentToolUseID == nil {
+		return ""
+	}
+	return *l.ParentToolUseID
 }
 
 func (u *usage) event(total bool) engine.Usage {

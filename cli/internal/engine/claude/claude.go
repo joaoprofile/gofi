@@ -15,6 +15,8 @@ package claude
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,7 +80,21 @@ type Options struct {
 	// MaxBudgetUSD is what the session may spend, passed as --max-budget-usd
 	// when positive: the engine stops itself there.
 	MaxBudgetUSD float64
+	// StablePrompt leaves what changes from one session to the next — the
+	// folder, the git status — out of the system prompt, as Isolated does,
+	// with the person's own settings kept: the sessions a conversation opens
+	// one after another then read that prefix from the cache.
+	StablePrompt bool
+	// Interrupt has Cancel ask the engine to stop the turn where it is,
+	// rather than end its process: the next turn goes on in the same engine,
+	// with no start and no conversation to load again. An engine that does
+	// not stop is ended, as without it.
+	Interrupt bool
 }
+
+// interruptGrace is how long an engine has to end a turn it was asked to
+// stop, before its process is ended instead.
+var interruptGrace = 3 * time.Second
 
 // Session is a conversation held by one long-lived claude process, restarted
 // with --resume when a cancel ends it.
@@ -91,6 +107,9 @@ type Session struct {
 	turn      *turn
 	early     []engine.Event // what a warmed engine said before the first turn
 	closed    bool
+
+	described chan struct{}    // closed once the engine said what it offers
+	commands  []engine.Command // what it said
 }
 
 // process is one running engine. Only its reader goroutine delivers events
@@ -99,12 +118,37 @@ type process struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stderr *tail
+	wmu    sync.Mutex // a turn and a control request may be written at once
+}
+
+// write sends one line to the engine.
+func (p *process) write(v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	p.wmu.Lock()
+	defer p.wmu.Unlock()
+	_, err = p.stdin.Write(append(b, '\n'))
+	return err
+}
+
+// control is a request of the engine's control protocol: it is answered by
+// the engine itself, and no model is called.
+func control(id, subtype string) map[string]any {
+	return map[string]any{"type": "control_request", "request_id": id, "request": map[string]any{"subtype": subtype}}
 }
 
 type turn struct {
 	events    chan engine.Event
 	finished  chan struct{}
 	cancelled bool
+	// queued are the messages sent during the turn that the engine has not
+	// handed the model yet: while there is one, the engine's end of a turn
+	// is not the end of this one — it goes on to run it.
+	queued map[string]bool
+	// round counts the turns the engine ended within this one.
+	round int
 }
 
 // New prepares a session. The engine starts on the first Send.
@@ -158,11 +202,10 @@ func (s *Session) Send(ctx context.Context, t engine.Turn) (<-chan engine.Event,
 	s.early = nil
 	s.mu.Unlock()
 
-	msg, _ := json.Marshal(map[string]any{
+	if err := p.write(map[string]any{
 		"type":    "user",
-		"message": map[string]any{"role": "user", "content": []map[string]string{{"type": "text", "text": t.Prompt}}},
-	})
-	if _, err := p.stdin.Write(append(msg, '\n')); err != nil {
+		"message": map[string]any{"role": "user", "content": content(t)},
+	}); err != nil {
 		// The process died between turns; its reader reports the exit on this
 		// turn's channel.
 		s.kill(p)
@@ -178,9 +221,23 @@ func (s *Session) Send(ctx context.Context, t engine.Turn) (<-chan engine.Event,
 	return tr.events, nil
 }
 
-// Cancel implements engine.Session. The engine has no interrupt on this
-// protocol, so the process goes, and the next turn resumes the conversation
-// by id — a cold start, but only for the turn after a cancel.
+// content is a turn as the engine reads it: its images, then its text.
+func content(t engine.Turn) []map[string]any {
+	out := make([]map[string]any, 0, len(t.Images)+1)
+	for _, img := range t.Images {
+		out = append(out, map[string]any{
+			"type":   "image",
+			"source": map[string]any{"type": "base64", "media_type": img.MediaType, "data": base64.StdEncoding.EncodeToString(img.Data)},
+		})
+	}
+	return append(out, map[string]any{"type": "text", "text": t.Prompt})
+}
+
+// Cancel implements engine.Session. Without Options.Interrupt the process
+// goes, and the next turn resumes the conversation by id — a cold start, but
+// only for the turn after a cancel. With it the engine is asked to stop the
+// turn and stays up; one that does not stop within interruptGrace, or a
+// second Cancel, ends the process as before.
 func (s *Session) Cancel() {
 	s.mu.Lock()
 	tr, p := s.turn, s.proc
@@ -188,9 +245,94 @@ func (s *Session) Cancel() {
 		s.mu.Unlock()
 		return
 	}
+	again, round := tr.cancelled, tr.round
 	tr.cancelled = true
 	s.mu.Unlock()
-	s.kill(p)
+	if !s.opts.Interrupt || again || p.write(control("interrupt", "interrupt")) != nil {
+		s.kill(p)
+		return
+	}
+	time.AfterFunc(interruptGrace, func() {
+		s.mu.Lock()
+		stuck := s.turn == tr && s.proc == p && tr.round == round
+		s.mu.Unlock()
+		if stuck {
+			s.kill(p)
+		}
+	})
+}
+
+// Steer implements engine.Steerer. The message goes to the engine as any
+// other, with an id: the engine queues it and reports, by that id, when the
+// model takes it.
+func (s *Session) Steer(t engine.Turn) (string, bool) {
+	s.mu.Lock()
+	tr, p := s.turn, s.proc
+	if tr == nil || p == nil || s.closed {
+		s.mu.Unlock()
+		return "", false
+	}
+	id := newID()
+	if tr.queued == nil {
+		tr.queued = map[string]bool{}
+	}
+	tr.queued[id] = true
+	s.mu.Unlock()
+	err := p.write(map[string]any{
+		"type":    "user",
+		"uuid":    id,
+		"message": map[string]any{"role": "user", "content": content(t)},
+	})
+	if err != nil {
+		s.mu.Lock()
+		delete(tr.queued, id)
+		s.mu.Unlock()
+		return "", false
+	}
+	return id, true
+}
+
+// newID is a random UUID, the form the engine wants a message's id in.
+func newID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6], b[8] = b[6]&0x0f|0x40, b[8]&0x3f|0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// Describe implements engine.Describer: it starts the engine if it must and
+// asks what it offers. The answer comes from the engine, not from a model.
+func (s *Session) Describe(ctx context.Context) (engine.Meta, bool) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return engine.Meta{}, false
+	}
+	if s.proc == nil {
+		p, err := s.start()
+		if err != nil {
+			s.mu.Unlock()
+			return engine.Meta{}, false
+		}
+		s.proc = p
+	}
+	p, ask := s.proc, s.described == nil
+	if ask {
+		s.described = make(chan struct{})
+	}
+	wait := s.described
+	s.mu.Unlock()
+	if ask && p.write(control("describe", "initialize")) != nil {
+		return engine.Meta{}, false
+	}
+	select {
+	case <-wait:
+	case <-ctx.Done():
+		return engine.Meta{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return engine.Meta{SessionID: s.sessionID, Commands: s.commands}, len(s.commands) > 0
 }
 
 // Close implements engine.Session.
@@ -221,6 +363,8 @@ func (s *Session) args() []string {
 	a = append(a, "--append-system-prompt", prompt)
 	if s.opts.Isolated {
 		a = append(a, "--setting-sources", "project", "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections")
+	} else if s.opts.StablePrompt {
+		a = append(a, "--exclude-dynamic-system-prompt-sections")
 	}
 	if c := strings.TrimSpace(s.opts.MCPConfig); c != "" {
 		a = append(a, "--mcp-config", c)
@@ -368,24 +512,60 @@ func (s *Session) deliver(p *process, raw []byte) {
 		return
 	}
 	s.mu.Lock()
-	for _, e := range events {
-		if m, ok := e.(engine.Meta); ok && m.SessionID != "" {
-			s.sessionID = m.SessionID
-		}
-	}
 	tr := s.turn
 	if s.proc != p {
 		tr = nil // a replaced process: its turn was already reported
-	} else if tr == nil {
-		// Said before any turn — a warmed engine's init: kept for the next one.
-		for _, e := range events {
-			if _, ok := e.(engine.Meta); ok {
+	}
+	kept := events[:0]
+	for _, e := range events {
+		switch v := e.(type) {
+		case engine.Meta:
+			if v.SessionID != "" {
+				s.sessionID = v.SessionID
+			}
+			if len(v.Commands) > 0 {
+				s.commands = v.Commands
+				if s.described == nil {
+					s.described = make(chan struct{})
+				}
+				select {
+				case <-s.described:
+				default:
+					close(s.described)
+				}
+			}
+			// Said before any turn — a warmed engine's init: kept for the
+			// next one.
+			if tr == nil && s.proc == p {
 				s.early = append(s.early, e)
 			}
+		case engine.Delivered:
+			// Only a message this turn sent is this turn's to report.
+			if tr == nil || !tr.queued[v.ID] {
+				continue
+			}
+			delete(tr.queued, v.ID)
+		case engine.Done:
+			// A turn the person stopped ended as they asked, whatever the
+			// engine calls it.
+			if tr != nil && tr.cancelled {
+				v.Cancelled, v.IsError, v.Err = true, false, ""
+				e = v
+			}
 		}
+		kept = append(kept, e)
 	}
+	events = kept
 	if terminal && tr != nil {
-		s.turn = nil
+		if len(tr.queued) > 0 {
+			// The engine ended a turn with a message still waiting: it runs
+			// it next, and this turn goes on with it.
+			terminal = false
+			tr.round++
+			tr.cancelled = false
+		} else {
+			s.turn = nil
+		}
 	}
 	s.mu.Unlock()
 	if tr == nil {
