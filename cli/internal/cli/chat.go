@@ -172,6 +172,7 @@ func runChat(f chatFlags) error {
 		Deliver:   spawnDelivery(root),
 		Review:    review,
 		Gofi:      gofi,
+		Inset:     stickyRows(),
 		NewSession: func(resumeID string) engine.Session {
 			if resumeID != "" {
 				resume = resumeID
@@ -197,6 +198,17 @@ func runChat(f chatFlags) error {
 			return s
 		},
 	})
+}
+
+// stickyRows is how many rows at the top of the screen the terminal keeps
+// for itself. VS Code's terminal pins the command that is running over the
+// first row once its prompt has scrolled away; whatever is drawn there is
+// under it.
+func stickyRows() int {
+	if os.Getenv("TERM_PROGRAM") == "vscode" {
+		return 1
+	}
+	return 0
 }
 
 // chatIntake plans the chat's requests the way `gofi intake` does: the light

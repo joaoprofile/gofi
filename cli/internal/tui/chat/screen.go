@@ -76,17 +76,24 @@ func (m *model) settle() {
 		m.pinned = pin
 		if !pin {
 			m.queue = append(m.queue, m.window...)
-			m.window = nil
+			m.window, m.head = nil, 0
 		}
 	}
 	if !m.pinned {
 		return
 	}
-	room := m.height - len(m.panel(m.panelLimit())) - len(m.liveLines()) - len(m.promptLines())
-	if over := len(m.window) - max(room, 0); over > 0 {
-		m.queue = append(m.queue, m.window[:over]...)
-		m.window = m.window[over:]
+	room := m.height - m.opts.Inset - len(m.panel(m.panelLimit())) - len(m.liveLines()) - len(m.promptLines())
+	over := len(m.window) - max(room, 0)
+	if over <= 0 {
+		return
 	}
+	// The banner leaves whole: a card cut in half is a broken card.
+	if m.head > 0 {
+		over = min(max(over, m.head), len(m.window))
+		m.head = 0
+	}
+	m.queue = append(m.queue, m.window[:over]...)
+	m.window = m.window[over:]
 }
 
 // pump sends the lines waiting for the scrollback, one batch at a time: the
@@ -142,12 +149,16 @@ func (m model) View() string {
 		return strings.Join(append(append(out, live...), prompt...), "\n")
 	}
 	panel := m.panel(m.panelLimit())
-	room := max(m.height-len(panel)-len(live)-len(prompt), 0)
+	room := max(m.height-m.opts.Inset-len(panel)-len(live)-len(prompt), 0)
 	window := m.window
 	if len(window) > room {
 		window = window[len(window)-room:]
 	}
 	lines := make([]string, 0, m.height)
+	// The rows the terminal draws over stay empty.
+	for range m.opts.Inset {
+		lines = append(lines, "")
+	}
 	lines = append(append(append(lines, panel...), window...), live...)
 	// The prompt keeps its place at the bottom: the room the conversation
 	// does not fill yet is over it.

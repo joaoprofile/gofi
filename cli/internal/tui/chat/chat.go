@@ -83,6 +83,10 @@ type Options struct {
 	// Clipboard reads the picture the clipboard holds, for ctrl+v. Nil reads
 	// the system's.
 	Clipboard func(context.Context) (clipboard.Picture, error)
+	// Inset is how many rows at the top of the screen the terminal draws
+	// over — an editor's terminal keeps the command that is running pinned
+	// there. The chat leaves them empty, so its panel is not under them.
+	Inset int
 }
 
 // Run holds the conversation until the user leaves.
@@ -158,6 +162,7 @@ type model struct {
 	queue    []string    // lines on their way to the scrollback
 	flushing bool        // a batch of them is with the terminal
 	window   []string    // the newest lines, held under the panel while it is pinned
+	head     int         // how many of them, from the top, are the banner
 	pinned   bool        // the panel is pinned and the chat draws the whole screen
 	greeted  bool        // the banner was shown, once the terminal said its size
 	leaving  bool        // the chat is ending: what is held goes, then it quits
@@ -325,13 +330,13 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.greeted = true
 			m.settle()
 			m.emit(m.banner())
-			return m, nil
+			if m.pinned {
+				m.head = len(m.window)
+			}
 		}
-		if m.pinned {
-			// A frame drawn for the old size wraps in the new one: start
-			// the screen over.
-			return m, tea.ClearScreen
-		}
+		// A new size is drawn over the old frame, never after a clear: a
+		// terminal that keeps what is cleared would file every frame away
+		// in its scrollback.
 		return m, nil
 
 	case sayMsg:

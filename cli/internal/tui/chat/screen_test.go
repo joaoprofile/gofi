@@ -683,3 +683,51 @@ func TestThePanelShowsThePlanAsItStands(t *testing.T) {
 		t.Errorf("a phase that ended is done, not at work:\n%s", text)
 	}
 }
+
+// The banner leaves the screen whole — a card cut in half is a broken card —
+// and the rows a terminal draws over at the top stay empty, so the panel is
+// never under them. A new size never clears the screen: a terminal that
+// keeps what is cleared would file every frame away in its scrollback.
+func TestTheBannerLeavesWholeAndTheTopRowsStayFree(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.opts.Inset = 1
+	update := func(msg tea.Msg) tea.Cmd {
+		next, cmd := m.Update(msg)
+		m = next.(model)
+		return cmd
+	}
+	update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != 30 || lines[0] != "" || !strings.Contains(lines[1], "activity") {
+		t.Fatalf("the first row is the terminal's, the panel comes under it:\n%s", m.View())
+	}
+	banner := m.head
+	if banner < 10 || banner != len(m.window) {
+		t.Fatalf("the banner is %d of the window's %d lines", banner, len(m.window))
+	}
+
+	// Lines fill the room under the banner; it stays whole while they fit.
+	room := 30 - 1 - len(m.panel(m.panelLimit())) - len(m.promptLines())
+	for i := 0; len(m.window) < room; i++ {
+		update(sayMsg{fmt.Sprintf("line %02d", i)})
+	}
+	if m.head != banner || len(m.queue) != 0 || m.flushing {
+		t.Fatalf("while everything fits nothing leaves: head %d, queue %d", m.head, len(m.queue))
+	}
+	// One line too many: the banner goes, all of it, and nothing else.
+	update(sayMsg{"one more"})
+	if m.head != 0 || len(m.window) != room-banner+1 || m.window[0] != "line 00" || strings.Contains(m.View(), "At the prompt") {
+		t.Fatalf("the banner should leave whole: head %d, window %d starting at %q", m.head, len(m.window), m.window[0])
+	}
+	if view := strings.Split(m.View(), "\n"); len(view) != 30 || view[0] != "" {
+		t.Errorf("the screen keeps its height and its free row (%d lines)", len(view))
+	}
+
+	if _, cmd := m.update(tea.WindowSizeMsg{Width: 90, Height: 28}); cmd != nil {
+		t.Error("a new size is only drawn over the old frame: it asks nothing of the terminal")
+	}
+	update(tea.WindowSizeMsg{Width: 90, Height: 28})
+	if n := len(strings.Split(m.View(), "\n")); n != 28 {
+		t.Errorf("after a resize the view is the new screen, got %d lines", n)
+	}
+}
