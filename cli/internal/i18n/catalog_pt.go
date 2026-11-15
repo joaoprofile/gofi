@@ -796,4 +796,11 @@ var catalogPT = map[string]string{
 	"index.layout.moved":             "  movido %s → %s",
 	"index.layout.dropped":           "  removido %s: derivado, e nada o lê no layout atual",
 	"index.layout.commit":            "  o grafo de código é versionado: faça commit da mudança",
+	"board.title":                    "agentes",
+	"board.runs":                     "%d em execução",
+	"board.working":                  "%d trabalhando",
+	"board.waiting":                  "%d esperando você",
+	"board.hint":                     "/watch abre o painel",
+	"board.gate":                     "espera %d decisão(ões) sua(s) — responda no /watch",
+	"board.more":                     "… +%d",
 }

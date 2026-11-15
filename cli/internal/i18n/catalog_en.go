@@ -797,4 +797,11 @@ var catalogEN = map[string]string{
 	"index.layout.moved":             "  moved %s → %s",
 	"index.layout.dropped":           "  removed %s: derived, and nothing reads it in the current layout",
 	"index.layout.commit":            "  the code graph is versioned: commit the move",
+	"board.title":                    "agents",
+	"board.runs":                     "%d running",
+	"board.working":                  "%d at work",
+	"board.waiting":                  "%d waiting on you",
+	"board.hint":                     "/watch opens the screen",
+	"board.gate":                     "waits on %d decision(s) of yours — answer in /watch",
+	"board.more":                     "… +%d",
 }
