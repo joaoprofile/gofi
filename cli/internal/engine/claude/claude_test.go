@@ -370,3 +370,19 @@ func TestACacheLifetimeReachesTheEngine(t *testing.T) {
 		t.Errorf("env lacks the lifetime")
 	}
 }
+
+// What a run's sessions open with goes at the end of the system prompt; a
+// text that would not fit an argument is refused, for the prompt to carry.
+func TestSharedWordsGoToTheSystemPrompt(t *testing.T) {
+	s := &Session{opts: Options{SystemPrompt: "turn of the loop"}}
+	if !s.Share("  the change  ") {
+		t.Fatal("refused")
+	}
+	a := s.args()
+	if i := slices.Index(a, "--append-system-prompt"); i < 0 || a[i+1] != "turn of the loop\n\nthe change" {
+		t.Errorf("args = %v", a)
+	}
+	if (&Session{}).Share(strings.Repeat("x", maxShared)) {
+		t.Error("a text past the argument's limit must be refused")
+	}
+}

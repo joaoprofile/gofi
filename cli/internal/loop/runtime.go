@@ -65,6 +65,13 @@ type Turn struct {
 	Tools  []string
 	Iter   int
 	Prompt string
+	// Shared is the part of Prompt every turn of the run opens with — the
+	// change. An engine whose sessions share a cache only before the first
+	// message takes it apart (Unshared); Prompt holds it for any other.
+	Shared string
+	// Warmed, when set, is called once the engine first answers: what the
+	// turn opens with is in the cache from then on.
+	Warmed func()
 	// ElicitFile is where the agent writes a decision it cannot find, relative
 	// to the project root.
 	ElicitFile string
@@ -235,6 +242,10 @@ type Event struct {
 
 // Runner carries out a flow over one change.
 type Runner struct {
+	// LensWarm is how long the lenses of an audit wait for the first of them
+	// to be answered, so they read from the cache what it wrote; 0 starts
+	// them all at once.
+	LensWarm time.Duration
 	// Root is the project root, where the run's state, events and agents are
 	// kept for gofi ps and gofi watch; Work is where the agents work — the
 	// run's worktree, or the root when it has none.
@@ -547,6 +558,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 	s.Lenses = nil
 	elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, fmt.Sprintf("elicit-%s-%d.json", name, s.Iter)))
 	prompt := withChange(r.Brief(rl, s, elicit), r.work(), s, rl)
+	shared := sharedText(r.work(), s, rl)
 	if s.Answered && s.Elicit != "" {
 		if e, err := intake.ReadElicitation(r.work(), s.Elicit); err == nil && e != nil {
 			prompt = intake.WithDecisions(prompt, e, s.Answers)
@@ -565,7 +577,7 @@ func (r *Runner) runAgent(ctx context.Context, name string, rl role.Role, s *Sta
 		before = snapshot(r.work(), guard)
 	}
 	tctx, why, cancel := r.Policy.turnContext(ctx, rl.Name)
-	res, err := r.Agent.Run(tctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, ElicitFile: elicit, Tier: tier, Raised: s.Raised[rl.Name] > 0, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, 1)})
+	res, err := r.Agent.Run(tctx, Turn{Node: name, Role: rl.Name, Agent: a.ID, Iter: s.Iter, Prompt: prompt, Shared: shared, ElicitFile: elicit, Tier: tier, Raised: s.Raised[rl.Name] > 0, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, 1)})
 	cancel()
 	err = why(err)
 	s.CostUSD += res.CostUSD

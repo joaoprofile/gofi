@@ -252,6 +252,28 @@ func (s *Session) args() []string {
 	return append(append(append(a, "--disallowed-tools"), interactiveTools...), s.opts.DisallowedTools...)
 }
 
+// maxShared bounds the system prompt a session is started with: it goes as
+// one argument, and the system refuses one past 128 KiB.
+const maxShared = 100_000
+
+// Share appends to the system prompt what every session of a run opens with.
+// Sessions share a cache up to the system prompt and no further: the same
+// words in the first message are written to it again by each. False when the
+// session has started or the text does not fit.
+func (s *Session) Share(text string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	base := s.opts.SystemPrompt
+	if base == "" {
+		base = systemPrompt
+	}
+	if s.proc != nil || s.closed || len(base)+len(text) > maxShared {
+		return false
+	}
+	s.opts.SystemPrompt = base + "\n\n" + strings.TrimSpace(text)
+	return true
+}
+
 // env is the engine's environment; nil, the process's own.
 func (s *Session) env() []string {
 	if s.opts.CacheTTL == "" {

@@ -593,7 +593,7 @@ func deliver(ctx context.Context, out io.Writer, root string, cfg *config.GofiCo
 	}
 
 	r := &loop.Runner{
-		Root: root, Work: work, Flow: f, Brief: loop.DefaultBrief, Roles: roles, Facts: facts,
+		Root: root, Work: work, Flow: f, LensWarm: lensWarm, Brief: loop.DefaultBrief, Roles: roles, Facts: facts,
 		Agent:    &engineAgent{root: root, work: work, run: run, open: open, out: out, quiet: o.Events},
 		Sensors:  sensor.Runner{Root: work, Commands: sensors, Cache: true},
 		Verdicts: diskVerdicts{root: work},
@@ -840,6 +840,10 @@ func regenerateIndexes(ctx context.Context, dir string) error {
 func landable(s *loop.State) bool {
 	return s.Node == "" && s.Outcome == "accepted" && s.Worktree != "" && s.Landing != landed
 }
+
+// lensWarm is how long the lenses of an audit wait for the first to be
+// answered — some 3 s, measured — before they start anyway.
+var lensWarm = 10 * time.Second
 
 // landPoll is how often a waiting landing looks again.
 var landPoll = 10 * time.Second
@@ -1267,7 +1271,13 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 	}
 	record("prompt", t.Prompt)
 
-	events, err := s.Send(ctx, engine.Turn{Prompt: t.Prompt})
+	// What every turn of the run opens with goes where the engine's sessions
+	// share a cache, when it has such a place; the transcript keeps it whole.
+	prompt := t.Prompt
+	if sh, ok := s.(interface{ Share(string) bool }); ok && t.Shared != "" && sh.Share(t.Shared) {
+		prompt = t.Unshared()
+	}
+	events, err := s.Send(ctx, engine.Turn{Prompt: prompt})
 	if err != nil {
 		return loop.TurnResult{}, err
 	}
@@ -1294,6 +1304,13 @@ func (a *engineAgent) Run(ctx context.Context, t loop.Turn) (loop.TurnResult, er
 				return a.finish(res, usage, failure)
 			}
 			e, last = got, time.Now()
+		}
+		if t.Warmed != nil {
+			switch e.(type) {
+			case engine.Delta, engine.Message, engine.Usage:
+				t.Warmed()
+				t.Warmed = nil
+			}
 		}
 		switch ev := e.(type) {
 		case engine.Usage:

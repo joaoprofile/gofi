@@ -145,6 +145,28 @@ func withChange(brief, work string, s *State, rl role.Role) string {
 	return carry(brief, work, changeText(work, s.ChangeDir, lean), reading, rl)
 }
 
+// sharedText is what withChange puts in a turn that every turn of the run
+// carries in the same words: the change and what else to read. Empty for a
+// stage that gets the proposal alone, whose words are its own.
+func sharedText(work string, s *State, rl role.Role) string {
+	if slices.Contains(leanStages, rl.Contract.Stage) {
+		return ""
+	}
+	text := changeText(work, s.ChangeDir, false)
+	if text == "" {
+		return ""
+	}
+	return text + loopReading
+}
+
+// Unshared is the turn's prompt without what an engine was given apart.
+func (t Turn) Unshared() string {
+	if t.Shared == "" {
+		return t.Prompt
+	}
+	return strings.Replace(t.Prompt, t.Shared, "", 1)
+}
+
 // reviewReading is loopReading for the review of a change not approved yet:
 // nothing is written but the review, and what the change is read against is
 // the PRD and the living spec.

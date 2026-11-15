@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/joaoprofile/gofi/cli/internal/role"
 	"github.com/joaoprofile/gofi/cli/internal/verdict"
@@ -64,7 +65,7 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 		elicit := filepath.ToSlash(filepath.Join(RunsDir, s.Run, "elicit-"+id+".json"))
 		a := &AgentState{ID: id, Node: name, Role: rl.Name, Tier: tier, Iter: s.Iter, Status: AgentWorking, Started: r.now()}
 		_ = saveAgent(r.Root, s.Run, a)
-		jobs[i] = &job{a: a, turn: Turn{Node: name, Role: rl.Name, Agent: id, Iter: s.Iter, Prompt: withChange(r.Brief(rl, s, elicit), r.work(), s, rl), ElicitFile: elicit, Tier: tier, Raised: s.Raised[rl.Name] > 0, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, len(roles))}}
+		jobs[i] = &job{a: a, turn: Turn{Node: name, Role: rl.Name, Agent: id, Iter: s.Iter, Prompt: withChange(r.Brief(rl, s, elicit), r.work(), s, rl), Shared: sharedText(r.work(), s, rl), ElicitFile: elicit, Tier: tier, Raised: s.Raised[rl.Name] > 0, Tools: rl.Contract.Tools, BudgetUSD: r.Policy.turnBudget(s.CostUSD, len(roles))}}
 	}
 	limit := r.Policy.AuditParallel
 	if limit <= 0 || limit > len(jobs) {
@@ -72,10 +73,32 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 	}
 	sem := make(chan struct{}, limit)
 	var wg sync.WaitGroup
-	for _, j := range jobs {
+	// The lenses open on the same words, and started at once each would write
+	// them to the cache. One goes first — of the tools most of them have, what
+	// a cache is keyed by — and the rest once it is answered.
+	warm := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(warm) }) }
+	lead := -1
+	if r.LensWarm > 0 && len(jobs) > 1 {
+		lead = leadLens(roles)
+		jobs[lead].turn.Warmed = release
+	} else {
+		release()
+	}
+	for i, j := range jobs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if i == lead {
+				defer release()
+			} else {
+				select {
+				case <-warm:
+				case <-time.After(r.LensWarm):
+				case <-ctx.Done():
+				}
+			}
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			tctx, why, cancel := r.Policy.turnContext(ctx, j.turn.Role)
@@ -99,6 +122,26 @@ func (r *Runner) runLenses(ctx context.Context, name string, roles []role.Role, 
 		return errors.Join(failed...)
 	}
 	return r.mergeLenses(s, name, kept)
+}
+
+// leadLens is the lens whose tools the most lenses have, the first of them.
+func leadLens(roles []role.Role) int {
+	key := func(rl role.Role) string {
+		t := slices.Clone(rl.Contract.Tools)
+		sort.Strings(t)
+		return strings.Join(t, ",")
+	}
+	count := map[string]int{}
+	for _, rl := range roles {
+		count[key(rl)]++
+	}
+	lead := 0
+	for i, rl := range roles {
+		if count[key(rl)] > count[key(roles[lead])] {
+			lead = i
+		}
+	}
+	return lead
 }
 
 // mergeLenses reads the verdict each lens of this iteration wrote and writes

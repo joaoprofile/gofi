@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
@@ -100,5 +102,48 @@ func TestTheFindingsOfEachAuditStayInTheRun(t *testing.T) {
 	}
 	if got := Situation(s, found[0]); got != "resolvido" {
 		t.Errorf("situation %q", got)
+	}
+}
+
+// The lenses wait for the first of them to be answered, and no longer: what
+// they open with is then read from the cache, not written by each.
+func TestTheLensesStartOnceTheFirstIsAnswered(t *testing.T) {
+	w := lensWorld(t)
+	w.runner.LensWarm = time.Minute
+	var mu sync.Mutex
+	var order []string
+	seen := func(next step) step {
+		return func(turn Turn) {
+			mu.Lock()
+			order = append(order, turn.Role)
+			mu.Unlock()
+			if turn.Warmed != nil {
+				turn.Warmed()
+			}
+			next(turn)
+		}
+	}
+	w.agent.steps["audit/gofi-qa"] = []step{seen(lensAudit(w.root, "aprovado"))}
+	w.agent.steps["audit/gofi-qa-security"] = []step{seen(lensAudit(w.root, "aprovado"))}
+	start := time.Now()
+	if s := w.run(t); s.Outcome != "accepted" {
+		t.Fatalf("outcome %s", s.Outcome)
+	}
+	if len(order) != 2 || order[0] != "gofi-qa" {
+		t.Errorf("order %v", order)
+	}
+	if time.Since(start) > 20*time.Second {
+		t.Error("the lenses waited out the limit instead of the first answer")
+	}
+}
+
+// The lens that goes first is one whose tools most lenses have.
+func TestTheLeadLensHasTheToolsOfMost(t *testing.T) {
+	tools := func(name string, t ...string) role.Role {
+		return role.Role{Name: name, Contract: role.Contract{Tools: t}}
+	}
+	roles := []role.Role{tools("general", "read", "verdict", "memory"), tools("a", "verdict", "read"), tools("b", "read", "verdict")}
+	if got := leadLens(roles); got != 1 {
+		t.Errorf("lead = %d", got)
 	}
 }

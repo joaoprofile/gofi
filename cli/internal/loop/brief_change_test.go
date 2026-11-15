@@ -175,3 +175,27 @@ func TestAReviewCarriesTheChangeInline(t *testing.T) {
 		t.Errorf("a review is not told to read as a run's turn is:\n%s", got)
 	}
 }
+
+// What every turn of a run opens with is named apart, in the very words the
+// prompt holds, so an engine can keep it where its sessions share a cache;
+// a stage that gets the proposal alone shares nothing.
+func TestTheChangeIsNamedApartForTheEngine(t *testing.T) {
+	work := t.TempDir()
+	writeChange(t, work, "## Abordagem\n\nUm componente.\n")
+	s := &State{Run: "r-1", Change: "alinhar", Context: "pricing", ChangeDir: "specs/pricing/changes/alinhar", Iter: 1}
+	a, b := shippedRoles()[0], role.Role{Name: "gofi-qa", Contract: role.Contract{Stage: "audit"}}
+	shared := sharedText(work, s, a)
+	if shared == "" || shared != sharedText(work, s, b) {
+		t.Fatalf("two roles of a run must share the same words:\n%s", shared)
+	}
+	turn := Turn{Prompt: withChange(DefaultBrief(a, s, ""), work, s, a), Shared: shared}
+	if !strings.Contains(turn.Prompt, shared) {
+		t.Fatal("the prompt must hold the shared words as they are")
+	}
+	if rest := turn.Unshared(); strings.Contains(rest, "A tela DEVE dizer o alvo.") || !strings.Contains(rest, "Trabalhe na mudança aprovada") {
+		t.Errorf("unshared, the prompt keeps the task and loses the change:\n%s", rest)
+	}
+	if got := sharedText(work, s, role.Role{Contract: role.Contract{Stage: "deliver"}}); got != "" {
+		t.Errorf("a lean stage shares nothing: %q", got)
+	}
+}

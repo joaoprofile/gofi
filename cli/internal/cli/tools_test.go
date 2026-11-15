@@ -1,6 +1,11 @@
 package cli
 
 import (
+	"context"
+	"github.com/joaoprofile/gofi/cli/internal/engine"
+	"github.com/joaoprofile/gofi/cli/internal/loop"
+	"io"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -99,5 +104,43 @@ func TestOnlyAReadingRoleShortensItsCache(t *testing.T) {
 	}
 	if got := turnCacheTTL([]string{"read", "edit", "write"}); got != "" {
 		t.Errorf("an implementer: %q", got)
+	}
+}
+
+type sharingSession struct {
+	shared, sent *string
+}
+
+func (s sharingSession) Share(text string) bool { *s.shared = text; return true }
+func (s sharingSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event, error) {
+	*s.sent = t.Prompt
+	ch := make(chan engine.Event, 2)
+	ch <- engine.Delta{Kind: engine.DeltaText, Text: "ok"}
+	ch <- engine.Done{}
+	close(ch)
+	return ch, nil
+}
+func (sharingSession) Cancel()      {}
+func (sharingSession) Close() error { return nil }
+
+// An engine that shares gets the change apart and the rest as the prompt;
+// the transcript keeps the turn whole, and the first answer warms the lenses.
+func TestATurnGivesTheSharedWordsToTheEngineApart(t *testing.T) {
+	var shared, sent string
+	root := t.TempDir()
+	a := &engineAgent{root: root, run: "r-1", out: io.Discard, quiet: true,
+		open: func(_, _ string, _ host.Tier, _ []string, _ float64) engine.Session {
+			return sharingSession{&shared, &sent}
+		}}
+	warmed := false
+	_, err := a.Run(context.Background(), loop.Turn{Node: "audit", Iter: 1, Prompt: "Trabalhe.\n\nA MUDANÇA\n\nO papel.", Shared: "A MUDANÇA\n\n", Warmed: func() { warmed = true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shared != "A MUDANÇA\n\n" || sent != "Trabalhe.\n\nO papel." || !warmed {
+		t.Errorf("shared %q, sent %q, warmed %v", shared, sent, warmed)
+	}
+	if b, _ := os.ReadFile(loop.Transcript(root, "r-1", "audit-1")); !strings.Contains(string(b), "A MUDANÇA") {
+		t.Errorf("the transcript lost the change: %s", b)
 	}
 }
