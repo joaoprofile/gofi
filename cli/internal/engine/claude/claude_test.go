@@ -225,10 +225,17 @@ func TestListSessions(t *testing.T) {
 	write("bbbbbbbb-2222", `{"type":"user","message":{"content":"first"}}`+"\n"+`{"type":"ai-title","aiTitle":"Payment refactor"}`+"\n", time.Minute)
 	write("not-a-session!", `{"type":"user"}`, 0)
 	write("cccccccc-3333", `{"type":"queue-operation"}`+"\n", 0)
+	// A conversation that began with a slash command is stored wrapped in the
+	// engine's own tags: it is named by the command, as the person typed it.
+	write("dddddddd-4444", `{"type":"user","message":{"content":"<command-message>gofi-status</command-message>\n<command-name>/gofi-status</command-name>\n<command-args>billing  user</command-args>"}}`+"\n", 2*time.Hour)
+	write("eeeeeeee-5555", `{"type":"user","message":{"content":"<local-command-stdout>x</local-command-stdout>"}}`+"\n"+`{"type":"user","message":{"content":[{"type":"text","text":"<command-name>/gofi-run</command-name>"}]}}`+"\n", 3*time.Hour)
 
 	got := ListSessions(project, 10)
-	if len(got) != 2 {
+	if len(got) != 4 {
 		t.Fatalf("got %+v", got)
+	}
+	if got[2].Title != "/gofi-status billing user" || got[3].Title != "/gofi-run" {
+		t.Errorf("a conversation begun by a command is named by it: %q, %q", got[2].Title, got[3].Title)
 	}
 	if got[0].ID != "bbbbbbbb-2222" || got[0].Title != "Payment refactor" {
 		t.Errorf("newest = %+v, want the titled one", got[0])

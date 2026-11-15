@@ -142,15 +142,41 @@ func titleOf(path string, size int64) string {
 func openingText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		return strings.TrimSpace(s)
+		return said(s)
 	}
 	for _, b := range blocks(raw) {
-		t := strings.TrimSpace(b.Text)
-		if b.Type == "text" && t != "" && !strings.HasPrefix(t, "<") {
+		if b.Type != "text" {
+			continue
+		}
+		if t := said(b.Text); t != "" {
 			return t
 		}
 	}
 	return ""
+}
+
+var (
+	reCommandName = regexp.MustCompile(`<command-name>\s*(/?[^<\s]+)\s*</command-name>`)
+	reCommandArgs = regexp.MustCompile(`(?s)<command-args>(.*?)</command-args>`)
+)
+
+// said is what the person wrote in a piece of text the engine stored: the
+// text itself, the slash command it was — the engine wraps one in tags —, or
+// nothing when the text is a block the engine or an editor attached.
+func said(text string) string {
+	t := strings.TrimSpace(text)
+	if !strings.HasPrefix(t, "<") {
+		return t
+	}
+	name := reCommandName.FindStringSubmatch(t)
+	if name == nil {
+		return ""
+	}
+	command := "/" + strings.TrimPrefix(name[1], "/")
+	if args := reCommandArgs.FindStringSubmatch(t); args != nil && strings.TrimSpace(args[1]) != "" {
+		command += " " + strings.Join(strings.Fields(args[1]), " ")
+	}
+	return command
 }
 
 func readAt(f *os.File, from, n int64) []byte {
