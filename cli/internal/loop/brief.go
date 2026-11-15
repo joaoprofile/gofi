@@ -28,7 +28,7 @@ func sensorsPassed(s *State) string {
 	if len(passed) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Os sensores %s passaram há pouco, nesta mesma árvore: não rode `verify` para confirmar de novo. Use-o só para ler um resultado que o seu papel audita — o rastreio (`trace`) de requisito sem código e de cenário sem teste.\n", strings.Join(passed, ", "))
+	return fmt.Sprintf("Os sensores %s passaram há pouco, nesta mesma árvore: não rode `verify` para confirmar de novo. Use-o só para ler um resultado que o seu papel audita — o rastreio (`trace`) de requisito sem código e de cenário sem teste. Sensor verde não é veredicto: o seu vem do código do escopo, lido contra o que o seu papel confere.\n", strings.Join(passed, ", "))
 }
 
 // DefaultBrief is the turn an agent node sends: the role's skill, invoked on

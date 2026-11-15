@@ -14,6 +14,10 @@ O que toda auditoria segue: o `gofi-qa` e cada uma das suas lentes.
    queda. → `reference/graph-audit.md` §Lei: auditar é consultar o grafo
 3. **Ausência só se prova em `deep`.** Nunca apresente ausência de aresta em
    `fast` como prova. → `reference/graph-audit.md` §Validar o modo do grafo
+4. **Sensor verde não é veredicto (LEI absoluta).** Aprovar exige ter lido o
+   código do seu escopo contra o que o seu papel confere. Veredicto apoiado só
+   no resultado do `verify` não é auditoria: os sensores já passaram antes de
+   você ser chamado.
 
 ---
 
