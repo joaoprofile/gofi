@@ -390,12 +390,43 @@ The chat plans free text by rules first, stops after a PRD or a spec for review 
 with the reviewer's findings — and hands the build to the loop. `Esc` stops a
 delivery at its next checkpoint; a gate's questions are asked in the chat.
 
+At the prompt:
+
+- **Several lines.** `Alt+Enter` (or `Ctrl+J`, or a `\` before `Enter`) breaks
+  the line; a pasted text keeps its own. `↑`/`↓` walk the text, then the history.
+- **`/` lists every command** — the chat's, the project's skills and the engine's
+  (`/compact`, `/context`, `/usage`…), each with what it does. `@` completes a
+  file to point at.
+- **`Ctrl+V` attaches the picture in the clipboard** (`Alt+V` where the terminal
+  keeps `Ctrl+V`), scaled down to what a model reads before it is sent.
+- **Approval shows what will run** — the command, the change as a diff — and
+  "don't ask again" covers commands that begin the same way, or file edits,
+  never a whole tool. A "no" can carry what the agent should do instead.
+- **`/find` `/show` `/impact` `/path` ask the index, `/runs` and `/watch` read
+  the runs**: gofi reads the disk and no model is called. `/cost` says what the
+  conversation holds and has spent; the status line keeps both in view.
+- **A follow-up while the agent works.** `Enter` during an answer sends it: the
+  engine hands it to the model at its next step, between two tool calls, and
+  the turn goes on knowing it — the message is all it costs. It waits over the
+  prompt until the model takes it, then joins the conversation where it was read.
+- **The panel at the top is what is at work, as it happens**: the plan being
+  conducted and its phases, this conversation's turn (how long, how many tools,
+  the last one), the subagents it started, and the runs of the loop with their
+  agents — started here, by `/gofi-run` or in another terminal. Read from what
+  the engine streams and from the runs on disk.
+
+`Esc` stops an answer without ending the engine, so the next message goes to the
+same process; the sessions a conversation opens share the cached system prompt.
+
 ### GOFI AI for VS Code
 
 Embedded in the binary; `gofi init` installs it, `gofi install extensions` updates it.
 
 - The same conducted flow as `gofi chat`: review before approval, delivery by the
   loop, gate questions as cards, stop, cost per run.
+- **GOFI: Chat in Terminal** (`Ctrl+Shift+P`): `gofi chat` itself in a VS Code
+  terminal, in the project root. There, `Shift+Enter` breaks the line and
+  `Ctrl+V` pastes text or, with none in the clipboard, attaches the copied image.
 - A run tab: the flow as a graph with the path taken, the sensors (not checked is
   shown apart from passed), the verdict, open findings, the amendment, the branch,
   the trace matrix — followed live. Batches appear in the same picker.
