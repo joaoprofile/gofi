@@ -106,6 +106,41 @@ func List(root string) ([]Info, error) {
 	return out, nil
 }
 
+// Live reads the runs a supervisor is carrying out right now, newest first:
+// the ones List calls running or blocked. It is what a screen asks every
+// second, so a run nobody holds costs it one look for a lock — its state is
+// not read.
+func Live(root string) ([]Info, error) {
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(RunsDir)))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []Info
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		l, locked := ReadLock(root, e.Name())
+		if !locked || !alive(l.PID) {
+			continue
+		}
+		s, err := LoadState(root, e.Name())
+		if err != nil || s.Node == "" {
+			continue
+		}
+		info := Info{State: s, Liveness: Running, PID: l.PID}
+		if _, open := OpenGate(root, e.Name()); open {
+			info.Liveness = Blocked
+		}
+		out = append(out, info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].State.Updated.After(out[j].State.Updated) })
+	return out, nil
+}
+
 // Alive reports whether the process holding a lock is still there.
 func Alive(pid int) bool { return alive(pid) }
 
