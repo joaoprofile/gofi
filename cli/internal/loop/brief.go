@@ -9,6 +9,28 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
+// rerunnable are the stages an auditor would run again only to see them pass.
+var rerunnable = []string{"build", "static", "test"}
+
+// sensorsPassed tells an auditor what the sensors already said of the tree it
+// reads: the audit is only reached when they pass, and its turn changes no
+// file, so running them again says the same and costs a step.
+func sensorsPassed(s *State) string {
+	if s.Sensor == nil || len(s.Sensor.Failed) > 0 {
+		return ""
+	}
+	var passed []string
+	for _, st := range rerunnable {
+		if slices.Contains(s.Sensor.Stages, st) {
+			passed = append(passed, st)
+		}
+	}
+	if len(passed) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Os sensores %s passaram há pouco, nesta mesma árvore: não rode `verify` para confirmar de novo. Use-o só para ler um resultado que o seu papel audita — o rastreio (`trace`) de requisito sem código e de cenário sem teste.\n", strings.Join(passed, ", "))
+}
+
 // DefaultBrief is the turn an agent node sends: the role's skill, invoked on
 // the change, with what the run knows that the role needs now — the sensor
 // output that failed, the findings still open — and where to write a
@@ -108,6 +130,9 @@ func DefaultBrief(rl role.Role, s *State, elicitFile string) string {
 		fmt.Fprintf(&b, "Você é uma das lentes desta auditoria (%s): audite só o que o seu papel cobre — as outras lentes cobrem o resto. Grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d, lens %s) — o mesmo que `gofi verdict write %s --run %s --iter %d --lens %s`. Não grave a memória do contexto: o gofi junta as lentes.\n", strings.Join(s.Lenses, ", "), s.Context, s.Run, s.Iter, rl.Name, s.Context, s.Run, s.Iter, rl.Name)
 	case rl.Contract.Stage == "audit":
 		fmt.Fprintf(&b, "Grave o veredicto com a ferramenta `verdict_write` do gofi (context %s, run %s, iter %d) — o mesmo que `gofi verdict write %s --run %s --iter %d`.\n", s.Context, s.Run, s.Iter, s.Context, s.Run, s.Iter)
+	}
+	if rl.Contract.Stage == "audit" {
+		b.WriteString(sensorsPassed(s))
 	}
 	// An internal role's skill is not named here: withChange carries it
 	// inline, after the change, where it is the same words on every turn of

@@ -98,6 +98,8 @@ type Usage struct {
 type SensorResult struct {
 	Failed []string `json:"failed,omitempty"`
 	Output string   `json:"output,omitempty"`
+	// Stages are the stages the run asked for, set by the runtime.
+	Stages []string `json:"stages,omitempty"`
 	// Findings are the failure read into places — file, line, what is wrong
 	// — from the tool's own report: what the next turn is given instead of
 	// the raw output (0002, D6).
@@ -397,6 +399,7 @@ func (r *Runner) runNode(ctx context.Context, name string, n Node, s *State) err
 		}
 	case KindSensor:
 		res := r.Sensors.Run(ctx, n.Stages)
+		res.Stages = slices.Clone(n.Stages)
 		s.Sensor = &res
 		for _, st := range res.Failed {
 			if s.SensorFailures == nil {
