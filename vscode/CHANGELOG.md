@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.0
+
+Requer o gofi desta versão (o `gofi chat` com o painel de atividade e o `/audit`).
+
+- **O painel de chat saiu.** A conversa é o `gofi chat`, no terminal do editor: o
+  rosto do gofi na barra de título (ou **GOFI: Chat in Terminal**) o abre. O
+  painel reimplementava o chat em outra linguagem e já divergia dele — somava o
+  custo acumulado a cada turno, o "sempre permitir" cobria a ferramenta inteira
+  e parar a resposta encerrava o motor.
+- **O que só o painel tinha foi para o chat.** O livro de tokens e a auditoria
+  de recuperação são o `/audit`; o arquivo em foco é `Ctrl+Alt+G`, que escreve
+  `@arquivo#Linhas` no prompt.
+- **O grafo foi refeito.** Três visões no lugar do grafo de força: a visão geral
+  dos contextos e das árvores de código, o mapa do projeto inteiro (documentos e
+  código, cada arquivo uma célula) e o rastreio de um contexto, dos documentos
+  aos requisitos e das tabelas ao código. Lê também `.gofi/index/code`.
+- **Saíram as configurações do painel** (`provider`, `permissionMode`,
+  `requireApproval`, `intake`, `effort`…) e os comandos de sessão. Ficam
+  `gofiPath`, `model`, `terminal.location` e `graph.openOnStartup` — este agora
+  desligado por padrão.
+
 ## 0.6.0
 
 Requer o gofi desta versão (o `gofi chat` com prompt de várias linhas, menu de

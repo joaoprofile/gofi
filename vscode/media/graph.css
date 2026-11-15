@@ -1,546 +1,1022 @@
-/* The graph page — in its own editor tab, and in the chat panel switched to
-   its graph mode. Every rule is scoped to #graphView, so the page sits beside
-   the chat's stylesheet without either touching the other.
+/* The graph page. Colours come from the editor's theme; what the page adds is
+   one accent — gofi's cyan — and a colour per kind of thing, the same in every
+   view, so a spec is the same blue on a card, in the map and in the trace. */
 
-   Surfaces follow the editor's theme; the colours that carry meaning in the
-   drawing are fixed, so a node's kind and a context's stage read the same in
-   every theme. Lines are gofi's blue, as in the chat and the terminal. */
+:root {
+	--bg: var(--vscode-editor-background, #1f1f2e);
+	--fg: var(--vscode-foreground, #cccccc);
+	--muted: var(--vscode-descriptionForeground, #9d9d9d);
+	--panel: var(--vscode-sideBar-background, #181825);
+	--raised: var(--vscode-editorWidget-background, #252536);
+	--line: var(--vscode-panel-border, rgba(128, 128, 128, 0.28));
+	--hover: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.16));
+	--accent: #22d3ee;
+	--ink: #0b1220; /* text on a coloured cell */
 
-#graphView {
-  --gofi-cyan: #22d3ee;
-  --gofi-sky: #7dd3fc;
-  /* A context's stage on the map: how far its documents have taken it. */
-  --stage-code: #22d3ee;
-  --stage-spec: #60a5fa;
-  --stage-prd: #a78bfa;
-  --stage-empty: #64748b;
-  /* Hue carries the kind; saturation carries the weight. The documents are
-     what the page is about, so they keep the vivid tones; packages are
-     context for them, and a wall of 24 grey dots must not out-shout three
-     specs. */
-  --node-context: #22d3ee;
-  --node-spec: #60a5fa;
-  --node-prd: #a78bfa;
-  --node-memory: #fbbf24;
-  --node-entity: #34d399;
-  --node-package: #64748b;
-  --label-dim: #94a3b8;
-  --graph-line: #7dd3fc;
-  --graph-border: rgba(34, 211, 238, 0.28);
-  --graph-surface: color-mix(in srgb, var(--vscode-editor-background) 86%, #22d3ee 4%);
-  --bar-height: 42px;
+	--k-prd: #a78bfa;
+	--k-proposal: #fbbf24;
+	--k-design: #2dd4bf;
+	--k-delta: #fb923c;
+	--k-spec: #6f8dff;
+	--k-memory: #f472b6;
+	--k-doc: #7c8aa5;
+	--k-file: #56657c;
+	--k-file-owned: #22d3ee;
+	--k-entity: #34d399;
+	--k-requirement: #6f8dff;
 
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-  color: var(--vscode-foreground);
-  background: var(--vscode-editor-background);
+	--good: #34d399;
+	--warn: #fbbf24;
 }
 
-body.vscode-light #graphView {
-  --stage-code: #0891b2;
-  --stage-spec: #2563eb;
-  --stage-prd: #7c3aed;
-  --stage-empty: #94a3b8;
-  --node-context: #0891b2;
-  --node-spec: #2563eb;
-  --node-prd: #7c3aed;
-  --node-memory: #b45309;
-  --node-entity: #059669;
-  --node-package: #94a3b8;
-  --label-dim: #64748b;
-  --graph-line: #0891b2;
-  --graph-border: rgba(8, 145, 178, 0.3);
+* {
+	box-sizing: border-box;
 }
 
-/* The page in its own tab fills the window. */
-html:has(body.graph-page),
-body.graph-page {
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
+html,
+body {
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--vscode-font-family, system-ui, sans-serif);
+	font-size: var(--vscode-font-size, 13px);
+	line-height: 1.45;
 }
 
-#graphView * {
-  box-sizing: border-box;
+button {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+	text-align: inherit;
 }
 
-/* `hidden` wins over any display a rule below gives an element. */
-#graphView [hidden] {
-  display: none !important;
+button:focus-visible,
+.card:focus-visible,
+input:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: 1px;
 }
 
-#graphView #app {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
+.muted {
+	color: var(--muted);
 }
 
-/* ── tree pane ───────────────────────────────────────────────────────── */
-
-/* The tree and the graph answer different questions about the same data:
-   one is exact and enumerable, the other is shape. Side by side, clicking
-   either one moves the other. */
-#graphView #tree {
-  width: 240px;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--graph-border);
-  background: var(--vscode-sideBar-background);
-  overflow: hidden;
+.grow {
+	flex: 1;
 }
 
-#graphView #treeHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: var(--bar-height);
-  padding: 0 14px;
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--graph-border);
-  font-size: 0.78em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--vscode-descriptionForeground);
+/* ── frame ─────────────────────────────────────────────────────────────── */
+
+#app {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
 }
 
-#graphView #treeCount {
-  margin-left: auto;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: rgba(34, 211, 238, 0.12);
-  color: var(--gofi-cyan);
-  letter-spacing: 0;
+#top {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 14px;
+	height: 44px;
+	border-bottom: 1px solid var(--line);
+	background: var(--panel);
+	flex: none;
 }
 
-#graphView #treeBody {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px 6px 12px;
+#project {
+	font-weight: 700;
+	font-size: 14px;
+	color: var(--accent);
 }
 
-#graphView #main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+#totals {
+	color: var(--muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-#graphView .row-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 3px 8px 3px 2px;
-  border: none;
-  border-radius: 5px;
-  background: none;
-  color: var(--vscode-foreground);
-  font: inherit;
-  font-size: 0.92em;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+#tabs {
+	display: flex;
+	gap: 2px;
+	margin-left: 10px;
+	align-self: stretch;
 }
 
-#graphView .row-item:hover {
-  background: var(--vscode-list-hoverBackground);
+.tab {
+	padding: 0 12px;
+	color: var(--muted);
+	border-bottom: 2px solid transparent;
+	margin-bottom: -1px;
 }
 
-#graphView .row-item.selected {
-  background: rgba(34, 211, 238, 0.14);
-  color: var(--vscode-foreground);
-  box-shadow: inset 2px 0 0 var(--gofi-cyan);
+.tab:hover {
+	color: var(--fg);
 }
 
-#graphView .row-item .twist {
-  flex: 0 0 12px;
-  opacity: 0.6;
-  font-size: 0.8em;
+.tab.on {
+	color: var(--fg);
+	border-bottom-color: var(--accent);
+	font-weight: 600;
 }
 
-#graphView .row-item .dot {
-  flex: 0 0 8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+#search {
+	width: 190px;
+	height: 26px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 13px;
+	background: var(--vscode-input-background, rgba(128, 128, 128, 0.12));
+	color: var(--vscode-input-foreground, inherit);
+	font: inherit;
 }
 
-#graphView .row-item .label {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	white-space: nowrap;
+	color: var(--fg);
 }
 
-#graphView .row-item .meta {
-  margin-left: auto;
-  padding-left: 8px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.86em;
+.chip:hover {
+	background: var(--hover);
 }
 
-#graphView .group {
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.78em;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.chip.on {
+	border-color: var(--accent);
+	color: var(--accent);
+	background: rgba(34, 211, 238, 0.1);
 }
 
-/* ── top bar ─────────────────────────────────────────────────────────── */
-
-#graphView #bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: var(--bar-height);
-  padding: 0 12px;
-  border-bottom: 1px solid var(--graph-border);
-  background: var(--vscode-sideBar-background);
-  flex: 0 0 auto;
-  white-space: nowrap;
-  overflow: hidden;
+.chip b {
+	color: var(--muted);
+	font-weight: 600;
 }
 
-#graphView #scope {
-  font-weight: 700;
-  flex: 0 0 auto;
-  color: var(--gofi-sky);
+.link {
+	color: var(--vscode-textLink-foreground, #4daafc);
+	margin-left: 6px;
 }
 
-#graphView #counts {
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.88em;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.link:hover {
+	text-decoration: underline;
 }
 
-#graphView .grow {
-  flex: 1;
+#body {
+	position: relative;
+	display: flex;
+	flex: 1;
+	min-height: 0;
 }
 
-#graphView .chip {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  line-height: 1.6;
-  font-family: inherit;
-  font-size: 0.86em;
-  color: var(--vscode-foreground);
-  background: transparent;
-  border: 1px solid var(--graph-border);
-  border-radius: 999px;
-  padding: 1px 11px;
-  opacity: 1;
-  cursor: pointer;
+#view {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	overflow: auto;
 }
 
-/* In the chat the page shares a stylesheet that paints every button on hover;
-   the graph's buttons keep their own look. */
-#graphView .chip:hover {
-  border-color: var(--gofi-cyan);
-  color: var(--gofi-cyan);
-  background: rgba(34, 211, 238, 0.08);
+#empty {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	color: var(--muted);
 }
 
-#graphView .chip:focus-visible {
-  outline: 1px solid var(--gofi-cyan);
+#empty[hidden],
+#view[hidden],
+#details[hidden],
+#search[hidden],
+.tip[hidden] {
+	display: none;
 }
 
-#graphView .toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+#emptyFile {
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 12px;
+	margin: 0;
 }
 
-#graphView .toggle input {
-  margin: 0;
-  accent-color: var(--gofi-cyan);
+/* ── Visão geral ───────────────────────────────────────────────────────── */
+
+.view-overview {
+	padding: 18px 22px 40px;
 }
 
-#graphView .toggle:has(input:checked) {
-  border-color: var(--gofi-cyan);
-  background: rgba(34, 211, 238, 0.12);
-  color: var(--gofi-cyan);
+.view-overview section {
+	margin-bottom: 26px;
 }
 
-#graphView #search {
-  width: 150px;
-  font-family: inherit;
-  font-size: 0.86em;
-  color: var(--vscode-input-foreground);
-  background: var(--vscode-input-background);
-  border: 1px solid var(--graph-border);
-  border-radius: 999px;
-  padding: 2px 10px;
+.view-overview h2 {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin: 0 0 10px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 }
 
-#graphView #search:focus {
-  outline: none;
-  border-color: var(--gofi-cyan);
+.view-overview h2 .muted {
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+	font-size: 12px;
 }
 
-/* ── stage ───────────────────────────────────────────────────────────── */
-
-/* A faint dot grid under the drawing: it gives the canvas depth and makes a
-   pan read as movement, without competing with the nodes. */
-#graphView #stage {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  background-color: var(--vscode-editor-background);
-  background-image: radial-gradient(circle, rgba(125, 211, 252, 0.09) 1px, transparent 1.2px);
-  background-size: 22px 22px;
+.tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+	gap: 10px;
 }
 
-#graphView #canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: grab;
+.tile {
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--raised);
 }
 
-#graphView #canvas.dragging {
-  cursor: grabbing;
+.tile-value {
+	font-size: 24px;
+	font-weight: 700;
+	line-height: 1.1;
+	font-variant-numeric: tabular-nums;
 }
 
-/* The key: a small card in a corner, not a panel over the drawing. */
-#graphView #legend {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-width: calc(100% - 24px);
-  padding: 9px 12px 10px;
-  border: 1px solid var(--graph-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
-  backdrop-filter: blur(6px);
-  font-size: 0.8em;
-  pointer-events: none;
+.tile-label {
+	color: var(--muted);
 }
 
-#graphView #legend:empty {
-  display: none;
+.tile-sub {
+	margin-top: 2px;
+	font-size: 12px;
+	color: var(--good);
 }
 
-#graphView #legend .legend-title {
-  margin-top: 5px;
-  font-size: 0.86em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--vscode-descriptionForeground);
+.order {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
 }
 
-#graphView #legend .legend-title:first-child {
-  margin-top: 0;
+.order-level {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
-#graphView #legend .row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.arrow {
+	color: var(--muted);
 }
 
-#graphView #legend .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  background: var(--mark);
+.cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+	gap: 12px;
 }
 
-#graphView #legend .ring {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  border: 3px solid var(--mark);
+.card {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	padding: 13px 14px;
+	border: 1px solid var(--line);
+	border-left: 3px solid var(--muted);
+	border-radius: 8px;
+	background: var(--raised);
+	cursor: pointer;
 }
 
-#graphView #legend .line {
-  width: 14px;
-  height: 2px;
-  flex: 0 0 auto;
-  border-radius: 2px;
-  background: var(--mark);
-  opacity: 0.7;
+.card:hover {
+	border-color: var(--accent);
+	border-left-color: var(--accent);
 }
 
-#graphView #legend .count {
-  margin-left: auto;
-  padding-left: 10px;
-  color: var(--vscode-descriptionForeground);
+.card.stage-implementado {
+	border-left-color: var(--good);
 }
 
-#graphView #empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  text-align: center;
-  padding: 24px;
-  color: var(--vscode-descriptionForeground);
+.card.stage-especificado {
+	border-left-color: var(--k-spec);
 }
 
-#graphView #empty[hidden] {
-  display: none;
+.card.stage-descoberta {
+	border-left-color: var(--k-prd);
 }
 
-#graphView #empty p {
-  max-width: 46ch;
-  white-space: pre-line;
+.card.tree {
+	border-left-color: var(--k-file-owned);
 }
 
-#graphView #empty code {
-  font-family: var(--vscode-editor-font-family);
-  background: var(--vscode-textCodeBlock-background);
-  padding: 1px 4px;
-  border-radius: 3px;
+.card-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
 }
 
-/* ── details ─────────────────────────────────────────────────────────── */
-
-#graphView #details {
-  position: absolute;
-  top: calc(var(--bar-height) + 10px);
-  right: 10px;
-  bottom: 10px;
-  width: 300px;
-  max-width: calc(100% - 20px);
-  overflow-y: auto;
-  padding: 14px 16px 18px;
-  border: 1px solid var(--graph-border);
-  border-radius: 12px;
-  background: var(--vscode-editorWidget-background);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+.card h3 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 700;
 }
 
-#graphView #details[hidden] {
-  display: none;
+.stage {
+	font-size: 11px;
+	color: var(--muted);
+	white-space: nowrap;
 }
 
-#graphView #details h2 {
-  margin: 0 24px 4px 0;
-  font-size: 1.1em;
-  color: var(--gofi-sky);
-  word-break: break-word;
+.stage.stage-implementado {
+	color: var(--good);
 }
 
-#graphView #details h3 {
-  margin: 16px 0 6px;
-  font-size: 0.78em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--vscode-descriptionForeground);
+.stage.stage-especificado {
+	color: var(--k-spec);
 }
 
-#graphView #detailsMeta {
-  margin: 0;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.9em;
+.stage.stage-descoberta {
+	color: var(--k-prd);
 }
 
-#graphView #details ul {
-  margin: 0;
-  padding-left: 16px;
+.chip.stage-implementado::before,
+.chip.stage-especificado::before,
+.chip.stage-descoberta::before,
+.chip.stage-vazio::before {
+	content: '';
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--muted);
 }
 
-#graphView #details li {
-  margin: 2px 0;
-  word-break: break-word;
+.chip.stage-implementado::before {
+	background: var(--good);
 }
 
-#graphView #details .action {
-  display: block;
-  width: 100%;
-  margin-top: 14px;
-  text-align: center;
+.chip.stage-especificado::before {
+	background: var(--k-spec);
 }
 
-#graphView #details .tag {
-  display: inline-block;
-  margin: 2px 4px 2px 0;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--graph-border);
-  font-family: var(--vscode-editor-font-family);
-  font-size: 0.84em;
+.chip.stage-descoberta::before {
+	background: var(--k-prd);
 }
 
-#graphView #details .link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--vscode-textLink-foreground);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+.meter {
+	height: 5px;
+	border-radius: 3px;
+	background: rgba(128, 128, 128, 0.25);
+	overflow: hidden;
 }
 
-#graphView #details .link:hover {
-  text-decoration: underline;
-  background: none;
+.meter i {
+	display: block;
+	height: 100%;
+	background: var(--good);
 }
 
-#graphView #details .empty {
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.9em;
+.card-line {
+	font-size: 12px;
 }
 
-#graphView .icon {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: var(--vscode-foreground);
-  font-size: 1.2em;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.7;
+.card-rel {
+	font-size: 12px;
 }
 
-#graphView .icon:hover {
-  opacity: 1;
-  background: none;
+.pills,
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
 }
 
-/* A narrow panel — the chat in the sidebar — gives the drawing the width:
-   the tree folds away, and the bar keeps only what fits. */
-@media (max-width: 620px) {
-  #graphView #tree {
-    display: none;
-  }
+.pill {
+	padding: 1px 7px;
+	border-radius: 9px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--ink);
+	background: var(--k-doc);
+}
 
-  #graphView #counts,
-  #graphView #refresh {
-    display: none;
-  }
+.pill.ghost {
+	background: none;
+	color: var(--muted);
+	border: 1px dashed var(--line);
+	font-weight: 400;
+}
 
-  #graphView #search {
-    width: 110px;
-  }
+.bars {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: 2px;
+}
 
-  #graphView #legend {
-    left: 8px;
-    bottom: 8px;
-    padding: 6px 9px 7px;
-    font-size: 0.72em;
-    opacity: 0.92;
-  }
+.bar {
+	display: grid;
+	grid-template-columns: 118px 1fr 52px;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+}
+
+.bar-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.bar-track {
+	height: 5px;
+	border-radius: 3px;
+	background: rgba(128, 128, 128, 0.2);
+	overflow: hidden;
+}
+
+.bar-track i {
+	display: block;
+	height: 100%;
+	background: var(--k-file-owned);
+}
+
+.bar-value {
+	text-align: right;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── the colour of each kind ───────────────────────────────────────────── */
+
+.k-prd {
+	background: var(--k-prd);
+}
+
+.k-proposal {
+	background: var(--k-proposal);
+}
+
+.k-design {
+	background: var(--k-design);
+}
+
+.k-delta {
+	background: var(--k-delta);
+}
+
+.k-spec {
+	background: var(--k-spec);
+}
+
+.k-memory {
+	background: var(--k-memory);
+}
+
+.k-doc {
+	background: var(--k-doc);
+}
+
+.k-file {
+	background: var(--k-file);
+}
+
+/* ── Mapa ──────────────────────────────────────────────────────────────── */
+
+.view-map {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	padding: 10px 14px 14px;
+	gap: 8px;
+}
+
+.map-bar,
+.lights,
+.trace-bar,
+.trace-facts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+}
+
+.crumbs {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.crumb {
+	color: var(--vscode-textLink-foreground, #4daafc);
+}
+
+.crumb.on {
+	color: var(--fg);
+	font-weight: 700;
+	cursor: default;
+}
+
+.crumb-facts {
+	margin-left: 8px;
+}
+
+.legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	font-size: 11px;
+	color: var(--muted);
+}
+
+.key {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.key i {
+	width: 9px;
+	height: 9px;
+	border-radius: 2px;
+}
+
+.map {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	border-radius: 6px;
+}
+
+.group {
+	position: absolute;
+	border: 1px solid var(--line);
+	border-radius: 3px;
+	pointer-events: none;
+}
+
+.group.d1 {
+	border-color: rgba(128, 128, 128, 0.5);
+	background: rgba(128, 128, 128, 0.07);
+}
+
+.group.d2 {
+	background: rgba(128, 128, 128, 0.07);
+}
+
+.group-name {
+	position: absolute;
+	left: 0;
+	top: 0;
+	max-width: 100%;
+	height: 18px;
+	padding: 0 6px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: 11px;
+	line-height: 18px;
+	font-weight: 600;
+	pointer-events: auto;
+}
+
+.group.g-area > .group-name {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.group-name:hover {
+	color: var(--accent);
+}
+
+.leaf {
+	position: absolute;
+	overflow: hidden;
+	border-radius: 2px;
+	color: var(--ink);
+	font-size: 10.5px;
+	line-height: 1.25;
+	text-align: left;
+	transition: opacity 0.12s;
+}
+
+.leaf span {
+	display: block;
+	padding: 2px 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-weight: 600;
+}
+
+.leaf.k-file {
+	color: #e6edf3;
+}
+
+.leaf.k-file.owned,
+.key i.owned {
+	background: var(--k-file-owned);
+	color: var(--ink);
+}
+
+.leaf.archived {
+	/* What was archived is still the project's, set back: striped, not bright. */
+	background-image: repeating-linear-gradient(135deg, rgba(11, 18, 32, 0.38) 0 4px, transparent 4px 8px);
+}
+
+.leaf:hover {
+	filter: brightness(1.18);
+	z-index: 2;
+}
+
+.leaf.dim {
+	opacity: 0.13;
+}
+
+.leaf.sel {
+	outline: 2px solid #fff;
+	outline-offset: -1px;
+	z-index: 3;
+}
+
+.tip {
+	position: absolute;
+	z-index: 10;
+	max-width: 420px;
+	padding: 7px 10px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--raised);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+	font-size: 12px;
+	pointer-events: none;
+}
+
+.tip .muted {
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 11px;
+	word-break: break-all;
+}
+
+/* ── Rastreio ──────────────────────────────────────────────────────────── */
+
+.view-trace {
+	display: flex;
+	flex-direction: column;
+	padding: 10px 14px 0;
+	gap: 8px;
+}
+
+.trace-facts {
+	font-size: 12px;
+}
+
+.pad {
+	padding: 20px 4px;
+}
+
+.board {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(190px, 1fr) minmax(250px, 1.5fr) minmax(130px, 0.7fr) minmax(190px, 1fr);
+	gap: 0 64px;
+	align-items: start;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 6px 2px 30px;
+}
+
+.wires {
+	position: absolute;
+	left: 0;
+	top: 0;
+	pointer-events: none;
+}
+
+.wire {
+	fill: none;
+	stroke: var(--muted);
+	stroke-width: 1;
+	opacity: 0.28;
+}
+
+.wire.w-toca,
+.wire.w-implementa {
+	stroke: var(--k-entity);
+}
+
+.wire.w-modifica {
+	stroke: var(--k-delta);
+}
+
+.board.following .wire {
+	opacity: 0.05;
+}
+
+.board.following .wire.lit {
+	stroke: var(--accent);
+	stroke-width: 1.6;
+	opacity: 0.95;
+}
+
+.column {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.column h3 {
+	position: sticky;
+	top: -6px;
+	z-index: 1;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 4px;
+	padding: 6px 0 4px;
+	background: var(--bg);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.column h3 .muted {
+	font-weight: 400;
+	letter-spacing: 0;
+}
+
+.none {
+	margin: 0;
+	font-size: 12px;
+}
+
+.node {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 26px;
+	padding: 3px 9px;
+	border: 1px solid var(--line);
+	border-left: 3px solid var(--k-doc);
+	border-radius: 5px;
+	background: var(--raised);
+	transition: opacity 0.12s;
+}
+
+.node:hover {
+	border-color: var(--accent);
+}
+
+.node.k-prd,
+.node.k-proposal,
+.node.k-design,
+.node.k-delta,
+.node.k-spec,
+.node.k-memory,
+.node.k-doc {
+	background: var(--raised);
+}
+
+.node.k-prd {
+	border-left-color: var(--k-prd);
+}
+
+.node.k-proposal {
+	border-left-color: var(--k-proposal);
+}
+
+.node.k-design {
+	border-left-color: var(--k-design);
+}
+
+.node.k-delta {
+	border-left-color: var(--k-delta);
+}
+
+.node.k-spec {
+	border-left-color: var(--k-spec);
+}
+
+.node.k-memory {
+	border-left-color: var(--k-memory);
+}
+
+.node.k-requirement {
+	border-left-color: var(--muted);
+}
+
+.node.k-requirement.s-vivo {
+	border-left-color: var(--good);
+}
+
+.node.k-requirement.s-proposto {
+	border-left-color: var(--warn);
+}
+
+.node.k-entity {
+	border-left-color: var(--k-entity);
+}
+
+.node.k-package {
+	border-left-color: var(--k-file-owned);
+}
+
+.node.k-package.borrowed {
+	border-left-color: var(--k-file);
+}
+
+.node-name {
+	flex: none;
+	font-weight: 600;
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 12px;
+}
+
+.node-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.node-count,
+.node-status {
+	flex: none;
+	margin-left: auto;
+	padding: 0 6px;
+	border-radius: 8px;
+	font-size: 10.5px;
+	color: var(--muted);
+	background: rgba(128, 128, 128, 0.18);
+}
+
+.node.dim,
+.board.following .node:not(.lit) {
+	opacity: 0.25;
+}
+
+.node.sel {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ── detalhes ──────────────────────────────────────────────────────────── */
+
+#details {
+	position: relative;
+	flex: none;
+	width: 320px;
+	overflow: auto;
+	padding: 14px 16px 30px;
+	border-left: 1px solid var(--line);
+	background: var(--panel);
+}
+
+#closeDetails {
+	position: absolute;
+	right: 10px;
+	top: 8px;
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
+	font-size: 16px;
+	text-align: center;
+	color: var(--muted);
+}
+
+#closeDetails:hover {
+	background: var(--hover);
+	color: var(--fg);
+}
+
+.badge {
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 9px;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--ink);
+	background: var(--k-doc);
+}
+
+.badge.k-file,
+.badge.k-package {
+	background: var(--k-file-owned);
+}
+
+.badge.k-entity {
+	background: var(--k-entity);
+}
+
+.badge.k-requirement {
+	background: var(--k-requirement);
+}
+
+#detailsTitle {
+	margin: 8px 0 2px;
+	font-size: 15px;
+	line-height: 1.3;
+	word-break: break-word;
+}
+
+#detailsPath {
+	margin: 0 0 8px;
+	color: var(--muted);
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 11px;
+	word-break: break-all;
+}
+
+#detailsFacts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	margin: 0 0 10px;
+	font-size: 12px;
+}
+
+#detailsFacts span {
+	padding: 1px 7px;
+	border-radius: 9px;
+	background: rgba(128, 128, 128, 0.18);
+}
+
+#detailsBody h4 {
+	display: flex;
+	gap: 8px;
+	margin: 16px 0 4px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+#detailsBody h4 .muted {
+	font-weight: 400;
+}
+
+#detailsBody ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.item {
+	display: block;
+	width: 100%;
+	padding: 3px 6px;
+	border-radius: 4px;
+}
+
+.item:not(:disabled):hover {
+	background: var(--hover);
+}
+
+.item:disabled {
+	cursor: default;
+}
+
+.item span {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.item small {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--muted);
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 10.5px;
 }

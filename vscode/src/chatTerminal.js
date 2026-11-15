@@ -1,7 +1,8 @@
 'use strict';
 
+const path = require('path');
 const vscode = require('vscode');
-const { findProjectRoot } = require('./gofiConfig.js');
+const { findProjectRoot } = require('./project.js');
 
 /** The terminal's name — also how it is found again after a window reload. */
 const TERMINAL_NAME = 'GOFI Chat';
@@ -35,11 +36,36 @@ function chatCommandLine({ gofiPath, model, platform = process.platform } = {}) 
 }
 
 /**
+ * How the chat is told about a file: `@path`, with the lines when some are
+ * selected — `@src/app.go#L10-24`. The path is relative to where the chat
+ * runs, which is what the agent resolves it against.
+ *
+ * @param {string} root Where the chat runs
+ * @param {string} file Absolute path of the file
+ * @param {{ start: number, end: number } | null} lines 1-based, inclusive
+ */
+function mentionOf(root, file, lines) {
+	let rel = path.relative(root, file);
+	if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+		rel = file; // outside the project: the whole path is the only honest one
+	}
+	rel = rel.split(path.sep).join('/');
+	// A path with a space would end at it: quoted, it stays one word.
+	const target = /\s/.test(rel) ? `"${rel}"` : rel;
+	if (!lines) {
+		return `@${target} `;
+	}
+	return lines.start === lines.end ? `@${target}#L${lines.start} ` : `@${target}#L${lines.start}-${lines.end} `;
+}
+
+/**
  * `gofi chat` in a VSCode terminal: the terminal chat, with the editor around
  * it. One terminal per window — asking for it again shows the one there is.
  */
 class ChatTerminal {
-	constructor() {
+	/** @param {vscode.ExtensionContext} [context] */
+	constructor(context) {
+		this.context = context;
 		this.subscriptions = [
 			vscode.window.onDidChangeActiveTerminal?.((terminal) => this.setFocus(terminal)),
 			vscode.window.onDidCloseTerminal?.(() => this.setFocus(vscode.window.activeTerminal)),
@@ -56,26 +82,42 @@ class ChatTerminal {
 		vscode.commands.executeCommand('setContext', CONTEXT_KEY, this.isChat(terminal));
 	}
 
+	/** The chat's terminal, when there is one. */
+	find() {
+		return (vscode.window.terminals || []).find((t) => this.isChat(t));
+	}
+
+	/** Where the chat runs: the project's root, or the folder that is open. */
+	root() {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		if (!folder) {
+			return null;
+		}
+		// The chat runs where the project is: a workspace opened on a folder
+		// inside it still finds the skills and the runs.
+		return findProjectRoot(folder.uri.fsPath) || folder.uri.fsPath;
+	}
+
 	/** Shows the chat's terminal, starting the chat in a new one if there is none. */
 	open() {
-		const existing = (vscode.window.terminals || []).find((t) => this.isChat(t));
+		const existing = this.find();
 		if (existing) {
 			existing.show();
 			return existing;
 		}
-		const folder = vscode.workspace.workspaceFolders?.[0];
-		if (!folder) {
+		const root = this.root();
+		if (!root) {
 			vscode.window.showWarningMessage('GOFI: abra uma pasta antes.');
 			return undefined;
 		}
 		const config = vscode.workspace.getConfiguration('gofiAI');
-		// The chat runs where the project is: a workspace opened on a folder
-		// inside it still finds the skills and the runs.
-		const root = findProjectRoot(folder.uri.fsPath);
 		const options = {
 			name: TERMINAL_NAME,
-			cwd: root ? vscode.Uri.file(root) : folder.uri,
-			iconPath: new vscode.ThemeIcon('comment-discussion'),
+			cwd: vscode.Uri.file(root),
+			// The tab wears the gofi face, like the button that opens it.
+			iconPath: this.context
+				? vscode.Uri.joinPath(this.context.extensionUri, 'images', 'gofi.svg')
+				: new vscode.ThemeIcon('comment-discussion'),
 		};
 		if (config.get('terminal.location') !== 'panel') {
 			options.location = { viewColumn: vscode.ViewColumn.Beside };
@@ -108,6 +150,38 @@ class ChatTerminal {
 		terminal.sendText(PASTE_IMAGE, false);
 	}
 
+	/**
+	 * Points the chat at the file in the editor: its path goes into the prompt
+	 * as an `@` mention, with the selected lines when there are some. Nothing
+	 * is sent — the person writes the request around it.
+	 *
+	 * With no chat open there is no prompt to write into: the chat is opened,
+	 * and the mention waits for the person to ask again once it is up.
+	 */
+	mention() {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.document.uri.scheme !== 'file') {
+			vscode.window.showWarningMessage('GOFI: abra um arquivo para mencioná-lo no chat.');
+			return;
+		}
+		const terminal = this.find();
+		if (!terminal) {
+			this.open();
+			vscode.window.setStatusBarMessage?.('GOFI: chat aberto — repita o comando para mencionar o arquivo', 5000);
+			return;
+		}
+		const selection = editor.selection;
+		const lines = selection && !selection.isEmpty
+			? {
+				start: selection.start.line + 1,
+				// A selection that ends at the start of a line does not include it.
+				end: selection.end.character === 0 && selection.end.line > selection.start.line ? selection.end.line : selection.end.line + 1,
+			}
+			: null;
+		terminal.show();
+		terminal.sendText(mentionOf(this.root() || '', editor.document.uri.fsPath, lines), false);
+	}
+
 	dispose() {
 		for (const s of this.subscriptions) {
 			s.dispose();
@@ -115,4 +189,4 @@ class ChatTerminal {
 	}
 }
 
-module.exports = { ChatTerminal, chatCommandLine, TERMINAL_NAME, CONTEXT_KEY, NEWLINE, PASTE_IMAGE };
+module.exports = { ChatTerminal, chatCommandLine, mentionOf, TERMINAL_NAME, CONTEXT_KEY, NEWLINE, PASTE_IMAGE };

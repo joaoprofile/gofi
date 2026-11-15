@@ -3,7 +3,7 @@
 const vscode = require('vscode');
 const path = require('path');
 
-const { findProjectRoot } = require('./gofiConfig.js');
+const { findProjectRoot } = require('./project.js');
 const fs = require('fs');
 const { listRuns, listBatches, readRun, runMarkup, RUNS } = require('./runView.js');
 

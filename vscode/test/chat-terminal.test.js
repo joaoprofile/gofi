@@ -1,8 +1,9 @@
 'use strict';
 
 // GOFI: Chat in Terminal — one terminal running `gofi chat` in the project
-// root, found again by name, and a paste that hands ctrl+v to the chat only
-// when the clipboard has no text.
+// root, found again by name; a paste that hands ctrl+v to the chat only when
+// the clipboard has no text; and the file in the editor mentioned in the
+// prompt. The chat itself is the CLI's: nothing of a conversation lives here.
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -31,7 +32,8 @@ vscode.commands.executeCommand = (...args) => { executed.push(args); };
 vscode.workspace.getConfiguration = () => ({ get: (key) => settings[key] });
 vscode.env = { clipboard: { readText: async () => clipboard } };
 
-const { ChatTerminal, chatCommandLine, TERMINAL_NAME, CONTEXT_KEY, PASTE_IMAGE } = require('../src/chatTerminal.js');
+vscode.window.setStatusBarMessage = () => {};
+const { ChatTerminal, chatCommandLine, mentionOf, TERMINAL_NAME, CONTEXT_KEY, PASTE_IMAGE } = require('../src/chatTerminal.js');
 
 function reset() {
 	created.length = 0;
@@ -124,15 +126,73 @@ test('ctrl+v pastes text as always and hands the key to the chat when there is n
 	assert.deepStrictEqual(executed, [['workbench.action.terminal.paste']]);
 });
 
-test('the manifest offers the command and binds the keys to the chat terminal only', () => {
+test('a mention is the path as the chat resolves it, with the lines that are selected', () => {
+	const root = path.join(path.sep, 'work', 'shop');
+	assert.strictEqual(mentionOf(root, path.join(root, 'internal', 'cart', 'cart.go'), null), '@internal/cart/cart.go ');
+	assert.strictEqual(mentionOf(root, path.join(root, 'internal', 'cart', 'cart.go'), { start: 10, end: 24 }), '@internal/cart/cart.go#L10-24 ');
+	assert.strictEqual(mentionOf(root, path.join(root, 'main.go'), { start: 7, end: 7 }), '@main.go#L7 ');
+	assert.strictEqual(mentionOf(root, path.join(root, 'docs', 'my notes.md'), null), '@"docs/my notes.md" ');
+	// A file outside the project keeps its whole path.
+	const outside = path.join(path.sep, 'etc', 'hosts');
+	assert.strictEqual(mentionOf(root, outside, null), `@${outside.split(path.sep).join('/')} `);
+});
+
+test('mentioning writes into the prompt of the chat that is open, and sends nothing', () => {
+	reset();
+	const root = project();
+	vscode.workspace.workspaceFolders = [{ uri: vscode.Uri.file(root) }];
+	const chat = new ChatTerminal();
+	const file = path.join(root, 'backend', 'api', 'server.go');
+	vscode.window.activeTextEditor = {
+		document: { uri: { scheme: 'file', fsPath: file } },
+		selection: { isEmpty: false, start: { line: 4, character: 2 }, end: { line: 9, character: 0 } },
+	};
+
+	// With no chat open there is no prompt to write into: the chat is opened.
+	chat.mention();
+	assert.strictEqual(created.length, 1);
+	assert.strictEqual(created[0].sent.length, 1, 'only the command that starts the chat was sent');
+
+	chat.mention();
+	assert.deepStrictEqual(created[0].sent[1], ['@backend/api/server.go#L5-9 ', false], 'the lines selected, the last one left out when the selection ends at its start');
+
+	vscode.window.activeTextEditor.selection = { isEmpty: true, start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+	chat.mention();
+	assert.deepStrictEqual(created[0].sent[2], ['@backend/api/server.go ', false]);
+
+	vscode.window.activeTextEditor = undefined;
+	chat.mention();
+	assert.strictEqual(created[0].sent.length, 3, 'with no file in the editor nothing is written');
+});
+
+test('the manifest opens the chat from the gofi button and keeps no panel of its own', () => {
 	const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-	const command = manifest.contributes.commands.find((c) => c.command === 'gofi-ai.chatInTerminal');
+	const contributes = manifest.contributes;
+	const command = contributes.commands.find((c) => c.command === 'gofi-ai.chatInTerminal');
 	assert.strictEqual(`${command.category}: ${command.title}`, 'GOFI: Chat in Terminal');
-	for (const binding of manifest.contributes.keybindings) {
-		assert.match(binding.when, /terminalFocus && gofi-ai\.chatTerminalFocus/);
+	assert.strictEqual(command.icon, 'images/gofi.svg');
+	assert.ok(fs.existsSync(path.join(__dirname, '..', command.icon)), 'the button has its picture');
+	assert.deepStrictEqual(contributes.menus['editor/title'].map((m) => m.command), ['gofi-ai.chatInTerminal']);
+	assert.strictEqual(contributes.views, undefined, 'the conversation is the terminal chat: there is no webview panel');
+	assert.strictEqual(contributes.viewsContainers, undefined);
+
+	for (const binding of contributes.keybindings.filter((b) => b.command !== 'gofi-ai.mention')) {
+		assert.match(binding.when, /terminalFocus && gofi-ai\.chatTerminalFocus/, 'the chat\'s keys are bound in its terminal only');
 	}
-	const newline = manifest.contributes.keybindings.find((b) => b.key === 'shift+enter');
+	const newline = contributes.keybindings.find((b) => b.key === 'shift+enter');
 	assert.strictEqual(newline.args.text, '\u001b\r', 'shift+enter is what the chat reads as alt+enter');
+
+	// Every command the manifest offers is one the extension registers.
+	const source = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+	for (const c of contributes.commands) {
+		assert.ok(source.includes(`'${c.command}'`), `${c.command} is offered and not registered`);
+	}
+	// And every setting it declares is one it reads.
+	const code = ['extension.js', 'src/chatTerminal.js', 'src/graphView.js', 'src/runPanel.js']
+		.map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
+	for (const key of Object.keys(contributes.configuration.properties)) {
+		assert.ok(code.includes(`'${key.replace('gofiAI.', '')}'`), `${key} is declared and never read`);
+	}
 });
 
 run();

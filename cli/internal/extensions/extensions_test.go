@@ -77,9 +77,11 @@ func TestVSIXLayout(t *testing.T) {
 		"[Content_Types].xml",
 		"extension/package.json",
 		"extension/extension.js",
-		"extension/media/main.js",
-		"extension/media/main.css",
+		"extension/src/chatTerminal.js",
+		"extension/media/graph.js",
+		"extension/media/graph.css",
 		"extension/images/icon.png",
+		"extension/images/gofi.svg",
 	} {
 		if !names[required] {
 			t.Errorf("vsix is missing %s", required)

@@ -1,63 +1,49 @@
 'use strict';
 
 const vscode = require('vscode');
-const { ChatManager, VIEW_ID } = require('./src/chatManager.js');
-const { resolveProvider } = require('./src/providers/index.js');
-const { readGofiProject, findProjectRoot } = require('./src/gofiConfig.js');
-const { hasGraph } = require('./src/docGraph.js');
+const { findProjectRoot } = require('./src/project.js');
+const { hasGraph } = require('./src/projectModel.js');
 const { GraphPanel } = require('./src/graphView.js');
 const { RunPanel } = require('./src/runPanel.js');
 const { ChatTerminal } = require('./src/chatTerminal.js');
 
-/** @param {vscode.ExtensionContext} context */
+/**
+ * gofi inside the editor: the chat in a terminal, and the two things a
+ * terminal cannot draw — the project's graph and a delivery run's flow.
+ *
+ * The conversation itself is `gofi chat`, the same one a plain terminal runs.
+ * The extension only opens it, lends it the editor's keys and points it at the
+ * file being edited; everything a conversation does lives in the CLI, once.
+ *
+ * @param {vscode.ExtensionContext} context
+ */
 function activate(context) {
-	const chats = new ChatManager(context);
+	const chat = new ChatTerminal(context);
 	const graph = new GraphPanel(context);
 	const runs = new RunPanel(context);
-	const terminalChat = new ChatTerminal();
 
 	context.subscriptions.push(
-		// `retainContextWhenHidden` keeps the transcript alive when the user
-		// switches to another view container — losing a conversation because the
-		// panel scrolled out of sight is not a tradeoff worth the memory.
-		vscode.window.registerWebviewViewProvider(VIEW_ID, chats, {
-			webviewOptions: { retainContextWhenHidden: true },
-		}),
-
-		vscode.commands.registerCommand('gofi-ai.focus', () => vscode.commands.executeCommand(`${VIEW_ID}.focus`)),
-		vscode.commands.registerCommand('gofi-ai.openInEditor', () => chats.openInEditor()),
-		// The editor title-bar button routes through the user's preference, so
-		// one icon serves both "dock it in the sidebar" and "give me a page".
-		vscode.commands.registerCommand('gofi-ai.open', () => {
-			const where = vscode.workspace.getConfiguration('gofiAI').get('openLocation');
-			if (where === 'beside') {
-				chats.openInEditor();
-			} else {
-				vscode.commands.executeCommand(`${VIEW_ID}.focus`);
-			}
-		}),
-		vscode.commands.registerCommand('gofi-ai.newSession', () => chats.newSession()),
-		vscode.commands.registerCommand('gofi-ai.history', () => chats.history()),
-		vscode.commands.registerCommand('gofi-ai.stop', () => chats.stop()),
-		// `gofi chat` itself, in a terminal: Ctrl+Shift+P → "GOFI: Chat in Terminal".
-		vscode.commands.registerCommand('gofi-ai.chatInTerminal', () => terminalChat.open()),
-		vscode.commands.registerCommand('gofi-ai.chatTerminalPaste', () => terminalChat.paste()),
-		vscode.commands.registerCommand('gofi-ai.openTerminal', () => openEngineTerminal()),
-		vscode.commands.registerCommand('gofi-ai.doctor', () => runDoctor()),
+		// Ctrl+Shift+P → "GOFI: Chat in Terminal", or the gofi face in the
+		// editor's title bar.
+		vscode.commands.registerCommand('gofi-ai.chatInTerminal', () => chat.open()),
+		// The id the title-bar button had while it opened a panel: kept so a
+		// keybinding made for it still opens the chat.
+		vscode.commands.registerCommand('gofi-ai.open', () => chat.open()),
+		vscode.commands.registerCommand('gofi-ai.chatTerminalPaste', () => chat.paste()),
+		vscode.commands.registerCommand('gofi-ai.mention', () => chat.mention()),
 		vscode.commands.registerCommand('gofi-ai.graph', (name) => graph.open(name)),
 		vscode.commands.registerCommand('gofi-ai.docsBuild', () => graph.build()),
 		vscode.commands.registerCommand('gofi-ai.run', () => runs.pick()),
-		{ dispose: () => chats.dispose() },
+		vscode.commands.registerCommand('gofi-ai.doctor', () => runDoctor()),
+		{ dispose: () => chat.dispose() },
 		{ dispose: () => graph.dispose() },
 		{ dispose: () => runs.dispose() },
-		{ dispose: () => terminalChat.dispose() },
 	);
 
-	// A project that already has a graph opens showing it. The panel is a
-	// reading surface, not a tool to go fetch — and the one thing that kept it
-	// from being used was having to know it existed. Off by setting for anyone
-	// who disagrees.
-	if (vscode.workspace.getConfiguration('gofiAI').get('graph.openOnStartup') !== false) {
+	// A project that already has a graph can open showing it: the panel is a
+	// reading surface, and what keeps one from being used is having to know it
+	// exists. Off unless asked for.
+	if (vscode.workspace.getConfiguration('gofiAI').get('graph.openOnStartup') === true) {
 		const folder = vscode.workspace.workspaceFolders?.[0];
 		if (folder) {
 			const root = findProjectRoot(folder.uri.fsPath);
@@ -68,59 +54,19 @@ function activate(context) {
 	}
 }
 
-/**
- * Drops the user into the engine's own interactive TUI in a VSCode terminal.
- *
- * The chat panel covers the normal path; this is the escape hatch for what a
- * webview cannot host — the engine's own approval prompts, `/resume`, and any
- * interactive flow that expects a real terminal.
- */
-function openEngineTerminal() {
+/** Runs `gofi doctor` where the person can read it: what is installed, and what is missing. */
+function runDoctor() {
 	const folder = vscode.workspace.workspaceFolders?.[0];
 	if (!folder) {
-		vscode.window.showWarningMessage('GOFI AI: abra uma pasta antes.');
+		vscode.window.showWarningMessage('GOFI: abra uma pasta antes.');
 		return;
 	}
-	const config = vscode.workspace.getConfiguration('gofiAI');
-	const exe = (config.get('claudeCode.executable') || '').trim() || 'claude';
-	const project = readGofiProject(folder.uri.fsPath);
-	const model = (config.get('model') || '').trim() || (project && project.model) || '';
-
-	const terminal = vscode.window.createTerminal({
-		name: 'GOFI AI',
-		cwd: folder.uri,
-		iconPath: new vscode.ThemeIcon('comment-discussion'),
-	});
+	const gofi = String(vscode.workspace.getConfiguration('gofiAI').get('gofiPath') || '').trim() || 'gofi';
+	const terminal = vscode.window.createTerminal({ name: 'GOFI doctor', cwd: folder.uri });
 	terminal.show();
-	terminal.sendText(model === '' ? exe : `${exe} --model ${model}`);
+	terminal.sendText(`${/\s/.test(gofi) ? `"${gofi}"` : gofi} doctor`);
 }
 
-/** Reports whether the configured engine is actually reachable, and from where. */
-async function runDoctor() {
-	const folder = vscode.workspace.workspaceFolders?.[0];
-	const config = vscode.workspace.getConfiguration('gofiAI');
-	const provider = resolveProvider(config);
-	const cwd = folder ? folder.uri.fsPath : process.cwd();
-	const project = folder ? readGofiProject(cwd) : null;
-
-	const result = await provider.probe({ cwd, config, project });
-	const where = project ? `projeto ${project.name}` : 'fora de um projeto gofi';
-
-	if (result.ok) {
-		vscode.window.showInformationMessage(`GOFI AI — ${provider.label} ok (${result.detail}), ${where}.`);
-		return;
-	}
-	const choice = await vscode.window.showErrorMessage(
-		`GOFI AI — ${provider.label} indisponível: ${result.detail}`,
-		...(result.hint ? ['Abrir configurações'] : []),
-	);
-	if (choice === 'Abrir configurações') {
-		vscode.commands.executeCommand('workbench.action.openSettings', 'gofiAI');
-	}
-}
-
-function deactivate() {
-	require('./src/intake.js').stopIntakeServers();
-}
+function deactivate() {}
 
 module.exports = { activate, deactivate };

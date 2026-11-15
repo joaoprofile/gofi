@@ -22,14 +22,16 @@ func newInstallCmd() *cobra.Command {
 		Short: i18n.T("cmd.install.short"),
 		Long: `Install, or repair, what wires gofi into the editor and the coding agent:
 
-  extensions  the GOFI AI panel, in every VSCode-family editor on PATH
+  extensions  the GOFI AI extension — the chat in the editor's terminal, the
+              project's graph, a run drawn — in every VSCode-family editor on PATH
   mcp         gofi's MCP server, in the file the project's host reads
   guard       the hook that keeps the agent asking the index first
   hooks       the git hooks that keep the code graph in the commit
 
 gofi init installs all of it. Without a subcommand, this installs everything
-the project asks for, as init would: the host decides what applies (the panel
-drives Claude Code; the guard needs a host with hooks) and .gofi.yaml decides
+the project asks for, as init would: the host decides what applies (the
+extension's chat is gofi chat, on Claude Code; the guard needs a host with
+hooks) and .gofi.yaml decides
 the rest (ai.guard, graph.hooks). Each item reports on its own line, and one
 that fails does not stop the others. Run again, it changes nothing that is
 already in place.
@@ -144,8 +146,9 @@ and no Node toolchain, and the version you get always matches the CLI. Running
 it again upgrades in place.
 
 Without --editor, every editor found on PATH is targeted (VS Code, Cursor,
-VS Code Insiders, VSCodium, Windsurf). The panel drives Claude Code: in a
-project on another host it installs all the same, and says so.`,
+VS Code Insiders, VSCodium, Windsurf). Its chat is gofi chat, which runs on
+Claude Code: in a project on another host it installs all the same — the graph
+and the run tab work there — and says so.`,
 		Example: `gofi install extensions
 gofi install extensions --list
 gofi install extensions --editor code`,

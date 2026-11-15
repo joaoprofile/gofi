@@ -1,6 +1,6 @@
 // Package extensions installs the editor extensions that ship with gofi —
-// today just GOFI AI, the chat panel whose sources live in vscode/ at the
-// repo root.
+// today just GOFI AI: the chat in the editor's terminal, the project's graph
+// and a run drawn, whose sources live in vscode/ at the repo root.
 //
 // The packaged .vsix is embedded in the binary, so installing needs neither a
 // network round trip nor a Node toolchain, and the extension a user gets is

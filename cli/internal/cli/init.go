@@ -394,7 +394,7 @@ func executePipeline(r *wizard.Result) error {
 		}})
 	}
 	// The GOFI AI extension is the editor-side half of the harness the steps
-	// above just installed — the panel that talks to the `.claude/skills/` this
+	// above just installed — the chat in its terminal, the graph of what the
 	// project now has. Best effort: a machine with no editor on PATH still gets
 	// a working project, and `gofi install extensions` fixes it later.
 	var extensionsNote string
