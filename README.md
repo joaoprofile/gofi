@@ -21,6 +21,7 @@
   <a href="#how-it-works">How it works</a> ·
   <a href="#the-delivery-loop">Delivery loop</a> ·
   <a href="#the-code-graph">Code graph</a> ·
+  <a href="#interfaces">Chat and editor</a> ·
   <a href="#cli-reference">CLI</a> ·
   <a href="#configuration">Configuration</a> ·
   <a href="#measured-results">Results</a>
@@ -42,9 +43,10 @@ where it belongs:
 - **Facts dispatch the roles, never a prompt.** Which roles implement, test and
   audit a change is computed from the change itself and from the code graph.
 
-It ships as a single binary — the `gofi` CLI, with an MCP server and the
-**GOFI AI** VS Code extension embedded — and this repository, the source of the
-roles, templates and knowledge that `gofi init` installs into a project.
+It ships as a single binary — the `gofi` CLI, with its terminal chat, an MCP
+server and the **GOFI AI** VS Code extension embedded — and this repository, the
+source of the roles, templates and knowledge that `gofi init` installs into a
+project.
 
 ### Features
 
@@ -59,6 +61,8 @@ roles, templates and knowledge that `gofi init` installs into a project.
 | **Batches** | `gofi run --all` delivers every approved change in dependency order, in parallel, under one shared budget, resumable |
 | **Learning** | A run that needed rework proposes the lesson that would have avoided it; the person accepts or rejects it |
 | **Token economy** | Isolated agent turns, briefs scoped to the role, green stages cached by tree, tier per role |
+| **Terminal chat** | A prompt of several lines, a `/` menu of every command, pasted images, approval with the diff, follow-ups while the agent works, a live panel of who is at work, and `/audit` of what the conversation read |
+| **Project graph** | In VS Code: how every context stands, a map of every document and source file, and the trace from documents to requirements to tables to code |
 | **Hosts** | Claude Code, Codex and Copilot, each role limited to the tools its contract grants |
 | **Languages** | Go, TypeScript (NestJS), Python (FastAPI), Java (Quarkus) and Rust (Axum) |
 
@@ -82,7 +86,7 @@ gofi scan
 gofi init my-service
 
 # Write the contract with the agents, then approve it
-gofi chat                                   # or the GOFI AI panel in VS Code
+gofi chat                                   # or GOFI: Chat in Terminal, in VS Code
 gofi review add-rate-limit                  # the reviewer reads the change first
 gofi change approve add-rate-limit          # your approval seals it — or say so in the chat
 
@@ -98,7 +102,7 @@ gofi report <run>                           # what was delivered, traced and aud
 
 ```sh
 # A specific version
-GOFI_VERSION=v0.4.0 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
+GOFI_VERSION=v0.6.3 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh
 # A custom directory
 curl -fsSL https://raw.githubusercontent.com/joaoprofile/gofi/main/install.sh | sh -s -- --bin-dir /opt/gofi/bin
 ```
@@ -387,58 +391,82 @@ gofi intake "<request>" --json     # the plan alone: context, phases, tiers, que
 ```
 
 The chat plans free text by rules first, stops after a PRD or a spec for review —
-with the reviewer's findings — and hands the build to the loop. `Esc` stops a
-delivery at its next checkpoint; a gate's questions are asked in the chat.
+with the reviewer's findings — and hands the build to the loop. A gate's
+questions are asked in the chat.
 
-At the prompt:
+<p align="center">
+  <img src="assets/readme/chat.png" alt="gofi chat: the panel of what is at work, the conversation, a follow-up waiting for the agent's next step" width="820">
+</p>
 
-- **Several lines.** `Alt+Enter` (or `Ctrl+J`, or a `\` before `Enter`) breaks
-  the line; a pasted text keeps its own. `↑`/`↓` walk the text, then the history.
-- **`/` lists every command** — the chat's, the project's skills and the engine's
-  (`/compact`, `/context`, `/usage`…), each with what it does. `@` completes a
-  file to point at.
-- **`Ctrl+V` attaches the picture in the clipboard** (`Alt+V` where the terminal
-  keeps `Ctrl+V`), scaled down to what a model reads before it is sent.
-- **Approval shows what will run** — the command, the change as a diff — and
-  "don't ask again" covers commands that begin the same way, or file edits,
-  never a whole tool. A "no" can carry what the agent should do instead.
-- **`/find` `/show` `/impact` `/path` ask the index, `/runs` and `/watch` read
-  the runs**: gofi reads the disk and no model is called. `/cost` says what the
-  conversation holds and has spent; the status line keeps both in view.
-- **A follow-up while the agent works.** `Enter` during an answer sends it: the
-  engine hands it to the model at its next step, between two tool calls, and
-  the turn goes on knowing it — the message is all it costs. It waits over the
-  prompt until the model takes it, then joins the conversation where it was read.
-- **The panel at the top is what is at work, as it happens**: the plan being
-  conducted and its phases, this conversation's turn (how long, how many tools,
-  the last one), the subagents it started, and the runs of the loop with their
-  agents — started here, by `/gofi-run` or in another terminal. Read from what
-  the engine streams and from the runs on disk.
+| At the prompt | |
+|---|---|
+| `Alt+Enter` · `Ctrl+J` · `\` + `Enter` | Break the line; a pasted text keeps its own. `↑`/`↓` walk the text, then the history |
+| `/` | Every command — the chat's, the project's skills and the engine's (`/compact`, `/context`, `/usage`…) — each with what it does |
+| `@` | Complete a file to point at |
+| `Ctrl+V` | Attach the picture in the clipboard (`Alt+V` where the terminal keeps `Ctrl+V`), scaled down to what a model reads |
+| `Enter` while the agent works | Send a follow-up: the engine hands it to the model at its next step, between two tool calls, and the turn goes on knowing it — the message is all it costs |
+| `Esc` | Stop the answer without ending the engine: the next message goes to the same process. A delivery stops at its next checkpoint |
+| `/find` · `/show` · `/impact` · `/path` | Ask the index — gofi reads the disk, no model is called |
+| `/runs` · `/watch` | The runs under way · the full watch screen |
+| `/cost` | What the conversation holds and has spent; the status line keeps both in view |
+| `/audit` | The account of the conversation: the tokens by kind, every read and what it brought into the context, what the graph spared, and the documents that cannot be read cheaply — no front matter, no sections, no index — each with a fix `/audit <n>` hands the agent. Listing calls no model |
 
-`Esc` stops an answer without ending the engine, so the next message goes to the
-same process; the sessions a conversation opens share the cached system prompt.
+**The panel at the top is what is at work, as it happens**: the plan being
+conducted and its phases, the conversation's turn (how long, how many tools, the
+last one), the subagents it started, and the runs of the loop with their agents —
+started here, by `/gofi-run` or in another terminal. It is read from what the
+engine streams and from the runs on disk; no model is called to draw it.
+
+**Approval shows what will run** — the command as it will run, the change as a
+diff. "Don't ask again" covers commands that begin the same way, or file edits,
+never a whole tool, and a "no" can carry what the agent should do instead.
+`--permission-mode` hands the decision to the engine.
 
 ### GOFI AI for VS Code
 
 Embedded in the binary; `gofi init` installs it, `gofi install extensions` updates it.
 
-- The same conducted flow as `gofi chat`: review before approval, delivery by the
-  loop, gate questions as cards, stop, cost per run.
-- **GOFI: Chat in Terminal** (`Ctrl+Shift+P`): `gofi chat` itself in a VS Code
-  terminal, in the project root. There, `Shift+Enter` breaks the line and
-  `Ctrl+V` pastes text or, with none in the clipboard, attaches the copied image.
-- A run tab: the flow as a graph with the path taken, the sensors (not checked is
-  shown apart from passed), the verdict, open findings, the amendment, the branch,
-  the trace matrix — followed live. Batches appear in the same picker.
-- A map of the project's contexts, per-action approval of edits and commands, and
-  a token meter with a retrieval audit.
+The conversation is `gofi chat` itself — the extension opens it in the editor
+and draws what a terminal cannot.
 
-<table>
-  <tr>
-    <td width="40%"><img src="assets/readme/gofi-ai-chat.png" alt="The GOFI AI chat panel"></td>
-    <td width="60%"><img src="assets/readme/gofi-ai-graph.png" alt="The GOFI AI map of contexts"></td>
-  </tr>
-</table>
+- **GOFI: Chat in Terminal** — the gofi face in the editor's title bar, or
+  `Ctrl+Shift+P`: `gofi chat` in a VS Code terminal, in the project root. There,
+  `Shift+Enter` breaks the line and `Ctrl+V` pastes text or, with none in the
+  clipboard, attaches the copied image; `Ctrl+Alt+G` in the editor mentions the
+  open file in the prompt, with the selected lines.
+- **GOFI: grafo do projeto** — what `gofi index` indexed, documents and code, in
+  three views. Nothing is laid out by a simulation: each view has the layout
+  its question has.
+- **GOFI: execução de uma entrega** — a run of the loop: the flow as a graph
+  with the path taken, the sensors (not checked is shown apart from passed), the
+  verdict, open findings, the amendment, the branch, the trace matrix — followed
+  live. Batches appear in the same picker.
+
+**Overview** — how each context stands: what was written, how many requirements
+are live, scenarios, tables, code, what it depends on and who depends on it, in
+the order the dependencies allow; and each tree of code with its largest packages.
+
+<p align="center">
+  <img src="assets/readme/graph-overview.png" alt="The project graph, overview: a card per context and per tree of code" width="820">
+</p>
+
+**Map** — the whole project at once: every document and every source file is a
+cell sized by its lines, grouped as the project is. Lighting up a context shows
+everything that is its own, documents and code alike; a click on a group zooms in.
+
+<p align="center">
+  <img src="assets/readme/graph-map.png" alt="The project graph, map: every document and source file, one context lit up" width="820">
+</p>
+
+**Trace** — one context, left to right: its documents, the requirements they add
+and specify, the tables they touch and the packages that implement them. Hovering
+follows a line end to end; a double click opens the file at the line.
+
+<p align="center">
+  <img src="assets/readme/graph-trace.png" alt="The project graph, trace: documents, requirements, tables and code of one context" width="820">
+</p>
+
+<sub>The pictures show an example project.</sub>
 
 ### MCP server
 
@@ -562,8 +590,8 @@ graph:
         - "deny: new-cross-context-edge"
 ```
 
-In VS Code: `gofiAI.gofiPath` (the binary), `gofiAI.model` (the panel's model),
-`gofiAI.intake` (plan free text and conduct the phases).
+In VS Code: `gofiAI.gofiPath` (the binary), `gofiAI.model` (the model the chat
+opens with) and `gofiAI.terminal.location` (where it opens).
 
 ---
 
@@ -589,7 +617,8 @@ Measured with `gofi bench`, `gofi bench audit` and the goldens of this repositor
 ai/          what gofi installs into a project: AGENTS.md, skills and roles, expertise,
              templates, SDK docs, institutional seed
 cli/         the Go CLI: loop, sensors, graph, packs, engines, MCP server, chat
-vscode/      the GOFI AI extension, embedded into the CLI
+vscode/      the GOFI AI extension — the chat in the editor's terminal, the project
+             graph, the run tab — embedded into the CLI
 ```
 
 ## Build from source

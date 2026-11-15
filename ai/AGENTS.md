@@ -71,7 +71,7 @@ viva no arquivamento. Contexto ainda no formato 2 (`sdd-*.md`) migra antes
 |---|---|---|---|
 | Revisar | antes de aprovar | achados de `gofi review <mudança>` — rodado em primeiro plano, que a revisão leva minutos e a pessoa acompanha o progresso: corrige ou diz que não procede | não |
 | Aprovar | contrato pronto | ferramenta `approve`, ou `gofi change approve` / `gofi spec approve` no terminal dela; editar depois desfaz o selo | sim |
-| Responder o portão | a execução parou numa decisão não coberta | `gofi answer` (ou os cartões do painel) | sim |
+| Responder o portão | a execução parou numa decisão não coberta | `gofi answer` (ou no `gofi chat` e no `gofi watch`) | sim |
 | Decidir a emenda | `impasse` com proposta em `.gofi/proposals/` | edita a mudança e aprova de novo, ou escreve outra | sim |
 | Aceitar a lição | execução aceita com retrabalho | `gofi learn accept` / `reject` | não |
 
