@@ -138,13 +138,30 @@ const loopReadingLean = "**O que ler neste turno:** só o que a sua tarefa pede 
 // that role. What changes from turn to turn comes after both.
 func withChange(brief, work string, s *State, rl role.Role) string {
 	lean := slices.Contains(leanStages, rl.Contract.Stage)
-	text := changeText(work, s.ChangeDir, lean)
-	switch {
-	case text == "":
-	case lean:
-		text += loopReadingLean
-	default:
-		text += loopReading
+	reading := loopReading
+	if lean {
+		reading = loopReadingLean
+	}
+	return carry(brief, work, changeText(work, s.ChangeDir, lean), reading, rl)
+}
+
+// reviewReading is loopReading for the review of a change not approved yet:
+// nothing is written but the review, and what the change is read against is
+// the PRD and the living spec.
+const reviewReading = "**O que ler neste turno:** a mudança está acima, inteira — não abra esses arquivos. Além dela, só aquilo contra o que o seu papel a confere: o PRD do contexto e a spec viva que o delta altera, pela §seção.\n\n"
+
+// ReviewBrief is a review's turn with the change in it, as a turn of the loop
+// carries it: named by path, the documents were the turn's first reads, each
+// refused whole by the guard and read again in parts.
+func ReviewBrief(brief, work, dir string, rl role.Role) string {
+	return carry(brief, work, changeText(work, dir, false), reviewReading, rl)
+}
+
+// carry puts the change, what else to read and the role's skill after the
+// brief's first paragraph.
+func carry(brief, work, text, reading string, rl role.Role) string {
+	if text != "" {
+		text += reading
 	}
 	text += roleText(work, rl)
 	if text == "" {

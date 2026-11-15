@@ -171,7 +171,7 @@ func reviewChange(ctx context.Context, out io.Writer, root string, cfg *config.G
 		transcript: transcript, heartbeat: reviewHeartbeat}
 	res, err := agent.Run(tctx, loop.Turn{Node: "review", Role: rl.Name, Agent: "review-" + change, Iter: 1,
 		Tier: rl.Contract.Tier, Tools: rl.Contract.Tools, BudgetUSD: loopPolicy(cfg).TurnBudgetUSD,
-		Prompt: reviewBrief(rl, change, dir, filepath.ToSlash(rel))})
+		Prompt: loop.ReviewBrief(reviewBrief(change, dir, filepath.ToSlash(rel)), root, dir, rl)})
 	trel, _ := filepath.Rel(root, transcript)
 	if err != nil {
 		if errors.Is(tctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
@@ -208,12 +208,11 @@ var reviewHeartbeat = 20 * time.Second
 
 // reviewBrief is the reviewer's turn: the change, not yet approved, and the
 // one file the turn writes.
-func reviewBrief(rl role.Role, change, dir, file string) string {
-	return fmt.Sprintf("Siga o papel descrito em %s.\n\n"+
-		"Revise a mudança `%s` antes da aprovação — `gofi change list`, a proposta, os deltas e o design em `%s/`. A pessoa ainda não a aprovou: o que você achar é o que ela corrige antes de aprovar.\n\n"+
+func reviewBrief(change, dir, file string) string {
+	return fmt.Sprintf("Revise a mudança `%s` antes da aprovação — a proposta, os deltas e o design em `%s/`. A pessoa ainda não a aprovou: o que você achar é o que ela corrige antes de aprovar.\n\n"+
 		"Grave os achados em `%s`, exatamente neste formato — `severity` blocker, major ou minor; `kind` ambiguidade, contradição, não testável, lacuna ou escopo; sem achado, `findings` vazio:\n\n```json\n%s\n```\n\n"+
 		"É a única escrita deste turno: não edite a mudança, a spec nem o código.\n",
-		layout.RoleSkill(rl.Name, true), change, dir, file, review.Example)
+		change, dir, file, review.Example)
 }
 
 func printReview(out io.Writer, r *review.Review) {

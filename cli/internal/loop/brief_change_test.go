@@ -155,3 +155,23 @@ func TestAReworkTurnIsToldWhatTheRunAlreadyWrote(t *testing.T) {
 		t.Errorf("a rework turn must be told what the run already wrote:\n%s", got)
 	}
 }
+
+// A review gets the change in its turn, as a turn of the loop does: it opens
+// on the task, carries the documents, and is told to read the PRD and the
+// living spec — not the code a run would touch.
+func TestAReviewCarriesTheChangeInline(t *testing.T) {
+	work := t.TempDir()
+	writeChange(t, work, "## Abordagem\n\nUm componente.\n")
+	got := ReviewBrief("Revise a mudança `alinhar`.\n\nGrave os achados.\n", work, "specs/pricing/changes/alinhar", role.Role{})
+	for _, want := range []string{"A tela DEVE dizer o alvo.", "Um componente.", "o PRD do contexto"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the review lacks %q:\n%s", want, got)
+		}
+	}
+	if !strings.HasPrefix(got, "Revise a mudança `alinhar`.\n\n**A mudança, na íntegra**") || !strings.HasSuffix(got, "Grave os achados.\n") {
+		t.Errorf("the change must follow the first paragraph:\n%s", got)
+	}
+	if strings.Contains(got, "o código que você vai tocar") {
+		t.Errorf("a review is not told to read as a run's turn is:\n%s", got)
+	}
+}
