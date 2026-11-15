@@ -57,6 +57,7 @@ func gofiCommands() []command {
 	return []command{
 		c("watch", "", "chat.help.watch"),
 		c("runs", "", "chat.help.runs"),
+		c("audit", "[n]", "chat.help.audit"),
 		c("find", "<texto>", "chat.help.find"),
 		c("show", "<símbolo>", "chat.help.show"),
 		c("impact", "<símbolo>", "chat.help.impact"),

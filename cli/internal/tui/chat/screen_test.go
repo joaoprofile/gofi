@@ -731,3 +731,66 @@ func TestTheBannerLeavesWholeAndTheTopRowsStayFree(t *testing.T) {
 		t.Errorf("after a resize the view is the new screen, got %d lines", n)
 	}
 }
+
+// /audit reads what the conversation read: the tokens by kind, the calls and
+// what they brought, what the numbers say — and the documents that cannot be
+// read cheaply, each with a fix that /audit <n> hands the agent. Listing
+// costs nothing; only the fix is a request.
+func TestAuditListsWhatWasReadAndAsksForAFix(t *testing.T) {
+	m, sessions := newTestModel(t)
+	root := m.opts.Root
+	spec := filepath.Join(root, "specs", "billing", "spec.md")
+	_ = os.MkdirAll(filepath.Dir(spec), 0o755)
+	_ = os.WriteFile(spec, []byte("# Billing\n"+strings.Repeat("a line\n", 200)), 0o644)
+
+	m.events = make(chan engine.Event)
+	feed := func(e engine.Event) {
+		next, _ := m.onEvent(e)
+		m = next.(model)
+	}
+	feed(engine.Usage{Input: 120, Output: 80, CacheRead: 9000, CacheWrite: 800})
+	feed(engine.Usage{Total: true, Input: 999999})
+	feed(engine.Message{Blocks: []engine.Block{{Kind: engine.BlockToolUse, ID: "r1", Name: "Read", Input: json.RawMessage(`{"file_path":"specs/billing/spec.md"}`)}}})
+	feed(engine.ToolResult{ToolUseID: "r1", Text: strings.Repeat("x", 12000)})
+	feed(engine.Message{Parent: "a1", Blocks: []engine.Block{{Kind: engine.BlockToolUse, ID: "g1", Name: "Grep", Input: json.RawMessage(`{"pattern":"Invoice","path":"internal"}`)}}})
+	feed(engine.ToolResult{ToolUseID: "g1", Parent: "a1", Text: strings.Repeat("y", 400)})
+	feed(engine.Done{})
+	m.events = nil
+
+	block, fixes := m.auditBlock()
+	for _, want := range []string{
+		"tokens: 120 new · 9k read from the cache · 800 written to the cache · 80 of output",
+		"reads: 2 calls, ~3.1k tokens — 0 through the graph · 1 in the code · 1 in documents",
+		"Read specs/billing/spec.md ~3k",
+		"specs/billing/spec.md read whole",
+		"91% of the input came from the cache",
+		"1. specs/billing/spec.md (201 lines) has no front matter",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("/audit misses %q in:\n%s", want, block)
+		}
+	}
+	if len(fixes) < 1 {
+		t.Fatalf("a document with no front matter is a fix to offer: %d", len(fixes))
+	}
+
+	m = typeText(m, "/audit")
+	if len((*sessions)[0].sent) != 0 || len(m.fixes) != len(fixes) {
+		t.Fatal("listing asks nothing of the agent")
+	}
+	m = typeText(m, "/audit 9")
+	if len((*sessions)[0].sent) != 0 {
+		t.Error("a fix that is not in the list is not sent")
+	}
+	m = drain(t, typeText(m, "/audit 1"))
+	sent := (*sessions)[0].sent
+	if len(sent) != 1 || !strings.Contains(sent[0], "`specs/billing/spec.md`") || !strings.Contains(sent[0], "Do not change the document's content") {
+		t.Errorf("/audit 1 should hand the agent the fix: %q", sent)
+	}
+
+	// A new conversation starts a new account.
+	m = typeText(m, "/clear")
+	if block, _ := m.auditBlock(); !strings.Contains(block, "no read recorded") || len(m.fixes) != 0 {
+		t.Errorf("after /clear the account is empty:\n%s", block)
+	}
+}

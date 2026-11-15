@@ -9,6 +9,7 @@ import (
 
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
+	"github.com/joaoprofile/gofi/cli/internal/ledger"
 )
 
 // replaceSession closes the conversation and opens another — a new one, or
@@ -25,6 +26,7 @@ func (m *model) replaceSession(resumeID string) {
 	// count again; what was spent here stays spent.
 	m.ctxTokens, m.ctxWarned, m.lastCost = 0, 0, 0
 	m.images, m.imageSeq = nil, 0
+	m.ledger, m.fixes = ledger.New(m.opts.Root), nil
 }
 
 // switchModel is /model: without an argument it lists the choices; with a

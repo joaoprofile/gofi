@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
+	"github.com/joaoprofile/gofi/cli/internal/ledger"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/tui/banner"
 	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
@@ -198,6 +200,10 @@ type model struct {
 	ctxWarned int     // the last size the person was told about
 	spent     float64 // the conversation and what it conducted, so far
 	lastCost  float64 // the engine's running total at the chat's last turn
+	// ledger is what the conversation read and what that cost; fixes are
+	// the repairs the last /audit listed, for /audit <n>.
+	ledger *ledger.Ledger
+	fixes  []ledger.Fix
 
 	armedExit time.Time // first ctrl+c on an idle prompt
 	notice    string    // one-line message in the status slot
@@ -236,6 +242,7 @@ func newModel(opts Options, color bool) model {
 		modelN:  opts.Model,
 		skills:  names,
 		onDisk:  onDisk,
+		ledger:  ledger.New(opts.Root),
 	}
 }
 
@@ -563,7 +570,7 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // answeredHere are the commands that only read what the chat already has:
 // they answer at once, a turn running or not.
-var answeredHere = map[string]bool{"/help": true, "/cost": true, "/runs": true}
+var answeredHere = map[string]bool{"/help": true, "/cost": true, "/runs": true, "/audit": true}
 
 // whileRunning takes what was typed while a turn runs. A message goes to
 // the engine, which hands it to the model at its next step — the turn goes
@@ -801,6 +808,20 @@ func (m model) submit(text string) (tea.Model, tea.Cmd) {
 		return m, tea.Sequence(echo, say(m.resume(strings.TrimSpace(strings.TrimPrefix(text, "/resume")))))
 	case text == "/cost":
 		return m, tea.Sequence(echo, say(m.costBlock()))
+	case text == "/audit":
+		block, fixes := m.auditBlock()
+		m.fixes = fixes
+		return m, tea.Sequence(echo, say(block))
+	case strings.HasPrefix(text, "/audit "):
+		// A fix is a request to the agent: it goes as one, the plan left out.
+		arg := strings.TrimSpace(strings.TrimPrefix(text, "/audit "))
+		n, err := strconv.Atoi(arg)
+		if err != nil || n < 1 || n > len(m.fixes) {
+			return note(k.warn, i18n.T("chat.audit.unknown", arg))
+		}
+		fix := m.fixes[n-1]
+		m.stopPlan()
+		return m.sendToEngine(fix.Prompt, tea.Sequence(echo, say(k.nested([]string{i18n.T("chat.audit.asking", fix.Label)}, k.dim))))
 	case text == "/runs":
 		lines := watch.Live(m.opts.Root).Lines(m.width-1, 40)
 		if len(lines) == 0 {
@@ -866,6 +887,11 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		if held := ev.Input + ev.CacheRead + ev.CacheWrite; !ev.Total && !ev.Sub && held > 0 {
 			m.ctxTokens = held + ev.Output
 		}
+		// Every message is billed, a subagent's too; the turn's total
+		// already holds them.
+		if !ev.Total {
+			m.ledger.Usage(ev.Input, ev.Output, ev.CacheRead, ev.CacheWrite)
+		}
 		return m, next
 
 	case engine.Delivered:
@@ -895,6 +921,12 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		return m, next
 
 	case engine.Message:
+		// What the agents read goes into the ledger, whoever read it.
+		for _, b := range ev.Blocks {
+			if b.Kind == engine.BlockToolUse {
+				m.ledger.Call(b.ID, b.Name, b.Input)
+			}
+		}
 		// A subagent's steps are followed on the panel; what it found comes
 		// back as the result of the call that started it.
 		if ev.Parent != "" {
@@ -932,6 +964,7 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		return m, tea.Sequence(say("\n"+strings.Join(out, "\n\n")), next)
 
 	case engine.ToolResult:
+		m.ledger.Result(ev.ToolUseID, ev.Text, ev.IsError)
 		if ev.Parent != "" {
 			return m, next
 		}
@@ -958,6 +991,7 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 
 	case engine.Done:
 		m.lastDone = ev
+		m.ledger.Turn()
 		cost := m.account(ev)
 		var line string
 		switch {
@@ -1091,6 +1125,60 @@ func money(usd float64) string {
 		return fmt.Sprintf("$%.3f", usd)
 	}
 	return fmt.Sprintf("$%.2f", usd)
+}
+
+// auditBlock is /audit: what the conversation read and what that cost, what
+// the numbers say is worth changing, and the documents of the project that
+// cannot be read cheaply — each with the fix /audit <n> asks the agent for.
+// It reads the ledger and the disk: no model is called to draw it.
+func (m model) auditBlock() (string, []ledger.Fix) {
+	k := m.look
+	r := m.ledger.Report()
+	t := r.Tokens
+	lines := []string{i18n.T("chat.audit.tokens", ledger.Count(t.Input), ledger.Count(t.CacheRead), ledger.Count(t.CacheWrite), ledger.Count(t.Output))}
+	if r.Calls == 0 {
+		lines = append(lines, k.dim.Render(i18n.T("chat.audit.none")))
+	} else {
+		lines = append(lines, i18n.T("chat.audit.retrieval", r.Calls, ledger.Count(r.Retrieved), r.Graph, r.Code, r.Docs))
+		var top []string
+		for _, row := range r.Heaviest {
+			if row.Tokens > 0 {
+				top = append(top, strings.TrimSpace(row.Name+" "+row.Target)+" ~"+ledger.Count(row.Tokens))
+			}
+		}
+		if len(top) > 0 {
+			// Three is enough to say where the context went.
+			for _, l := range wrapLines(i18n.T("chat.audit.heaviest", strings.Join(top[:min(len(top), 3)], " · ")), m.width-8) {
+				lines = append(lines, k.dim.Render(l))
+			}
+		}
+	}
+	var fixes []ledger.Fix
+	var repairs []string
+	mark := map[ledger.Level]string{ledger.Warn: k.warn.Render("!"), ledger.Info: k.dim.Render("·"), ledger.Good: k.good.Render("✓")}
+	wrap := func(lead, text string) []string {
+		out := wrapLines(text, m.width-8-ansi.StringWidth(lead))
+		for i := range out {
+			if i == 0 {
+				out[i] = lead + " " + out[i]
+			} else {
+				out[i] = strings.Repeat(" ", ansi.StringWidth(lead)+1) + out[i]
+			}
+		}
+		return out
+	}
+	for _, f := range append(r.Findings, ledger.Scan(m.opts.Root, r.Findings)...) {
+		if f.Fix == nil {
+			lines = append(lines, wrap(mark[f.Level], f.Text)...)
+			continue
+		}
+		fixes = append(fixes, *f.Fix)
+		repairs = append(repairs, wrap(k.accent.Render(fmt.Sprintf("%d.", len(fixes))), f.Text+" → "+f.Fix.Label)...)
+	}
+	if len(repairs) > 0 {
+		lines = append(append(lines, "", k.bold.Render(i18n.T("chat.audit.fixes"))), repairs...)
+	}
+	return "\n" + k.bullet(k.accent, i18n.T("chat.audit.title"), k.bold, m.width) + "\n" + k.nested(lines, k.text), fixes
 }
 
 // costBlock is /cost: what the conversation holds and what it has spent,
