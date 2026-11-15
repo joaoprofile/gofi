@@ -83,8 +83,16 @@ mais caro —, e cada resposta relê tudo o que veio antes.** Por isso:
 - **Antes da primeira pergunta**, diga uma vez, em uma frase, que `gofi chat` faz
   esta mesma etapa com as perguntas num nível mais barato, e deixe a pessoa
   escolher. Se ela quiser seguir aqui, siga sem insistir.
-- **Um contexto por sessão.** Terminado um contexto, sugira abrir uma sessão nova
-  para o próximo: o que ficou decidido já está no arquivo que você escreveu.
+- **Um artefato por sessão.** Escrita a mudança de um contexto e gravada a memória
+  dele, **pare aqui**: diga que o próximo contexto e a entrega (`/gofi-run`)
+  começam numa sessão nova (no Claude Code, `/clear`), e por quê — cada mensagem
+  desta conversa relê tudo o que já foi escrito nela, e o que a próxima sessão
+  precisa já está no disco. Pedido que cobre vários contextos: combine a ordem e
+  faça só o primeiro nesta sessão. Se a pessoa preferir seguir aqui, siga.
+- **Edite, não reescreva.** Corrigir um documento já escrito é editar o trecho,
+  nunca gravar o arquivo inteiro de novo nem regravá-lo por script de shell. Não
+  releia o que acabou de escrever — está nesta conversa; para conferir, leia só
+  a seção.
 - **Avise quando a conversa ficar longa:** passadas umas 10 rodadas de perguntas,
   grave o que já está decidido no arquivo do papel e sugira continuar numa sessão
   nova, a partir dele.
