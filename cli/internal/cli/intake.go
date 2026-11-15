@@ -1,10 +1,7 @@
 package cli
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -46,29 +43,18 @@ Two rounds at most: answer with --answer id=value (the ids the questions
 carry), or --proceed to go on with each default written down as an
 assumption.
 
---json prints the result in the gofi.intake/v1 schema, for the editor, the MCP
-tool and scripts. --serve stays open for an editor that plans every message:
-one request per line of stdin — {"request", "answers", "proceed", "no_model",
-"tier"} — and one result per line of stdout, with the index kept loaded
-between them (it is most of what planning costs) and reloaded when it changes.`,
+--json prints the result in the gofi.intake/v1 schema, for the MCP tool and
+scripts.`,
 		Example: `gofi intake "crie um PRD de sincronização de pedidos"
 gofi intake "altere o fluxo de pricing, adicionando um rate limit" --json
 gofi intake "corrija o cancelamento de pedidos" --tier deep
 gofi intake "crie um PRD de sincronização de pedidos" --answer context=novo
 gofi intake "altere as regras" --proceed`,
-		Args: func(cmd *cobra.Command, args []string) error {
-			if serve, _ := cmd.Flags().GetBool("serve"); serve {
-				return cobra.NoArgs(cmd, args)
-			}
-			return cobra.MinimumNArgs(1)(cmd, args)
-		},
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := findProjectRoot()
 			if err != nil {
 				return err
-			}
-			if serve, _ := cmd.Flags().GetBool("serve"); serve {
-				return serveIntake(root, cmd.InOrStdin(), cmd.OutOrStdout())
 			}
 			asJSON, _ := cmd.Flags().GetBool("json")
 			tier, _ := cmd.Flags().GetString("tier")
@@ -110,7 +96,6 @@ gofi intake "altere as regras" --proceed`,
 		},
 	}
 	cmd.Flags().Bool("json", false, "print the result in the gofi.intake/v1 schema")
-	cmd.Flags().Bool("serve", false, "stay open and plan one JSON request per line of stdin, keeping the index loaded")
 	cmd.Flags().String("tier", "", "run every phase at this tier (light, standard, deep)")
 	cmd.Flags().Bool("no-model", false, "keep to the rules: every open point is a question")
 	cmd.Flags().StringArray("answer", nil, "answer a question of the previous round, as id=value")
@@ -221,69 +206,4 @@ func fillPhaseModels(r *intake.Result, cfg *config.GofiConfig) {
 			r.Plan[i].Model = h.Model(r.Plan[i].Tier, cfg.AI.Tiers)
 		}
 	}
-}
-
-// serveRequest is one line an editor sends to `gofi intake --serve`.
-type serveRequest struct {
-	Request string            `json:"request"`
-	Answers map[string]string `json:"answers"`
-	Proceed bool              `json:"proceed"`
-	NoModel bool              `json:"no_model"`
-	Tier    string            `json:"tier"`
-}
-
-// serveIntake plans one request per line until stdin closes, answering each
-// with one line: the result, or {"error": ...}. The index stays loaded.
-func serveIntake(root string, in io.Reader, out io.Writer) error {
-	engines := &intake.Engines{}
-	sc := bufio.NewScanner(in)
-	sc.Buffer(make([]byte, 64<<10), 4<<20)
-	enc := json.NewEncoder(out)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
-		}
-		res, err := serveOne(root, line, engines)
-		if err != nil {
-			_ = enc.Encode(map[string]string{"error": err.Error()})
-			continue
-		}
-		if err := enc.Encode(res); err != nil {
-			return err
-		}
-	}
-	return sc.Err()
-}
-
-func serveOne(root, line string, engines *intake.Engines) (*intake.Result, error) {
-	var req serveRequest
-	if err := json.Unmarshal([]byte(line), &req); err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	if strings.TrimSpace(req.Request) == "" {
-		return nil, errors.New("request: empty")
-	}
-	if req.Tier != "" && !slices.Contains(host.Tiers, host.Tier(req.Tier)) {
-		return nil, fmt.Errorf("tier %q: use light, standard or deep", req.Tier)
-	}
-	opts := intake.Options{Tier: host.Tier(req.Tier), CacheDir: filepath.Join(root, ".gofi", "cache", "intake"),
-		Answers: req.Answers, Proceed: req.Proceed, Engines: engines}
-	// The configuration is read per request: a model or tier changed in
-	// .gofi.yaml applies to the next message without restarting the editor.
-	cfg, _, cfgErr := loadProjectConfig()
-	if cfgErr == nil {
-		opts.Language = backendLanguage(cfg)
-		if !req.NoModel {
-			opts.Model = lightModelFor(cfg)
-		}
-	}
-	res, err := intake.Run(root, req.Request, opts)
-	if err != nil {
-		return nil, err
-	}
-	if cfgErr == nil {
-		fillPhaseModels(res, cfg)
-	}
-	return res, nil
 }

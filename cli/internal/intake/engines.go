@@ -15,7 +15,8 @@ import (
 )
 
 // Engines keeps the search index loaded between requests, for a process that
-// plans many of them — `gofi intake --serve`, which the editor keeps open.
+// plans many of them — `gofi chat`, which plans every message of a
+// conversation.
 // Loading it is most of what planning costs (measured: ~410 ms of ~400–800),
 // and it is reloaded only when something it was read from changed: the index
 // files, the documents they index, or the project's lexicon.

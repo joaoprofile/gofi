@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/joaoprofile/gofi/cli/internal/docs"
@@ -70,36 +69,5 @@ func TestIntakeCommandJSON(t *testing.T) {
 		if err := cmd.Execute(); err == nil {
 			t.Error("an unknown tier must be refused")
 		}
-	}
-}
-
-// --serve answers one request per line, keeping the index loaded, and a bad
-// line gets an error line instead of ending the process.
-func TestIntakeServe(t *testing.T) {
-	root := intakeProject(t)
-	t.Chdir(root)
-	in := strings.NewReader(`{"request":"altere o envio de pricing, adicionando um rate limit","no_model":true}
-not json
-{"request":"oi","no_model":true}
-`)
-	var out bytes.Buffer
-	if err := serveIntake(root, in, &out); err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("lines = %d:\n%s", len(lines), out.String())
-	}
-	var first, third intake.Result
-	_ = json.Unmarshal([]byte(lines[0]), &first)
-	_ = json.Unmarshal([]byte(lines[2]), &third)
-	if first.Schema != intake.Schema || first.Context == nil || first.Context.Name != "pricing" || len(first.Plan) == 0 {
-		t.Errorf("first = %s", lines[0])
-	}
-	if !strings.Contains(lines[1], `"error"`) {
-		t.Errorf("bad line = %s", lines[1])
-	}
-	if !third.Chat {
-		t.Errorf("third = %s", lines[2])
 	}
 }

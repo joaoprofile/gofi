@@ -214,6 +214,10 @@ func stickyRows() int {
 // chatIntake plans the chat's requests the way `gofi intake` does: the light
 // tier for what the rules leave open, and its decisions cached.
 func chatIntake(cfg *config.GofiConfig, root string) func(string, map[string]string, bool) (*intake.Result, error) {
+	// A conversation plans every message: the index stays loaded between
+	// them — loading it is most of what planning costs — and is read again
+	// only when something it was built from changed.
+	engines := &intake.Engines{}
 	return func(text string, answers map[string]string, proceed bool) (*intake.Result, error) {
 		return intake.Run(root, text, intake.Options{
 			Language: backendLanguage(cfg),
@@ -221,6 +225,7 @@ func chatIntake(cfg *config.GofiConfig, root string) func(string, map[string]str
 			CacheDir: filepath.Join(root, ".gofi", "cache", "intake"),
 			Answers:  answers,
 			Proceed:  proceed,
+			Engines:  engines,
 		})
 	}
 }
