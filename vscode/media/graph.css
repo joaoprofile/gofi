@@ -1,6 +1,6 @@
 /* The graph page. Colours come from the editor's theme; what the page adds is
    one accent — gofi's cyan — and a colour per kind of thing, the same in every
-   view, so a spec is the same blue on a card, in the map and in the trace. */
+   view, so a spec is the same blue on a card, in the graph and in the trace. */
 
 :root {
 	--bg: var(--vscode-editor-background, #1f1f2e);
@@ -25,8 +25,31 @@
 	--k-entity: #34d399;
 	--k-requirement: #6f8dff;
 
+	/* The groups of the graph — code in slates, the lighter the higher — and
+	   its links, a colour for each thing a link says. */
+	--g-context: var(--accent);
+	--g-library: #a3b1c9;
+	--g-scope: #c7d2e6;
+	--g-folder: #8696b1;
+	--g-section: #6b7791;
+	--g-tree: rgba(148, 163, 184, 0.34);
+	--e-code: #7aa2f7;
+	--e-docs: #e0af68;
+	--e-bridge: #2ac3a2;
+
 	--good: #34d399;
 	--warn: #fbbf24;
+}
+
+body.vscode-light {
+	--g-library: #64748b;
+	--g-scope: #475569;
+	--g-folder: #7c8aa3;
+	--g-section: #94a3b8;
+	--g-tree: rgba(71, 85, 105, 0.3);
+	--e-code: #3b6fd8;
+	--e-docs: #b7791f;
+	--e-bridge: #0d9488;
 }
 
 * {
@@ -499,18 +522,13 @@ input:focus-visible {
 	background: var(--k-file);
 }
 
-/* ── Mapa ──────────────────────────────────────────────────────────────── */
+/* ── Grafo ─────────────────────────────────────────────────────────────── */
 
-.view-map {
+.view-graph {
 	display: flex;
-	flex-direction: column;
 	overflow: hidden;
-	padding: 10px 14px 14px;
-	gap: 8px;
 }
 
-.map-bar,
-.lights,
 .trace-bar,
 .trace-facts {
 	display: flex;
@@ -520,145 +538,289 @@ input:focus-visible {
 	flex: none;
 }
 
-.crumbs {
+/* The tree beside the picture: the same nodes, in the order they are kept. */
+
+.tree-pane {
 	display: flex;
-	align-items: center;
-	gap: 6px;
+	flex-direction: column;
+	flex: none;
+	/* Of the window, not of what is left of it: the picture does not move when
+	   the panel of details opens on the other side. */
+	width: clamp(210px, 22vw, 330px);
+	min-height: 0;
+	border-right: 1px solid var(--line);
+	background: var(--panel);
 }
 
-.crumb {
-	color: var(--vscode-textLink-foreground, #4daafc);
-}
-
-.crumb.on {
-	color: var(--fg);
-	font-weight: 700;
-	cursor: default;
-}
-
-.crumb-facts {
-	margin-left: 8px;
-}
-
-.legend {
+.tree-head {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
+	justify-content: space-between;
+	gap: 8px;
+	flex: none;
+	padding: 10px 12px 6px;
 	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	color: var(--muted);
 }
 
-.key {
+.tree-found {
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--accent);
+}
+
+.tree {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding-bottom: 12px;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 22px;
+	padding-right: 10px;
+	white-space: nowrap;
+	cursor: pointer;
+	outline-offset: -1px;
+}
+
+.row:hover,
+.row.hov {
+	background: var(--hover);
+}
+
+.row.sel {
+	background: var(--vscode-list-activeSelectionBackground, rgba(34, 211, 238, 0.16));
+	color: var(--vscode-list-activeSelectionForeground, inherit);
+}
+
+.row:focus-visible {
+	outline: 1px solid var(--accent);
+}
+
+.twist {
+	flex: none;
+	width: 12px;
+	height: 12px;
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
+	justify-content: center;
 }
 
-.key i {
+.twist::before {
+	content: '';
+	width: 5px;
+	height: 5px;
+	border: solid currentColor;
+	border-width: 0 1.5px 1.5px 0;
+	transform: translateX(-1px) rotate(-45deg);
+	opacity: 0.65;
+	transition: transform 0.12s;
+}
+
+.twist.open::before {
+	transform: translateY(-1px) rotate(45deg);
+}
+
+.twist.none::before {
+	display: none;
+}
+
+/* A node's mark: filled, or a ring when it is a group that is open — as in
+   the picture. */
+.dot {
+	flex: none;
 	width: 9px;
 	height: 9px;
-	border-radius: 2px;
+	border-radius: 50%;
+	background: currentColor;
 }
 
-.map {
+.dot.open {
+	background: none;
+	box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.c-prd {
+	color: var(--k-prd);
+}
+
+.c-proposal {
+	color: var(--k-proposal);
+}
+
+.c-design {
+	color: var(--k-design);
+}
+
+.c-delta {
+	color: var(--k-delta);
+}
+
+.c-spec {
+	color: var(--k-spec);
+}
+
+.c-memory {
+	color: var(--k-memory);
+}
+
+.c-doc {
+	color: var(--k-doc);
+}
+
+.c-file {
+	color: var(--k-file);
+}
+
+.c-owned {
+	color: var(--k-file-owned);
+}
+
+.c-context {
+	color: var(--g-context);
+}
+
+.c-library {
+	color: var(--g-library);
+}
+
+.c-scope {
+	color: var(--g-scope);
+}
+
+.c-folder {
+	color: var(--g-folder);
+}
+
+.c-section {
+	color: var(--g-section);
+}
+
+.row-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.row.group > .row-name {
+	font-weight: 600;
+}
+
+.row.dim > .row-name,
+.row.archived > .row-name {
+	color: var(--muted);
+}
+
+.row-meta {
+	flex: none;
+	font-size: 11px;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* The picture. */
+
+.graph-stage {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+}
+
+.graph-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--line);
+}
+
+.graph-count {
+	margin-right: 4px;
+	white-space: nowrap;
+}
+
+/* A family of links: its line, and whether it is drawn. */
+.fam i {
+	width: 16px;
+	height: 2px;
+	border-radius: 1px;
+	background: currentColor;
+}
+
+.fam.on {
+	border-color: var(--line);
+	color: var(--fg);
+	background: none;
+}
+
+.fam.f-code i {
+	color: var(--e-code);
+}
+
+.fam.f-docs i {
+	color: var(--e-docs);
+}
+
+.fam.f-bridge i {
+	color: var(--e-bridge);
+}
+
+.fam:not(.on) {
+	color: var(--muted);
+	text-decoration: line-through;
+	opacity: 0.6;
+}
+
+.fam:not(.on) i {
+	color: var(--muted);
+}
+
+.canvas-wrap {
 	position: relative;
 	flex: 1;
 	min-height: 0;
 	overflow: hidden;
-	border-radius: 6px;
 }
 
-.group {
+.graph-canvas {
 	position: absolute;
-	border: 1px solid var(--line);
-	border-radius: 3px;
-	pointer-events: none;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	cursor: grab;
+	touch-action: none;
 }
 
-.group.d1 {
-	border-color: rgba(128, 128, 128, 0.5);
-	background: rgba(128, 128, 128, 0.07);
+.graph-canvas.over {
+	cursor: pointer;
 }
 
-.group.d2 {
-	background: rgba(128, 128, 128, 0.07);
+.graph-canvas.dragging {
+	cursor: grabbing;
 }
 
-.group-name {
+.graph-hint {
 	position: absolute;
-	left: 0;
-	top: 0;
-	max-width: 100%;
-	height: 18px;
-	padding: 0 6px;
+	left: 12px;
+	right: 12px;
+	bottom: 8px;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	font-size: 11px;
-	line-height: 18px;
-	font-weight: 600;
-	pointer-events: auto;
-}
-
-.group.g-area > .group-name {
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-}
-
-.group-name:hover {
-	color: var(--accent);
-}
-
-.leaf {
-	position: absolute;
-	overflow: hidden;
-	border-radius: 2px;
-	color: var(--ink);
-	font-size: 10.5px;
-	line-height: 1.25;
-	text-align: left;
-	transition: opacity 0.12s;
-}
-
-.leaf span {
-	display: block;
-	padding: 2px 4px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	font-weight: 600;
-}
-
-.leaf.k-file {
-	color: #e6edf3;
-}
-
-.leaf.k-file.owned,
-.key i.owned {
-	background: var(--k-file-owned);
-	color: var(--ink);
-}
-
-.leaf.archived {
-	/* What was archived is still the project's, set back: striped, not bright. */
-	background-image: repeating-linear-gradient(135deg, rgba(11, 18, 32, 0.38) 0 4px, transparent 4px 8px);
-}
-
-.leaf:hover {
-	filter: brightness(1.18);
-	z-index: 2;
-}
-
-.leaf.dim {
-	opacity: 0.13;
-}
-
-.leaf.sel {
-	outline: 2px solid #fff;
-	outline-offset: -1px;
-	z-index: 3;
+	pointer-events: none;
 }
 
 .tip {
@@ -930,6 +1092,18 @@ input:focus-visible {
 .badge.k-file,
 .badge.k-package {
 	background: var(--k-file-owned);
+}
+
+.badge.k-context {
+	background: var(--g-context);
+}
+
+.badge.k-library,
+.badge.k-folder,
+.badge.k-scope,
+.badge.k-section,
+.badge.k-root {
+	background: var(--g-library);
 }
 
 .badge.k-entity {

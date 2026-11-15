@@ -25,27 +25,43 @@ do chat (`/help`) e no README do gofi.
 
 ## Grafo do projeto
 
-`GOFI: grafo do projeto` abre, numa aba, o que o `gofi index` indexou — os
-documentos **e** o código — em três visões:
+O **botão do grafo**, ao lado do rosto do gofi na barra de título do editor —
+ou `Ctrl+Shift+P` → **GOFI: grafo do projeto** — abre, numa aba, o que o
+`gofi index` indexou — os documentos **e** o código — em três visões:
 
 - **Visão geral** — como está cada contexto: o que foi escrito (PRD, proposta,
   design, delta, spec, memória), quantos requisitos existem e quantos estão
   vivos, cenários, tabelas, arquivos de código, de quem ele depende e quem
   depende dele, na ordem que as dependências permitem. E cada árvore de código
   com o tamanho e os maiores pacotes.
-- **Mapa** — o projeto inteiro de uma vez: cada documento e cada arquivo fonte
-  é uma célula do tamanho das suas linhas, agrupada como o projeto é agrupado
-  (contextos e bibliotecas; árvores e pacotes). Clicar no nome de um grupo
-  aproxima; **acender um contexto** destaca tudo o que é dele, documentos e
-  código; o filtro apaga o que não casa. Um clique mostra os detalhes, dois
-  abrem o arquivo.
+- **Grafo** — o projeto inteiro como um grafo, com a árvore dele ao lado. Os
+  contextos, as bibliotecas e cada árvore de código são grupos que se abrem no
+  que guardam, até os documentos e os arquivos fonte; a árvore e o desenho
+  mostram os mesmos nós, com os mesmos grupos abertos. As ligações são o que os
+  índices sabem: **código** que chama ou usa outro código, **documentos** que
+  citam outro ou dependem de outro contexto, e o código que é de um
+  **contexto**. Uma ligação que entra num grupo fechado termina no grupo, com
+  o peso de tudo o que ela representa — por isso o desenho abre enxuto e se
+  lê, mesmo num projeto de milhares de arquivos.
+
+  | No grafo | O que faz |
+  |---|---|
+  | clique | seleciona: o painel mostra o que o nó guarda e a que está ligado |
+  | dois cliques | abre ou fecha um grupo; num arquivo, abre o arquivo |
+  | arrastar um nó | move e fixa onde foi solto (**reorganizar** solta todos) |
+  | arrastar o fundo, rolar | desloca e aproxima |
+  | passar o mouse | destaca o nó e tudo a que ele está ligado |
+  | filtro | acha pelo nome ou caminho, na árvore e no desenho |
+  | setas, na árvore | sobem e descem; `→` abre, `←` fecha, `Enter` seleciona |
+
+  **enquadrar** mostra tudo o que está aberto, **recolher** volta ao desenho de
+  abertura, e cada tipo de ligação se esconde no seu botão.
 - **Rastreio** — um contexto da esquerda para a direita: seus documentos, os
   requisitos que eles adicionam e especificam (com título, estado e cenários),
   as tabelas que tocam e os pacotes de código que as implementam. Passar o
   mouse segue uma linha de ponta a ponta.
 
-Nada é disposto por simulação: cada visão tem o desenho que a sua pergunta tem,
-calculado uma vez por tamanho de tela. O painel de detalhes lista, para um
+O painel de detalhes lista, para um
 documento, os requisitos, as tabelas e quem o cita; para um arquivo fonte, os
 contextos, as tabelas que implementa e os símbolos, cada um abrindo na linha.
 
@@ -64,7 +80,7 @@ ao vivo enquanto a execução roda.
 |---|---|
 | `GOFI: Chat in Terminal` | Abre o `gofi chat` num terminal do VSCode |
 | `GOFI: mencionar o arquivo aberto no chat` | Escreve `@arquivo` no prompt do chat |
-| `GOFI: grafo do projeto` | Abre o grafo |
+| `GOFI: grafo do projeto` | Abre o grafo (o botão ao lado do rosto do gofi) |
 | `GOFI: construir o grafo de documentos` | Roda `gofi index` num terminal |
 | `GOFI: execução de uma entrega (fluxo e rastreio)` | Escolhe uma execução e a desenha |
 | `GOFI: diagnosticar a instalação` | Roda `gofi doctor` num terminal |

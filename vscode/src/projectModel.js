@@ -9,16 +9,16 @@ const path = require('path');
  *
  * `gofi find` answers a question with a path and a line range, which is the
  * right shape for an agent and the wrong one for a person asking what the
- * project is made of. That question is about shape, and a hairball of nine
- * hundred dots answers it no better than a list does. So nothing here is laid
- * out by a simulation; each view answers one question, with the layout the
- * question has:
+ * project is made of. That question is about shape, and each view answers one
+ * side of it:
  *
  *   overview — how each context stands: what was written, what is specified,
  *              what is live, which code is its own, what it depends on; and
  *              each tree of code with its size.
- *   treemap  — the whole project at once, every document and every source file
- *              a cell sized by its lines, grouped the way the project is.
+ *   graph    — the whole project as a tree — contexts, libraries, each tree of
+ *              code down to the source files — and the links that cross it,
+ *              for the page to draw folded, a branch opened at a time. Nine
+ *              hundred dots at once are a hairball; a branch is a picture.
  *   trace    — one context from its documents to its requirements, and from
  *              its tables to the code that implements them.
  *
@@ -414,24 +414,45 @@ function libraryOf(d) {
 	return lib ? lib.name : 'Outros';
 }
 
+/** The relations of the code graph that tie one symbol to another. */
+const CODE_RELS = new Set(['calls', 'uses', 'embeds', 'implements', 'extends']);
+
 /**
- * The whole project as nested cells: the documents by context and by library,
- * the code by tree and by package, each leaf sized by its lines.
+ * The whole project as a tree and the links that cross it.
  *
- * A leaf carries the contexts it belongs to, so the page can light up
- * everything a context owns — its documents and its code — at once.
+ * The tree is how the project is kept: the contexts with their documents, the
+ * libraries the agents read, and each tree of code folder by folder down to
+ * the source files. The links are what the two indexes know, between the
+ * things of that tree and nothing else:
+ *
+ *   code       — a file whose symbols call or use another file's;
+ *   cita       — a document that cites another;
+ *   depende    — a document that needs another context;
+ *   pertence   — a source file and the context it is part of.
+ *
+ * The code that implements a table a document touches is left to the trace:
+ * a table is implemented in a hundred places, and drawn here it would tie
+ * every context to all of the code.
+ *
+ * A leaf carries the contexts it belongs to. Every link has both ends in the
+ * tree, so the page can fold a branch and still know what crosses into it.
  */
-function treemap(root) {
+function graph(root) {
 	const model = load(root);
 	if (!model) {
 		return null;
 	}
-	const group = (id, name, kind, children) => ({ id, name, kind, children: children.filter((c) => !c.children || c.children.length > 0) });
+	const ids = new Set();
+	const known = (node) => {
+		ids.add(node.id);
+		return node;
+	};
+	const group = (id, name, kind, children, extra) => known({ id, name, kind, ...extra, children: children.filter((c) => !c.children || c.children.length > 0) });
 
 	const byCtx = new Map();
 	const byLib = new Map();
 	for (const d of model.docs.values()) {
-		const leaf = { id: d.id, name: d.name, kind: d.kind, size: d.lines, path: d.path, ctx: d.ctx ? [d.ctx] : [], title: d.title, archived: d.archived };
+		const leaf = known({ id: d.id, name: d.name, kind: d.kind, size: d.lines, path: d.path, ctx: d.ctx ? [d.ctx] : [], title: d.title, archived: d.archived });
 		if (d.ctx && !placeholder(d.ctx)) {
 			(byCtx.get(d.ctx) || byCtx.set(d.ctx, []).get(d.ctx)).push(leaf);
 		} else {
@@ -452,26 +473,113 @@ function treemap(root) {
 			}
 		}
 	}
+
+	/** The node a folder of a tree is drawn as: the tree itself at its root. */
+	const folderId = (scope, dir) => (dir === scope.base.replace(/\/$/, '') || dir === '.' && scope.base === '' ? `scope:${scope.name}` : `dir:${scope.name}:${dir}`);
 	const trees = model.scopes.map((s) => {
-		const packages = new Map();
+		const top = { dirs: new Map(), files: [] };
 		for (const f of model.files.values()) {
 			if (f.scope !== s.name) {
 				continue;
 			}
-			const leaf = { id: f.id, name: f.name, kind: 'file', size: f.lines, path: f.path, ctx: owners.get(f.path) || [], symbols: f.symbols };
-			(packages.get(f.dir) || packages.set(f.dir, []).get(f.dir)).push(leaf);
+			let at = top;
+			let dir = s.base.replace(/\/$/, '');
+			const inside = dirName(f.path.slice(s.base.length));
+			for (const part of inside === '.' ? [] : inside.split('/')) {
+				dir = dir ? `${dir}/${part}` : part;
+				at = at.dirs.get(part) || at.dirs.set(part, { name: part, path: dir, dirs: new Map(), files: [] }).get(part);
+			}
+			at.files.push({ id: f.id, name: f.name, kind: 'file', size: f.lines, path: f.path, ctx: owners.get(f.path) || [], symbols: f.symbols });
 		}
-		const children = [...packages.entries()].sort().map(([dir, leaves]) => ({ ...group(`pkg:${dir}`, tail(dir), 'package', leaves), path: dir }));
-		return { ...group(`scope:${s.name}`, s.name, 'scope', children), language: s.language };
+		const inside = (d) => [
+			...[...d.dirs.values()].sort((a, b) => a.name.localeCompare(b.name)).map(fold),
+			...d.files.sort((a, b) => a.name.localeCompare(b.name)).map(known),
+		];
+		// A folder that only holds another folder is read as one: a/b.
+		function fold(d) {
+			let name = d.name;
+			while (d.files.length === 0 && d.dirs.size === 1) {
+				d = [...d.dirs.values()][0];
+				name = `${name}/${d.name}`;
+			}
+			return group(folderId(s, d.path), name, 'folder', inside(d), { path: d.path });
+		}
+		return group(`scope:${s.name}`, s.name, 'scope', inside(top), { language: s.language, path: s.base.replace(/\/$/, '') });
 	});
 
-	return group('root', baseName(root.split(path.sep).join('/')), 'root', [
-		group('docs', 'Documentos', 'area', [
-			group('docs:contexts', 'Contextos', 'section', contexts),
-			group('docs:libraries', 'Bibliotecas', 'section', libraries),
-		]),
-		group('code', 'Código', 'area', trees),
+	const weights = new Map();
+	const link = (from, to, kind, n) => {
+		if (from !== to && ids.has(from) && ids.has(to)) {
+			const key = `${from}\n${to}\n${kind}`;
+			weights.set(key, (weights.get(key) || 0) + (n || 1));
+		}
+	};
+
+	// What the documents say: who cites whom, who needs which context, and
+	// which code is a context's own.
+	for (const d of model.docs.values()) {
+		for (const [to, rel] of model.out.get(d.id) || []) {
+			if (rel === 'cita') {
+				link(d.id, to, 'cita');
+			} else if (rel === 'depende' && to !== PREFIX.ctx + d.ctx) {
+				link(d.id, to, 'depende');
+			}
+		}
+	}
+	for (const [file, names] of owners) {
+		for (const name of names) {
+			link(PREFIX.code + file, PREFIX.ctx + name, 'pertence');
+		}
+	}
+
+	// What the code says: a file whose symbols reach into another file. Two
+	// packages that only import each other are tied folder to folder.
+	for (const s of model.scopes) {
+		const fileOf = new Map();
+		for (const n of s.graph.nodes || []) {
+			if (n.file && n.kind !== 'package') {
+				fileOf.set(n.id, s.base + n.file);
+			}
+		}
+		const dirOfUnit = new Map();
+		for (const [rel, f] of Object.entries(s.graph.files || {})) {
+			if (f.unit) {
+				dirOfUnit.set(f.unit, dirName(s.base + rel));
+			}
+		}
+		const tied = new Set();
+		const imports = [];
+		for (const e of s.graph.edges || []) {
+			if (CODE_RELS.has(e.rel)) {
+				const a = fileOf.get(e.from);
+				const b = fileOf.get(e.to);
+				if (a && b && a !== b) {
+					link(PREFIX.code + a, PREFIX.code + b, 'code');
+					tied.add(`${dirName(a)}\n${dirName(b)}`);
+				}
+			} else if (e.rel === 'imports') {
+				imports.push(e);
+			}
+		}
+		for (const e of imports) {
+			const a = dirOfUnit.get(String(e.from).replace(/^pkg:/, ''));
+			const b = dirOfUnit.get(String(e.to).replace(/^pkg:/, ''));
+			if (a && b && a !== b && !tied.has(`${a}\n${b}`)) {
+				link(folderId(s, a), folderId(s, b), 'code');
+			}
+		}
+	}
+
+	const tree = group('root', baseName(root.split(path.sep).join('/')), 'root', [
+		group('docs:contexts', 'Contextos', 'section', contexts),
+		group('docs:libraries', 'Bibliotecas', 'section', libraries),
+		...trees,
 	]);
+	const links = [...weights.entries()].map(([key, weight]) => {
+		const [from, to, kind] = key.split('\n');
+		return { from, to, kind, weight };
+	});
+	return { tree, links };
 }
 
 /**
@@ -620,4 +728,4 @@ function details(root, id) {
 	return null;
 }
 
-module.exports = { hasGraph, overview, treemap, trace, details, GRAPH_FILE, DOCS_DIR, CODE_DIR };
+module.exports = { hasGraph, overview, graph, trace, details, GRAPH_FILE, DOCS_DIR, CODE_DIR };

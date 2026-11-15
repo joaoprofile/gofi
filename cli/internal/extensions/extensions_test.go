@@ -79,6 +79,7 @@ func TestVSIXLayout(t *testing.T) {
 		"extension/extension.js",
 		"extension/src/chatTerminal.js",
 		"extension/media/graph.js",
+		"extension/media/graphLayout.js",
 		"extension/media/graph.css",
 		"extension/images/icon.png",
 		"extension/images/gofi.svg",

@@ -2,7 +2,7 @@
   "name": "gofi-ai",
   "displayName": "GOFI AI",
   "description": "O gofi dentro do VSCode: o chat no terminal do editor, o grafo do projeto e a execução de uma entrega, desenhados.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "gofi",
   "license": "MIT",
   "engines": {
@@ -110,6 +110,10 @@
         {
           "command": "gofi-ai.chatInTerminal",
           "group": "navigation@100"
+        },
+        {
+          "command": "gofi-ai.graph",
+          "group": "navigation@101"
         }
       ],
       "editor/context": [
@@ -148,7 +152,7 @@
         "gofiAI.graph.openOnStartup": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Abre o grafo do projeto ao lado do código quando o workspace já tem `.gofi/index/docs/graph.json`. Desligue para abrir só pelo ícone **GOFI Grafo**."
+          "markdownDescription": "Abre o grafo do projeto ao lado do código quando o workspace já tem `.gofi/index/docs/graph.json`. Desligado, ele abre pelo botão do grafo na barra do editor, ao lado do rosto do gofi."
         }
       }
     }
@@ -157,7 +161,7 @@
     "vscode:prepublish": "echo no-build",
     "package": "vsce package",
     "publish": "vsce publish",
-    "test": "node test/project-model.test.js && node test/run-view.test.js && node test/chat-terminal.test.js"
+    "test": "node test/project-model.test.js && node test/graph-layout.test.js && node test/run-view.test.js && node test/chat-terminal.test.js"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.0.0"

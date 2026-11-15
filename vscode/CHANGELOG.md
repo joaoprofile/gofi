@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+- **O grafo é um grafo.** No lugar do mapa de células, o projeto inteiro
+  desenhado como grafo, com a árvore dele ao lado: contextos, bibliotecas e
+  cada árvore de código são grupos que se abrem no que guardam, até os
+  documentos e os arquivos fonte. Os nós se arrastam e ficam onde são soltos,
+  o desenho se aproxima e se desloca, um clique seleciona e mostra a que o nó
+  está ligado, dois abrem o grupo ou o arquivo, e passar o mouse destaca as
+  ligações de um nó.
+- **As ligações do código entram no desenho.** Além de quem cita e de quem
+  depende de quem, o grafo mostra o código que chama ou usa outro código e o
+  código que é de cada contexto. Uma ligação para dentro de um grupo fechado
+  termina no grupo: o desenho abre enxuto e não vira um novelo.
+- **O grafo tem botão.** Ao lado do rosto do gofi, na barra de título do
+  editor. O rosto abre o chat; o botão, o grafo.
+
 ## 0.7.0
 
 Requer o gofi desta versão (o `gofi chat` com o painel de atividade e o `/audit`).

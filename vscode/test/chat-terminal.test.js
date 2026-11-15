@@ -165,14 +165,17 @@ test('mentioning writes into the prompt of the chat that is open, and sends noth
 	assert.strictEqual(created[0].sent.length, 3, 'with no file in the editor nothing is written');
 });
 
-test('the manifest opens the chat from the gofi button and keeps no panel of its own', () => {
+test('the manifest opens the chat from the gofi button, the graph from the one beside it, and keeps no panel of its own', () => {
 	const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 	const contributes = manifest.contributes;
 	const command = contributes.commands.find((c) => c.command === 'gofi-ai.chatInTerminal');
 	assert.strictEqual(`${command.category}: ${command.title}`, 'GOFI: Chat in Terminal');
 	assert.strictEqual(command.icon, 'images/gofi.svg');
 	assert.ok(fs.existsSync(path.join(__dirname, '..', command.icon)), 'the button has its picture');
-	assert.deepStrictEqual(contributes.menus['editor/title'].map((m) => m.command), ['gofi-ai.chatInTerminal']);
+	// Beside it, the button of the project's graph: the two things the extension opens.
+	assert.deepStrictEqual(contributes.menus['editor/title'].map((m) => m.command), ['gofi-ai.chatInTerminal', 'gofi-ai.graph']);
+	const graph = contributes.commands.find((c) => c.command === 'gofi-ai.graph');
+	assert.ok(graph.icon, 'a button in the title bar needs its picture');
 	assert.strictEqual(contributes.views, undefined, 'the conversation is the terminal chat: there is no webview panel');
 	assert.strictEqual(contributes.viewsContainers, undefined);
 

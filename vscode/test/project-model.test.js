@@ -1,8 +1,9 @@
 'use strict';
 
 // The graph page's three views, over a project written to disk the way
-// `gofi index` leaves one: the overview of how each context stands, the map
-// of every document and source file, and the trace of one context.
+// `gofi index` leaves one: the overview of how each context stands, the graph
+// of the whole project — its tree and the links across it — and the trace of
+// one context.
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -97,9 +98,18 @@ function project() {
 		nodes: [
 			{ id: 'func:x.Login', kind: 'func', name: 'Login', file: 'domain/user/service/user.go', line: 30, score: 0.9 },
 			{ id: 'func:x.Logout', kind: 'func', name: 'Logout', file: 'domain/user/service/user.go', line: 90, score: 0.2 },
+			{ id: 'struct:x.User', kind: 'struct', name: 'User', file: 'domain/user/model/entity.go', line: 8, score: 0.7 },
 			{ id: 'pkg:x', kind: 'package', name: 'service', file: 'domain/user/service/user.go' },
 		],
-		edges: [],
+		edges: [
+			{ from: 'pkg:x', to: 'func:x.Login', rel: 'contains' },
+			{ from: 'func:x.Login', to: 'struct:x.User', rel: 'uses' },
+			{ from: 'func:x.Logout', to: 'struct:x.User', rel: 'calls' },
+			{ from: 'func:x.Login', to: 'func:x.Logout', rel: 'calls' }, // the same file: no link
+			{ from: 'pkg:x/domain/billing/service', to: 'pkg:x/domain/user/model', rel: 'imports' },
+			{ from: 'pkg:x/domain/user/service', to: 'pkg:x/domain/user/model', rel: 'imports' }, // already tied by its symbols
+			{ from: 'pkg:x/domain/billing/service', to: 'pkg:fmt', rel: 'imports' }, // not of the project
+		],
 	});
 	write(root, '.gofi/index/code/frontend/gofi_graph.json', {
 		language: 'typescript',
@@ -119,7 +129,7 @@ test('a project never indexed has nothing to draw, and says so by returning noth
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gofi-model-empty-'));
 	assert.strictEqual(model.hasGraph(root), false);
 	assert.strictEqual(model.overview(root), null);
-	assert.strictEqual(model.treemap(root), null);
+	assert.strictEqual(model.graph(root), null);
 	assert.strictEqual(model.trace(root, 'user'), null);
 });
 
@@ -157,28 +167,57 @@ test('the overview measures each tree of code and names the libraries', () => {
 	assert.deepStrictEqual(o.libraries.map((l) => [l.name, l.docs]).sort(), [['Expertise', 1], ['SDK', 1]]);
 });
 
-test('the map holds every document and every source file once, sized by its lines', () => {
+test('the graph holds every document and every source file once, in the tree the project is kept in', () => {
 	const root = project();
-	const map = model.treemap(root);
-	assert.deepStrictEqual(map.children.map((a) => a.name), ['Documentos', 'Código']);
-	const all = leaves(map);
+	const { tree } = model.graph(root);
+	assert.deepStrictEqual(tree.children.map((a) => a.name), ['Contextos', 'Bibliotecas', 'backend', 'frontend']);
+	const all = leaves(tree);
 	assert.strictEqual(all.length, 11, '7 documents and 4 source files');
 	assert.strictEqual(new Set(all.map((l) => l.id)).size, all.length, 'nothing is drawn twice');
 
 	const spec = all.find((l) => l.id === 'specs/user/spec.md');
 	assert.deepStrictEqual([spec.kind, spec.size, spec.title, spec.ctx], ['spec', 300, 'Spec — user', ['user']]);
 	assert.strictEqual(all.find((l) => l.path.includes('/archive/')).archived, true);
-	assert.deepStrictEqual(leaves(group(map, 'ctx:billing')).map((l) => l.kind).sort(), ['delta', 'proposal']);
-	assert.deepStrictEqual(leaves(group(map, 'lib:SDK')).map((l) => l.path), ['.claude/sdk/go/api/http.md']);
+	assert.deepStrictEqual(leaves(group(tree, 'ctx:billing')).map((l) => l.kind).sort(), ['delta', 'proposal']);
+	assert.deepStrictEqual(leaves(group(tree, 'lib:SDK')).map((l) => l.path), ['.claude/sdk/go/api/http.md']);
+	assert.strictEqual(group(tree, 'ctx:{contexto}'), undefined, 'a template\'s placeholder is not a context');
 
-	// Code is grouped by tree and by package, at its path in the project, and
-	// carries the contexts the document graph says it belongs to.
-	const backend = group(map, 'scope:backend');
-	assert.deepStrictEqual(backend.children.map((p) => p.path).sort(), ['backend/domain/billing/service', 'backend/domain/user/model', 'backend/domain/user/service']);
+	// Code is a tree of folders, at its path in the project; a folder that only
+	// holds another is read as one. A file carries the contexts it belongs to.
+	const backend = group(tree, 'scope:backend');
+	assert.deepStrictEqual([backend.kind, backend.language, backend.children.map((c) => c.id)], ['scope', 'go', ['dir:backend:backend/domain']]);
+	const domain = backend.children[0];
+	assert.deepStrictEqual(domain.children.map((c) => [c.name, c.path]), [['billing/service', 'backend/domain/billing/service'], ['user', 'backend/domain/user']]);
+	assert.deepStrictEqual(group(tree, 'dir:backend:backend/domain/user').children.map((c) => c.name), ['model', 'service']);
 	const file = all.find((l) => l.id === 'code:backend/domain/user/service/user.go');
 	assert.deepStrictEqual([file.kind, file.size, file.ctx, file.symbols], ['file', 400, ['user'], 2]);
 	assert.deepStrictEqual(all.find((l) => l.id === 'code:backend/domain/billing/service/charge.go').ctx, []);
+	// A file at the root of its tree hangs from the tree itself.
+	assert.deepStrictEqual(group(tree, 'scope:frontend').children.map((c) => c.id), ['dir:frontend:frontend/src']);
 	assert.strictEqual(all.find((l) => l.id === 'code:frontend/src/App.tsx').size, 40);
+});
+
+test('the graph\'s links are what the two indexes say, between things of the tree', () => {
+	const root = project();
+	const { tree, links } = model.graph(root);
+	const ids = new Set();
+	const walk = (n) => {
+		ids.add(n.id);
+		(n.children || []).forEach(walk);
+	};
+	walk(tree);
+	assert.ok(links.every((l) => ids.has(l.from) && ids.has(l.to) && l.from !== l.to), 'every link has both ends in the tree');
+	const said = links.map((l) => `${l.from} -${l.kind}${l.weight > 1 ? `×${l.weight}` : ''}-> ${l.to}`).sort();
+	assert.deepStrictEqual(said, [
+		// Two symbols of one file reaching into another are one link, twice as heavy.
+		'code:backend/domain/user/service/user.go -code×2-> code:backend/domain/user/model/entity.go',
+		'code:backend/domain/user/model/entity.go -pertence-> ctx:user',
+		'code:backend/domain/user/service/user.go -pertence-> ctx:user',
+		// Two packages that only import each other are tied folder to folder.
+		'dir:backend:backend/domain/billing/service -code-> dir:backend:backend/domain/user/model',
+		'specs/billing/proposal.md -depende-> ctx:user',
+		'specs/user/spec.md -cita-> prd/user/prd-user.md',
+	].sort());
 });
 
 test('the trace of a context goes from its documents to its requirements, and from its tables to the code', () => {

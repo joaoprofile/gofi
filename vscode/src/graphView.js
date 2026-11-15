@@ -11,7 +11,8 @@ const PANEL_TYPE = 'gofi-ai.graphPanel';
 
 /**
  * The project's graph in an editor tab: what gofi indexed — the documents and
- * the code — drawn in the three views projectModel.js builds. One per window:
+ * the code — drawn in the three views projectModel.js builds (the simulation
+ * that lays the graph out is media/graphLayout.js). One per window:
  * the page wants the whole editor area, and two side by side would only ever
  * show the same project twice.
  *
@@ -123,7 +124,7 @@ class GraphPanel {
 			this.post({ type: 'empty', reason: 'sem-grafo', file: path.join(root, model.DOCS_DIR) });
 			return;
 		}
-		this.post({ type: 'model', overview, map: model.treemap(root), context: this.focused });
+		this.post({ type: 'model', overview, graph: model.graph(root), context: this.focused });
 		this.focused = '';
 	}
 
@@ -219,6 +220,7 @@ class GraphPanel {
 </head>
 <body>
 ${markup()}
+<script nonce="${nonce}" src="${asset('graphLayout.js')}"></script>
 <script nonce="${nonce}" src="${asset('graph.js')}"></script>
 </body>
 </html>`;
