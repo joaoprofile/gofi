@@ -89,7 +89,7 @@ func (m model) onIntake(msg intakeDone) (tea.Model, tea.Cmd) {
 	k := m.look
 	if msg.err != nil {
 		m.plan = nil
-		return m, tea.Println("\n" + k.bullet(k.bad, msg.err.Error(), k.text, m.width) + "\n" + k.nested([]string{i18n.T("chat.plan.send_hint")}, k.dim))
+		return m, say("\n" + k.bullet(k.bad, msg.err.Error(), k.text, m.width) + "\n" + k.nested([]string{i18n.T("chat.plan.send_hint")}, k.dim))
 	}
 	r := msg.res
 	m.plan.res = r
@@ -97,17 +97,17 @@ func (m model) onIntake(msg intakeDone) (tea.Model, tea.Cmd) {
 		m.plan = nil
 		return m.sendToEngine(r.Request, nil)
 	}
-	shown := tea.Println(m.planBlock(r))
+	shown := say(m.planBlock(r))
 	switch {
 	case r.Blocked != "":
 		m.plan, m.wait = nil, waitNone
-		return m, tea.Sequence(shown, tea.Println(k.nested([]string{i18n.T("intake.blocked", r.Blocked)}, k.warn)))
+		return m, tea.Sequence(shown, say(k.nested([]string{i18n.T("intake.blocked", r.Blocked)}, k.warn)))
 	case r.Ask:
 		m.wait = waitAnswer
-		return m, tea.Sequence(shown, tea.Println(m.questionsBlock(r)))
+		return m, tea.Sequence(shown, say(m.questionsBlock(r)))
 	case r.Answer != "":
 		m.plan, m.wait = nil, waitNone
-		return m, tea.Sequence(shown, tea.Println(k.nested([]string{i18n.T("chat.plan.answer", r.Answer)}, k.text)))
+		return m, tea.Sequence(shown, say(k.nested([]string{i18n.T("chat.plan.answer", r.Answer)}, k.text)))
 	case len(r.Plan) == 0:
 		m.plan = nil
 		if r.Turn != "" {
@@ -120,7 +120,7 @@ func (m model) onIntake(msg intakeDone) (tea.Model, tea.Cmd) {
 		// A question was answered or a default assumed: the plan is shown for
 		// review before anything runs (0001, Q1).
 		m.wait = waitConfirm
-		return m, tea.Sequence(shown, tea.Println(k.nested([]string{i18n.T("chat.plan.confirm")}, k.accent)))
+		return m, tea.Sequence(shown, say(k.nested([]string{i18n.T("chat.plan.confirm")}, k.accent)))
 	}
 	return m.startPhase(shown)
 }
@@ -131,7 +131,7 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 	t := strings.ToLower(strings.TrimSpace(text))
 	if t == "cancelar" || t == "/cancelar" {
 		m.stopPlan()
-		return m, tea.Sequence(echo, tea.Println(k.nested([]string{i18n.T("chat.plan.cancelled")}, k.dim)))
+		return m, tea.Sequence(echo, say(k.nested([]string{i18n.T("chat.plan.cancelled")}, k.dim)))
 	}
 	switch m.wait {
 	case waitAnswer:
@@ -151,7 +151,7 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 			// One question answered, another left: it is asked next, from the
 			// same round.
 			r.Questions = r.Questions[1:]
-			return m, tea.Sequence(echo, tea.Println(m.questionsBlock(r)))
+			return m, tea.Sequence(echo, say(m.questionsBlock(r)))
 		}
 		m.wait = waitNone
 		m.running, m.planning, m.started = true, true, time.Now()
@@ -172,7 +172,7 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 			p.asking = p.asking[1:]
 		}
 		if len(p.asking) > 0 {
-			return m, tea.Sequence(echo, tea.Println(m.questionBlock(p.asking[0])))
+			return m, tea.Sequence(echo, say(m.questionBlock(p.asking[0])))
 		}
 		m.wait = waitNone
 		return m.startPhase(echo)
@@ -195,7 +195,7 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 			p.asking = nil
 		}
 		if len(p.asking) > 0 {
-			return m, tea.Sequence(echo, tea.Println(m.questionBlock(p.asking[0])))
+			return m, tea.Sequence(echo, say(m.questionBlock(p.asking[0])))
 		}
 		// What was not answered takes its recommendation, as gofi answer
 		// does.
@@ -204,7 +204,7 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 		run := d.gate.Run
 		d.gate, d.gateAnswers, m.wait = nil, nil, waitNone
 		if err := loop.Answer(m.opts.Root, run, answers); err != nil {
-			return m, tea.Sequence(echo, tea.Println(k.nested([]string{err.Error()}, k.warn)))
+			return m, tea.Sequence(echo, say(k.nested([]string{err.Error()}, k.warn)))
 		}
 		return m, echo
 	case waitConfirm, waitContinue:
@@ -216,19 +216,19 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 				sealed, err := intake.SealContract(m.opts.Root, p.res, p.next-1)
 				if err != nil {
 					m.stopPlan()
-					return m, tea.Sequence(echo, tea.Println(k.nested([]string{err.Error()}, k.warn)))
+					return m, tea.Sequence(echo, say(k.nested([]string{err.Error()}, k.warn)))
 				}
 				for _, s := range sealed {
-					echo = tea.Sequence(echo, tea.Println(k.nested([]string{i18n.T("ask.sealed", s)}, k.dim)))
+					echo = tea.Sequence(echo, say(k.nested([]string{i18n.T("ask.sealed", s)}, k.dim)))
 				}
 			}
 			return m.startPhase(echo)
 		}
 		if no(t) {
 			m.stopPlan()
-			return m, tea.Sequence(echo, tea.Println(k.nested([]string{i18n.T("chat.plan.stopped")}, k.dim)))
+			return m, tea.Sequence(echo, say(k.nested([]string{i18n.T("chat.plan.stopped")}, k.dim)))
 		}
-		return m, tea.Sequence(echo, tea.Println(k.nested([]string{i18n.T("chat.plan.yes_no")}, k.warn)))
+		return m, tea.Sequence(echo, say(k.nested([]string{i18n.T("chat.plan.yes_no")}, k.warn)))
 	}
 	return m, echo
 }
@@ -296,7 +296,7 @@ func (m model) startDelivery(flow string, before tea.Cmd) (tea.Model, tea.Cmd) {
 	k := m.look
 	if m.opts.Deliver == nil || r.Context == nil {
 		m.stopPlan()
-		return m, tea.Sequence(before, tea.Println(k.nested([]string{i18n.T("chat.plan.no_delivery")}, k.warn)))
+		return m, tea.Sequence(before, say(k.nested([]string{i18n.T("chat.plan.no_delivery")}, k.warn)))
 	}
 	p.closePhase()
 	d := m.opts.Deliver(flow, r.Context.Name)
@@ -305,7 +305,7 @@ func (m model) startDelivery(flow string, before tea.Cmd) (tea.Model, tea.Cmd) {
 	for p.next++; p.next < len(r.Plan) && loop.Delivers(r.Plan[p.next].Produces) && !r.Plan[p.next].Elicit; p.next++ {
 	}
 	m.conducting = true
-	line := tea.Println("\n" + k.bullet(k.accent, i18n.T("ask.handoff", flow), k.bold, m.width))
+	line := say("\n" + k.bullet(k.accent, i18n.T("ask.handoff", flow), k.bold, m.width))
 	if before != nil {
 		line = tea.Sequence(before, line)
 	}
@@ -351,7 +351,7 @@ func (m model) onDeliveryEvent(e loop.Event) (tea.Model, tea.Cmd) {
 				d.gate, d.gateAnswers = q, map[string]string{}
 				p.asking, m.wait = qs, waitGate
 				head := k.nested([]string{i18n.T("chat.delivery.gate_ask", len(qs), e.Run)}, k.accent)
-				return m, tea.Sequence(tea.Println("\n"+head), tea.Println(m.questionBlock(qs[0])), readDelivery(d.events))
+				return m, tea.Sequence(say("\n"+head), say(m.questionBlock(qs[0])), readDelivery(d.events))
 			}
 		}
 		line = k.nested([]string{i18n.T("chat.delivery.gate", e.Why)}, k.warn)
@@ -365,7 +365,7 @@ func (m model) onDeliveryEvent(e loop.Event) (tea.Model, tea.Cmd) {
 	if line == "" {
 		return m, next
 	}
-	return m, tea.Sequence(tea.Println(line), next)
+	return m, tea.Sequence(say(line), next)
 }
 
 // onDeliveryDone goes on with the plan when every change was accepted, and
@@ -388,11 +388,11 @@ func (m model) onDeliveryDone() (tea.Model, tea.Cmd) {
 			why = err.Error()
 		}
 		m.stopPlan()
-		return m, tea.Println(k.nested([]string{i18n.T("run.not_accepted", why)}, k.warn))
+		return m, say(k.nested([]string{i18n.T("run.not_accepted", why)}, k.warn))
 	}
 	if p.next >= len(p.res.Plan) {
 		m.stopPlan()
-		return m, tea.Println("\n" + k.bullet(k.good, i18n.T("chat.plan.done"), k.text, m.width))
+		return m, say("\n" + k.bullet(k.good, i18n.T("chat.plan.done"), k.text, m.width))
 	}
 	return m.startPhase(nil)
 }
@@ -441,7 +441,7 @@ func (m model) startPhase(before tea.Cmd) (tea.Model, tea.Cmd) {
 	}
 	p.next++
 	m.conducting = true
-	line := tea.Println("\n" + k.bullet(k.accent, header, k.bold, m.width))
+	line := say("\n" + k.bullet(k.accent, header, k.bold, m.width))
 	if before != nil {
 		line = tea.Sequence(before, line)
 	}
@@ -473,11 +473,11 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 		if elErr != nil {
 			lines = append([]string{elErr.Error()}, lines...)
 		}
-		return m, tea.Println(k.nested(lines, k.warn))
+		return m, say(k.nested(lines, k.warn))
 	}
 	if done.Elicit {
 		if el == nil {
-			return m.startPhase(tea.Println(k.nested([]string{i18n.T("ask.elicit.none", done.Role)}, k.dim)))
+			return m.startPhase(say(k.nested([]string{i18n.T("ask.elicit.none", done.Role)}, k.dim)))
 		}
 		if p.decisions == nil {
 			p.decisions = map[string]*decided{}
@@ -489,7 +489,7 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 			p.asking, p.askingFor = qs, done.Role
 			m.wait = waitElicit
 			head := k.nested([]string{i18n.T("ask.elicit.questions", len(qs), done.Role)}, k.accent)
-			return m, tea.Sequence(tea.Println("\n"+head), tea.Println(m.questionBlock(qs[0])))
+			return m, tea.Sequence(say("\n"+head), say(m.questionBlock(qs[0])))
 		}
 		return m.startPhase(nil)
 	}
@@ -500,7 +500,7 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 			msg += " " + i18n.T("chat.plan.next", r.Next)
 		}
 		m.stopPlan()
-		return m, tea.Println("\n" + k.bullet(k.good, msg, k.text, m.width))
+		return m, say("\n" + k.bullet(k.good, msg, k.text, m.width))
 	}
 	if done.ReviewAfter || intake.ApprovalAfter(r, p.next-1) {
 		// A spec is read by the reviewer first: the person approves knowing
@@ -513,11 +513,11 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 				lines, blocking, err := review(context.Background(), ctx, func(line string) { ch <- reviewProgress{line: line, ch: ch} })
 				ch <- reviewed{lines: lines, blocking: blocking, err: err}
 			}()
-			return m, tea.Batch(tea.Println(k.nested([]string{i18n.T("chat.plan.reviewing", ctx)}, k.dim)), readReview(ch))
+			return m, tea.Batch(say(k.nested([]string{i18n.T("chat.plan.reviewing", ctx)}, k.dim)), readReview(ch))
 		}
 		// An approval point: what the next phases build rests on this document.
 		m.wait = waitContinue
-		return m, tea.Println("\n" + k.nested([]string{i18n.T("chat.plan.review", done.Produces, r.Plan[p.next].Role)}, k.accent))
+		return m, say("\n" + k.nested([]string{i18n.T("chat.plan.review", done.Produces, r.Plan[p.next].Role)}, k.accent))
 	}
 	return m.startPhase(nil)
 }
@@ -558,13 +558,13 @@ func (m model) onReviewed(msg reviewed) (tea.Model, tea.Cmd) {
 	}
 	out := []tea.Cmd{}
 	if msg.err != nil {
-		out = append(out, tea.Println(k.nested([]string{msg.err.Error()}, k.warn)))
+		out = append(out, say(k.nested([]string{msg.err.Error()}, k.warn)))
 	} else if len(msg.lines) > 0 {
 		style := k.dim
 		if msg.blocking > 0 {
 			style = k.warn
 		}
-		out = append(out, tea.Println(k.nested(msg.lines, style)))
+		out = append(out, say(k.nested(msg.lines, style)))
 	}
 	r := p.res
 	done := r.Plan[p.next-1]
@@ -573,7 +573,7 @@ func (m model) onReviewed(msg reviewed) (tea.Model, tea.Cmd) {
 	if msg.blocking > 0 {
 		prompt = i18n.T("chat.plan.review_blocking", msg.blocking) + " " + prompt
 	}
-	out = append(out, tea.Println("\n"+k.nested([]string{prompt}, k.accent)))
+	out = append(out, say("\n"+k.nested([]string{prompt}, k.accent)))
 	return m, tea.Sequence(out...)
 }
 
@@ -632,13 +632,16 @@ func (m model) engine() engine.Session {
 
 // sendToEngine runs one turn with the text as typed.
 func (m model) sendToEngine(text string, before tea.Cmd) (tea.Model, tea.Cmd) {
-	events, err := m.engine().Send(context.Background(), engine.Turn{Prompt: text})
+	turn := engine.Turn{Prompt: text, Images: m.outgoing}
+	m.outgoing = nil
+	events, err := m.engine().Send(context.Background(), turn)
 	if err != nil {
 		m.stopPlan()
-		return m, tea.Sequence(before, tea.Println(m.look.bullet(m.look.bad, err.Error(), m.look.text, m.width)))
+		return m, tea.Sequence(before, say(m.look.bullet(m.look.bad, err.Error(), m.look.text, m.width)))
 	}
 	m.running, m.events, m.started, m.frame = true, events, time.Now(), 0
 	m.live, m.lastFailed = "", false
+	m.act = activity{}
 	cmds := []tea.Cmd{waitEvent(events), tickCmd()}
 	if before != nil {
 		cmds = append([]tea.Cmd{before}, cmds...)

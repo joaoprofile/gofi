@@ -19,8 +19,12 @@ func (m *model) replaceSession(resumeID string) {
 	if sw, ok := m.session.(engine.ModelSwitcher); ok && m.chosenModel != "" {
 		sw.SetModel(m.chosenModel)
 	}
-	m.tools = map[string]string{}
+	m.tools, m.calls, m.lastCall = map[string]string{}, map[string]string{}, ""
 	m.always = map[string]bool{}
+	// Another conversation holds nothing yet, and its engine starts its
+	// count again; what was spent here stays spent.
+	m.ctxTokens, m.ctxWarned, m.lastCost = 0, 0, 0
+	m.images, m.imageSeq = nil, 0
 }
 
 // switchModel is /model: without an argument it lists the choices; with a

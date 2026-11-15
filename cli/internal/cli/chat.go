@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -52,10 +53,34 @@ the plan is shown, its questions asked (answer with the option's number, or
 stops after a PRD or a spec for review. /brief shows the assembled request;
 /send <text> sends text as typed, with no plan.
 
-Before the agent edits a file or runs a command, the chat asks: yes, yes for
-that tool until the conversation ends, or no — and a "no" goes back to the
-agent as the reason. Reading and searching never ask. --permission-mode hands
-the decision to Claude Code instead (acceptEdits, plan, bypassPermissions, …).`,
+The prompt takes as many lines as the request needs: alt+enter (or ctrl+j, or
+a backslash before enter) breaks the line, and a pasted text keeps its own.
+Typing / lists every command — the chat's, the project's skills and the
+engine's, each with what it does — and @ completes a file to point at.
+ctrl+v attaches the picture in the clipboard (alt+v where the terminal keeps
+ctrl+v for itself).
+
+While the agent works, enter sends a follow-up: the engine hands it to the
+model at its next step — between two tool calls — and the turn goes on knowing
+it. It costs the message and nothing else. Esc stops the step under way.
+
+The top of the screen is the panel of what is at work, as it happens: the plan
+being conducted and its phases, this conversation's turn — how long, how many
+tools, the last one —, the subagents it started, and the runs of the loop with
+their agents, started here, by /gofi-run or in another terminal. It is read
+from what the engine streams and from the runs on disk; no model is called to
+draw it. /watch opens the full screen. On a terminal under 18 lines the panel
+shows over the prompt only while something is at work.
+
+/find, /show, /impact and /path ask the project's index and /runs lists the
+runs under way: gofi reads the disk and no model is called.
+
+Before the agent edits a file or runs a command, the chat shows what it is —
+the command, the change as a diff — and asks: yes; yes and do not ask again
+for commands that begin the same way, or for file edits, until the
+conversation ends; or no, with what the agent should do instead. Reading and
+searching never ask. --permission-mode hands the decision to Claude Code
+instead (acceptEdits, plan, bypassPermissions, …).`,
 		Example: `gofi chat
 gofi chat --model sonnet
 gofi chat --resume <session-id>`,
@@ -123,6 +148,17 @@ func runChat(f chatFlags) error {
 		mode = "auto"
 	}
 
+	// The chat asks gofi itself what the index knows and opens its watch
+	// screen: the same binary, in the project.
+	var gofi func(args ...string) *exec.Cmd
+	if self, err := os.Executable(); err == nil {
+		gofi = func(args ...string) *exec.Cmd {
+			cmd := exec.Command(self, args...)
+			cmd.Dir = root
+			return cmd
+		}
+	}
+
 	resume := strings.TrimSpace(f.resume)
 	return chat.Run(chat.Options{
 		Root:      root,
@@ -135,6 +171,7 @@ func runChat(f chatFlags) error {
 		TierModel: tierModel,
 		Deliver:   spawnDelivery(root),
 		Review:    review,
+		Gofi:      gofi,
 		NewSession: func(resumeID string) engine.Session {
 			if resumeID != "" {
 				resume = resumeID
@@ -147,6 +184,14 @@ func runChat(f chatFlags) error {
 				PermissionMode: mode,
 				Settings:       settings,
 				AllowedTools:   guard.WriteRules,
+				// A conversation opens several sessions — its own, one per
+				// phase of a plan, another after /clear: with what changes
+				// between them out of the system prompt, each reads that
+				// prefix from the cache the one before it wrote.
+				StablePrompt: true,
+				// Esc stops the answer, not the engine: the next message
+				// goes to the same process.
+				Interrupt: true,
 			})
 			resume = "" // consumed: /clear starts afresh, not back where it pointed
 			return s

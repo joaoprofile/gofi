@@ -470,7 +470,7 @@ func TestApprovingTheContractIsNeverAlways(t *testing.T) {
 	m, _, _ := planModel(t, nil, nil)
 	req := &approval.Request{Tool: approval.ApproveTool, Input: json.RawMessage(`{"ref":"adicionar-filtro"}`)}
 	m.asking = []*approval.Request{req}
-	view := m.approvalView(req)
+	view := strings.Join(m.approvalView(req, 30), "\n")
 	if strings.Contains(view, "2.") || !strings.Contains(view, "adicionar-filtro") {
 		t.Errorf("view:\n%s", view)
 	}

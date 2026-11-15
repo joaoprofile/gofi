@@ -7,12 +7,20 @@
 // Text in free form goes through the intake first, when there is one: the
 // plan is shown, its questions asked, and its phases conducted one turn each
 // (0001, D9). /skills go to the engine as typed, so every skill the project
-// installed works with no wiring here. A few commands are the chat's own:
-// /help, /clear, /exit, /brief, /send, and !command for the shell.
+// installed works with no wiring here. A few commands are the chat's own —
+// /help, /clear, /model, /resume, /cost, /brief, /send, /exit and !command for
+// the shell — and a few read the project without a model: /watch, /runs,
+// /find, /show, /impact, /path.
+//
+// The files of the package, by what they draw: input.go the prompt, menu.go
+// the list under it while a /command or an @path is typed, approve.go the
+// dialog before a change, screen.go how it all reaches the terminal — and the
+// board of the agents at work, pinned over the conversation while a run goes.
 package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,19 +29,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/joaoprofile/gofi/cli/internal/approval"
+	"github.com/joaoprofile/gofi/cli/internal/clipboard"
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 	"github.com/joaoprofile/gofi/cli/internal/host"
 	"github.com/joaoprofile/gofi/cli/internal/i18n"
 	"github.com/joaoprofile/gofi/cli/internal/intake"
-	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/loop"
 	"github.com/joaoprofile/gofi/cli/internal/tui/banner"
 	"github.com/joaoprofile/gofi/cli/internal/tui/styles"
+	"github.com/joaoprofile/gofi/cli/internal/tui/watch"
 )
 
 // Options configure a chat.
@@ -67,6 +76,13 @@ type Options struct {
 	// of minutes is seen working. Nil leaves the review stop to the person
 	// alone.
 	Review func(ctx context.Context, contextName string, progress func(line string)) (lines []string, blocking int, err error)
+	// Gofi builds a command of gofi itself, to run in the project: what
+	// /watch opens and what /find, /show, /impact and /path ask the index.
+	// Nil leaves those commands out.
+	Gofi func(args ...string) *exec.Cmd
+	// Clipboard reads the picture the clipboard holds, for ctrl+v. Nil reads
+	// the system's.
+	Clipboard func(context.Context) (clipboard.Picture, error)
 }
 
 // Run holds the conversation until the user leaves.
@@ -95,7 +111,19 @@ type (
 		command string
 		output  string
 		err     error
+		keep    int // lines of the output shown; 0 is a shell command's few
 	}
+	// described is what the engine said it runs, before any turn.
+	described struct{ meta engine.Meta }
+	// pasted is the picture a paste brought, or why there is none; quiet
+	// when nobody asked for a picture — an empty paste.
+	pasted struct {
+		pic   clipboard.Picture
+		err   error
+		quiet bool
+	}
+	// watchClosed is the person back from the watch screen.
+	watchClosed struct{ err error }
 	tick        struct{}
 	approvalMsg struct{ req *approval.Request }
 	// deliveryEvent is one event of the delivery the loop carries out;
@@ -110,11 +138,34 @@ type model struct {
 	color   bool
 	session engine.Session
 
-	input   textinput.Model
+	input   prompt
 	history []string
 	histPos int
+	// menu lists what a /command or an @path being typed could be; menuOff
+	// is the person closing it, until they type again.
+	menu    *menu
+	menuOff bool
 
-	width int
+	// images are the pictures pasted into the prompt, each standing in the
+	// text as "[Image #n]"; outgoing the ones the turn being sent takes.
+	images   []attached
+	imageSeq int
+	outgoing []engine.Image
+
+	width, height int
+
+	// What reaches the terminal, and how (screen.go).
+	queue    []string    // lines on their way to the scrollback
+	flushing bool        // a batch of them is with the terminal
+	window   []string    // the newest lines, held under the panel while it is pinned
+	pinned   bool        // the panel is pinned and the chat draws the whole screen
+	greeted  bool        // the banner was shown, once the terminal said its size
+	leaving  bool        // the chat is ending: what is held goes, then it quits
+	board    watch.Board // the runs alive in the project
+	act      activity    // what the turn in flight has done, for the panel
+	// steered are the messages sent while the turn runs, until the model
+	// takes them.
+	steered []steer
 
 	running bool
 	events  <-chan engine.Event
@@ -123,15 +174,32 @@ type model struct {
 	live    string // answer text streamed so far, not yet printed
 	think   bool   // the model is thinking rather than writing
 
-	tools  map[string]string // tool use id → name, to label its result
-	modelN string
-	skills []string
+	tools map[string]string // tool use id → name, to label its result
+	// calls are the tool calls as they were shown, and lastCall the one
+	// shown last: a result that is not its own says which call it answers.
+	calls    map[string]string
+	lastCall string
+	modelN   string
+	skills   []string
+	// onDisk are the project's skills as read from .claude/skills, and
+	// described what the engine said it runs: the menu shows both.
+	onDisk    []skill
+	described []engine.Command
+
+	// What the conversation holds and has cost: the tokens the last answer
+	// read, the window they fill, and what the session spent.
+	ctxTokens int
+	ctxWindow int
+	ctxWarned int     // the last size the person was told about
+	spent     float64 // the conversation and what it conducted, so far
+	lastCost  float64 // the engine's running total at the chat's last turn
 
 	armedExit time.Time // first ctrl+c on an idle prompt
 	notice    string    // one-line message in the status slot
 
 	asking []*approval.Request // tool calls waiting for a yes or no, oldest first
-	always map[string]bool     // tools approved for the rest of the conversation
+	ask    asked               // the dialog over the first of them
+	always map[string]bool     // what was approved for the rest of the conversation, by scope
 
 	chosenModel string         // picked with /model; outlives /clear and /resume
 	listed      []engine.Saved // what the last /resume listed, for /resume <n>
@@ -145,41 +213,146 @@ type model struct {
 }
 
 func newModel(opts Options, color bool) model {
-	ti := textinput.New()
-	ti.Prompt = "> "
-	ti.Placeholder = i18n.T("chat.placeholder")
-	ti.Focus()
-	k := newLook(color)
-	ti.PlaceholderStyle = k.dim
+	onDisk := readProjectSkills(opts.Root)
+	names := make([]string, 0, len(onDisk))
+	for _, s := range onDisk {
+		names = append(names, s.name)
+	}
 	return model{
 		opts:    opts,
-		look:    k,
+		look:    newLook(color),
 		color:   color,
 		session: opts.NewSession(""),
-		input:   ti,
+		input:   newPrompt(i18n.T("chat.placeholder")),
 		width:   80,
 		tools:   map[string]string{},
+		calls:   map[string]string{},
 		always:  map[string]bool{},
 		modelN:  opts.Model,
-		skills:  projectSkills(opts.Root),
+		skills:  names,
+		onDisk:  onDisk,
 	}
 }
 
+// Init starts what the chat needs before the first message. The banner is
+// not said here: it waits for the terminal to say its size, which decides
+// where it is drawn.
 func (m model) Init() tea.Cmd {
+	return tea.Batch(m.introduce(), watchBoard(m.opts.Root, 0))
+}
+
+// banner is the card the chat opens with: who it is and where, and beside
+// that what the person can do from the prompt and the conversations they can
+// go back to.
+func (m model) banner() string {
 	b := banner.Banner{
 		Title:    "chat",
 		Version:  m.opts.Version,
 		Subtitle: i18n.T("chat.subtitle"),
 		Dir:      m.opts.Root,
 	}
-	return tea.Batch(textinput.Blink, tea.Println(banner.Render(b, m.color)))
+	var about []string
+	if m.modelN != "" {
+		about = append(about, m.modelN)
+	}
+	if n := len(m.onDisk); n > 0 {
+		about = append(about, i18n.T("chat.banner.skills", n))
+	}
+	if len(about) > 0 {
+		b.Extra = []string{strings.Join(about, " · ")}
+	}
+	b.Side = []banner.Section{{Title: i18n.T("chat.banner.keys"), Lines: []string{
+		"/\t" + i18n.T("chat.banner.slash"),
+		"@  !\t" + i18n.T("chat.banner.at"),
+		"alt+enter\t" + i18n.T("chat.banner.newline"),
+		"ctrl+v\t" + i18n.T("chat.banner.image"),
+		"enter\t" + i18n.T("chat.banner.steer"),
+	}}}
+	var recent []string
+	if m.opts.Sessions != nil {
+		for i, s := range m.opts.Sessions() {
+			if i == 3 {
+				break
+			}
+			recent = append(recent, ago(time.Since(s.Updated))+"\t"+strings.Join(strings.Fields(s.Title), " "))
+		}
+	}
+	if len(recent) > 0 {
+		b.Side = append(b.Side, banner.Section{Title: i18n.T("chat.banner.recent"), Lines: recent})
+	} else {
+		b.Side = append(b.Side, banner.Section{Title: i18n.T("chat.banner.free"), Lines: []string{
+			"/find /show\t" + i18n.T("chat.banner.index"),
+			"/runs /watch\t" + i18n.T("chat.banner.runs"),
+			"/cost\t" + i18n.T("chat.banner.cost"),
+		}})
+	}
+	return banner.RenderWidth(b, m.color, m.width)
 }
 
+// introduce starts the engine while the person reads the banner and asks it
+// what it runs: by the first "/" the menu lists every command it knows, each
+// with what it does. The engine answers for itself — no model is called.
+func (m model) introduce() tea.Cmd {
+	d, ok := m.session.(engine.Describer)
+	if !ok {
+		return nil
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		meta, ok := d.Describe(ctx)
+		if !ok {
+			return nil
+		}
+		return described{meta}
+	}
+}
+
+// Update takes a message and then lets the screen catch up: whatever the
+// message said goes to the terminal in the order it was said.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	return next.(model).pump(cmd)
+}
+
+func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.input.Width = max(msg.Width-4, 10)
+		m.width, m.height = msg.Width, msg.Height
+		m.input.SetWidth(msg.Width - 3)
+		if !m.greeted {
+			// The first size: now the banner knows where it goes.
+			m.greeted = true
+			m.settle()
+			m.emit(m.banner())
+			return m, nil
+		}
+		if m.pinned {
+			// A frame drawn for the old size wraps in the new one: start
+			// the screen over.
+			return m, tea.ClearScreen
+		}
+		return m, nil
+
+	case sayMsg:
+		m.emit(msg.text)
+		return m, nil
+	case flushed:
+		m.flushing = false
+		return m, nil
+	case boardMsg:
+		m.board = msg.board
+		return m, watchBoard(m.opts.Root, boardEvery(m.board))
+	case described:
+		m.describe(msg.meta)
+		m.refreshMenu()
+		return m, nil
+	case pasted:
+		return m.onPasted(msg)
+	case watchClosed:
+		if msg.err != nil {
+			return m, say(m.look.nested([]string{msg.err.Error()}, m.look.warn))
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -194,11 +367,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onDeliveryDone()
 
 	case approvalMsg:
-		if m.always[msg.req.Tool] {
+		if m.remembered(msg.req) {
 			msg.req.Answer(approval.Decision{Allow: true})
-			return m, tea.Println(m.look.nested([]string{i18n.T("chat.approve.auto", msg.req.Tool)}, m.look.dim))
+			return m, say(m.look.nested([]string{i18n.T("chat.approve.auto", scopeOf(msg.req).label)}, m.look.dim))
 		}
 		m.asking = append(m.asking, msg.req)
+		if len(m.asking) == 1 {
+			m.openAsk()
+		}
 		return m, nil
 
 	case eventMsg:
@@ -210,11 +386,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case reviewed:
 		return m.onReviewed(msg)
 	case reviewProgress:
-		return m, tea.Sequence(tea.Println(m.look.nested([]string{msg.line}, m.look.dim)), readReview(msg.ch))
+		return m, tea.Sequence(say(m.look.nested([]string{msg.line}, m.look.dim)), readReview(msg.ch))
 
 	case turnEnded:
 		m.running, m.events, m.think = false, nil, false
-		m.asking = nil
+		m.asking, m.ask = nil, asked{}
+		if len(m.steered) > 0 {
+			// The engine ended before taking them: back to the prompt, so
+			// what was written is not lost.
+			var texts []string
+			for _, st := range m.steered {
+				texts = append(texts, st.text)
+			}
+			m.steered = nil
+			if m.input.Empty() {
+				m.input.SetValue(strings.Join(texts, "\n"))
+			}
+			m.notice = i18n.T("chat.steer.undelivered")
+		}
 		flush := m.flushLive()
 		if m.conducting && m.plan != nil {
 			next, cmd := m.afterPhase()
@@ -224,7 +413,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case shellDone:
 		m.running = false
-		return m, tea.Println(m.shellBlock(msg))
+		return m, say(m.shellBlock(msg))
 
 	case tick:
 		if !m.running {
@@ -233,14 +422,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame++
 		return m, tickCmd()
 	}
-
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	if msg.Paste {
+		return m.onPaste(string(msg.Runes))
+	}
+	key := msg.String()
+	switch key {
 	case "ctrl+c":
 		if m.running {
 			m.interrupt()
@@ -249,34 +439,78 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.stopDelivery() {
 			return m, nil
 		}
-		if m.input.Value() != "" {
-			m.input.Reset()
+		if !m.input.Empty() {
+			m.clearInput()
 			return m, nil
 		}
 		if time.Since(m.armedExit) < 2*time.Second {
-			return m, tea.Quit
+			m.leaving = true
+			return m, nil
 		}
 		m.armedExit = time.Now()
 		m.notice = i18n.T("chat.exit_hint")
 		return m, nil
 	case "ctrl+d":
-		if m.input.Value() == "" && !m.running {
-			return m, tea.Quit
+		if m.input.Empty() {
+			m.leaving = !m.running
+			return m, nil
 		}
+		msg = tea.KeyMsg{Type: tea.KeyDelete}
 	case "esc":
+		if m.menu != nil {
+			m.menu, m.menuOff = nil, true
+			return m, nil
+		}
 		if m.running {
 			m.interrupt()
 		}
 		m.stopDelivery()
 		return m, nil
+	case "ctrl+v", "alt+v":
+		return m.pasteImage(false)
+	}
+
+	if m.menu != nil {
+		switch key {
+		case "up", "ctrl+p":
+			m.menu.move(-1)
+			return m, nil
+		case "down", "ctrl+n":
+			m.menu.move(1)
+			return m, nil
+		case "tab":
+			return m.takeMenu(false)
+		case "enter":
+			if !m.running {
+				return m.takeMenu(true)
+			}
+			// While a turn runs the menu only completes: what runs then is
+			// decided by whileRunning.
+			next, cmd := m.takeMenu(false)
+			nm := next.(model)
+			if text := strings.TrimSpace(nm.input.Value()); answeredHere[text] {
+				return nm.whileRunning(text)
+			}
+			return nm, cmd
+		}
+	}
+
+	switch key {
 	case "up":
+		// Up moves through the text first; from its first row, through what
+		// was sent before.
+		if m.input.Key(msg) {
+			return m, nil
+		}
 		if m.histPos > 0 {
 			m.histPos--
 			m.input.SetValue(m.history[m.histPos])
-			m.input.CursorEnd()
 		}
 		return m, nil
 	case "down":
+		if m.input.Key(msg) {
+			return m, nil
+		}
 		if m.histPos < len(m.history) {
 			m.histPos++
 			if m.histPos == len(m.history) {
@@ -284,13 +518,11 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.input.SetValue(m.history[m.histPos])
 			}
-			m.input.CursorEnd()
 		}
 		return m, nil
 	case "tab":
 		value, options := m.complete(m.input.Value())
 		m.input.SetValue(value)
-		m.input.CursorEnd()
 		m.notice = ""
 		if len(options) > 0 {
 			if len(options) > 8 {
@@ -300,8 +532,14 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter":
-		if m.running {
+		// A backslash before enter breaks the line, as in a shell.
+		if before := m.input.Before(); strings.HasSuffix(before, "\\") {
+			at := len([]rune(before))
+			m.input.Replace(at-1, at, "\n")
 			return m, nil
+		}
+		if m.running {
+			return m.whileRunning(strings.TrimSpace(m.input.Value()))
 		}
 		text := strings.TrimSpace(m.input.Value())
 		if text == "" && (m.wait == waitConfirm || m.wait == waitContinue) {
@@ -311,9 +549,205 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.submit(text)
 	}
 	m.notice = ""
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	if m.input.Key(msg) {
+		m.menuOff = false
+		m.refreshMenu()
+	}
+	return m, nil
+}
+
+// answeredHere are the commands that only read what the chat already has:
+// they answer at once, a turn running or not.
+var answeredHere = map[string]bool{"/help": true, "/cost": true, "/runs": true}
+
+// whileRunning takes what was typed while a turn runs. A message goes to
+// the engine, which hands it to the model at its next step — the turn goes
+// on knowing it —, and shows over the prompt until then. A command that only
+// reads what the chat has is answered at once. Anything else waits for the
+// turn: it stays in the prompt.
+func (m model) whileRunning(text string) (tea.Model, tea.Cmd) {
+	switch {
+	case text == "":
+		return m, nil
+	case answeredHere[text]:
+		return m.submit(text)
+	case strings.HasPrefix(text, "/"), strings.HasPrefix(text, "!"), m.events == nil:
+		m.notice = i18n.T("chat.steer.wait")
+		return m, nil
+	}
+	st, ok := m.engine().(engine.Steerer)
+	if !ok {
+		m.notice = i18n.T("chat.steer.wait")
+		return m, nil
+	}
+	m.takeImages(text)
+	id, ok := st.Steer(engine.Turn{Prompt: text, Images: m.outgoing})
+	m.outgoing = nil
+	if !ok {
+		// The turn ended as the key was pressed: enter again sends it.
+		m.notice = i18n.T("chat.steer.ended")
+		return m, nil
+	}
+	m.steered = append(m.steered, steer{id: id, text: text})
+	m.input.Reset()
+	m.menu, m.menuOff, m.notice = nil, false, ""
+	if len(m.history) == 0 || m.history[len(m.history)-1] != text {
+		m.history = append(m.history, text)
+	}
+	m.histPos = len(m.history)
+	return m, nil
+}
+
+// clearInput empties the prompt and what was attached to it.
+func (m *model) clearInput() {
+	m.input.Reset()
+	m.images, m.menu, m.menuOff = nil, nil, false
+}
+
+// refreshMenu opens, updates or closes the menu for what is under the cursor.
+func (m *model) refreshMenu() {
+	if m.menuOff {
+		m.menu = nil
+		return
+	}
+	next := m.openMenu()
+	// The choice stays on the item it was on while it is still listed.
+	if next != nil && m.menu != nil && m.menu.sel < len(m.menu.items) {
+		was := m.menu.items[m.menu.sel].value
+		for i, it := range next.items {
+			if it.value == was {
+				next.sel = i
+				break
+			}
+		}
+	}
+	m.menu = next
+}
+
+// takeMenu puts the menu's choice in the prompt. With run, a command that
+// needs nothing more is sent at once — enter on "/he" runs /help —; one that
+// takes an argument, and any path, waits for the rest of the line.
+func (m model) takeMenu(run bool) (tea.Model, tea.Cmd) {
+	u := m.menu
+	it := u.items[u.sel]
+	value := it.value
+	if !strings.HasSuffix(value, "/") {
+		value += " "
+	}
+	m.input.Replace(u.from, len([]rune(m.input.Before())), value)
+	m.menu = nil
+	// Only the chat's own commands say "<this>" for what they cannot run
+	// without; the engine writes its optional arguments the same way.
+	needs := it.kind <= kindGofi && strings.HasPrefix(it.hint, "<")
+	if u.path || !run || needs {
+		m.refreshMenu()
+		return m, nil
+	}
+	return m.submit(strings.TrimSpace(m.input.Value()))
+}
+
+// attached is a picture waiting to go with the next message.
+type attached struct {
+	n   int
+	pic clipboard.Picture
+}
+
+func imageToken(n int) string { return fmt.Sprintf("[Image #%d]", n) }
+
+// onPaste takes a paste: text goes into the prompt as it is, line breaks and
+// all; the path of an image file brings the image; and an empty paste — what
+// a terminal sends when the clipboard holds no text — asks the clipboard for
+// a picture.
+func (m model) onPaste(text string) (tea.Model, tea.Cmd) {
+	if strings.TrimSpace(text) == "" {
+		return m.pasteImage(true)
+	}
+	if path, ok := pastedPath(text); ok {
+		return m, func() tea.Msg {
+			pic, _, err := clipboard.File(path)
+			return pasted{pic: pic, err: err}
+		}
+	}
+	m.notice = ""
+	m.input.Insert(text)
+	m.menuOff = false
+	m.refreshMenu()
+	return m, nil
+}
+
+// pastedPath is the image file a pasted text names — what a terminal pastes
+// when a file is dropped on it: one line, quoted or with its spaces escaped.
+func pastedPath(text string) (string, bool) {
+	p := strings.TrimSpace(text)
+	if p == "" || strings.Contains(p, "\n") {
+		return "", false
+	}
+	p = strings.TrimPrefix(strings.Trim(p, `'"`), "file://")
+	p = strings.ReplaceAll(p, `\ `, " ")
+	if !clipboard.IsImagePath(p) {
+		return "", false
+	}
+	if st, err := os.Stat(p); err != nil || st.IsDir() {
+		return "", false
+	}
+	return p, true
+}
+
+// pasteImage reads the clipboard's picture off the update loop: asking the
+// system can take a second.
+func (m model) pasteImage(quiet bool) (tea.Model, tea.Cmd) {
+	read := m.opts.Clipboard
+	if read == nil {
+		read = clipboard.Read
+	}
+	if !quiet {
+		m.notice = i18n.T("chat.image.reading")
+	}
+	return m, func() tea.Msg {
+		pic, err := read(context.Background())
+		return pasted{pic: pic, err: err, quiet: quiet}
+	}
+}
+
+// onPasted attaches the picture a paste brought: it goes with the next
+// message, standing in the text where the cursor was.
+func (m model) onPasted(msg pasted) (tea.Model, tea.Cmd) {
+	switch {
+	case errors.Is(msg.err, clipboard.ErrNoImage):
+		m.notice = ""
+		if !msg.quiet {
+			m.notice = i18n.T("chat.image.none")
+		}
+		return m, nil
+	case msg.err != nil:
+		m.notice = i18n.T("chat.image.failed", msg.err.Error())
+		return m, nil
+	}
+	m.imageSeq++
+	m.images = append(m.images, attached{n: m.imageSeq, pic: msg.pic})
+	m.input.Insert(imageToken(m.imageSeq) + " ")
+	m.notice = i18n.T("chat.image.attached", m.imageSeq, sizeOf(msg.pic))
+	return m, nil
+}
+
+// sizeOf is a picture's size as the person weighs it: its pixels and about
+// how many tokens it adds to the message.
+func sizeOf(p clipboard.Picture) string {
+	if p.Width == 0 {
+		return fmt.Sprintf("%d kB", (len(p.Data)+512)/1024)
+	}
+	return fmt.Sprintf("%d×%d · ~%s tokens", p.Width, p.Height, tokenCount(p.Width*p.Height/750))
+}
+
+// takeImages hands the turn the pictures still standing in the text.
+func (m *model) takeImages(text string) {
+	m.outgoing = nil
+	for _, a := range m.images {
+		if strings.Contains(text, imageToken(a.n)) {
+			m.outgoing = append(m.outgoing, engine.Image{MediaType: a.pic.MediaType, Data: a.pic.Data})
+		}
+	}
+	m.images = nil
 }
 
 // interrupt stops the turn, and denies whatever it was waiting on so no hook
@@ -322,41 +756,8 @@ func (m *model) interrupt() {
 	if m.opts.Approvals != nil {
 		m.opts.Approvals.DenyAll(i18n.T("chat.approve.interrupted"))
 	}
-	m.asking = nil
+	m.asking, m.ask = nil, asked{}
 	m.engine().Cancel()
-}
-
-// onApprovalKey answers the oldest pending call.
-func (m model) onApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	req := m.asking[0]
-	var d approval.Decision
-	var note string
-	switch msg.String() {
-	case "1", "y", "s", "enter":
-		d, note = approval.Decision{Allow: true}, i18n.T("chat.approve.allowed")
-	case "2", "a":
-		// An approval of the contract is asked each time: "always" is not
-		// offered for it, and a 2 is a no.
-		if req.Tool == approval.ApproveTool {
-			return m, nil
-		}
-		m.always[req.Tool] = true
-		d, note = approval.Decision{Allow: true}, i18n.T("chat.approve.allowed_always", req.Tool)
-	case "3", "n", "esc":
-		d, note = approval.Decision{Reason: i18n.T("chat.approve.reason")}, i18n.T("chat.approve.denied")
-	case "ctrl+c":
-		m.interrupt()
-		return m, nil
-	default:
-		return m, nil
-	}
-	req.Answer(d)
-	m.asking = m.asking[1:]
-	style := m.look.good
-	if !d.Allow {
-		style = m.look.bad
-	}
-	return m, tea.Println(m.look.nested([]string{note}, style))
 }
 
 // submit routes what was typed: a command of the chat's own, the shell, or
@@ -365,27 +766,47 @@ func (m model) submit(text string) (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
+	m.takeImages(text)
 	m.input.Reset()
+	m.menu, m.menuOff = nil, false
 	m.notice = ""
 	if len(m.history) == 0 || m.history[len(m.history)-1] != text {
 		m.history = append(m.history, text)
 	}
 	m.histPos = len(m.history)
-	echo := tea.Println("\n" + m.look.userLine(text, m.width))
+	k := m.look
+	echo := say("\n" + k.userLine(text, m.width))
+	note := func(style lipgloss.Style, lines ...string) (tea.Model, tea.Cmd) {
+		return m, tea.Sequence(echo, say(k.nested(lines, style)))
+	}
 
 	switch {
 	case text == "/exit" || text == "/quit":
-		return m, tea.Quit
+		m.leaving = true
+		return m, nil
 	case text == "/help":
-		return m, tea.Sequence(echo, tea.Println(m.helpBlock()))
+		return m, tea.Sequence(echo, say(m.helpBlock()))
 	case text == "/clear":
 		m.stopPlan()
 		m.replaceSession("")
-		return m, tea.Sequence(echo, tea.Println(m.look.nested([]string{i18n.T("chat.cleared")}, m.look.dim)))
+		return note(k.dim, i18n.T("chat.cleared"))
 	case text == "/model" || strings.HasPrefix(text, "/model "):
-		return m, tea.Sequence(echo, tea.Println(m.switchModel(strings.TrimSpace(strings.TrimPrefix(text, "/model")))))
+		return m, tea.Sequence(echo, say(m.switchModel(strings.TrimSpace(strings.TrimPrefix(text, "/model")))))
 	case text == "/resume" || strings.HasPrefix(text, "/resume "):
-		return m, tea.Sequence(echo, tea.Println(m.resume(strings.TrimSpace(strings.TrimPrefix(text, "/resume")))))
+		return m, tea.Sequence(echo, say(m.resume(strings.TrimSpace(strings.TrimPrefix(text, "/resume")))))
+	case text == "/cost":
+		return m, tea.Sequence(echo, say(m.costBlock()))
+	case text == "/runs":
+		lines := watch.Live(m.opts.Root).Lines(m.width-1, 40)
+		if len(lines) == 0 {
+			return note(k.dim, i18n.T("chat.runs.none"))
+		}
+		return m, tea.Sequence(echo, say("\n"+strings.Join(lines[:len(lines)-1], "\n")))
+	case text == "/watch":
+		if m.opts.Gofi == nil {
+			return note(k.warn, i18n.T("chat.gofi.unavailable"))
+		}
+		return m, tea.Sequence(echo, tea.ExecProcess(m.opts.Gofi("watch"), func(err error) tea.Msg { return watchClosed{err} }))
 	case strings.HasPrefix(text, "!"):
 		command := strings.TrimSpace(text[1:])
 		if command == "" {
@@ -395,15 +816,29 @@ func (m model) submit(text string) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(echo, runShell(m.opts.Root, command), tickCmd())
 	case text == "/brief":
 		if m.plan == nil || m.plan.res == nil {
-			return m, tea.Sequence(echo, tea.Println(m.look.nested([]string{i18n.T("chat.plan.no_brief")}, m.look.dim)))
+			return note(k.dim, i18n.T("chat.plan.no_brief"))
 		}
-		return m, tea.Sequence(echo, tea.Println("\n"+m.look.markdown(m.plan.res.Brief, m.width)))
+		return m, tea.Sequence(echo, say("\n"+k.markdown(m.plan.res.Brief, m.width)))
 	case strings.HasPrefix(text, "/send "):
 		m.stopPlan()
 		return m.sendToEngine(strings.TrimSpace(strings.TrimPrefix(text, "/send ")), echo)
 	case m.wait != waitNone:
 		return m.onPlanReply(text, echo)
-	case !strings.HasPrefix(text, "/") && m.opts.Intake != nil:
+	}
+	// A question the index answers is asked of the index: gofi reads the
+	// project and no model is called.
+	if args, ok := gofiArgs(text); ok {
+		if m.opts.Gofi == nil {
+			return note(k.warn, i18n.T("chat.gofi.unavailable"))
+		}
+		if len(args) == 1 {
+			return note(k.warn, i18n.T("chat.gofi.usage", text))
+		}
+		m.running, m.started, m.frame = true, time.Now(), 0
+		return m, tea.Batch(echo, runGofi(m.opts.Gofi(args...), args), tickCmd())
+	}
+	// A message with a picture goes as it is: the plan is made of text.
+	if !strings.HasPrefix(text, "/") && m.opts.Intake != nil && len(m.outgoing) == 0 {
 		return m.startIntake(text, echo)
 	}
 	return m.sendToEngine(text, echo)
@@ -417,12 +852,35 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		if ev.Model != "" {
 			m.modelN = ev.Model
 		}
-		if len(ev.SlashCommands) > 0 {
-			m.skills = ev.SlashCommands
+		m.describe(ev)
+		return m, next
+
+	case engine.Usage:
+		// What the last answer read is what the conversation holds: every
+		// turn from here reads it again. A subagent's is its own.
+		if held := ev.Input + ev.CacheRead + ev.CacheWrite; !ev.Total && !ev.Sub && held > 0 {
+			m.ctxTokens = held + ev.Output
+		}
+		return m, next
+
+	case engine.Delivered:
+		// The model took a message sent during the turn: it joins the
+		// conversation here, where it was read.
+		for i, st := range m.steered {
+			if st.id != ev.ID {
+				continue
+			}
+			m.steered = append(m.steered[:i:i], m.steered[i+1:]...)
+			m.lastFailed = false
+			return m, tea.Sequence(m.flushLive(), say("\n"+k.userLine(st.text, m.width)), next)
 		}
 		return m, next
 
 	case engine.Delta:
+		// A subagent writes to the agent that asked, not to the person.
+		if ev.Sub {
+			return m, next
+		}
 		if ev.Kind == engine.DeltaThinking {
 			m.think = true
 			return m, next
@@ -432,6 +890,16 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		return m, next
 
 	case engine.Message:
+		// A subagent's steps are followed on the panel; what it found comes
+		// back as the result of the call that started it.
+		if ev.Parent != "" {
+			for _, b := range ev.Blocks {
+				if b.Kind == engine.BlockToolUse {
+					m.noteCall(b, ev.Parent)
+				}
+			}
+			return m, next
+		}
 		// The finished message is authoritative: its text replaces what was
 		// streamed, and its tool calls appear only here.
 		var out []string
@@ -441,21 +909,28 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 				out = append(out, k.markdown(b.Text, m.width))
 			case engine.BlockToolUse:
 				m.tools[b.ID] = b.Name
+				m.noteCall(b, "")
+				m.lastCall = b.ID
 				summary := toolSummary(b.Input, m.opts.Root, m.width-len(b.Name)-6)
 				call := k.bold.Render(b.Name)
 				if summary != "" {
 					call += k.dim.Render("(") + summary + k.dim.Render(")")
 				}
 				out = append(out, k.accent.Render("● ")+call)
+				m.calls[b.ID] = ansi.Strip(call)
 			}
 		}
 		m.live = ""
 		if len(out) == 0 {
 			return m, next
 		}
-		return m, tea.Sequence(tea.Println("\n"+strings.Join(out, "\n\n")), next)
+		return m, tea.Sequence(say("\n"+strings.Join(out, "\n\n")), next)
 
 	case engine.ToolResult:
+		if ev.Parent != "" {
+			return m, next
+		}
+		m.noteResult(ev.ToolUseID)
 		style := k.dim
 		if ev.IsError {
 			style = k.bad
@@ -467,10 +942,18 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		for i := range lines {
 			lines[i] = ansi.Truncate(lines[i], m.width-6, "…")
 		}
-		return m, tea.Sequence(tea.Println(k.nested(lines, style)), next)
+		block := k.nested(lines, style)
+		// Calls made side by side answer out of order: a result that does
+		// not follow its call names it.
+		if call := m.calls[ev.ToolUseID]; call != "" && ev.ToolUseID != m.lastCall {
+			block = k.dim.Render("  "+ansi.Truncate(call, m.width-4, "…")) + "\n" + block
+		}
+		m.lastCall = ""
+		return m, tea.Sequence(say(block), next)
 
 	case engine.Done:
 		m.lastDone = ev
+		cost := m.account(ev)
 		var line string
 		switch {
 		case ev.Cancelled:
@@ -480,9 +963,12 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 			m.lastFailed = true
 			line = "\n" + k.bullet(k.bad, ev.Err, k.text, m.width)
 		default:
-			line = k.dim.Render("  " + turnFooter(ev))
+			line = k.dim.Render("  " + turnFooter(ev, cost))
+			if tip := m.contextTip(); tip != "" {
+				line += "\n" + k.dim.Render("  "+tip)
+			}
 		}
-		return m, tea.Sequence(m.flushLive(), tea.Println(line), next)
+		return m, tea.Sequence(m.flushLive(), say(line), next)
 
 	case engine.Failure:
 		m.lastFailed = true
@@ -490,7 +976,7 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		if ev.Hint != "" {
 			out += "\n" + k.nested([]string{ev.Hint}, k.dim)
 		}
-		return m, tea.Sequence(tea.Println(out), next)
+		return m, tea.Sequence(say(out), next)
 	}
 	return m, next
 }
@@ -503,54 +989,198 @@ func (m *model) flushLive() tea.Cmd {
 	if text == "" {
 		return nil
 	}
-	return tea.Println("\n" + m.look.markdown(text, m.width))
+	return say("\n" + m.look.markdown(text, m.width))
 }
 
-func turnFooter(d engine.Done) string {
+// turnFooter is what a turn took: its time and what it cost.
+func turnFooter(d engine.Done, cost float64) string {
 	parts := []string{fmt.Sprintf("%.1fs", d.Duration.Seconds())}
-	if d.CostUSD > 0 {
-		parts = append(parts, fmt.Sprintf("$%.3f", d.CostUSD))
+	if cost > 0 {
+		parts = append(parts, fmt.Sprintf("$%.3f", cost))
 	}
 	return strings.Join(parts, " · ")
 }
 
-func (m model) View() string {
+// account takes a finished turn into what the conversation spent and returns
+// the turn's own cost. The engine reports its running total since it started:
+// the chat's session lives across turns, so a turn cost what the total grew
+// by; a phase's session is new, and its total is the phase's.
+func (m *model) account(d engine.Done) float64 {
+	if d.ContextWindow > 0 {
+		m.ctxWindow = d.ContextWindow
+	}
+	cost := d.CostUSD
+	if !m.conducting {
+		if d.CostUSD >= m.lastCost {
+			cost = d.CostUSD - m.lastCost
+		}
+		m.lastCost = d.CostUSD
+	}
+	m.spent += cost
+	return cost
+}
+
+// contextSteps are the sizes of a conversation at which the person is told
+// what it costs to carry: each turn reads it all again.
+var contextSteps = []int{100_000, 200_000, 400_000, 800_000}
+
+// contextTip says, once per size reached, that the conversation grew and how
+// to make it small again. Empty otherwise.
+func (m *model) contextTip() string {
+	if m.conducting {
+		return ""
+	}
+	step := 0
+	for _, s := range contextSteps {
+		if m.ctxTokens >= s {
+			step = s
+		}
+	}
+	if step <= m.ctxWarned {
+		if m.ctxTokens < contextSteps[0] {
+			m.ctxWarned = 0
+		}
+		return ""
+	}
+	m.ctxWarned = step
+	return i18n.T("chat.context.tip", tokenCount(m.ctxTokens))
+}
+
+// tokenCount is a number of tokens at a glance: 950, 42k, 1.2M.
+func tokenCount(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1e6), ".0") + "M"
+	case n >= 1_000:
+		return fmt.Sprintf("%dk", (n+500)/1000)
+	}
+	return fmt.Sprint(n)
+}
+
+// meter is the conversation at a glance, for the status line: the model, how
+// much it holds, what it has cost. It gives way from the right when the line
+// is short.
+func (m model) meter(room int) string {
+	parts := []string{m.modelN}
+	if m.ctxTokens > 0 {
+		held := "ctx " + tokenCount(m.ctxTokens)
+		if m.ctxWindow > 0 {
+			held += fmt.Sprintf(" (%d%%)", min(m.ctxTokens*100/m.ctxWindow, 100))
+		}
+		parts = append(parts, held)
+	}
+	if m.spent > 0 {
+		parts = append(parts, money(m.spent))
+	}
+	for n := len(parts); n > 0; n-- {
+		if s := strings.Join(parts[:n], " · "); ansi.StringWidth(s) <= room {
+			return s
+		}
+	}
+	return ""
+}
+
+// money is an amount spent, with the cents of a cent while it is small.
+func money(usd float64) string {
+	if usd < 0.1 {
+		return fmt.Sprintf("$%.3f", usd)
+	}
+	return fmt.Sprintf("$%.2f", usd)
+}
+
+// costBlock is /cost: what the conversation holds and what it has spent,
+// from what the engine already reported — nothing is asked of a model.
+func (m model) costBlock() string {
 	k := m.look
-	var b strings.Builder
+	held := i18n.T("chat.cost.empty")
+	if m.ctxTokens > 0 {
+		held = tokenCount(m.ctxTokens) + " tokens"
+		if m.ctxWindow > 0 {
+			held += fmt.Sprintf(" / %s (%d%%)", tokenCount(m.ctxWindow), min(m.ctxTokens*100/m.ctxWindow, 100))
+		}
+	}
+	lines := []string{
+		i18n.T("chat.cost.context", held),
+		i18n.T("chat.cost.spent", m.spent),
+		k.dim.Render(i18n.T("chat.cost.hint")),
+	}
+	return "\n" + k.bullet(k.accent, i18n.T("chat.cost.title"), k.bold, m.width) + "\n" + k.nested(lines, k.text)
+}
 
-	if m.running {
-		if text := strings.TrimSpace(m.live); text != "" {
-			lines := strings.Split(k.markdown(text, m.width), "\n")
-			// Keep the live answer to the last lines that fit: the whole of it
-			// reaches the scrollback once it is finished.
-			if len(lines) > 12 {
-				lines = lines[len(lines)-12:]
+// liveLines is the answer being written and how long the turn has taken:
+// what follows the conversation until it is finished and joins it.
+func (m model) liveLines() []string {
+	if !m.running {
+		return nil
+	}
+	k := m.look
+	var out []string
+	if text := strings.TrimSpace(m.live); text != "" {
+		lines := strings.Split(k.markdown(text, m.width), "\n")
+		// Keep the live answer to the last lines that fit: the whole of it
+		// reaches the conversation once it is finished.
+		keep := 12
+		if m.pinned {
+			keep = min(max(m.height/4, 3), keep)
+		}
+		if len(lines) > keep {
+			lines = lines[len(lines)-keep:]
+		}
+		out = append(append(out, ""), lines...)
+	}
+	label := i18n.T("chat.working")
+	switch {
+	case m.planning:
+		label = i18n.T("chat.planning")
+	case m.think:
+		label = i18n.T("chat.thinking")
+	}
+	secs := int(time.Since(m.started).Seconds())
+	spin := string(spinFrames[m.frame%len(spinFrames)])
+	hint := i18n.T("chat.esc_hint")
+	if m.events != nil {
+		hint += " · " + i18n.T("chat.steer.enter")
+	}
+	status := ansi.Truncate(spin+" "+label+" ("+elapsed(secs)+" · "+hint+")", max(m.width-1, 10), "…")
+	return append(out, "", k.accent.Render(status))
+}
+
+// promptLines is the prompt and what goes with it: the messages waiting for
+// the agent's next step, the prompt itself — or, while the agent waits for a
+// yes, the dialog in its place —, and under it the menu or the status line.
+func (m model) promptLines() []string {
+	k := m.look
+	out := m.steerLines()
+	asking := len(m.asking) > 0
+	rule := k.border.Render(strings.Repeat("─", max(m.width, 10)))
+	if asking {
+		limit := 40
+		if m.height > 0 {
+			limit = m.height - len(out) - 6
+			if m.pinned {
+				limit -= len(m.panel(m.panelLimit()))
 			}
-			b.WriteString("\n" + strings.Join(lines, "\n") + "\n")
 		}
-		label := i18n.T("chat.working")
-		switch {
-		case m.planning:
-			label = i18n.T("chat.planning")
-		case m.think:
-			label = i18n.T("chat.thinking")
-		}
-		secs := int(time.Since(m.started).Seconds())
-		spin := string(spinFrames[m.frame%len(spinFrames)])
-		status := ansi.Truncate(spin+" "+label+" ("+elapsed(secs)+" · "+i18n.T("chat.esc_hint")+")", max(m.width-1, 10), "…")
-		b.WriteString("\n" + k.accent.Render(status) + "\n")
-	}
-
-	line := k.border.Render(strings.Repeat("─", max(m.width, 10)))
-	if len(m.asking) > 0 {
-		b.WriteString("\n" + line + "\n" + m.approvalView(m.asking[0]) + "\n" + line + "\n")
+		out = append(append(out, ""), m.approvalView(m.asking[0], max(limit, 12))...)
 	} else {
-		b.WriteString("\n" + line + "\n" + m.input.View() + "\n" + line + "\n")
+		in := m.input
+		in.SetWidth(m.width - 3)
+		rows := 10
+		if m.height > 0 {
+			rows = min(max(m.height/3, 3), rows)
+		}
+		out = append(out, "", rule)
+		out = append(append(out, in.View(k, m.color, rows)...), rule)
 	}
 
+	if m.menu != nil && !asking {
+		return append(out, m.menu.view(k, m.width)...)
+	}
 	status := i18n.T("chat.keys")
 	switch {
-	case len(m.asking) > 0:
+	case asking && m.ask.typing:
+		status = i18n.T("chat.approve.note_keys")
+	case asking:
 		status = i18n.T("chat.approve.keys")
 	case m.wait == waitAnswer || m.wait == waitElicit:
 		status = i18n.T("chat.plan.answer_hint")
@@ -560,37 +1190,22 @@ func (m model) View() string {
 	if m.notice != "" {
 		status = m.notice
 	}
-	right := m.modelN
-	gap := m.width - 2 - ansi.StringWidth(status) - ansi.StringWidth(right)
-	if gap < 2 {
-		right, gap = "", 0
+	// The meter keeps its place on the right; a long hint gives way to it.
+	right := m.meter(max(m.width/2, 24))
+	room := m.width - 3
+	if right != "" {
+		room -= ansi.StringWidth(right) + 2
 	}
-	footer := ansi.Truncate("  "+status+strings.Repeat(" ", gap)+right, max(m.width-1, 10), "…")
-	b.WriteString(k.dim.Render(footer))
-	return b.String()
-}
-
-// approvalView asks about one tool call, in place of the prompt.
-func (m model) approvalView(r *approval.Request) string {
-	k := m.look
-	call := k.bold.Render(r.Tool)
-	if summary := toolSummary(r.Input, m.opts.Root, m.width-len(r.Tool)-16); summary != "" {
-		call += k.dim.Render("(") + summary + k.dim.Render(")")
+	if room < 12 {
+		right, room = "", m.width-3
 	}
-	question := k.accent.Render("● ") + i18n.T("chat.approve.question", call)
-	options := "  " + k.accent.Render("1.") + " " + i18n.T("chat.approve.yes") + "   " +
-		k.accent.Render("2.") + " " + i18n.T("chat.approve.always", r.Tool) + "   " +
-		k.accent.Render("3.") + " " + i18n.T("chat.approve.no")
-	if r.Tool == approval.ApproveTool {
-		question = k.accent.Render("● ") + i18n.T("chat.approve.contract", call)
-		options = "  " + k.accent.Render("1.") + " " + i18n.T("chat.approve.yes") + "   " +
-			k.accent.Render("3.") + " " + i18n.T("chat.approve.no")
+	status = ansi.Truncate(status, max(room, 8), "…")
+	footer := "  " + status
+	if right != "" {
+		footer += strings.Repeat(" ", max(m.width-3-ansi.StringWidth(status)-ansi.StringWidth(right), 2)) + right
 	}
-	if more := len(m.asking) - 1; more > 0 {
-		options += k.dim.Render("  " + i18n.T("chat.approve.more", more))
-	}
-	width := max(m.width-1, 10)
-	return ansi.Truncate(question, width, "…") + "\n" + ansi.Truncate(options, width, "…")
+	footer = ansi.Truncate(footer, max(m.width-1, 10), "…")
+	return append(out, k.dim.Render(footer))
 }
 
 var spinFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
@@ -627,14 +1242,28 @@ func runShell(dir, command string) tea.Cmd {
 	}
 }
 
+// runGofi asks gofi itself, in the project: the index's answer is read from
+// disk, and it is the whole of it that matters — most of it is shown.
+func runGofi(cmd *exec.Cmd, args []string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := cmd.CombinedOutput()
+		return shellDone{command: "gofi " + strings.Join(args, " "), output: string(out), err: err, keep: 40}
+	}
+}
+
 func (m model) shellBlock(r shellDone) string {
 	k := m.look
 	dot := k.good
 	if r.err != nil {
 		dot = k.bad
 	}
-	head := dot.Render("● ") + k.bold.Render("Shell") + k.dim.Render("(") + ansi.Truncate(r.command, m.width-12, "…") + k.dim.Render(")")
-	lines := preview(r.output, 8, func(n int) string { return i18n.T("chat.more_lines", n) })
+	name, keep := "Shell", 8
+	if r.keep > 0 {
+		name, keep = "gofi", r.keep
+		r.command = strings.TrimPrefix(r.command, "gofi ")
+	}
+	head := dot.Render("● ") + k.bold.Render(name) + k.dim.Render("(") + ansi.Truncate(r.command, m.width-12, "…") + k.dim.Render(")")
+	lines := preview(r.output, keep, func(n int) string { return i18n.T("chat.more_lines", n) })
 	if len(lines) == 0 {
 		lines = []string{i18n.T("chat.no_output")}
 	}
@@ -649,23 +1278,25 @@ func (m model) shellBlock(r shellDone) string {
 
 func (m model) helpBlock() string {
 	k := m.look
-	rows := [][2]string{
-		{"/help", i18n.T("chat.help.help")},
-		{"/clear", i18n.T("chat.help.clear")},
-		{"/model", i18n.T("chat.help.model")},
-		{"/resume", i18n.T("chat.help.resume")},
-		{"/brief", i18n.T("chat.help.brief")},
-		{"/send", i18n.T("chat.help.send")},
-		{"/exit", i18n.T("chat.help.exit")},
-		{"!<command>", i18n.T("chat.help.shell")},
-		{"esc", i18n.T("chat.help.esc")},
-		{"↑ ↓", i18n.T("chat.help.history")},
-		{"tab", i18n.T("chat.help.tab")},
+	var rows [][2]string
+	for _, c := range append(chatCommands(), gofiCommands()...) {
+		rows = append(rows, [2]string{strings.TrimSpace("/" + c.name + " " + c.hint), c.desc})
 	}
+	rows = append(rows,
+		[2]string{"!<command>", i18n.T("chat.help.shell")},
+		[2]string{"@<path>", i18n.T("chat.help.tab")},
+		[2]string{"alt+enter", i18n.T("chat.help.newline")},
+		[2]string{"enter", i18n.T("chat.help.steer")},
+		[2]string{"ctrl+v", i18n.T("chat.help.image")},
+		[2]string{"esc", i18n.T("chat.help.esc")},
+		[2]string{"↑ ↓", i18n.T("chat.help.history")},
+	)
 	var lines []string
 	for _, r := range rows {
-		lines = append(lines, k.accent.Render(fmt.Sprintf("%-11s", r[0]))+" "+r[1])
+		pad := strings.Repeat(" ", max(18-ansi.StringWidth(r[0]), 1))
+		lines = append(lines, k.accent.Render(r[0])+pad+r[1])
 	}
+	lines = append(lines, "", k.dim.Render(i18n.T("chat.help.engine")))
 	if skills := gofiSkills(m.skills); len(skills) > 0 {
 		lines = append(lines, "", i18n.T("chat.help.skills"))
 		for _, s := range skills {
@@ -685,21 +1316,6 @@ func gofiSkills(all []string) []string {
 		}
 	}
 	sort.Strings(out)
-	return out
-}
-
-// projectSkills lists .claude/skills before the engine is up to report them.
-func projectSkills(root string) []string {
-	entries, err := os.ReadDir(layout.Skills().Abs(root))
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if e.IsDir() {
-			out = append(out, e.Name())
-		}
-	}
 	return out
 }
 

@@ -15,9 +15,17 @@ import (
 	"github.com/joaoprofile/gofi/cli/internal/engine"
 )
 
+// The dialogs answer at once here: the wait that protects a person typing is
+// tested on its own.
+func TestMain(m *testing.M) {
+	approvalGuard = 0
+	os.Exit(m.Run())
+}
+
 // fakeSession records what reached the engine and replays a scripted turn.
 type fakeSession struct {
 	sent      []string
+	images    []int // how many pictures went with each turn
 	resumed   string
 	model     string
 	cancelled int
@@ -28,6 +36,7 @@ type fakeSession struct {
 
 func (f *fakeSession) Send(_ context.Context, t engine.Turn) (<-chan engine.Event, error) {
 	f.sent = append(f.sent, t.Prompt)
+	f.images = append(f.images, len(t.Images))
 	if f.onSend != nil {
 		f.onSend(t.Prompt)
 	}
