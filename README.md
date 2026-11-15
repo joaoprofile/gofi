@@ -62,7 +62,7 @@ project.
 | **Learning** | A run that needed rework proposes the lesson that would have avoided it; the person accepts or rejects it |
 | **Token economy** | Isolated agent turns, briefs scoped to the role, green stages cached by tree, tier per role |
 | **Terminal chat** | A prompt of several lines, a `/` menu of every command, pasted images, approval with the diff, follow-ups while the agent works, a live panel of who is at work, and `/audit` of what the conversation read |
-| **Project graph** | In VS Code: how every context stands, a map of every document and source file, and the trace from documents to requirements to tables to code |
+| **Project graph** | In VS Code: how every context stands, the whole project as an interactive graph beside its tree — documents and code, and what ties them — and the trace from documents to requirements to tables to code |
 | **Hosts** | Claude Code, Codex and Copilot, each role limited to the tools its contract grants |
 | **Languages** | Go, TypeScript (NestJS), Python (FastAPI), Java (Quarkus) and Rust (Axum) |
 
@@ -434,9 +434,9 @@ and draws what a terminal cannot.
   `Shift+Enter` breaks the line and `Ctrl+V` pastes text or, with none in the
   clipboard, attaches the copied image; `Ctrl+Alt+G` in the editor mentions the
   open file in the prompt, with the selected lines.
-- **GOFI: grafo do projeto** — what `gofi index` indexed, documents and code, in
-  three views. Nothing is laid out by a simulation: each view has the layout
-  its question has.
+- **GOFI: grafo do projeto** — the button beside the gofi face, or
+  `Ctrl+Shift+P`: what `gofi index` indexed, documents and code, in three
+  views.
 - **GOFI: execução de uma entrega** — a run of the loop: the flow as a graph
   with the path taken, the sensors (not checked is shown apart from passed), the
   verdict, open findings, the amendment, the branch, the trace matrix — followed
@@ -450,12 +450,19 @@ the order the dependencies allow; and each tree of code with its largest package
   <img src="assets/readme/graph-overview.png" alt="The project graph, overview: a card per context and per tree of code" width="820">
 </p>
 
-**Map** — the whole project at once: every document and every source file is a
-cell sized by its lines, grouped as the project is. Lighting up a context shows
-everything that is its own, documents and code alike; a click on a group zooms in.
+**Graph** — the whole project as a graph, beside its tree: contexts, libraries
+and each tree of code are groups that open into what they hold, down to the
+documents and the source files. The links say what the indexes know — code that
+uses code, documents that cite or depend, the code that is a context's own — and
+a link into a folded group ends at the group, as heavy as everything it stands
+for. Opened a branch at a time it stays a picture to read, on a project of
+thousands of files too. A click selects and shows what a node holds and is tied
+to; a double click opens a group or the file; nodes are dragged and stay where
+they are left; the pointer over a node lights what it is tied to; the filter
+finds by name or path in the tree and in the picture.
 
 <p align="center">
-  <img src="assets/readme/graph-map.png" alt="The project graph, map: every document and source file, one context lit up" width="820">
+  <img src="assets/readme/graph-view.png" alt="The project graph: the tree of the project beside the graph, with a context and a folder of code open" width="820">
 </p>
 
 **Trace** — one context, left to right: its documents, the requirements they add
