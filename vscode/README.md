@@ -103,8 +103,16 @@ arquivo.
 | `GOFI AI: nova sessão` | Guarda a conversa atual e começa outra, com contexto limpo |
 | `GOFI AI: conversas salvas` | Lista as conversas do projeto para retomar uma |
 | `GOFI AI: interromper a resposta` | Mata o turno em andamento |
+| `GOFI: Chat in Terminal` | Abre o `gofi chat` num terminal do VSCode, na raiz do projeto |
 | `GOFI AI: abrir o motor em um terminal` | Sobe a TUI interativa do motor num terminal do VSCode |
 | `GOFI AI: diagnosticar a instalação` | Diz se o motor está acessível e de onde |
+
+**GOFI: Chat in Terminal** (`Ctrl+Shift+P`) é o `gofi chat` do terminal dentro
+do editor: o mesmo prompt de várias linhas, o menu do `/`, a autorização com o
+diff e o painel dos agentes. No terminal dele, `Shift+Enter` quebra a linha e
+`Ctrl+V` cola texto ou, sem texto na área de transferência, anexa a imagem
+copiada. `gofiAI.terminal.location` escolhe entre a aba ao lado do código e o
+painel de terminais.
 
 O chat cobre o caminho normal. O terminal é a saída de emergência para o que um
 webview não hospeda: os prompts de aprovação do próprio motor, `/resume`, e

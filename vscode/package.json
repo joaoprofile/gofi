@@ -2,7 +2,7 @@
   "name": "gofi-ai",
   "displayName": "GOFI AI",
   "description": "Chat com os agentes gofi dentro do VSCode. Fala com o Claude por padrão; o motor é plugável para qualquer LLM.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "gofi",
   "license": "MIT",
   "engines": {
@@ -93,6 +93,17 @@
         "icon": "$(debug-stop)"
       },
       {
+        "command": "gofi-ai.chatInTerminal",
+        "title": "Chat in Terminal",
+        "category": "GOFI",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "gofi-ai.chatTerminalPaste",
+        "title": "colar no chat do terminal (texto ou imagem)",
+        "category": "GOFI"
+      },
+      {
         "command": "gofi-ai.openTerminal",
         "title": "GOFI AI: abrir o motor em um terminal",
         "category": "GOFI AI",
@@ -122,7 +133,28 @@
         "category": "GOFI AI"
       }
     ],
+    "keybindings": [
+      {
+        "command": "workbench.action.terminal.sendSequence",
+        "args": {
+          "text": "\u001b\r"
+        },
+        "key": "shift+enter",
+        "when": "terminalFocus && gofi-ai.chatTerminalFocus"
+      },
+      {
+        "command": "gofi-ai.chatTerminalPaste",
+        "key": "ctrl+v",
+        "when": "terminalFocus && gofi-ai.chatTerminalFocus"
+      }
+    ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "gofi-ai.chatTerminalPaste",
+          "when": "gofi-ai.chatTerminalFocus"
+        }
+      ],
       "view/title": [
         {
           "command": "gofi-ai.openInEditor",
@@ -226,6 +258,19 @@
           "default": "gofi",
           "markdownDescription": "Caminho do binário `gofi` usado para planejar os pedidos. Vazio ou `gofi` usa o do PATH."
         },
+        "gofiAI.terminal.location": {
+          "type": "string",
+          "default": "beside",
+          "enum": [
+            "beside",
+            "panel"
+          ],
+          "enumDescriptions": [
+            "Numa aba do editor, ao lado do código — o padrão.",
+            "No painel de terminais, embaixo."
+          ],
+          "markdownDescription": "Onde **GOFI: Chat in Terminal** abre o `gofi chat`."
+        },
         "gofiAI.showThinking": {
           "type": "boolean",
           "default": true,
@@ -271,7 +316,7 @@
     "vscode:prepublish": "echo no-build",
     "package": "vsce package",
     "publish": "vsce publish",
-    "test": "node test/permission-scope.test.js && node test/session-history.test.js && node test/working-row.test.js && node test/attachments.test.js && node test/rate-limit.test.js && node test/doc-graph.test.js && node test/conduct.test.js && node test/run-view.test.js && node test/model-persist.test.js && node test/usage-queries.test.js"
+    "test": "node test/permission-scope.test.js && node test/session-history.test.js && node test/working-row.test.js && node test/attachments.test.js && node test/rate-limit.test.js && node test/doc-graph.test.js && node test/conduct.test.js && node test/run-view.test.js && node test/model-persist.test.js && node test/usage-queries.test.js && node test/chat-terminal.test.js"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.0.0"

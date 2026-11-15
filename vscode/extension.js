@@ -7,12 +7,14 @@ const { readGofiProject, findProjectRoot } = require('./src/gofiConfig.js');
 const { hasGraph } = require('./src/docGraph.js');
 const { GraphPanel } = require('./src/graphView.js');
 const { RunPanel } = require('./src/runPanel.js');
+const { ChatTerminal } = require('./src/chatTerminal.js');
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
 	const chats = new ChatManager(context);
 	const graph = new GraphPanel(context);
 	const runs = new RunPanel(context);
+	const terminalChat = new ChatTerminal();
 
 	context.subscriptions.push(
 		// `retainContextWhenHidden` keeps the transcript alive when the user
@@ -37,6 +39,9 @@ function activate(context) {
 		vscode.commands.registerCommand('gofi-ai.newSession', () => chats.newSession()),
 		vscode.commands.registerCommand('gofi-ai.history', () => chats.history()),
 		vscode.commands.registerCommand('gofi-ai.stop', () => chats.stop()),
+		// `gofi chat` itself, in a terminal: Ctrl+Shift+P → "GOFI: Chat in Terminal".
+		vscode.commands.registerCommand('gofi-ai.chatInTerminal', () => terminalChat.open()),
+		vscode.commands.registerCommand('gofi-ai.chatTerminalPaste', () => terminalChat.paste()),
 		vscode.commands.registerCommand('gofi-ai.openTerminal', () => openEngineTerminal()),
 		vscode.commands.registerCommand('gofi-ai.doctor', () => runDoctor()),
 		vscode.commands.registerCommand('gofi-ai.graph', (name) => graph.open(name)),
@@ -45,6 +50,7 @@ function activate(context) {
 		{ dispose: () => chats.dispose() },
 		{ dispose: () => graph.dispose() },
 		{ dispose: () => runs.dispose() },
+		{ dispose: () => terminalChat.dispose() },
 	);
 
 	// A project that already has a graph opens showing it. The panel is a

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0
+
+Requer o gofi desta versão (o `gofi chat` com prompt de várias linhas, menu de
+comandos e imagem colada).
+
+- **GOFI: Chat in Terminal.** `Ctrl+Shift+P` → *GOFI: Chat in Terminal* abre o
+  `gofi chat` num terminal do VSCode, na raiz do projeto — ao lado do código
+  por padrão, ou no painel de terminais (`gofiAI.terminal.location`). Chamar de
+  novo mostra o terminal que já existe.
+- **As teclas do chat funcionam no terminal do editor.** `Shift+Enter` quebra a
+  linha. `Ctrl+V` cola o texto da área de transferência como sempre e, quando
+  ela não tem texto, entrega a tecla ao chat, que anexa a imagem copiada.
+  Valem só no terminal do GOFI Chat: os outros terminais ficam como estão.
+
 ## 0.5.1
 
 Requer o gofi 0.5.1 (a ferramenta `approve` do servidor MCP).
