@@ -175,7 +175,7 @@ PRD), derivado do frontmatter de cada `contexts/*.md`.
 │   ├── api/                        — referência do SDK gofi, gerada do código (MCP Light)
 │   └── knowledge/                  — knowledge específico da linguagem
 ├── expertise/<pack>/               — especialidades: PACK.md (contrato) + seções
-│   └── harness-protocols/ ddd-architecture/ event-driven/ diagramming/ ui-design/ platform-delivery/ code-review/
+│   └── harness-protocols/ ddd-architecture/ event-driven/ architecture-patterns/ diagramming/ ui-design/ platform-delivery/ code-review/
 ├── knowledge/                      — aprendizado do time (o gofi nunca reescreve)
 │   ├── shared/                     — vale para todos os papéis
 │   └── {eng,ui,...}/               — de um papel (protocolo de aprendizado)
@@ -266,7 +266,8 @@ vez e usado por todo papel que precisa dele. O `PACK.md` declara quando ele se
 aplica (imports, símbolos, intenções, entidades, paths) e a quais papéis serve;
 `harness-protocols` (retrieval, memória, versionamento, aprendizado) vale para
 toda tarefa. Packs atuais: `harness-protocols`, `ddd-architecture`,
-`event-driven`, `diagramming`, `ui-design`, `platform-delivery`, `code-review`.
+`event-driven`, `architecture-patterns`, `diagramming`, `ui-design`,
+`platform-delivery`, `code-review`.
 
 **Conteúdo típico** em `sdk/go/knowledge/` (Go): `absolute-rules`, `layers`,
 `naming`, `structure`, `gofi-orchestrator`, `configuration`,

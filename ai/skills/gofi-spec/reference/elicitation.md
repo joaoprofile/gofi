@@ -127,13 +127,14 @@ Use `expertise/ddd-architecture/ddd-principles.md` como guia. Aprofunde cada ite
 - O contexto mantém um **compilado de janela móvel** (total/contagem/participação % por entidade num período)? Se sim, declarar: a semântica de cada métrica (o que conta como total; contagem = unidades vs ocorrências; base da %) — isso é **decisão de negócio** (vem do PRD; se ambíguo vs legado, reverse-engineer o cálculo legado e confirmar com o dev); a janela e o filtro de estado; **em qual tabela** os campos vivem (pode ser tabela de outro contexto — então o contexto que calcula é **escritor exclusivo daquelas colunas**, o dono só lê); e que o recompute é **best-effort** após a ingestão do raw (re-sync periódico recompila). `gofi-eng` faz recompute **set-based** (1 `UPDATE`+CTE com roll-off + guard div-zero), não reset+N. Padrão em `.claude/expertise/ddd-architecture/application-vs-domain-service.md` §"Recompute de agregado derivado".
 
 **Padrões de projeto** (perguntar só quando o contexto indicar):
-- CQRS, Saga, Strategy, Factory, idempotência, event sourcing
+- Saga, Strategy, Factory, idempotência
+- Outbox, event sourcing, CQRS: `.claude/expertise/architecture-patterns/PACK.md`
 
 **Perfil de acesso ao banco — uma resposta por tabela do agregado:**
 - Perfil de write: `append-only` / `hot UPDATE` / `hot DELETE+INSERT` / `cold`
 - Combinações de filtro previstas (do `/schemas` ou listagem estática) + ordenações default
 - Workers cross-cutting (purge, archive, replicação seletiva, etc.) que filtrem por coluna específica nesta tabela
-- A spec **declara** o perfil em §3 (modelo de dados) ou §4 (arquitetura) — `gofi-eng` usa pra escolher índices na migration; `gofi-qa` audita aderência. Sem perfil declarado, a migration não tem como decidir índice corretamente.
+- A spec **declara** o perfil em §3 (modelo de dados) ou §4 (arquitetura): sem ele o `gofi-eng` não tem como escolher os índices da migration; `gofi-qa` audita aderência.
 - Estratégia completa de índices, fillfactor e autovacuum por perfil em `.claude/sdk/<lang>/knowledge/postgres-index-strategy.md` (PostgreSQL).
 
 **Cenário transacional do agregado (aggregate methods + concorrência):**
