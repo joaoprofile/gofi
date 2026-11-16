@@ -20,6 +20,8 @@ var ReadOnlyRules = []string{
 	"Bash(gofi intake *)",
 	"Bash(gofi spec check)",
 	"Bash(gofi spec check *)",
+	"Bash(gofi prd check)",
+	"Bash(gofi prd check *)",
 	"Bash(gofi spec order)",
 	"Bash(gofi spec order *)",
 	"Bash(gofi change list)",
@@ -45,7 +47,7 @@ var WriteRules = []string{
 }
 
 // A read-only gofi command, optionally after a cd, and nothing else.
-var reReadOnly = regexp.MustCompile(`^(\S*/)?gofi\s+(find|show|path|index\s+status)(\s|$)`)
+var reReadOnly = regexp.MustCompile(`^(\S*/)?gofi\s+(find|show|path|index\s+status|prd\s+check)(\s|$)`)
 var reCd = regexp.MustCompile(`^cd\s+\S+$`)
 
 // ReadOnlyCommand reports whether every command in a shell line is a gofi
