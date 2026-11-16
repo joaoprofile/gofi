@@ -62,6 +62,8 @@ func gofiCommands() []command {
 		c("show", "<símbolo>", "chat.help.show"),
 		c("impact", "<símbolo>", "chat.help.impact"),
 		c("path", "<de> <para>", "chat.help.path"),
+		c("scan", "", "chat.help.scan"),
+		c("prd", "[contexto]", "chat.help.prd"),
 	}
 }
 
@@ -72,6 +74,12 @@ func gofiArgs(text string) ([]string, bool) {
 	switch name {
 	case "find", "show", "impact", "path":
 		return append([]string{name}, strings.Fields(rest)...), true
+	case "scan":
+		// What the repository holds and what is next: a gofi project or not.
+		return []string{"scan"}, true
+	case "prd":
+		// The discovery's sensor, for every PRD or for a context's.
+		return append([]string{"prd", "check"}, strings.Fields(rest)...), true
 	}
 	return nil, false
 }

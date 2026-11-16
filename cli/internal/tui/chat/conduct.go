@@ -25,7 +25,50 @@ const (
 	waitContinue = "continue" // the next phase, after a PRD or a spec
 	waitElicit   = "elicit"   // a decision an elicitation left
 	waitGate     = "gate"     // a decision a delivery's run waits on
+	waitReply    = "reply"    // an answer to what the phase's role asked
 )
+
+// The three legs of the work, each with its own specialist, one at a time:
+// the problem becomes a PRD, the PRD a contract, the contract code. A plan may
+// cross more than one; it stops at the end of each for the person.
+const (
+	legDiscovery = "discovery"
+	legSpec      = "spec"
+	legDelivery  = "delivery"
+)
+
+// legOf is the leg an artifact is produced in, or "" for one that is of none
+// — documentation, a status.
+func legOf(produces string) string {
+	switch {
+	case produces == "prd":
+		return legDiscovery
+	case produces == "spec":
+		return legSpec
+	case loop.Delivers(produces):
+		return legDelivery
+	}
+	return ""
+}
+
+// legAt is the leg of phase i of a plan: an elicitation is of the leg of the
+// role it prepares.
+func legAt(plan []intake.Phase, i int) string {
+	for j := i; j < len(plan) && plan[j].Role == plan[i].Role; j++ {
+		if plan[j].Produces != "" {
+			return legOf(plan[j].Produces)
+		}
+	}
+	return ""
+}
+
+// legName is a leg as the person reads it.
+func legName(leg string) string {
+	if leg == "" {
+		return i18n.T("chat.leg.other")
+	}
+	return i18n.T("chat.leg." + leg)
+}
 
 // intakeDone carries the intake's answer back into the update loop.
 type intakeDone struct {
@@ -52,6 +95,17 @@ type plan struct {
 	askingFor string            // the role they are for
 
 	delivery *delivery // the loop's delivery, while it runs
+
+	// asks says the phase that just ran ended on a question to the person;
+	// reviewed is the phase whose document the reviewer already read, so an
+	// adjustment to it is not read again on its own.
+	asks     bool
+	reviewed int
+	// fixing says the plan waits on what the discovery's sensor found;
+	// accepted, that the person went on past it: it is not put in front of
+	// them again until the PRD changes.
+	fixing   bool
+	accepted bool
 }
 
 // decided is an elicitation and its answers.
@@ -207,6 +261,17 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 			return m, tea.Sequence(echo, say(k.nested([]string{err.Error()}, k.warn)))
 		}
 		return m, echo
+	case waitReply:
+		if t == "" || t == "seguir" || t == "/seguir" {
+			// Left unanswered: the plan goes on as if nothing had been asked.
+			// Past the sensor's findings, the PRD is taken as it is; past a
+			// question of the role, only the question is.
+			p := m.plan
+			m.wait, p.asks, p.accepted, p.fixing = waitNone, false, p.accepted || p.fixing, false
+			next, cmd := m.afterWriting()
+			return next, tea.Sequence(echo, cmd)
+		}
+		return m.sayToPhase(text, echo)
 	case waitConfirm, waitContinue:
 		if yes(t) {
 			m.wait = waitNone
@@ -228,9 +293,25 @@ func (m model) onPlanReply(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
 			m.stopPlan()
 			return m, tea.Sequence(echo, say(k.nested([]string{i18n.T("chat.plan.stopped")}, k.dim)))
 		}
+		// At a review stop, what is written out is an adjustment to the
+		// document: it goes to the role that wrote it, in the same session,
+		// and the stop comes back. A word or two is a slip of the yes or no.
+		if m.wait == waitContinue && m.plan != nil && m.plan.phase != nil && len(strings.Fields(text)) >= 3 {
+			return m.sayToPhase(text, echo)
+		}
 		return m, tea.Sequence(echo, say(k.nested([]string{i18n.T("chat.plan.yes_no")}, k.warn)))
 	}
 	return m, echo
+}
+
+// sayToPhase says something to the role of the phase that just ran — an answer
+// to what it asked, an adjustment to what it wrote — as one more turn of its
+// session. What follows that turn is what follows the phase.
+func (m model) sayToPhase(text string, echo tea.Cmd) (tea.Model, tea.Cmd) {
+	m.wait = waitNone
+	m.conducting = true
+	m.plan.accepted, m.plan.fixing = false, false
+	return m.sendToEngine(text, echo)
 }
 
 func yes(t string) bool {
@@ -493,19 +574,63 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 		}
 		return m.startPhase(nil)
 	}
+	return m.afterWriting()
+}
+
+// afterWriting is what follows a phase that wrote: the role's question, if it
+// left one; the end of the plan; the stop for the person at the end of a leg;
+// or the next phase.
+func (m model) afterWriting() (tea.Model, tea.Cmd) {
+	k := m.look
+	p := m.plan
+	r := p.res
+	done := r.Plan[p.next-1]
+	if p.asks && p.phase != nil {
+		// The role asked the person something: what is typed now is its
+		// answer, in its session — never a request to plan.
+		m.wait = waitReply
+		return m, say("\n" + k.nested([]string{i18n.T("chat.plan.asked", done.Role)}, k.accent))
+	}
+	// The discovery's sensor: the PRD just written is read, with no model
+	// asked, before anything is built on it.
+	var sensed tea.Cmd
+	sensedErrs := 0
+	if done.Produces == "prd" && r.Context != nil {
+		if block, errs := m.prdSensed(r.Context.Name); block != "" {
+			sensed, sensedErrs = say(block), errs
+		}
+	}
 	if p.next >= len(r.Plan) {
+		if sensedErrs > 0 && p.phase != nil && !p.accepted {
+			// The plan ends here, but the PRD still asks for corrections:
+			// the role is one line away, in its own session.
+			m.wait, p.fixing = waitReply, true
+			return m, tea.Sequence(sensed, say("\n"+k.nested([]string{i18n.T("chat.plan.prd_fix", done.Role)}, k.accent)))
+		}
 		p.outcome = runs.OutcomeDone
 		msg := i18n.T("chat.plan.done")
 		if r.Next != "" {
 			msg += " " + i18n.T("chat.plan.next", r.Next)
 		}
 		m.stopPlan()
-		return m, say("\n" + k.bullet(k.good, msg, k.text, m.width))
+		return m, tea.Sequence(sensed, say("\n"+k.bullet(k.good, msg, k.text, m.width)))
 	}
 	if done.ReviewAfter || intake.ApprovalAfter(r, p.next-1) {
+		if done.Produces == "prd" {
+			// The end of the discovery: what the sensor found comes before
+			// the stop, and going on stays the person's to decide.
+			m.wait = waitContinue
+			prompt := m.reviewPrompt()
+			if sensedErrs > 0 {
+				prompt = i18n.T("chat.plan.prd_blocking", sensedErrs) + " " + prompt
+			}
+			return m, tea.Sequence(sensed, say("\n"+k.nested([]string{prompt}, k.accent)))
+		}
 		// A spec is read by the reviewer first: the person approves knowing
-		// what it found. It runs aside — a turn of its own.
-		if done.Produces == "spec" && m.opts.Review != nil && r.Context != nil {
+		// what it found. It runs aside — a turn of its own — and once: an
+		// adjustment after it is checked by the seal, not read again.
+		if done.Produces == "spec" && m.opts.Review != nil && r.Context != nil && p.reviewed != p.next {
+			p.reviewed = p.next
 			review, ctx := m.opts.Review, r.Context.Name
 			ch := make(chan tea.Msg, 64)
 			go func() {
@@ -517,9 +642,47 @@ func (m model) afterPhase() (tea.Model, tea.Cmd) {
 		}
 		// An approval point: what the next phases build rests on this document.
 		m.wait = waitContinue
-		return m, say("\n" + k.nested([]string{i18n.T("chat.plan.review", done.Produces, r.Plan[p.next].Role)}, k.accent))
+		return m, say("\n" + k.nested([]string{m.reviewPrompt()}, k.accent))
 	}
 	return m.startPhase(nil)
+}
+
+// prdSensed is what the discovery's sensor says of a context's PRD, as a
+// block to show, and how much of it asks for a correction. Empty when there
+// is no sensor here or no PRD of the current format to read.
+func (m model) prdSensed(ctx string) (string, int) {
+	if m.opts.PRD == nil {
+		return "", 0
+	}
+	lines, errs, warns, ok := m.opts.PRD(ctx)
+	if !ok {
+		return "", 0
+	}
+	k := m.look
+	if len(lines) == 0 {
+		return k.nested([]string{i18n.T("chat.prd.ready", ctx)}, k.dim), 0
+	}
+	style := k.dim
+	if errs > 0 {
+		style = k.warn
+	}
+	return k.nested(append([]string{i18n.T("chat.prd.sensor", ctx, errs, warns)}, lines...), style), errs
+}
+
+// reviewPrompt is what the stop at the end of a leg says: what was written,
+// that an adjustment is written here to the role that wrote it, and what
+// going on means — the next leg, by name.
+func (m model) reviewPrompt() string {
+	p := m.plan
+	r := p.res
+	done, next := r.Plan[p.next-1], r.Plan[p.next]
+	switch {
+	case done.Produces == "prd":
+		return i18n.T("chat.plan.review.discovery", done.Role, next.Role)
+	case done.Produces == "spec" && legAt(r.Plan, p.next) == legDelivery && m.opts.Deliver != nil:
+		return i18n.T("chat.plan.review.spec", done.Role)
+	}
+	return i18n.T("chat.plan.review", done.Produces, next.Role)
 }
 
 // reviewed is the review of a spec at its review stop.
@@ -566,10 +729,8 @@ func (m model) onReviewed(msg reviewed) (tea.Model, tea.Cmd) {
 		}
 		out = append(out, say(k.nested(msg.lines, style)))
 	}
-	r := p.res
-	done := r.Plan[p.next-1]
 	m.wait = waitContinue
-	prompt := i18n.T("chat.plan.review", done.Produces, r.Plan[p.next].Role)
+	prompt := m.reviewPrompt()
 	if msg.blocking > 0 {
 		prompt = i18n.T("chat.plan.review_blocking", msg.blocking) + " " + prompt
 	}
@@ -634,6 +795,7 @@ func (m model) engine() engine.Session {
 func (m model) sendToEngine(text string, before tea.Cmd) (tea.Model, tea.Cmd) {
 	turn := engine.Turn{Prompt: text, Images: m.outgoing}
 	m.outgoing = nil
+	m.said, m.asked = "", false
 	events, err := m.engine().Send(context.Background(), turn)
 	if err != nil {
 		m.stopPlan()
@@ -661,7 +823,29 @@ func (m model) planBlock(r *intake.Result) string {
 		head += " · " + r.Context.Name + " (" + state + ")"
 	}
 	var lines []string
-	for i, ph := range r.Plan {
+	// The plan is read by its legs — discovery, specification, delivery —,
+	// each with its own specialist: it is where the plan stops for review.
+	legs := 0
+	for i := range r.Plan {
+		if i == 0 || legAt(r.Plan, i) != legAt(r.Plan, i-1) {
+			legs++
+		}
+	}
+	for i := 0; i < len(r.Plan); i++ {
+		ph := r.Plan[i]
+		leg := legAt(r.Plan, i)
+		if legs > 1 && (i == 0 || leg != legAt(r.Plan, i-1)) {
+			lines = append(lines, k.bold.Render(legName(leg)))
+		}
+		if _, build := loop.FlowFor(ph.Produces); build && !ph.Elicit && m.opts.Deliver != nil && r.Context != nil {
+			// What is built is the loop's: its roles are dispatched by the
+			// change, not run here one by one.
+			lines = append(lines, fmt.Sprintf("%d. %s", i+1, i18n.T("chat.leg.loop")))
+			for i+1 < len(r.Plan) && loop.Delivers(r.Plan[i+1].Produces) && !r.Plan[i+1].Elicit {
+				i++
+			}
+			continue
+		}
 		tier := string(ph.Tier)
 		switch {
 		case ph.Elicit:
@@ -673,6 +857,11 @@ func (m model) planBlock(r *intake.Result) string {
 	}
 	for _, p := range r.Packs {
 		lines = append(lines, k.dim.Render("+ "+p.Pack+" — "+p.Why))
+	}
+	if r.Found != nil {
+		// A context being adopted: what the repository already holds of it
+		// is where its documents start from.
+		lines = append(lines, k.dim.Render(i18n.T("chat.plan.found", r.Found.Summary())))
 	}
 	for _, a := range r.Assumptions {
 		lines = append(lines, k.warn.Render(i18n.T("chat.plan.assumed", a)))

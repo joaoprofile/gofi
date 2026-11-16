@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -478,5 +479,426 @@ func TestApprovingTheContractIsNeverAlways(t *testing.T) {
 	m = next.(model)
 	if len(m.asking) != 1 || m.always[approval.ApproveTool] {
 		t.Errorf("a 2 settled the approval: asking %d, always %v", len(m.asking), m.always)
+	}
+}
+
+// says is the script of a turn whose answer is text: what the role says, and
+// the turn's end.
+func says(text string) []engine.Event {
+	return []engine.Event{
+		engine.Meta{SessionID: "s1"},
+		engine.Message{Blocks: []engine.Block{{Kind: engine.BlockText, Text: text}}},
+		engine.Done{Duration: time.Second},
+	}
+}
+
+// An answer is not a request. A discovery opened with its role stays with
+// it: what the person answers — with a verb in it or not — goes to the role
+// as typed, and nothing of it is planned. Planned, "pode adicionar…" became a
+// plan of specification, code and audit in the middle of the discovery.
+func TestAnAnswerToARoleIsNotPlanned(t *testing.T) {
+	m, sessions, calls := planModel(t, []*intake.Result{threePhases()}, nil)
+	m.opts.Interviews = map[string]string{"gofi-pd": "prd", "gofi-spec": "spec"}
+	m = drain(t, ask(t, m, "/gofi-pd contexto de tenant"))
+	if m.talking != "gofi-pd" {
+		t.Fatalf("the discovery's conversation should be open: talking=%q", m.talking)
+	}
+	m = drain(t, ask(t, m, "aceito a recomendação, pode adicionar um PF por sócio da empresa"))
+	m = drain(t, ask(t, m, "altere também o limite de sócios"))
+	chat := (*sessions)[0]
+	if len(*calls) != 0 || m.plan != nil || len(chat.sent) != 3 || chat.sent[1] != "aceito a recomendação, pode adicionar um PF por sócio da empresa" {
+		t.Fatalf("the answers were planned: intake calls %d, plan %v, sent %q", len(*calls), m.plan != nil, chat.sent)
+	}
+	if view := m.View(); !strings.Contains(view, "/gofi-pd") || !strings.Contains(view, "/clear") {
+		t.Errorf("the prompt should say whose conversation it is and how it is left:\n%s", view)
+	}
+
+	// Another role invoked takes the conversation; a command of the engine
+	// does not end it.
+	m = drain(t, ask(t, m, "/compact"))
+	if m.talking != "gofi-pd" {
+		t.Errorf("a command that is no role closed the conversation: %q", m.talking)
+	}
+	m = drain(t, ask(t, m, "/gofi-spec tenant"))
+	if m.talking != "gofi-spec" {
+		t.Errorf("the specification's conversation should be open: %q", m.talking)
+	}
+
+	// /clear closes it: what comes next is a request again, and is planned.
+	m = drain(t, ask(t, m, "/clear"))
+	m = ask(t, m, "altere o fluxo de pricing")
+	if m.talking != "" || len(*calls) != 1 || m.plan == nil {
+		t.Errorf("after /clear a request is planned: talking=%q intake calls=%d plan=%v", m.talking, len(*calls), m.plan != nil)
+	}
+}
+
+// With no role's conversation open, what follows a question of the chat is
+// its answer too — and what follows an answer that asked nothing is a
+// request, planned as before.
+func TestWhatFollowsAQuestionAnswersIt(t *testing.T) {
+	m, sessions, calls := planModel(t, []*intake.Result{{Request: "oi", Chat: true}, threePhases()}, nil)
+	chat := (*sessions)[0]
+	chat.script = says("Posso registrar assim.\n\nAceita, ou quer simplificar (uma empresa por proprietário)?")
+	m = drain(t, ask(t, m, "oi"))
+	if !m.asked || len(*calls) != 1 {
+		t.Fatalf("the chat asked and should wait for the answer: asked=%v calls=%d", m.asked, len(*calls))
+	}
+	chat.script = says("Registrado.")
+	m = drain(t, ask(t, m, "aceito, pode adicionar os sócios"))
+	if len(*calls) != 1 || len(chat.sent) != 2 || chat.sent[1] != "aceito, pode adicionar os sócios" || m.asked {
+		t.Fatalf("the answer was planned: calls=%d sent=%q asked=%v", len(*calls), chat.sent, m.asked)
+	}
+	m = ask(t, m, "altere o fluxo de pricing")
+	if len(*calls) != 2 || m.plan == nil {
+		t.Errorf("with nothing asked, a request is planned: calls=%d", len(*calls))
+	}
+}
+
+func TestEndsAsking(t *testing.T) {
+	for text, want := range map[string]bool{
+		"Aceita, ou quer simplificar (por exemplo, um único proprietário no MVP)?":  true,
+		"Qual modelo prefere?\n\n1. Um tenant por pessoa\n2. Um tenant por empresa": true,
+		"**Posso seguir assim?**":                                true,
+		"PRD gravado em prd/tenant/prd-tenant.md.":               false,
+		"Por que isso importa? Porque o sócio decide.\n\nFeito.": false, // a question answered in its own line is not left open
+		"": false,
+		"Perguntei antes: quem aprova?\n\na\nb\nc\nd\ne\nf\ng\nh\n\nConcluído.": false,
+	} {
+		if got := endsAsking(text); got != want {
+			t.Errorf("endsAsking(%q) = %v, want %v", text, got, want)
+		}
+	}
+}
+
+// At the stop at the end of a leg, what is written out is an adjustment to
+// the document: it goes to the role that wrote it, in its session, and the
+// stop comes back — the reviewer does not read it a second time on its own.
+// A word or two is a slip of the yes or no, and sends nothing.
+func TestAnAdjustmentAtTheReviewStopGoesToTheRole(t *testing.T) {
+	m, sessions, calls := planModel(t, []*intake.Result{threePhases()}, nil)
+	reviews := 0
+	m.opts.Review = func(context.Context, string, func(string)) ([]string, int, error) {
+		reviews++
+		return nil, 0, nil
+	}
+	toStop := func(m model) model {
+		t.Helper()
+		var last tea.Cmd
+		for i := 0; m.running && i < 50; i++ {
+			next, c := m.Update(waitEvent(m.events)())
+			m, last = next.(model), c
+		}
+		if msg := findMsg(last, func(msg tea.Msg) bool { _, ok := msg.(reviewed); return ok }); msg != nil {
+			next, _ := m.Update(msg)
+			m = next.(model)
+		}
+		return m
+	}
+	m = toStop(ask(t, m, "altere o fluxo de pricing"))
+	if m.wait != waitContinue || reviews != 1 {
+		t.Fatalf("the spec stops for review, read once: wait=%q reviews=%d", m.wait, reviews)
+	}
+	if said := m.reviewPrompt(); !strings.Contains(said, "/gofi-spec") || !strings.Contains(said, "loop") {
+		t.Errorf("the stop names who refines and what going on does: %q", said)
+	}
+
+	m = ask(t, m, "pode seguir")
+	if sent, _ := phases(*sessions); len(sent) != 1 || m.wait != waitContinue {
+		t.Fatalf("two words are no adjustment: sent=%d wait=%q", len(sent), m.wait)
+	}
+
+	m = toStop(ask(t, m, "troque o prazo do requisito 2 para trinta dias"))
+	sent, _ := phases(*sessions)
+	if len(sent) != 2 || sent[1] != "troque o prazo do requisito 2 para trinta dias" || len(*sessions) != 2 {
+		t.Fatalf("the adjustment goes to the spec's own session: sent=%q sessions=%d", sent, len(*sessions))
+	}
+	if len(*calls) != 1 || m.wait != waitContinue || reviews != 1 || len(lastDeliveries) != 0 {
+		t.Fatalf("after it the stop is back, nothing planned, nothing built, not reviewed again: calls=%d wait=%q reviews=%d deliveries=%v", len(*calls), m.wait, reviews, lastDeliveries)
+	}
+
+	// Enter still goes on to the loop.
+	m, c := enterCmd(m)
+	m = pump(t, m, c)
+	if len(lastDeliveries) != 1 || m.plan != nil {
+		t.Errorf("enter should hand the change to the loop: %v", lastDeliveries)
+	}
+}
+
+// A role that ends its phase on a question is answered: what the person types
+// — a plain "sim" too — goes to it, and the plan goes on once it asks nothing
+// more, or on an empty Enter.
+func TestARoleThatAsksIsAnswered(t *testing.T) {
+	prd := &intake.Result{
+		Request: "descoberta do tenant", Intent: "create", Artifact: "prd",
+		Context: &intake.Context{Name: "tenant", New: true},
+		Plan:    []intake.Phase{{Role: "gofi-pd", Produces: "prd", Tier: host.Deep, Base: host.Deep, TierWhy: "contrato"}},
+		Brief:   "# Pedido montado\n",
+	}
+	m, sessions, calls := planModel(t, []*intake.Result{prd}, nil)
+	m.opts.NewSession = func(string) engine.Session {
+		s := &fakeSession{script: says("Recomendo um tenant pessoal por CPF.\n\nAceita, ou quer simplificar?")}
+		*sessions = append(*sessions, s)
+		return s
+	}
+	m = drain(t, ask(t, m, "descoberta do tenant"))
+	if m.wait != waitReply || m.plan == nil {
+		t.Fatalf("the role asked: the plan waits for the answer, it does not end: wait=%q plan=%v", m.wait, m.plan != nil)
+	}
+	role := (*sessions)[1]
+	role.script = says("Registrado. PRD gravado em prd/tenant/prd-tenant.md.")
+	m = drain(t, ask(t, m, "sim"))
+	if len(role.sent) != 2 || role.sent[1] != "sim" || len(*calls) != 1 {
+		t.Fatalf("the answer goes to the role, as typed: sent=%q intake calls=%d", role.sent, len(*calls))
+	}
+	if m.plan != nil || m.wait != waitNone || !role.closed {
+		t.Errorf("with nothing more asked the plan ends: plan=%v wait=%q", m.plan != nil, m.wait)
+	}
+
+	// Left unanswered, an empty Enter goes on.
+	m2, sessions2, _ := planModel(t, []*intake.Result{prd}, nil)
+	m2.opts.NewSession = func(string) engine.Session {
+		s := &fakeSession{script: says("Feito. Quer revisar algo?")}
+		*sessions2 = append(*sessions2, s)
+		return s
+	}
+	m2 = drain(t, ask(t, m2, "descoberta do tenant"))
+	if m2.wait != waitReply {
+		t.Fatalf("wait=%q", m2.wait)
+	}
+	if m2 = enter(m2); m2.plan != nil || m2.wait != waitNone {
+		t.Errorf("an empty Enter goes on, here to the end of the plan: plan=%v wait=%q", m2.plan != nil, m2.wait)
+	}
+}
+
+// The plan is read by its legs — discovery, specification, delivery —, each
+// with its specialist, and what is built is one line: the loop's. A plan of
+// one leg reads as it always did.
+func TestThePlanIsReadByItsLegs(t *testing.T) {
+	m, _, _ := planModel(t, nil, nil)
+	whole := &intake.Result{
+		Intent: "create", Artifact: "code", Context: &intake.Context{Name: "tenant", New: true},
+		Plan: []intake.Phase{
+			{Role: "gofi-pd", Tier: host.Standard, Base: host.Deep, Elicit: true, TierWhy: "elicitação"},
+			{Role: "gofi-pd", Produces: "prd", Tier: host.Deep, Base: host.Deep, TierWhy: "contrato"},
+			{Role: "gofi-spec", Tier: host.Standard, Base: host.Deep, Elicit: true, TierWhy: "elicitação"},
+			{Role: "gofi-spec", Produces: "spec", Tier: host.Deep, Base: host.Deep, TierWhy: "contrato"},
+			{Role: "gofi-eng", Produces: "code", Tier: host.Standard, Base: host.Standard, TierWhy: "contrato"},
+			{Role: "gofi-qa", Produces: "audit", Tier: host.Standard, Base: host.Standard, TierWhy: "contrato"},
+		},
+	}
+	block := m.planBlock(whole)
+	at := func(s string) int { return strings.Index(block, s) }
+	if !(at("Discovery") > 0 && at("Discovery") < at("1. /gofi-pd") && at("2. /gofi-pd") < at("Specification") &&
+		at("Specification") < at("3. /gofi-spec") && at("4. /gofi-spec") < at("Delivery loop") && at("Delivery loop") < at("5. gofi run")) {
+		t.Errorf("the plan should be read leg by leg, in order:\n%s", block)
+	}
+	if strings.Contains(block, "/gofi-eng") || strings.Contains(block, "/gofi-qa") {
+		t.Errorf("what is built is the loop's, not a role run here:\n%s", block)
+	}
+	for i, want := range []string{legDiscovery, legDiscovery, legSpec, legSpec, legDelivery, legDelivery} {
+		if got := legAt(whole.Plan, i); got != want {
+			t.Errorf("leg of phase %d = %q, want %q", i+1, got, want)
+		}
+	}
+
+	one := threePhases()
+	one.Plan = one.Plan[:1]
+	if b := m.planBlock(one); strings.Contains(b, "Specification") || !strings.Contains(b, "1. /gofi-spec") {
+		t.Errorf("a plan of one leg has no heading:\n%s", b)
+	}
+}
+
+// saidBy runs a command tree and joins every text it says, for what a step
+// put on screen.
+func saidBy(cmd tea.Cmd) string {
+	var out []string
+	findMsg(cmd, func(msg tea.Msg) bool {
+		if s, ok := msg.(sayMsg); ok {
+			out = append(out, s.text)
+		}
+		return false
+	})
+	return strings.Join(out, "\n")
+}
+
+// toEnd runs the turn under way to its end and returns what its end said.
+func toEnd(t *testing.T, m model) (model, string) {
+	t.Helper()
+	var last tea.Cmd
+	for i := 0; m.running && i < 50; i++ {
+		next, c := m.Update(waitEvent(m.events)())
+		m, last = next.(model), c
+	}
+	return m, saidBy(last)
+}
+
+func discovery(then ...intake.Phase) *intake.Result {
+	return &intake.Result{
+		Request: "descoberta do tenant", Intent: "create", Artifact: "prd",
+		Context: &intake.Context{Name: "tenant", New: true},
+		Plan:    append([]intake.Phase{{Role: "gofi-pd", Produces: "prd", Tier: host.Deep, Base: host.Deep, TierWhy: "contrato"}}, then...),
+		Brief:   "# Pedido montado\n",
+	}
+}
+
+// The discovery has a sensor: the PRD just written is read with no model
+// asked, and what still asks for a correction is said before the stop. Going
+// on stays the person's to decide — the sensor informs, it does not lock.
+func TestThePRDIsSensedAtTheEndOfTheDiscovery(t *testing.T) {
+	spec := intake.Phase{Role: "gofi-spec", Produces: "spec", Tier: host.Deep, Base: host.Deep, TierWhy: "contrato"}
+	m, sessions, _ := planModel(t, []*intake.Result{discovery(spec)}, nil)
+	read := 0
+	m.opts.PRD = func(ctx string) ([]string, int, int, bool) {
+		read++
+		return []string{"✗ §2 sem métrica com hoje, meta e como medir", "· §6 sem restrição, premissa ou risco descrito"}, 1, 1, ctx == "tenant"
+	}
+	m, said := toEnd(t, ask(t, m, "descoberta do tenant"))
+	if m.wait != waitContinue || read != 1 {
+		t.Fatalf("the discovery stops for the person, its PRD read once: wait=%q read=%d", m.wait, read)
+	}
+	for _, want := range []string{"tenant: 1 to correct, 1 warning(s)", "§2 sem métrica", "the sensor found 1 point(s) to correct", "/gofi-pd refines it here", "opens the specification with /gofi-spec"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the stop should say %q:\n%s", want, said)
+		}
+	}
+	// Enter goes on to the specification all the same.
+	m, _ = enterCmd(m)
+	if sent, _ := phases(*sessions); len(sent) != 2 || !strings.HasPrefix(sent[1], "/gofi-spec ") {
+		t.Errorf("the specification should start: %q", sent)
+	}
+}
+
+// A plan that ends at the PRD does not end on one that still asks for
+// corrections: the role is a line away. An empty Enter takes the PRD as it
+// is, and a PRD with nothing to correct ends the plan at once.
+func TestADiscoveryDoesNotEndOnAPRDToCorrect(t *testing.T) {
+	m, sessions, calls := planModel(t, []*intake.Result{discovery()}, nil)
+	errs := 2
+	m.opts.PRD = func(string) ([]string, int, int, bool) {
+		if errs == 0 {
+			return nil, 0, 0, true
+		}
+		return []string{"✗ §4 sem nada em \"Fora\"", "✗ §5 sem jornada com passos"}, errs, 0, true
+	}
+	m, said := toEnd(t, ask(t, m, "descoberta do tenant"))
+	if m.wait != waitReply || m.plan == nil || !strings.Contains(said, "it goes to /gofi-pd") || !strings.Contains(said, "§5 sem jornada") {
+		t.Fatalf("the plan waits with the role at hand: wait=%q\n%s", m.wait, said)
+	}
+	// The adjustment goes to the role; corrected, the plan ends.
+	errs = 0
+	m, said = toEnd(t, ask(t, m, "acrescente o que fica fora e a jornada do convite"))
+	role := (*sessions)[1]
+	if len(role.sent) != 2 || len(*calls) != 1 || m.plan != nil || !strings.Contains(said, "ready for the specification") {
+		t.Fatalf("after the correction the plan ends, the PRD ready: sent=%d calls=%d plan=%v\n%s", len(role.sent), len(*calls), m.plan != nil, said)
+	}
+
+	// Taken as it is: an empty Enter ends the plan, and the sensor does not
+	// hold it a second time.
+	m2, _, _ := planModel(t, []*intake.Result{discovery()}, nil)
+	m2.opts.PRD = func(string) ([]string, int, int, bool) { return []string{"✗ §1 sem o problema"}, 1, 0, true }
+	m2, _ = toEnd(t, ask(t, m2, "descoberta do tenant"))
+	if m2 = enter(m2); m2.plan != nil || m2.wait != waitNone {
+		t.Errorf("an empty Enter takes the PRD as it is: plan=%v wait=%q", m2.plan != nil, m2.wait)
+	}
+
+	// A role's question left unanswered is not the PRD taken as it is: the
+	// sensor still has its say before the plan ends.
+	m3, sessions3, _ := planModel(t, []*intake.Result{discovery()}, nil)
+	m3.opts.PRD = func(string) ([]string, int, int, bool) { return []string{"✗ §1 sem o problema"}, 1, 0, true }
+	m3.opts.NewSession = func(string) engine.Session {
+		s := &fakeSession{script: says("Rascunho gravado. Quer revisar algo?")}
+		*sessions3 = append(*sessions3, s)
+		return s
+	}
+	m3, _ = toEnd(t, ask(t, m3, "descoberta do tenant"))
+	if m3.wait != waitReply || m3.plan.fixing {
+		t.Fatalf("first the role's question: wait=%q fixing=%v", m3.wait, m3.plan.fixing)
+	}
+	m3, c := enterCmd(m3)
+	if said := saidBy(c); m3.plan == nil || m3.wait != waitReply || !m3.plan.fixing || !strings.Contains(said, "§1 sem o problema") {
+		t.Fatalf("past the question the sensor stops the plan: wait=%q\n%s", m3.wait, said)
+	}
+	if m3 = enter(m3); m3.plan != nil {
+		t.Errorf("past the sensor the plan ends")
+	}
+}
+
+// In a discovery held with the role itself, the turn that writes the PRD is
+// read by the sensor too — only that turn, and only a discovery's.
+func TestADiscoverysTurnThatWritesThePRDIsSensed(t *testing.T) {
+	m, sessions, _ := planModel(t, nil, nil)
+	m.opts.Interviews = map[string]string{"gofi-pd": "prd", "gofi-spec": "spec"}
+	wrote := []string{}
+	m.opts.PRDsSince = func(time.Time) []string { return wrote }
+	m.opts.PRD = func(ctx string) ([]string, int, int, bool) { return []string{"✗ §2 sem métrica"}, 1, 0, true }
+	(*sessions)[0].script = says("Qual é a métrica de sucesso?")
+	m, said := toEnd(t, ask(t, m, "/gofi-pd tenant"))
+	if strings.Contains(said, "PRD sensor") {
+		t.Errorf("no PRD was written in this turn:\n%s", said)
+	}
+	wrote = []string{"tenant"}
+	(*sessions)[0].script = says("PRD gravado em prd/tenant/prd-tenant.md.")
+	m, said = toEnd(t, ask(t, m, "80% dos sócios conciliados"))
+	if !strings.Contains(said, "PRD sensor for tenant: 1 to correct") || !strings.Contains(said, "§2 sem métrica") {
+		t.Errorf("the turn that wrote the PRD should be sensed:\n%s", said)
+	}
+	// A specification's turn is not a discovery's.
+	m = drain(t, ask(t, m, "/gofi-spec tenant"))
+	if m, said = toEnd(t, ask(t, m, "siga")); strings.Contains(said, "PRD sensor") {
+		t.Errorf("the sensor is the discovery's:\n%s", said)
+	}
+	_ = m
+}
+
+// /scan and /prd read the disk through gofi and call no model: the first
+// needs no argument and works in a folder that is no gofi project, the
+// second is the discovery's sensor on demand.
+func TestScanAndPRDAreAskedOfGofi(t *testing.T) {
+	for text, want := range map[string]string{
+		"/scan":       "scan",
+		"/prd":        "prd check",
+		"/prd tenant": "prd check tenant",
+	} {
+		args, ok := gofiArgs(text)
+		if !ok || strings.Join(args, " ") != want {
+			t.Errorf("%s → %v (%v), want %q", text, args, ok, want)
+		}
+	}
+	m, sessions, calls := planModel(t, nil, nil)
+	var ran [][]string
+	m.opts.Gofi = func(args ...string) *exec.Cmd {
+		ran = append(ran, args)
+		return exec.Command("true")
+	}
+	m.input.SetValue("/scan")
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "scan" || !m.running {
+		t.Fatalf("/scan should run gofi scan with no argument asked: %v", ran)
+	}
+	if len(*calls) != 0 || len((*sessions)[0].sent) != 0 {
+		t.Errorf("nothing of it goes to a model: intake %d, engine %q", len(*calls), (*sessions)[0].sent)
+	}
+}
+
+// Outside a gofi project the chat says so where it is seen first, with the
+// way in; inside one, the plan of a context being adopted says what the
+// repository already holds of it.
+func TestAdoptionIsSaidWhereItMatters(t *testing.T) {
+	m, _, _ := planModel(t, nil, nil)
+	m.opts.Gofi = func(...string) *exec.Cmd { return exec.Command("true") }
+	m.width = 120
+	if b := m.banner(); strings.Contains(b, "/scan") {
+		t.Errorf("a gofi project needs no way in:\n%s", b)
+	}
+	m.opts.Intake = nil
+	if b := m.banner(); !strings.Contains(b, "/scan") || !strings.Contains(b, "not a gofi project") {
+		t.Errorf("outside a project the banner should point at /scan:\n%s", b)
+	}
+
+	r := discovery()
+	r.Found = &intake.Found{Dir: "domain/tenant/", Sources: 12, Tests: 3, Tables: []string{"tenant"}}
+	if block := m.planBlock(r); !strings.Contains(block, "already in the repository: código em `domain/tenant/` (12 fontes, 3 testes), 1 tabela(s)") {
+		t.Errorf("the plan should say what the repository holds:\n%s", block)
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,6 +66,19 @@ type Options struct {
 	// last round's questions, proceed goes on without them. Nil sends every
 	// request as typed.
 	Intake func(text string, answers map[string]string, proceed bool) (*intake.Result, error)
+	// Interviews are the roles that interview the person when invoked — a
+	// discovery, a specification —, by name, with what each produces. A
+	// conversation opened with one stays with it: what is typed is its answer.
+	Interviews map[string]string
+	// PRD reads the PRD of a context the way gofi prd check does — the
+	// discovery's sensor, with no model asked: its findings as lines, the
+	// corrections first, how many of them ask for a correction and how many
+	// are only worth reading. ok is false when the context has no PRD of the
+	// current format.
+	PRD func(context string) (lines []string, errs, warns int, ok bool)
+	// PRDsSince are the contexts whose PRD was written since a moment: what
+	// a discovery's turn left, for the sensor to read.
+	PRDsSince func(since time.Time) []string
 	// TierModel is the model a tier runs on, for a phase the router raised
 	// above its role's contract. Nil keeps the skill's own model.
 	TierModel func(host.Tier) string
@@ -215,6 +229,15 @@ type model struct {
 	chosenModel string         // picked with /model; outlives /clear and /resume
 	listed      []engine.Saved // what the last /resume listed, for /resume <n>
 
+	// talking is the role the person opened a conversation with by invoking
+	// it — a discovery, a specification: until that conversation is closed,
+	// what is typed is said to it, and nothing of it is planned as a request.
+	// asked says the chat's last answer ended on a question to the person,
+	// so what comes next answers it; said is the last text of the turn.
+	talking string
+	asked   bool
+	said    string
+
 	plan       *plan       // the request being conducted, if any
 	wait       string      // what the plan waits for from the person
 	planning   bool        // the intake is running
@@ -272,6 +295,10 @@ func (m model) banner() string {
 	}
 	if len(about) > 0 {
 		b.Extra = []string{strings.Join(about, " · ")}
+	}
+	if m.opts.Intake == nil && m.opts.Gofi != nil {
+		// Not a gofi project yet: the way in is said, where it is seen first.
+		b.Extra = append(b.Extra, i18n.T("chat.banner.adopt"))
 	}
 	b.Side = []banner.Section{{Title: i18n.T("chat.banner.keys"), Lines: []string{
 		"/\t" + i18n.T("chat.banner.slash"),
@@ -449,9 +476,24 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notice = i18n.T("chat.steer.undelivered")
 		}
 		flush := m.flushLive()
+		// A turn that ends on a question waits for its answer: in a phase of
+		// the plan the role's, here the conversation's.
+		asks := !m.lastFailed && endsAsking(m.said)
 		if m.conducting && m.plan != nil {
+			m.plan.asks = asks
 			next, cmd := m.afterPhase()
 			return next, tea.Sequence(flush, cmd)
+		}
+		m.asked = asks
+		// A discovery's turn that wrote a PRD is read by the sensor at once:
+		// the person sees what still asks for a correction before the role
+		// is asked for anything else.
+		if !m.lastFailed && m.opts.Interviews[m.talking] == "prd" && m.opts.PRDsSince != nil {
+			for _, ctx := range m.opts.PRDsSince(m.started) {
+				if block, _ := m.prdSensed(ctx); block != "" {
+					flush = tea.Sequence(flush, say(block))
+				}
+			}
 		}
 		return m, flush
 
@@ -586,7 +628,7 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.whileRunning(strings.TrimSpace(m.input.Value()))
 		}
 		text := strings.TrimSpace(m.input.Value())
-		if text == "" && (m.wait == waitConfirm || m.wait == waitContinue) {
+		if text == "" && (m.wait == waitConfirm || m.wait == waitContinue || m.wait == waitReply) {
 			// Enter on an empty prompt takes the plan's default: go on.
 			return m.onPlanReply("", nil)
 		}
@@ -833,6 +875,7 @@ func (m model) submit(text string) (tea.Model, tea.Cmd) {
 	case text == "/clear":
 		m.stopPlan()
 		m.replaceSession("")
+		m.talking = ""
 		return note(k.dim, i18n.T("chat.cleared"))
 	case text == "/model" || strings.HasPrefix(text, "/model "):
 		return m, tea.Sequence(echo, say(m.switchModel(strings.TrimSpace(strings.TrimPrefix(text, "/model")))))
@@ -889,17 +932,54 @@ func (m model) submit(text string) (tea.Model, tea.Cmd) {
 		if m.opts.Gofi == nil {
 			return note(k.warn, i18n.T("chat.gofi.unavailable"))
 		}
-		if len(args) == 1 {
+		if len(args) == 1 && args[0] != "scan" {
 			return note(k.warn, i18n.T("chat.gofi.usage", text))
 		}
 		m.running, m.started, m.frame = true, time.Now(), 0
 		return m, tea.Batch(echo, runGofi(m.opts.Gofi(args...), args), tickCmd())
 	}
+	if strings.HasPrefix(text, "/") {
+		// A role invoked outright opens its conversation; another command
+		// closes the one that was open.
+		name, _, _ := strings.Cut(text[1:], " ")
+		if _, ok := m.opts.Interviews[name]; ok {
+			m.talking = name
+		} else if slices.ContainsFunc(m.onDisk, func(s skill) bool { return s.name == name }) {
+			m.talking = ""
+		}
+		return m.sendToEngine(text, echo)
+	}
+	// An answer is not a request: what is typed to a role whose conversation
+	// is open, or right after the chat asked something, goes to it as it is.
+	// Planned, a discovery's answer with a verb in it — "pode adicionar…" —
+	// became a plan of its own, and the conversation was lost to it.
+	if m.talking != "" || m.asked {
+		return m.sendToEngine(text, echo)
+	}
 	// A message with a picture goes as it is: the plan is made of text.
-	if !strings.HasPrefix(text, "/") && m.opts.Intake != nil && len(m.outgoing) == 0 {
+	if m.opts.Intake != nil && len(m.outgoing) == 0 {
 		return m.startIntake(text, echo)
 	}
 	return m.sendToEngine(text, echo)
+}
+
+// endsAsking reports whether an answer leaves a question to the person: one
+// of its last lines ends in a question mark — the question itself, or the
+// question over the options it offers.
+func endsAsking(text string) bool {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	seen := 0
+	for i := len(lines) - 1; i >= 0 && seen < 8; i-- {
+		l := strings.TrimRight(lines[i], " \t*_`)\"'»”")
+		if l == "" {
+			continue
+		}
+		seen++
+		if strings.HasSuffix(l, "?") || strings.HasSuffix(l, "？") {
+			return true
+		}
+	}
+	return false
 }
 
 func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
@@ -975,6 +1055,7 @@ func (m model) onEvent(e engine.Event) (tea.Model, tea.Cmd) {
 		for _, b := range ev.Blocks {
 			switch b.Kind {
 			case engine.BlockText:
+				m.said = b.Text
 				out = append(out, k.markdown(b.Text, m.width))
 			case engine.BlockToolUse:
 				m.tools[b.ID] = b.Name
@@ -1311,6 +1392,11 @@ func (m model) promptLines() []string {
 		status = i18n.T("chat.plan.answer_hint")
 	case m.wait == waitConfirm || m.wait == waitContinue:
 		status = i18n.T("chat.plan.confirm_keys")
+	case m.wait == waitReply:
+		status = i18n.T("chat.plan.reply_keys")
+	case m.talking != "":
+		// The conversation is a role's: say so, and how it is left.
+		status = i18n.T("chat.talking", legName(legOf(m.opts.Interviews[m.talking])), m.talking)
 	}
 	if m.notice != "" {
 		status = m.notice

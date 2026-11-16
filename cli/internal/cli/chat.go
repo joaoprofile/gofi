@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joaoprofile/gofi/cli/internal/contract"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -161,18 +163,21 @@ func runChat(f chatFlags) error {
 
 	resume := strings.TrimSpace(f.resume)
 	return chat.Run(chat.Options{
-		Root:      root,
-		Version:   Version,
-		Model:     model,
-		Approvals: approvals,
-		Sessions:  func() []engine.Saved { return claude.ListSessions(root, 10) },
-		Models:    config.AllModels(),
-		Intake:    planIntake,
-		TierModel: tierModel,
-		Deliver:   spawnDelivery(root),
-		Review:    review,
-		Gofi:      gofi,
-		Inset:     stickyRows(),
+		Root:       root,
+		Version:    Version,
+		Model:      model,
+		Approvals:  approvals,
+		Sessions:   func() []engine.Saved { return claude.ListSessions(root, 10) },
+		Models:     config.AllModels(),
+		Intake:     planIntake,
+		Interviews: intake.Interviewers(root),
+		PRD:        prdSensor(root),
+		PRDsSince:  prdsSince(root),
+		TierModel:  tierModel,
+		Deliver:    spawnDelivery(root),
+		Review:     review,
+		Gofi:       gofi,
+		Inset:      stickyRows(),
 		NewSession: func(resumeID string) engine.Session {
 			if resumeID != "" {
 				resume = resumeID
@@ -211,6 +216,32 @@ func stickyRows() int {
 	return 0
 }
 
+// prdSensor reads a context's PRD for the chat the way gofi prd check does:
+// its findings as lines, the corrections first, and how many of those.
+func prdSensor(root string) func(string) ([]string, int, int, bool) {
+	return func(ctx string) ([]string, int, int, bool) {
+		findings, state := contract.CheckPRD(root, contract.PRDPath(ctx))
+		if state != contract.PRDCurrent {
+			return nil, 0, 0, false
+		}
+		errs, warns := contract.PRDSummary(findings)
+		return contract.PRDLines(findings, 8), errs, warns, true
+	}
+}
+
+// prdsSince are the contexts whose PRD was written since a moment.
+func prdsSince(root string) func(time.Time) []string {
+	return func(since time.Time) []string {
+		var out []string
+		for _, rel := range contract.PRDs(root) {
+			if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil && !info.ModTime().Before(since) {
+				out = append(out, filepath.Base(filepath.Dir(rel)))
+			}
+		}
+		return out
+	}
+}
+
 // chatIntake plans the chat's requests the way `gofi intake` does: the light
 // tier for what the rules leave open, and its decisions cached.
 func chatIntake(cfg *config.GofiConfig, root string) func(string, map[string]string, bool) (*intake.Result, error) {
@@ -218,6 +249,9 @@ func chatIntake(cfg *config.GofiConfig, root string) func(string, map[string]str
 	// them — loading it is most of what planning costs — and is read again
 	// only when something it was built from changed.
 	engines := &intake.Engines{}
+	// What the repository holds outside gofi's own corpus — for a context
+	// being adopted — is read aside while the person writes the first message.
+	engines.Warm(root)
 	return func(text string, answers map[string]string, proceed bool) (*intake.Result, error) {
 		return intake.Run(root, text, intake.Options{
 			Language: backendLanguage(cfg),

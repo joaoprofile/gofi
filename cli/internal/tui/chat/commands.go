@@ -22,6 +22,8 @@ func (m *model) replaceSession(resumeID string) {
 	}
 	m.tools, m.calls, m.lastCall = map[string]string{}, map[string]string{}, ""
 	m.always = map[string]bool{}
+	// Another conversation: no role is being talked to in it, nothing was asked.
+	m.talking, m.asked, m.said = "", false, ""
 	// Another conversation holds nothing yet, and its engine starts its
 	// count again; what was spent here stays spent.
 	m.ctxTokens, m.ctxWarned, m.lastCost = 0, 0, 0
