@@ -390,9 +390,41 @@ gofi ask "<request>"               # one call, script-friendly
 gofi intake "<request>" --json     # the plan alone: context, phases, tiers, questions
 ```
 
-The chat plans free text by rules first, stops after a PRD or a spec for review —
-with the reviewer's findings — and hands the build to the loop. A gate's
-questions are asked in the chat.
+The work has three legs, one at a time, each with its own specialist:
+**discovery** (`/gofi-pd` writes the PRD), **specification** (`/gofi-spec` writes
+the change) and **delivery** (the loop, `gofi run`). The chat plans free text by
+rules first and shows the plan by those legs; it stops at the end of each for
+review — after a spec, with the reviewer's findings — and hands the build to the
+loop. A gate's questions are asked in the chat.
+
+| Leg | Guides — say what to do, before | Sensors — check what was done, after | Closes when |
+|---|---|---|---|
+| Discovery | `/gofi-pd`, its playbook and PRD rules, the institutional corpus, the PRD template | `gofi prd check` — every section said, no doubt left open, scope in and out, a metric with today and the goal, journeys with steps, no requirement written in it; `gofi index check` on its header | the person approves the PRD |
+| Specification | `/gofi-spec`, its elicitation checklist, the templates, the living spec, the code graph, the expertise packs | `gofi spec check`, the reviewer (`gofi review`), the seal on approval | the person approves the change |
+| Delivery | the sealed change, the roles the loop dispatches (plan, test, implement by layer), the packs and the SDK docs | integrity, build, static, test, graph, trace, the auditors — repair and triage act only on what they report | the run is accepted and lands |
+
+**An answer is never planned.** What is typed to a role whose conversation is
+open — `/gofi-pd …` or `/gofi-spec …`, until `/clear` — or right after the chat
+asked something, goes to it as typed: a discovery's answer with a verb in it is
+not a new request. In a conducted plan, a role that ends its phase on a question
+is answered the same way, and at a review stop what is written out is an
+adjustment to the document: it goes to the role that wrote it, in its own
+session, and the stop comes back.
+
+**The discovery has a sensor.** The PRD a discovery leaves is read by
+`gofi prd check` — the disk, no model — at the end of the discovery, in a
+conducted plan and in a conversation held with `/gofi-pd` itself: what still
+asks for a correction is said before the specification starts, and going on
+stays the person's to decide.
+
+**Adopting a repository starts from what it holds.** Outside a gofi project the
+chat says so and points at `/scan`. Inside one, a discovery or a specification
+of a context that has no PRD and no spec yet is planned with what the
+repository already has of it — where its code is, the tables it names, the
+documents written before gofi that read as a PRD or a spec — as pointers in the
+assembled request: the role reads those before it asks, and the person answers
+only what nothing there shows. A context the code already has is called by the
+name the code gives it. The repository is read once, aside, as the chat opens.
 
 <p align="center">
   <img src="assets/readme/chat.png" alt="gofi chat: the panel of what is at work, the conversation, a follow-up waiting for the agent's next step" width="820">
@@ -407,6 +439,7 @@ questions are asked in the chat.
 | `Enter` while the agent works | Send a follow-up: the engine hands it to the model at its next step, between two tool calls, and the turn goes on knowing it — the message is all it costs |
 | `Esc` | Stop the answer without ending the engine: the next message goes to the same process. A delivery stops at its next checkpoint |
 | `/find` · `/show` · `/impact` · `/path` | Ask the index — gofi reads the disk, no model is called |
+| `/scan` · `/prd [context]` | What the repository already holds and what is next · whether a PRD is ready for the specification — no model is called |
 | `/runs` · `/watch` | The runs under way · the full watch screen |
 | `/cost` | What the conversation holds and has spent; the status line keeps both in view |
 | `/audit` | The account of the conversation: the tokens by kind, every read and what it brought into the context, what the graph spared, and the documents that cannot be read cheaply — no front matter, no sections, no index — each with a fix `/audit <n>` hands the agent. Listing calls no model |
@@ -520,6 +553,7 @@ follows a line end to end; a double click opens the file at the line.
 | `gofi change new <id> --context <ctx>` | Create a change from the templates |
 | `gofi change list` · `approve <id>` · `archive <id>` | List · seal · apply to the living specs |
 | `gofi review <change>` · `--context <ctx>` · `--again` | Review before approval |
+| `gofi prd check [context]` | Whether a PRD is ready for the specification: sections, open doubts, scope, metrics, journeys — and what `gofi index check` says of the same file, so one command closes a PRD. An older-format PRD has its header checked only. No model; exits non-zero on an error |
 | `gofi spec check` · `approve` · `order` · `migrate` | Validate · seal a living spec · build order · migrate format 2 |
 
 **Delivery**
