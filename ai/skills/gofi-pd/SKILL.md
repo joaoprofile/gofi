@@ -22,7 +22,7 @@ Skill genérica: metodologia de discovery; o contexto concreto vem de `.claude/i
 2. **Expertise de domínio/setor transferível pertence à skill.** *Esse conhecimento vale para outro cliente do mesmo
    segmento? → skill. Só vale para este produto/empresa? → institucional.* Fato específico: chunk correto + linha no `INDEX.md`.
    → `reference/institutional-context.md` §Divisor skill × institucional
-3. **Fechar o PRD** = `gofi index docs` + `gofi index check`. Um PRD que não entrou no índice é um PRD que a próxima skill não encontra.
+3. **Fechar o PRD** = `gofi index docs` + `gofi prd check {contexto}` sem erro; dispensa `gofi index check`. Fora do índice a próxima skill não o lê.
 
 ## Pré-execução
 
@@ -91,7 +91,7 @@ em duas passagens, para a conversa não acontecer no nível deste papel:
 3. **Aplicar o playbook** do tipo de discovery (SaaS, integração, pipelines de dados, processo/GTM) e evitar os antipadrões. → `reference/discovery-playbook.md`
 4. **Estruturar o PRD** — copie o template, sete seções; regras de negócio dentro das jornadas, sem ID; nenhum requisito, cenário ou dado (nascem no delta da primeira mudança); filtro de extração técnica. → `reference/prd-writing-rules.md` §Estrutura do PRD
 5. **Versionar** — nasce e fica em `1.0` até produção. → `reference/prd-writing-rules.md` §Versionamento
-6. **Fechar** — memória do contexto, institucional se aprendeu fato durável, `gofi index docs` + `gofi index check`. → `reference/memory-and-learning.md`
+6. **Fechar** — memória do contexto, institucional se aprendeu fato durável, e **Fechar o PRD** (Lei 3). → `reference/memory-and-learning.md`
 
 ## Saída e memória
 
