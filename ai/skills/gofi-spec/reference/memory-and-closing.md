@@ -38,7 +38,7 @@ antes de tocar o frontmatter**. O essencial:
 
 > **Regra:** sempre que uma spec for **criada** ou **alterada**, atualize a memória do contexto no mesmo turno — independentemente de ter havido bump de versão. Não tratar isso como passo opcional. Status da spec deve sempre estar presente e refletir a versão mais recente.
 > Idem para bumps cross-spec: se a spec do contexto X foi bumpada por decisão tomada no contexto Y, **ambos** os `contexts/{X}.md` e `contexts/{Y}.md` precisam ser atualizados.
-> **Exceção:** ajustes em spec cuja solução ainda não está em produção não exigem bump — ver "Versionamento" acima. A **memória do contexto** segue regra própria (`memory-protocol.md`) e continua sendo atualizada em toda fase.
+> **Exceção:** ajustes em spec cuja solução ainda não está em produção não exigem bump — ver "Versionamento" acima. A **memória do contexto** segue `expertise/harness-protocols/memory.md` e é atualizada em toda fase.
 
 ### 1. `.claude/memory/contexts/{contexto}.md` — frontmatter (estado por-contexto)
 
