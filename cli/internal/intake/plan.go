@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/joaoprofile/gofi/cli/internal/host"
+	"github.com/joaoprofile/gofi/cli/internal/layout"
 	"github.com/joaoprofile/gofi/cli/internal/role"
 )
 
@@ -44,6 +45,21 @@ type Phase struct {
 	Elicit     bool   `json:"elicit,omitempty"`
 	Checklist  string `json:"checklist,omitempty"`
 	ElicitFile string `json:"elicit_file,omitempty"`
+}
+
+// Interviewers are the roles that interview the person when invoked outright —
+// the ones whose contract puts an elicitation before them —, each with what
+// it produces. A conductor keeps such a conversation with its role: what the
+// person types in it is an answer, not a request to plan.
+func Interviewers(root string) map[string]string {
+	out := map[string]string{}
+	roles, _ := role.Load(layout.RoleDirs(root)...)
+	for _, r := range roles {
+		if r.Contract.Elicit != nil && r.Contract.Produces != "" && !r.Contract.Internal() {
+			out[r.Name] = r.Contract.Produces
+		}
+	}
+	return out
 }
 
 // defaultArtifact is what a request ends with when it names no artifact: a

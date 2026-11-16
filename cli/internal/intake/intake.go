@@ -101,6 +101,10 @@ type Result struct {
 	// Blocked says why the plan cannot run, and what unblocks it: no phase
 	// runs while it is set.
 	Blocked string `json:"blocked,omitempty"`
+	// Found is what the repository already holds of a context that has no
+	// PRD and no spec yet, when the plan writes one: where a project being
+	// adopted starts from.
+	Found *Found `json:"found,omitempty"`
 
 	// intentGuessed is set when no word of the request named the intent.
 	intentGuessed bool
@@ -350,6 +354,22 @@ func run(root, text string, opts Options, s settled) (*Result, error) {
 		res.Next = nextAfter(res.Artifact, p)
 	}
 
+	// Adoption: a context with no PRD and no spec may be in the repository
+	// all the same — its code, its tables, documents written before gofi.
+	// The roles that write its documents start from that.
+	if c := res.Context; c != nil && !c.has("prd") && !c.has("spec") && writesDocs(res.Plan) {
+		// A context named from the words of the request — "iniciar a
+		// descoberta de fidelidade" — is the one the code already has, when
+		// one of those words names it. What the person settled stays.
+		if c.New && s.context == "" && s.newContext == "" {
+			if name := namedInRepository(root, opts.Engines, ws); name != "" && name != c.Name {
+				res.Signals = append(res.Signals, fmt.Sprintf("contexto %s ← o código já o tem (do assunto sairia %s)", name, c.Name))
+				c.Name, c.Why = name, "o pedido cita um contexto que o código já tem, ainda sem PRD nem spec"
+			}
+		}
+		res.Found = foundIn(root, opts.Engines, c.Name)
+	}
+
 	// Expertise for the roles of the plan.
 	if packs, _ := expertise.Load(root); len(packs) > 0 {
 		res.Packs = choosePacks(packs, res.Plan, ws, res.Evidence)
@@ -566,18 +586,23 @@ func sufficiency(res *Result, related []candidate, roles []role.Role, ws []strin
 	case s.context != "" || s.newContext != "" || s.forceNew:
 		// Settled by the person or the model: not asked again.
 	case ctx == nil && len(options) > 0:
-		qs = append(qs, Question{ID: "context", Text: "Em qual contexto?", Options: options})
+		qs = append(qs, Question{ID: "context", Text: "Em qual contexto (a área do produto) entra o pedido?", Options: options})
 	case ctx == nil:
-		qs = append(qs, Question{ID: "context", Text: "Em qual contexto? Nenhum contexto do índice casa com o pedido."})
+		qs = append(qs, Question{ID: "context", Text: "Em qual contexto (a área do produto) entra o pedido? Nenhum dos que o projeto já tem combina com ele: diga o nome."})
 	case ctx.New && len(options) > 0:
 		qs = append(qs, Question{ID: "context",
 			Text:    fmt.Sprintf("Contexto novo `%s`, ou parte de um que já existe?", ctx.Name),
 			Options: append([]string{"novo: " + ctx.Name}, options...)})
+	case ctx.New && res.Found != nil && res.Found.Dir != "":
+		// The code has it already; gofi has no document of it yet.
+		qs = append(qs, Question{ID: "context",
+			Text:    fmt.Sprintf("Contexto `%s`: o código já o tem em `%s`, ainda sem PRD nem spec. Confirme, ou diga em qual contexto existente o pedido entra.", ctx.Name, res.Found.Dir),
+			Options: []string{"novo: " + ctx.Name}})
 	case ctx.New:
 		// A new context is the person's to choose, even with nothing in the
 		// index to set it against: the name was taken from the request.
 		qs = append(qs, Question{ID: "context",
-			Text:    fmt.Sprintf("Contexto novo `%s`? Nada no índice se relaciona ao pedido — ou diga em qual contexto existente ele entra.", ctx.Name),
+			Text:    fmt.Sprintf("Contexto novo `%s`? Nada do que o projeto já tem se relaciona ao pedido — confirme, ou diga em qual contexto existente ele entra.", ctx.Name),
 			Options: []string{"novo: " + ctx.Name}})
 	}
 	// "What changes?" is only a question when there is something to change —

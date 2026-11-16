@@ -463,3 +463,91 @@ func TestThePhaseAfterAReviewDoesNotApproveTheContract(t *testing.T) {
 		}
 	}
 }
+
+// A discovery is asked for by its own name too, and its plan is the
+// discovery alone: the specification is offered after it, never put in it.
+func TestADiscoveryIsPlannedAsADiscovery(t *testing.T) {
+	for _, text := range []string{"quero iniciar a descoberta do tenant pessoal", "vamos fazer o discover do tenant pessoal"} {
+		r := runIntake(t, project(t), text, Options{})
+		if r.Artifact != "prd" || !slices.Equal(roles(r), []string{"gofi-pd"}) || r.Next != "gofi-spec" {
+			t.Errorf("%q: read as %s · %s, plan %v, next %q (%v)", text, r.Intent, r.Artifact, roles(r), r.Next, r.Signals)
+		}
+	}
+}
+
+// The roles that interview the person are the ones whose contract says so:
+// a conductor keeps their conversation with them.
+func TestInterviewersAreTheRolesThatElicit(t *testing.T) {
+	got := Interviewers(project(t))
+	if len(got) != 2 || got["gofi-pd"] != "prd" || got["gofi-spec"] != "spec" {
+		t.Errorf("interviewers = %v, want the discovery and the specification", got)
+	}
+}
+
+// adopted is a project whose code and documents were written before gofi: a
+// context in its folders, with a table and a document that reads as a PRD,
+// and nothing of it in gofi's own corpus yet.
+func adopted(t *testing.T) string {
+	t.Helper()
+	root := project(t)
+	write(t, root, "go.mod", "module example.com/loja\n\ngo 1.22\n")
+	write(t, root, "domain/fidelidade/service.go", "package fidelidade\n")
+	write(t, root, "domain/fidelidade/service_test.go", "package fidelidade\n")
+	write(t, root, "migrations/001.sql", "create table fidelidade_ponto (id int);\n")
+	write(t, root, "docs/produto/fidelidade.md", "# Fidelidade\n\n## Problema\nx\n\n## Personas\nCliente.\n\n## Escopo\nx\n")
+	return root
+}
+
+// Adopting a project: a discovery of a context the code already has starts
+// from what the repository holds — where its code is, its tables, the
+// document that reads as a PRD —, as pointers in the assembled request, and
+// the question about the context says the code has it. The person answers
+// what nothing there shows, not what is on disk.
+func TestADiscoveryStartsFromWhatTheRepositoryHolds(t *testing.T) {
+	root := adopted(t)
+	r := runIntake(t, root, "quero iniciar a descoberta de fidelidade", Options{})
+	if r.Found == nil || r.Found.Dir != "domain/fidelidade/" || r.Found.Sources != 1 || r.Found.Tests != 1 {
+		t.Fatalf("found = %+v (context %+v)", r.Found, r.Context)
+	}
+	if !slices.Contains(r.Found.Tables, "fidelidade_ponto") || len(r.Found.Documents) != 1 || r.Found.Documents[0] != (FoundDoc{Path: "docs/produto/fidelidade.md", Kind: "prd"}) {
+		t.Errorf("found = %+v", r.Found)
+	}
+	for _, want := range []string{"**Já existe no repositório**", "- código: `domain/fidelidade/` — 1 fontes, 1 testes", "- tabelas: fidelidade_ponto", "- `docs/produto/fidelidade.md` — lê como prd"} {
+		if !strings.Contains(r.Brief, want) {
+			t.Errorf("the assembled request should carry %q:\n%s", want, r.Brief)
+		}
+	}
+	if len(r.Questions) != 1 || !strings.Contains(r.Questions[0].Text, "o código já o tem em `domain/fidelidade/`") {
+		t.Errorf("the question should say the code has the context: %+v", r.Questions)
+	}
+	if got := r.Found.Summary(); got != "código em `domain/fidelidade/` (1 fontes, 1 testes), 1 tabela(s), 1 documento(s)" {
+		t.Errorf("summary = %q", got)
+	}
+}
+
+// What the repository holds is read only where it is needed: a context that
+// has its PRD or its spec is gofi's already, and a plan that writes no
+// document asks nothing of it — neither pays for a scan.
+func TestOnlyAContextBeingAdoptedIsLookedUpInTheRepository(t *testing.T) {
+	root := adopted(t)
+	for _, text := range []string{"altere o fluxo de envio de preços do pricing", "crie um PRD de sincronização de pedidos", "explique como funciona o pricing"} {
+		if r := runIntake(t, root, text, Options{}); r.Found != nil || strings.Contains(r.Brief, "Já existe no repositório") {
+			t.Errorf("%q: found %+v", text, r.Found)
+		}
+	}
+}
+
+// A process that plans many requests reads the repository once.
+func TestTheRepositoryIsScannedOnceForAConversation(t *testing.T) {
+	root := adopted(t)
+	engines := &Engines{}
+	first := engines.scanned(root)
+	write(t, root, "domain/fidelidade/extra.go", "package fidelidade\n")
+	if second := engines.scanned(root); first == nil || second != first {
+		t.Errorf("the scan was read again within the same conversation")
+	}
+	r := runIntake(t, root, "quero iniciar a descoberta de fidelidade", Options{Engines: engines})
+	if r.Found == nil || r.Found.Sources != 1 {
+		t.Errorf("the conversation's scan should answer: %+v", r.Found)
+	}
+}

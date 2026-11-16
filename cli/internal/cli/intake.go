@@ -148,6 +148,10 @@ func printIntake(out io.Writer, r *intake.Result) {
 		}
 		fmt.Fprintf(out, "\n  contexto %s (%s)\n    %s\n", c.Name, state, c.Why)
 	}
+	if r.Found != nil {
+		// A context being adopted: what its documents start from.
+		fmt.Fprintf(out, "    já existe no repositório: %s\n", r.Found.Summary())
+	}
 	if r.Blocked != "" {
 		fmt.Fprintf(out, "\n  %s\n", i18n.T("intake.blocked", r.Blocked))
 	}

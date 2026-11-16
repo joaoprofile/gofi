@@ -16,7 +16,7 @@
 #              role then writes its document at once, without interviewing.
 tier: deep
 produces: prd
-intents: [descubra, descobrir, levante, levantar, prd, requisito, requisitos, discovery]
+intents: [descubra, descobrir, descoberta, levante, levantar, prd, requisito, requisitos, discovery, discover]
 needs: [context]
 elicit:
   tier: standard

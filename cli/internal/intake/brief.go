@@ -66,6 +66,12 @@ func brief(r *Result) string {
 		}
 		b.WriteString("\n\n")
 	}
+	if r.Found != nil {
+		// What is there is read before anything is asked: the document says
+		// what already runs, and the person answers only what nothing shows.
+		b.WriteString("**Já existe no repositório** (ainda fora do padrão gofi — leia antes de perguntar; o que isto responde não se pergunta):\n\n")
+		b.WriteString(strings.Join(r.Found.lines(), "\n") + "\n\n")
+	}
 	b.WriteString("**Restrições:** as leis comuns do `AGENTS.md`")
 	if r.Context != nil && strings.Contains(strings.Join(r.Context.Has, ","), "spec") {
 		fmt.Fprintf(&b, "; a spec viva de %[1]s (`gofi show ctx:%[1]s`) e as mudanças abertas (`gofi change list`) são a fonte da verdade — spec viva não se edita: o que muda vai num delta", r.Context.Name)
