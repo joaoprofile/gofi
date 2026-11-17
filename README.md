@@ -31,7 +31,7 @@
 
 ## Overview
 
-gofi is a harness for building software with AI coding agents. It splits the work
+Gofi is a harness for building software with AI coding agents. It splits the work
 where it belongs:
 
 - **The person owns the contract.** Requirements and scenarios live in versioned
